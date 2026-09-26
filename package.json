@@ -18,6 +18,7 @@
     "dist",
     "web/dist",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "scripts": {

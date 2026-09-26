@@ -1,5 +1,7 @@
 # pi-webapp
 
+[简体中文](README.zh-CN.md)
+
 ![pi-webapp cover](https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png)
 
 **pi-webapp** opens the active Pi coding agent session in a local browser. Pi continues to run the agent, tools, and session storage; the browser provides a live interface for conversation and control.
@@ -39,7 +41,7 @@ pi -e .
 
 After editing the extension, rebuild it, then enter `/reload` and `/web` in Pi. Refreshing an old browser page alone does not replace the running bridge.
 
-The source lives in `extension/`, `shared/`, and `web/src/`. The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and this README. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
+The source lives in `extension/`, `shared/`, and `web/src/`. The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and the English and Chinese READMEs. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
 
 ## Publish
 
