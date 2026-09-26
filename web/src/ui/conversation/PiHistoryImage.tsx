@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageLightbox } from "./ImageLightbox.tsx";
 import css from "./MessageImage.module.css";
+import { localize as t } from "../locale/preference.ts";
 
 // Bound the image long edge without upscaling.
 function singleFit(width: number, height: number) {
@@ -51,11 +52,11 @@ export function PiHistoryImage({ name, messageId, index, file, tile, loadImage }
   }, [file, messageId, index, attempt]);
 
   const fit = !tile && size ? singleFit(size.width, size.height) : null;
-  if (failed) return <button type="button" className={css.error} data-variant={tile ? "tile" : "single"} onClick={() => setAttempt((value) => value + 1)}>图片加载失败，重试</button>;
+  if (failed) return <button type="button" className={css.error} data-variant={tile ? "tile" : "single"} onClick={() => setAttempt((value) => value + 1)}>{t("图片加载失败，重试", "Image failed to load. Retry")}</button>;
   return <>
-    <button type="button" className={css.frame} data-variant={tile ? "tile" : "single"} aria-label={`预览 ${name}`} title="查看原图" disabled={!url} onClick={() => setOpen(true)} style={fit ? { width: fit.width, height: fit.height } : undefined}>
-      {url ? <img src={url} alt={name} onLoad={(event) => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setFailed(true)} style={fit ? { objectPosition: fit.objectPosition } : undefined} /> : <span className={css.loading}>加载中</span>}
+    <button type="button" className={css.frame} data-variant={tile ? "tile" : "single"} aria-label={t(`预览 ${name}`, `Preview ${name}`)} title={t("查看原图", "View original image")} disabled={!url} onClick={() => setOpen(true)} style={fit ? { width: fit.width, height: fit.height } : undefined}>
+      {url ? <img src={url} alt={name} onLoad={(event) => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setFailed(true)} style={fit ? { objectPosition: fit.objectPosition } : undefined} /> : <span className={css.loading}>{t("加载中", "Loading")}</span>}
     </button>
-    {open && url && <ImageLightbox src={url} alt={name} labels={{ dialog: "图片预览", close: "关闭预览" }} onClose={() => setOpen(false)} />}
+    {open && url && <ImageLightbox src={url} alt={name} labels={{ dialog: t("图片预览", "Image preview"), close: t("关闭预览", "Close preview") }} onClose={() => setOpen(false)} />}
   </>;
 }

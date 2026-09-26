@@ -7,20 +7,21 @@ import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
+import { useLocale, localize as t } from "./ui/locale/preference.ts";
 import type { LayoutInfo, PanelInfo } from "./ui/contract.ts";
 import type { SidebarPanelMetadata } from "./ui/sidebar/contract/slots.ts";
 import "./pi.css";
 
-const labels: Record<string, string> = {
-  "session.new.label": "新会话",
-  "session.new": "新会话",
-  "toggle.open": "展开侧栏",
-  "toggle.collapse": "收起侧栏",
-  "panels.label": "面板",
-  "brand.localBuild": "pi-webapp",
-};
-
 export function PiApp() {
+  useLocale();
+  const labels: Record<string, string> = {
+    "session.new.label": t("新会话", "New session"),
+    "session.new": t("新会话", "New session"),
+    "toggle.open": t("展开侧栏", "Expand sidebar"),
+    "toggle.collapse": t("收起侧栏", "Collapse sidebar"),
+    "panels.label": t("面板", "Panels"),
+    "brand.localBuild": "pi-webapp",
+  };
   const bridge = usePiBridge();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => {
@@ -58,7 +59,7 @@ export function PiApp() {
   const renderSidebarSlot = (key: string, owner: any, options?: { fallback?: React.ReactNode }) => {
     if (key === "sidebar.brand.mark") return <PiLogo size={24} />;
     if (key === "sidebar.brand.name") return <span>pi-webapp</span>;
-    if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row ${owner.wide ? "" : "pi-settings-trigger-rail"}`}><button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label="Pi 设置" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>Pi 设置</span>}</button></div>;
+    if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row ${owner.wide ? "" : "pi-settings-trigger-rail"}`}><button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label={t("Pi 设置", "Pi Settings")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>{t("Pi 设置", "Pi Settings")}</span>}</button></div>;
     if (key === "sidebar.workspaces") return <PiWorkspaceBrowser
       wide={owner.wide}
       expandSidebar={owner.expandSidebar}

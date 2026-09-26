@@ -2,12 +2,15 @@ import { useRef } from "react";
 import type { CommandOption } from "../../pi-bridge.ts";
 import { useAnchoredMaxHeight } from "../primitives/useAnchoredMaxHeight.ts";
 import css from "./MenuView.module.css";
+import { localize as t } from "../locale/preference.ts";
 
-export const builtInCommands: CommandOption[] = [
-  { name: "compact", description: "压缩当前会话内容" },
-  { name: "model", description: "选择本会话使用的模型" },
-  { name: "new", description: "创建新会话" },
-];
+export function builtInCommands(): CommandOption[] {
+  return [
+    { name: "compact", description: t("压缩当前会话内容", "Compact the current session") },
+    { name: "model", description: t("选择本会话使用的模型", "Choose the model for this session") },
+    { name: "new", description: t("创建新会话", "Create a new session") },
+  ];
+}
 
 export function PiCommandMenu({ commands, active, onHover, onPick }: {
   commands: CommandOption[];
@@ -18,8 +21,8 @@ export function PiCommandMenu({ commands, active, onHover, onPick }: {
   const menu = useRef<HTMLDivElement>(null);
   const maxHeight = useAnchoredMaxHeight(menu, 400, commands.length);
   return <div ref={menu} className={css.menu} data-trigger-menu="" style={{ maxHeight }}>
-    <div className={css.viewport} role="listbox" aria-label="指令" aria-activedescendant={commands[active] ? `pi-command-${active}` : undefined}>
-      <div className={css.groupTitle} role="presentation">指令</div>
+    <div className={css.viewport} role="listbox" aria-label={t("指令", "Commands")} aria-activedescendant={commands[active] ? `pi-command-${active}` : undefined}>
+      <div className={css.groupTitle} role="presentation">{t("指令", "Commands")}</div>
       {commands.map((command, index) => <button
         key={command.name}
         id={`pi-command-${index}`}
@@ -33,7 +36,7 @@ export function PiCommandMenu({ commands, active, onHover, onPick }: {
         <span className={css.itemName}>{command.name}</span>
         {command.description && <span className={css.itemDescription}>{command.description}</span>}
       </button>)}
-      {commands.length === 0 && <div className={css.groupTitle}>没有匹配的指令</div>}
+      {commands.length === 0 && <div className={css.groupTitle}>{t("没有匹配的指令", "No matching commands")}</div>}
     </div>
   </div>;
 }

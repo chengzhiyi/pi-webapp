@@ -9,6 +9,7 @@ import processCss from "./TurnProcess.module.css";
 import usageCss from "./TurnUsagePanel.module.css";
 import dialogCss from "./stat-dialog.module.css";
 import actionsCss from "./MessageIconActions.module.css";
+import { localize as t } from "../locale/preference.ts";
 
 function toolSummary(block: ViewBlock): string {
   try {
@@ -27,7 +28,7 @@ export function ToolRow({ block, result, running, onInspect, cwd }: {
   const output = result?.blocks.map((part) => part.text).join("\n") ?? null;
   const state = result?.isError ? "error" : result ? "ok" : running ? "running" : "pending";
   const shell = block.toolName === "bash" || block.toolName === "pwsh";
-  const title = ({ bash: "Bash", pwsh: "PowerShell", read: "读取", write: "写入", edit: "编辑", grep: "搜索", glob: "搜索" } as Record<string, string>)[block.toolName || ""] || block.toolName || "工具调用";
+  const title = ({ bash: "Bash", pwsh: "PowerShell", read: t("读取", "Read"), write: t("写入", "Write"), edit: t("编辑", "Edit"), grep: t("搜索", "Search"), glob: t("搜索", "Search") } as Record<string, string>)[block.toolName || ""] || block.toolName || t("工具调用", "Tool call");
   const command = toolSummary(block);
   return <div className={toolCss.root} data-state={state} data-tool={block.toolName}>
     <DisclosureRow icon={<IconCodeOutline16 size={14} />} title={title} open={expanded} onToggle={() => setExpanded((value) => !value)}
@@ -35,12 +36,12 @@ export function ToolRow({ block, result, running, onInspect, cwd }: {
       collapsedContent={<><span className={toolCss.sep} aria-hidden /><span className={`${toolCss.summary} ${state === "error" ? toolCss.errorSummary : ""}`}>{state === "error" ? output?.split("\n", 1)[0] : command}</span></>}>
       <div className={toolCss.bodyWrap}>
         {shell ? <TerminalBlock command={command} cwd={cwd} output={output ?? undefined} running={output === null} exitCode={result?.isError ? 1 : result ? 0 : undefined} maxLines={Infinity} className={toolCss.terminalBody} labels={{
-          signal: (signal) => `信号 ${signal}`, exitCode: (code) => `退出码 ${code}`, running: "运行中", failed: "失败", done: "已完成", copy: "复制", copied: "已复制", noOutput: "无输出", collapseAria: "收起输出", collapse: "收起", expandAria: (hidden) => `展开其余 ${hidden} 行输出`, expand: (hidden) => `… 其余 ${hidden} 行`,
+          signal: (signal) => t(`信号 ${signal}`, `Signal ${signal}`), exitCode: (code) => t(`退出码 ${code}`, `Exit code ${code}`), running: t("运行中", "Running"), failed: t("失败", "Failed"), done: t("已完成", "Done"), copy: t("复制", "Copy"), copied: t("已复制", "Copied"), noOutput: t("无输出", "No output"), collapseAria: t("收起输出", "Collapse output"), collapse: t("收起", "Collapse"), expandAria: (hidden) => t(`展开其余 ${hidden} 行输出`, `Expand remaining ${hidden} output lines`), expand: (hidden) => t(`… 其余 ${hidden} 行`, `… ${hidden} more lines`),
         }} /> : <div className={toolCss.ioCard}>
           <div className={toolCss.ioSection}><span className={toolCss.ioLabel}>IN</span><span className={toolCss.ioText}>{block.text}</span></div>
-          {output !== null && <><span className={toolCss.ioDivider} aria-hidden /><div className={toolCss.ioSection}><span className={toolCss.ioLabel}>OUT</span><span className={toolCss.ioText} data-error={result?.isError || undefined}>{output || "无文本输出"}</span></div></>}
+          {output !== null && <><span className={toolCss.ioDivider} aria-hidden /><div className={toolCss.ioSection}><span className={toolCss.ioLabel}>OUT</span><span className={toolCss.ioText} data-error={result?.isError || undefined}>{output || t("无文本输出", "No text output")}</span></div></>}
         </div>}
-        {onInspect && <button className={toolCss.inspectButton} type="button" onClick={onInspect}>查看轨迹</button>}
+        {onInspect && <button className={toolCss.inspectButton} type="button" onClick={onInspect}>{t("查看轨迹", "View trajectory")}</button>}
       </div>
     </DisclosureRow>
   </div>;
@@ -50,9 +51,9 @@ export function ToolRow({ block, result, running, onInspect, cwd }: {
 export function TurnProcess({ toolCount, messageCount, open, onToggle }: {
   toolCount: number; messageCount: number; open: boolean; onToggle: () => void;
 }) {
-  const labels = [toolCount > 0 && `${toolCount} 次工具调用`, messageCount > 0 && `${messageCount} 条消息`].filter(Boolean);
+  const labels = [toolCount > 0 && t(`${toolCount} 次工具调用`, `${toolCount} tool calls`), messageCount > 0 && t(`${messageCount} 条消息`, `${messageCount} messages`)].filter(Boolean);
   return <button type="button" className={processCss.root} data-open={open || undefined} aria-expanded={open} onClick={onToggle}>
-    <span className={processCss.label}>{labels.length ? labels.join(" · ") : "已思考"}</span>
+    <span className={processCss.label}>{labels.length ? labels.join(" · ") : t("已思考", "Thought")}</span>
     <IconChevronDownOutline14 className={processCss.chevron} />
   </button>;
 }
@@ -88,18 +89,18 @@ export function UsagePill({ usage, model }: { usage: ViewUsage; model: string | 
   const cacheHit = billedInput > 0 ? Math.round(usage.cacheRead / billedInput * 100) : null;
   return <span ref={root} className={usageCss.root}>
     <button type="button" className={usageCss.trigger} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-      <IconDatabaseOutline16 /><span className={usageCss.label}>用量 {formatTokens(usage.totalTokens)}</span>
+      <IconDatabaseOutline16 /><span className={usageCss.label}>{t("用量", "Usage")} {formatTokens(usage.totalTokens)}</span>
     </button>
-    {open && createPortal(<div ref={panel} className={dialogCss.panel} role="dialog" aria-label="本轮用量" style={position ?? { top: -1000, left: -1000 }}>
-      <div className={dialogCss.title}><span className={dialogCss.titleLabel}><IconDatabaseOutline16 />本轮用量</span><span className={dialogCss.titleValue}>{formatTokens(usage.totalTokens)}</span></div>
+    {open && createPortal(<div ref={panel} className={dialogCss.panel} role="dialog" aria-label={t("本轮用量", "Turn usage")} style={position ?? { top: -1000, left: -1000 }}>
+      <div className={dialogCss.title}><span className={dialogCss.titleLabel}><IconDatabaseOutline16 />{t("本轮用量", "Turn usage")}</span><span className={dialogCss.titleValue}>{formatTokens(usage.totalTokens)}</span></div>
       <div className={dialogCss.titleRule} aria-hidden />
       <dl className={dialogCss.details}>
-        {model && <><dt>提供方 / 模型</dt><dd className={dialogCss.route}>{model}</dd></>}
-        {cacheHit !== null && <><dt>缓存命中</dt><dd>{cacheHit}%</dd></>}
-        <dt>未缓存输入</dt><dd>{formatTokens(usage.input)}</dd>
-        <dt>缓存读取</dt><dd>{formatTokens(usage.cacheRead)}</dd>
-        <dt>缓存写入</dt><dd>{formatTokens(usage.cacheWrite)}</dd>
-        <dt>输出</dt><dd>{formatTokens(usage.output)}{usage.reasoning !== undefined && <span className={dialogCss.reasoning}>（其中推理 {formatTokens(usage.reasoning)}）</span>}</dd>
+        {model && <><dt>{t("提供方 / 模型", "Provider / model")}</dt><dd className={dialogCss.route}>{model}</dd></>}
+        {cacheHit !== null && <><dt>{t("缓存命中", "Cache hit")}</dt><dd>{cacheHit}%</dd></>}
+        <dt>{t("未缓存输入", "Uncached input")}</dt><dd>{formatTokens(usage.input)}</dd>
+        <dt>{t("缓存读取", "Cache read")}</dt><dd>{formatTokens(usage.cacheRead)}</dd>
+        <dt>{t("缓存写入", "Cache write")}</dt><dd>{formatTokens(usage.cacheWrite)}</dd>
+        <dt>{t("输出", "Output")}</dt><dd>{formatTokens(usage.output)}{usage.reasoning !== undefined && <span className={dialogCss.reasoning}>{t(`（其中推理 ${formatTokens(usage.reasoning)}）`, ` (including ${formatTokens(usage.reasoning)} reasoning)`)}</span>}</dd>
       </dl>
     </div>, document.body)}
   </span>;
@@ -110,8 +111,8 @@ export function TurnActions({ text, timestamp, usage, model }: {
 }) {
   const [copied, setCopied] = useState(false);
   return <div className={actionsCss.actions}>
-    {text && <button className={actionsCss.action} type="button" aria-label={copied ? "已复制" : "复制回复"} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1000); }); }}><IconCopyOutline16 /></button>}
+    {text && <button className={actionsCss.action} type="button" aria-label={copied ? t("已复制", "Copied") : t("复制回复", "Copy reply")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1000); }); }}><IconCopyOutline16 /></button>}
     {usage && <UsagePill usage={usage} model={model} />}
-    {timestamp && <time className={actionsCss.timeEnd} dateTime={timestamp}>{new Date(timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>}
+    {timestamp && <time className={actionsCss.timeEnd} dateTime={timestamp}>{new Date(timestamp).toLocaleTimeString(t("zh-CN", "en-US"), { hour: "2-digit", minute: "2-digit" })}</time>}
   </div>;
 }

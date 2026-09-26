@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14, IconDataOutline16 } from "../primitives/icons/index.tsx";
 import type { ModelOption } from "../../pi-bridge.ts";
 import css from "./ModelSelect.module.css";
+import { localize as t } from "../locale/preference.ts";
 
 interface Props {
   openSignal?: number;
@@ -16,9 +17,8 @@ interface Props {
 }
 
 /** Model picker backed by Pi's available-model directory. */
-const effortNames: Record<string, string> = { off: "关闭", minimal: "极低", low: "低", medium: "中", high: "高", xhigh: "极高" };
-
 export function PiModelSelect({ openSignal = 0, current, models, disabled, onSelect, thinkingLevel, thinkingLevels, onSelectThinkingLevel }: Props) {
+  const effortNames: Record<string, string> = { off: t("关闭", "Off"), minimal: t("极低", "Minimal"), low: t("低", "Low"), medium: t("中", "Medium"), high: t("高", "High"), xhigh: t("极高", "Extra high") };
   const [open, setOpen] = useState(false);
   const lastOpenSignal = useRef(openSignal);
   useEffect(() => {
@@ -39,7 +39,7 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
     return [...grouped];
   }, [models]);
   const selected = models.find((model) => `${model.provider}/${model.id}` === current);
-  const label = selected?.name || current || "Pi 模型";
+  const label = selected?.name || current || t("Pi 模型", "Pi model");
   const effortLabel = thinkingLevels.length > 1 && thinkingLevel ? effortNames[thinkingLevel] ?? thinkingLevel : null;
 
   const close = (restoreFocus = false) => {
@@ -94,21 +94,21 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
   };
 
   return <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
-    <button ref={triggerRef} className={css.trigger} type="button" aria-label={`切换模型，当前 ${label}${effortLabel ? `，推理强度${effortLabel}` : ""}`} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined} title={effortLabel ? `${label} · ${effortLabel}` : label} disabled={disabled || busy} onClick={() => open ? close() : setOpen(true)}>
+    <button ref={triggerRef} className={css.trigger} type="button" aria-label={t(`切换模型，当前 ${label}${effortLabel ? `，推理强度${effortLabel}` : ""}`, `Change model, current ${label}${effortLabel ? `, reasoning effort ${effortLabel}` : ""}`)} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined} title={effortLabel ? `${label} · ${effortLabel}` : label} disabled={disabled || busy} onClick={() => open ? close() : setOpen(true)}>
       <IconDataOutline16 className={css.triggerIcon} size={16} />
       <span className={css.triggerLabel}>{label}</span>
       {effortLabel && <span className={css.triggerEffort}>{effortLabel}</span>}
       <IconChevronDownOutline14 className={`${css.chevron} ${open ? css.chevronOpen : ""}`} />
     </button>
-    {open && createPortal(<div ref={menuRef} id={`${id}-menu`} role="menu" aria-label="选择模型" className={css.menu} style={position}>
-      {pane === "root" ? <><button type="button" role="menuitem" className={css.cell} onClick={() => setPane("model")}><span className={css.cellLabel}>模型</span><span className={css.cellValue}>{label}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>{effortLabel && <button type="button" role="menuitem" className={css.cell} onClick={() => setPane("effort")}><span className={css.cellLabel}>推理强度</span><span className={css.cellValue}>{effortLabel}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>}</> : pane === "model" ? <>
+    {open && createPortal(<div ref={menuRef} id={`${id}-menu`} role="menu" aria-label={t("选择模型", "Choose model")} className={css.menu} style={position}>
+      {pane === "root" ? <><button type="button" role="menuitem" className={css.cell} onClick={() => setPane("model")}><span className={css.cellLabel}>{t("模型", "Model")}</span><span className={css.cellValue}>{label}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>{effortLabel && <button type="button" role="menuitem" className={css.cell} onClick={() => setPane("effort")}><span className={css.cellLabel}>{t("推理强度", "Reasoning effort")}</span><span className={css.cellValue}>{effortLabel}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>}</> : pane === "model" ? <>
         <div className={css.groups}>
           {groups.map(([provider, options]) => <section className={css.group} role="group" aria-label={provider} key={provider}>
             <div className={css.groupTitle}>{provider}</div>
             {options?.map((model) => <button key={model.id} type="button" role="menuitemradio" aria-checked={`${model.provider}/${model.id}` === current} className={`${css.option} ${`${model.provider}/${model.id}` === current ? css.selected : ""}`} title={model.name || model.id} disabled={busy} onClick={() => { void choose(model); }}><span className={css.optionCopy}><span className={css.modelName}>{model.name || model.id}</span></span><span className={css.check}>{`${model.provider}/${model.id}` === current && <IconCheckOutline16 />}</span></button>)}
           </section>)}
         </div>
-        {models.length === 0 && <div className={css.empty}>暂无可用模型</div>}
+        {models.length === 0 && <div className={css.empty}>{t("暂无可用模型", "No models available")}</div>}
       </> : <div className={css.groups}>{thinkingLevels.map((level) => <button key={level} type="button" role="menuitemradio" aria-checked={level === thinkingLevel} className={`${css.option} ${level === thinkingLevel ? css.selected : ""}`} disabled={busy} onClick={() => { void chooseEffort(level); }}><span className={css.optionCopy}><span className={css.modelName}>{effortNames[level] ?? level}</span></span><span className={css.check}>{level === thinkingLevel && <IconCheckOutline16 />}</span></button>)}</div>}
     </div>, document.body)}
   </div>;
