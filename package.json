@@ -1,0 +1,60 @@
+{
+  "name": "pi-webapp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
+  "license": "MIT",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "image": "https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png",
+    "extensions": [
+      "./dist/extension.js"
+    ]
+  },
+  "files": [
+    "assets/cover-webapp.png",
+    "dist",
+    "web/dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit && tsc -p web/tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "build": "npm run build:web && npm run build:extension",
+    "build:web": "vite build",
+    "build:extension": "esbuild extension/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --minify --outfile=dist/extension.js",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run check && npm run test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.87.1",
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@types/node": "22.19.19",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.28.2",
+    "typescript": "7.0.2",
+    "vite": "^6.4.3"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "anser": "^2.3.5",
+    "clsx": "^2.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  }
+}

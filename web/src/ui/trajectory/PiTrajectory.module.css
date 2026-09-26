@@ -1,0 +1,5 @@
+.timelineButton { padding: 0; border: 0; cursor: pointer; }
+.timelineButton:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 1px; }
+.turnLabelButton { position: absolute; z-index: 4; top: 0; left: 0; width: 42px; height: 14px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.turnLabelButton:focus-visible { outline: 1px solid var(--dsw-alias-state-business-primary); }
+.empty { height: 36px; color: var(--dsw-alias-label-tertiary); text-align: center; }

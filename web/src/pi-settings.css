@@ -1,0 +1,67 @@
+.pi-settings-section button, .pi-settings-sidebar { color: var(--dsw-alias-label-primary); font: inherit; cursor: pointer; }
+.pi-settings-content { width: 100%; }
+.pi-settings-content h2 { margin: 8px 0 8px; color: var(--dsw-alias-label-primary); font-size: 18px; line-height: 26px; font-weight: 600; }
+.pi-settings-intro { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; }
+.pi-settings-section { margin-top: 28px; }
+.pi-settings-section ul { display: grid; gap: 10px; margin: 0 0 12px; padding: 0; list-style: none; }
+.pi-settings-section li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 12px; }
+.pi-settings-section li code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--ds-font-family-code); }
+.pi-settings-section li button { flex: none; padding: 4px 8px; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-settings-section li button:hover { color: var(--dsw-alias-state-error-primary); }
+.pi-settings-section .pi-settings-empty { display: block; border-style: dashed; color: var(--dsw-alias-label-tertiary); font-size: 13px; }
+.pi-settings-section form { display: flex; gap: 8px; }
+.pi-settings-section input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; outline-color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.pi-settings-section form button { padding: 0 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-specific-input-major); font-size: 13px; }
+.pi-settings-section button:disabled { opacity: .45; cursor: not-allowed; }
+.pi-settings-error { color: var(--dsw-alias-state-error-primary); font-size: 13px; }
+.pi-settings-retry { padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; font-size: 13px; }
+.pi-settings-trigger-row { flex: none; display: flex; align-items: center; gap: 8px; width: calc(100% + 4px); margin: 4px -2px; }
+.pi-settings-trigger-rail { width: 36px; margin: 8px 0 10px; }
+.pi-settings-sidebar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 42px; margin: 0; padding: 0 10px 0 8px; box-sizing: border-box; border: none; border-radius: 12px; background: transparent; overflow: hidden; font-size: 14px; line-height: 22px; }
+.pi-settings-sidebar:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-settings-sidebar[data-wide="false"] { flex: none; width: 36px; height: 36px; justify-content: center; gap: 0; padding: 0; border-radius: 50%; }
+.pi-settings-sidebar span { overflow: hidden; white-space: nowrap; }
+.pi-settings-general { margin-top: 32px; }
+.pi-settings-section h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.pi-settings-section h3 span { font-weight: 400; color: var(--dsw-alias-label-tertiary); }
+.pi-resource-main { min-width: 0; display: grid; gap: 3px; }
+.pi-resource-item strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-resource-item small { color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-resource-meta { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-resource-actions { display: flex; align-items: center; gap: 8px; }
+.pi-package-contents { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-package-contents span + span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; border-radius: 5px; background: var(--dsw-alias-bg-module-platform); }
+.pi-config-item small { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.pi-config-item .pi-config-warning { color: var(--dsw-alias-state-error-primary); }
+.pi-config-hint { margin: 8px 0 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.pi-config-hint button { padding: 0 4px; color: var(--dsw-alias-state-business-primary); text-decoration: underline; }
+@media (max-width: 640px) { .pi-settings-section li { grid-template-columns: minmax(0, 1fr); } .pi-resource-actions { justify-content: flex-start; } }
+.pi-provider-list { display: grid; gap: 8px; margin-top: 28px; }
+.pi-provider-card { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l4); border-radius: 16px; }
+.pi-provider-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pi-provider-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; font-weight: 500; }
+.pi-provider-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--dsw-alias-state-success-primary); }
+.pi-provider-empty { margin: 0; padding: 20px; border: 1px dashed var(--dsw-alias-border-l3); border-radius: 16px; color: var(--dsw-alias-label-tertiary); text-align: center; font-size: 13px; }
+.pi-provider-add-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.pi-provider-add-actions button { flex: 1 1 0; min-width: 180px; height: 44px; border: 1px dashed var(--dsw-alias-border-l3); border-radius: 16px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; cursor: pointer; }
+.pi-provider-add-actions button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-provider-add-card { display: grid; gap: 14px; margin-top: 12px; padding: 14px 16px; border-radius: 12px; background: var(--dsw-alias-bg-module-platform); }
+.pi-provider-add-card > label, .pi-provider-custom-form label { display: grid; gap: 6px; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.pi-provider-add-card > p { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.pi-provider-add-card input, .pi-provider-add-card select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.pi-provider-custom-form { display: grid; gap: 12px; }
+.pi-provider-custom-form > button { justify-self: start; }
+.pi-provider-methods { display: flex; gap: 8px; flex-wrap: wrap; }
+.pi-provider-card-head button, .pi-provider-methods button, .pi-provider-add-card button, .pi-provider-flow button { padding: 7px 12px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 14px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.pi-provider-card-head button:hover, .pi-provider-methods button:hover:not(:disabled), .pi-provider-add-card button:hover:not(:disabled), .pi-provider-flow button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-provider-add-actions button:disabled, .pi-provider-card-head button:disabled, .pi-provider-methods button:disabled, .pi-provider-add-card button:disabled, .pi-provider-flow button:disabled { opacity: .45; cursor: not-allowed; }
+.pi-provider-flow { display: grid; gap: 10px; margin-top: 22px; padding: 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
+.pi-provider-flow-head { display: flex; align-items: center; justify-content: space-between; }
+.pi-provider-flow p { margin: 0; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.pi-provider-flow a { margin-left: 5px; color: var(--dsw-alias-state-business-primary); }
+.pi-provider-flow form label { display: block; margin-bottom: 9px; font-size: 13px; }
+.pi-provider-flow form div { display: flex; gap: 8px; }
+.pi-provider-flow input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
+.pi-provider-options { display: grid; gap: 8px; }
+.pi-provider-options button { text-align: left; }
+.pi-provider-options small { display: block; margin-top: 3px; }
