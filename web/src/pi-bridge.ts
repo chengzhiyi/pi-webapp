@@ -1,3 +1,4 @@
+import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { useEffect, useState } from "react";
 
 export interface ViewBlock {
@@ -93,18 +94,19 @@ async function post(path: string, body: object, signal?: AbortSignal) {
     signal,
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `请求失败：${response.status}`);
+  if (!response.ok) throw new Error(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`));
   return result;
 }
 
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `请求失败：${response.status}`);
+  if (!response.ok) throw new Error(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`));
   return result as T;
 }
 
 export function usePiBridge() {
+  const locale = useLocale();
   const [session, setSession] = useState<SessionView | null>(null);
   const [streaming, setStreaming] = useState<ViewMessage | null>(null);
   const [connection, setConnection] = useState<ConnectionState>(token ? "connecting" : "missing-token");
@@ -116,7 +118,6 @@ export function usePiBridge() {
 
   useEffect(() => {
     if (!token) {
-      setError("请在 Pi 终端输入 /web，打开显示的完整地址。");
       return;
     }
     const controller = new AbortController();
@@ -132,7 +133,7 @@ export function usePiBridge() {
             signal: controller.signal,
           });
           if (!response.ok || !response.body) {
-            throw new Error(response.status === 401 ? "访问令牌无效，请在 Pi 中重新输入 /web。" : "连接 Pi 失败");
+            throw new Error(response.status === 401 ? t("访问令牌无效，请在 Pi 中重新输入 /web。", "Invalid access token. Run /web again in Pi.") : t("连接 Pi 失败", "Could not connect to Pi"));
           }
           setConnection("connected");
           setError("");
@@ -160,11 +161,11 @@ export function usePiBridge() {
               end = pending.indexOf("\n");
             }
           }
-          throw new Error("Pi 网页连接已关闭");
+          throw new Error(t("Pi 网页连接已关闭", "The Pi web connection has closed"));
         } catch (cause) {
           if (!alive) return;
           setConnection("disconnected");
-          setError(cause instanceof Error ? cause.message : "连接 Pi 失败");
+          setError(cause instanceof Error ? cause.message : t("连接 Pi 失败", "Could not connect to Pi"));
           await new Promise<void>((resolve) => { timer = setTimeout(resolve, 1500); });
         }
       }
@@ -178,10 +179,14 @@ export function usePiBridge() {
   }, []);
 
   useEffect(() => {
+    if (!token) setError(t("请在 Pi 终端输入 /web，打开显示的完整地址。", "Enter /web in the Pi terminal and open the full address shown."));
+  }, [locale]);
+
+  useEffect(() => {
     if (connection !== "connected") return;
     let active = true;
     void get<ModelOption[]>("/api/models").then((items) => { if (active) setModels(items); }).catch((cause) => {
-      if (active) setError(cause instanceof Error ? cause.message : "无法获取模型列表");
+      if (active) setError(cause instanceof Error ? cause.message : t("无法获取模型列表", "Could not load the model list"));
     });
     void get<CommandOption[]>("/api/commands").then((items) => { if (active) setCommands(items); }).catch(() => { if (active) setCommands([]); });
     return () => { active = false; };
@@ -205,22 +210,22 @@ export function usePiBridge() {
     workspaces,
     directoryPickerKind,
     async pickDirectory(): Promise<string | null> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const result = await post("/api/directory/pick", { sessionId: session.sessionId });
       return result.path;
     },
     async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/directory/list", { sessionId: session.sessionId, ...(path === undefined ? {} : { path }) }, signal);
     },
     async createDirectory(path: string, name: string): Promise<string> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const result = await post("/api/directory/create", { sessionId: session.sessionId, path, name });
       return result.path;
     },
     clearError: () => setError(""),
     async upload(file: File, signal?: AbortSignal): Promise<AttachmentReceipt> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const url = `/api/attachment?sessionId=${encodeURIComponent(session.sessionId)}&name=${encodeURIComponent(file.name)}`;
       const response = await fetch(url, {
         method: "POST",
@@ -229,8 +234,8 @@ export function usePiBridge() {
         signal,
       });
       const result = await response.json();
-      if (response.status === 404) throw new Error("当前 Pi 桥接服务仍是旧版。请在 Pi 中输入 /reload，再输入 /web 并打开新地址，然后重试上传。");
-      if (!response.ok) throw new Error(result.error || `上传失败：${response.status}`);
+      if (response.status === 404) throw new Error(t("当前 Pi 桥接服务仍是旧版。请在 Pi 中输入 /reload，再输入 /web 并打开新地址，然后重试上传。", "The Pi bridge is outdated. Run /reload, then /web in Pi, open the new address, and retry the upload."));
+      if (!response.ok) throw new Error(result.error || t(`上传失败：${response.status}`, `Upload failed: ${response.status}`));
       return result as AttachmentReceipt;
     },
     async discardAttachment(id: string): Promise<void> {
@@ -241,73 +246,73 @@ export function usePiBridge() {
       if (!session || connection !== "connected") return;
       setError("");
       try { await post("/api/message", { sessionId: session.sessionId, text, attachments }); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "发送失败"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("发送失败", "Send failed")); throw cause; }
     },
     async loadMessageImage(messageId: string, index: number): Promise<Blob> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const url = `/api/image?sessionId=${encodeURIComponent(session.sessionId)}&messageId=${encodeURIComponent(messageId)}&index=${index}`;
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) throw new Error("图片读取失败");
+      if (!response.ok) throw new Error(t("图片读取失败", "Could not load image"));
       return response.blob();
     },
     async stop() {
       if (!session || connection !== "connected") return;
       try { await post("/api/abort", { sessionId: session.sessionId }); setError(""); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "停止失败"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("停止失败", "Could not stop")); throw cause; }
     },
     async compact() {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       try { await post("/api/compact", { sessionId: session.sessionId }); setError(""); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "压缩失败"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("压缩失败", "Compaction failed")); throw cause; }
     },
     async newSession() {
       if (!session || connection !== "connected") return;
       try { await post("/api/new-session", { sessionId: session.sessionId }); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "无法创建新会话"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("无法创建新会话", "Could not create a new session")); throw cause; }
     },
     async addWorkspace(path: string, create: boolean) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/workspace/add", { sessionId: session.sessionId, path, create });
     },
     async selectWorkspace(id: string) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/workspace/select", { sessionId: session.sessionId, id });
     },
     async newSessionInWorkspace(id: string) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/workspace/new-session", { sessionId: session.sessionId, id });
     },
     async removeWorkspace(id: string) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/workspace/remove", { sessionId: session.sessionId, id });
     },
     async selectSession(workspaceId: string, id: string, path: string | null) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/session/select", { sessionId: session.sessionId, workspaceId, id, path: path ?? "" });
     },
     async setModel(provider: string, id: string) {
       if (!session || connection !== "connected") return;
       try { await post("/api/model", { sessionId: session.sessionId, provider, id }); setError(""); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "切换模型失败"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("切换模型失败", "Could not change model")); throw cause; }
     },
     async setThinkingLevel(level: string) {
       if (!session || connection !== "connected") return;
       try { await post("/api/thinking-level", { sessionId: session.sessionId, level }); setError(""); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "切换推理强度失败"); throw cause; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("切换推理强度失败", "Could not change reasoning effort")); throw cause; }
     },
     async getConfig() { return get<ConfigView>("/api/config"); },
     async getProviders() { return get<ProviderView[]>("/api/providers"); },
     async addCustomProvider(provider: CustomProviderInput): Promise<void> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/provider/custom", { sessionId: session.sessionId, provider });
     },
     async startProviderLogin(providerId: string, method: LoginMethod): Promise<{ id: string }> {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/provider/login", { sessionId: session.sessionId, providerId, method });
     },
     async getProviderLogin(id: string) { return get<LoginView>(`/api/provider/login?id=${encodeURIComponent(id)}`); },
     async respondProviderLogin(id: string, value: string) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/provider/login/respond", { sessionId: session.sessionId, id, value });
     },
     async cancelProviderLogin(id: string) {
@@ -316,7 +321,7 @@ export function usePiBridge() {
     },
     async refreshModels() { setModels(await get<ModelOption[]>("/api/models")); },
     async updateConfig(kind: ConfigKind, scope: ConfigScope, action: "add" | "remove", value: string) {
-      if (!session || connection !== "connected") throw new Error("Pi 会话不可用");
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/config", { sessionId: session.sessionId, kind, scope, action, value }) as Promise<ConfigView>;
     },
   };

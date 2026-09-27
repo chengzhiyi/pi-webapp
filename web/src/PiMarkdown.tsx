@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { localize as t } from "./ui/locale/preference.ts";
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const code = useRef<HTMLPreElement>(null);
@@ -12,7 +13,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1800);
       } catch { setCopied(false); }
-    }}>{copied ? "已复制" : "复制代码"}</button></div>
+    }}>{copied ? t("已复制", "Copied") : t("复制代码", "Copy code")}</button></div>
     <pre ref={code}>{children}</pre>
   </div>;
 }

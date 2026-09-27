@@ -21,6 +21,7 @@ import { IconPaperclipOutline16 } from "./ui/primitives/icons/index.tsx";
 import { FileTypeIcon, fileExtension } from "./ui/primitives/FileTypeIcon.tsx";
 import { DropOverlay } from "./ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../shared/user-message.ts";
+import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import "./pi-conversation.css";
 
 interface Props {
@@ -55,8 +56,8 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
       <div className={messageCss.userRow} data-message-role="user">
         <div className={messageCss.userStack}>
           {(images.length > 0 || displayed.attachments.some((attachment) => !attachment.image)) && <div className={messageCss.attachmentRow} data-message-attachments>
-            {images.map(({ index }, ordinal) => <PiHistoryImage key={index} name={imageNames[ordinal]?.name ?? imageFiles?.[ordinal]?.name ?? "图片"} messageId={message.id} index={index} file={imageFiles?.[ordinal]} tile={images.length > 1 || displayed.attachments.length > images.length} loadImage={loadImage} />)}
-            {displayed.attachments.filter((attachment) => !attachment.image).map((attachment, index) => <span key={`${attachment.name}-${index}`} className={messageCss.fileCard} title={attachment.name}><FileTypeIcon path={attachment.name} className={messageCss.fileIcon} /><span className={messageCss.fileContent}><span className={messageCss.fileName}>{attachment.name}</span><span className={messageCss.fileMeta}>{fileExtension(attachment.name).toUpperCase()} 文件</span></span></span>)}
+            {images.map(({ index }, ordinal) => <PiHistoryImage key={index} name={imageNames[ordinal]?.name ?? imageFiles?.[ordinal]?.name ?? t("图片", "Image")} messageId={message.id} index={index} file={imageFiles?.[ordinal]} tile={images.length > 1 || displayed.attachments.length > images.length} loadImage={loadImage} />)}
+            {displayed.attachments.filter((attachment) => !attachment.image).map((attachment, index) => <span key={`${attachment.name}-${index}`} className={messageCss.fileCard} title={attachment.name}><FileTypeIcon path={attachment.name} className={messageCss.fileIcon} /><span className={messageCss.fileContent}><span className={messageCss.fileName}>{attachment.name}</span><span className={messageCss.fileMeta}>{fileExtension(attachment.name).toUpperCase()} {t("文件", "file")}</span></span></span>)}
           </div>}
           {displayed.text && <div className={messageCss.bubble}>{displayed.text}</div>}
         </div>
@@ -104,7 +105,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, running = false, c
     </>}
     {answerBlocks.length > 0 && lastAssistant && <PiMessage message={{ ...lastAssistant, blocks: answerBlocks }} results={results} loadImage={loadImage} running={lastAssistant.id === "stream"} />}
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
-    {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>模型请求失败</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? "模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。" : message.error}</span></div>)}
+    {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>{t("模型请求失败", "Model request failed")}</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
     {!running && failures.length === 0 && (lastAssistant || (turn.usage && turn.usage.totalTokens > 0)) && <TurnActions text={answer} timestamp={lastAssistant?.timestamp} usage={turn.usage} model={lastAssistant?.model ?? model} />}
   </div>;
 }
@@ -118,6 +119,7 @@ interface PendingAttachment {
 }
 
 function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, onSetModel, onSetThinkingLevel }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onCompact" | "onNewSession" | "commands" | "models" | "onSetModel" | "onSetThinkingLevel"> & { hero: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
+  const locale = useLocale();
   const [draft, setDraft] = useState("");
   const [working, setWorking] = useState(false);
   const [commandMenu, setCommandMenu] = useState<"button" | "slash" | null>(null);
@@ -140,9 +142,9 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
   const canStop = ready && !session.idle && !working;
   const availableCommands = useMemo(() => {
     const unique = new Map<string, CommandOption>();
-    for (const command of [...builtInCommands, ...commands]) if (!unique.has(command.name)) unique.set(command.name, command);
+    for (const command of [...builtInCommands(), ...commands]) if (!unique.has(command.name)) unique.set(command.name, command);
     return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [commands]);
+  }, [commands, locale]);
   const query = commandMenu === "slash" ? draft.slice(1).toLowerCase() : "";
   const visibleCommands = commandMenu === null ? [] : availableCommands.filter((command) => command.name.toLowerCase().includes(query));
 
@@ -185,7 +187,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
       setAttachments((current) => current.map((item) => item.key === key ? { ...item, status: "ready", receipt, error: undefined } : item));
     }).catch((cause) => {
       if (removedKeys.current.has(key)) return;
-      const message = cause instanceof Error ? cause.message : "上传失败";
+      const message = cause instanceof Error ? cause.message : t("上传失败", "Upload failed");
       setAttachmentError(message);
       setAttachments((current) => current.map((item) => item.key === key ? { ...item, status: "error", error: message } : item));
     }).finally(() => { if (uploadControllers.current.get(key) === controller) uploadControllers.current.delete(key); });
@@ -203,7 +205,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
     if (!canAttach || files.length === 0) return;
     const available = Math.max(0, 20 - attachments.length);
     const accepted = files.slice(0, available).filter((file) => file.size > 0 && file.size <= 20 * 1024 * 1024);
-    if (accepted.length !== files.length) setAttachmentError("最多添加 20 个文件，单个文件不得超过 20 MB 且不能为空");
+    if (accepted.length !== files.length) setAttachmentError(t("最多添加 20 个文件，单个文件不得超过 20 MB 且不能为空", "Add up to 20 nonempty files, each no larger than 20 MB"));
     else setAttachmentError("");
     const pending = accepted.map((file) => ({ key: crypto.randomUUID(), file, status: "uploading" as const }));
     setAttachments((current) => [...current, ...pending]);
@@ -259,11 +261,11 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
 
   return (
     <div className={`${inputCss.root} ${hero ? inputCss.hero : ""}`}>
-      {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? "松开以上传文件" : "当前无法上传文件", desc: canAttach ? "最多 20 个文件，每个不超过 20 MB" : undefined }} />}
+      {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? t("松开以上传文件", "Drop to upload files") : t("当前无法上传文件", "Files cannot be uploaded now"), desc: canAttach ? t("最多 20 个文件，每个不超过 20 MB", "Up to 20 files, 20 MB each") : undefined }} />}
       <form ref={form} className={inputCss.card} data-composer-card onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         {commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />}
-        <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label="选择要上传的文件" onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
-        {attachments.length > 0 && <div className="pi-attachment-rail" role="group" aria-label="待发送附件">
+        <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label={t("选择要上传的文件", "Choose files to upload")} onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
+        {attachments.length > 0 && <div className="pi-attachment-rail" role="group" aria-label={t("待发送附件", "Pending attachments")}>
           {attachments.map((item) => <PiAttachmentItem key={item.key} file={item.file} status={item.status} error={item.error} onRemove={() => removeAttachment(item)} onRetry={() => { setAttachmentError(""); setAttachments((current) => current.map((entry) => entry.key === item.key ? { ...entry, status: "uploading", error: undefined } : entry)); uploadAttachment(item.key, item.file); }} />)}
         </div>}
         <div className={inputCss.scroll} data-input-scroll>
@@ -271,8 +273,8 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
             <textarea
               ref={textarea}
               className="pi-editor"
-              aria-label="给当前 Pi 会话发送消息"
-              placeholder={ready ? "给 Pi 发送消息" : "打开 Pi 中 /web 给出的完整地址"}
+              aria-label={t("给当前 Pi 会话发送消息", "Send a message to the current Pi session")}
+              placeholder={ready ? t("给 Pi 发送消息", "Message Pi") : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
               value={draft}
               onChange={(event) => {
                 const next = event.target.value;
@@ -303,15 +305,15 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
         </div>
         <div className={inputCss.row}>
           <div className={inputCss.tools}>
-            <button className={inputCss.add} type="button" aria-label="添加指令" title="添加指令" aria-haspopup="listbox" aria-expanded={commandMenu !== null} disabled={!canAttach} onMouseDown={(event) => event.preventDefault()} onClick={() => { setCommandMenu(commandMenu === null ? "button" : null); setActiveCommand(0); textarea.current?.focus(); }}><IconPlusOutline16 size={16} /></button>
-            <button className={inputCss.add} type="button" aria-label="添加文件" title="添加文件" disabled={!canAttach} onClick={() => fileInput.current?.click()}><IconPaperclipOutline16 size={16} /></button>
-            <span className="pi-input-context">当前 Pi 会话</span>
+            <button className={inputCss.add} type="button" aria-label={t("添加指令", "Add command")} title={t("添加指令", "Add command")} aria-haspopup="listbox" aria-expanded={commandMenu !== null} disabled={!canAttach} onMouseDown={(event) => event.preventDefault()} onClick={() => { setCommandMenu(commandMenu === null ? "button" : null); setActiveCommand(0); textarea.current?.focus(); }}><IconPlusOutline16 size={16} /></button>
+            <button className={inputCss.add} type="button" aria-label={t("添加文件", "Add file")} title={t("添加文件", "Add file")} disabled={!canAttach} onClick={() => fileInput.current?.click()}><IconPaperclipOutline16 size={16} /></button>
+            <span className="pi-input-context">{t("当前 Pi 会话", "Current Pi session")}</span>
           </div>
           <div className={inputCss.trailing}>
             <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />
             {canStop
-              ? <button className={inputCss.primary} type="button" aria-label="停止运行" onClick={() => { void stop(); }}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg></button>
-              : <button className={inputCss.primary} type="submit" aria-label="发送消息" disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
+              ? <button className={inputCss.primary} type="button" aria-label={t("停止运行", "Stop running")} onClick={() => { void stop(); }}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg></button>
+              : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
           </div>
         </div>
       </form>
@@ -354,12 +356,12 @@ export function PiConversation({ session, streaming, connection, error, onSend, 
     return () => observer.disconnect();
   }, []);
   useEffect(() => { if (!empty && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [empty, session?.messages.length, streaming?.blocks, pending?.id]);
-  const workspace = session?.cwd.split(/[\\/]/).filter(Boolean).at(-1) || "Pi 工作区";
+  const workspace = session?.cwd.split(/[\\/]/).filter(Boolean).at(-1) || t("Pi 工作区", "Pi workspace");
   const liveMessages = [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])];
   const results = toolResults(liveMessages);
   const turns = conversationTurns(liveMessages);
   const heroText = (key: string) => ({
-    "hero.headline": "有什么可以帮你？",
+    "hero.headline": t("有什么可以帮你？", "How can I help?"),
     "hero.preview": "Pi",
   })[key] ?? key;
 
@@ -372,11 +374,11 @@ export function PiConversation({ session, streaming, connection, error, onSend, 
               <span className={`${conversationCss.crumb} ${conversationCss.crumbCurrent}`}>{session.name}</span>
             </div>
           </div>
-          <div className={conversationCss.headerActions}><StateDot state={connection === "connected" ? session.idle ? "done" : "ongoing" : "error"} /><span className="pi-header-state">{connection === "connected" ? session.idle ? "已连接" : "运行中" : "已断开"}</span></div>
+          <div className={conversationCss.headerActions}><StateDot state={connection === "connected" ? session.idle ? "done" : "ongoing" : "error"} /><span className="pi-header-state">{connection === "connected" ? session.idle ? t("已连接", "Connected") : t("运行中", "Running") : t("已断开", "Disconnected")}</span></div>
         </div>
-        <div className={conversationCss.tabs} role="tablist" aria-label="会话视图">
-          <button className={`${conversationCss.tab} ${activeTab === "chat" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={activeTab === "chat"} type="button" onClick={() => setActiveTab("chat")}>对话</button>
-          <button className={`${conversationCss.tab} ${activeTab === "trajectory" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={activeTab === "trajectory"} type="button" onClick={() => setActiveTab("trajectory")}>轨迹</button>
+        <div className={conversationCss.tabs} role="tablist" aria-label={t("会话视图", "Session views")}>
+          <button className={`${conversationCss.tab} ${activeTab === "chat" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={activeTab === "chat"} type="button" onClick={() => setActiveTab("chat")}>{t("对话", "Chat")}</button>
+          <button className={`${conversationCss.tab} ${activeTab === "trajectory" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={activeTab === "trajectory"} type="button" onClick={() => setActiveTab("trajectory")}>{t("轨迹", "Trajectory")}</button>
         </div>
       </header>}
       <div className={conversationCss.body}>
