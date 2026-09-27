@@ -6,7 +6,7 @@ import inputCss from "./ui/conversation/InputBar.module.css";
 import heroCss from "./ui/conversation/HeroShell.module.css";
 import chatCss from "./ui/chat/ChatView.module.css";
 import messageCss from "./ui/chat/MessageItem.module.css";
-import type { AttachmentReceipt, ConnectionState, SessionView, ViewMessage, ViewBlock } from "./pi-bridge.ts";
+import type { AttachmentReceipt, ConnectionState, ModelsStatus, SessionView, ViewMessage, ViewBlock } from "./pi-bridge.ts";
 import type { CommandOption, ModelOption } from "./pi-bridge.ts";
 import { PiMarkdown } from "./PiMarkdown.tsx";
 import { ReasoningRow } from "./ui/chat/ReasoningRow.tsx";
@@ -38,6 +38,8 @@ interface Props {
   commands: CommandOption[];
   onStop: () => Promise<void>;
   models: ModelOption[];
+  modelsStatus: ModelsStatus;
+  onConfigureModels: () => void;
   onSetModel: (provider: string, id: string) => Promise<void>;
   onSetThinkingLevel: (level: string) => Promise<void>;
 }
@@ -118,7 +120,7 @@ interface PendingAttachment {
   error?: string;
 }
 
-function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, onSetModel, onSetThinkingLevel }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onCompact" | "onNewSession" | "commands" | "models" | "onSetModel" | "onSetThinkingLevel"> & { hero: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
+function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel"> & { hero: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
   const locale = useLocale();
   const [draft, setDraft] = useState("");
   const [working, setWorking] = useState(false);
@@ -137,8 +139,11 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
   const form = useRef<HTMLFormElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const ready = connection === "connected" && session !== null;
+  const noModels = ready && modelsStatus === "ready" && models.length === 0;
+  const modelSelected = ready && models.some((model) => `${model.provider}/${model.id}` === session.model);
   const canAttach = ready && session.idle && !working;
-  const canSend = canAttach && (draft.trim().length > 0 || attachments.length > 0) && attachments.every((item) => item.status === "ready");
+  const localCommand = attachments.length === 0 && ["/compact", "/new", "/model"].includes(draft.trim());
+  const canSend = canAttach && modelsStatus === "ready" && (modelSelected || localCommand) && (draft.trim().length > 0 || attachments.length > 0) && attachments.every((item) => item.status === "ready");
   const canStop = ready && !session.idle && !working;
   const availableCommands = useMemo(() => {
     const unique = new Map<string, CommandOption>();
@@ -232,7 +237,6 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
     setWorking(true);
     const text = draft.trim();
     const sentAttachments = attachments;
-    const localCommand = attachments.length === 0 && ["/compact", "/new", "/model"].includes(text);
     if (!localCommand) {
       setDraft("");
       setAttachments([]);
@@ -274,7 +278,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
               ref={textarea}
               className="pi-editor"
               aria-label={t("给当前 Pi 会话发送消息", "Send a message to the current Pi session")}
-              placeholder={ready ? t("给 Pi 发送消息", "Message Pi") : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
+              placeholder={noModels ? t("先连接模型，再开始对话", "Connect a model to start chatting") : ready && modelsStatus === "ready" && !modelSelected ? t("先选择模型，再开始对话", "Choose a model to start chatting") : ready ? t("给 Pi 发送消息", "Message Pi") : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
               value={draft}
               onChange={(event) => {
                 const next = event.target.value;
@@ -310,7 +314,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
             <span className="pi-input-context">{t("当前 Pi 会话", "Current Pi session")}</span>
           </div>
           <div className={inputCss.trailing}>
-            <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />
+            {noModels ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button> : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />}
             {canStop
               ? <button className={inputCss.primary} type="button" aria-label={t("停止运行", "Stop running")} onClick={() => { void stop(); }}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg></button>
               : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
@@ -322,7 +326,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
   );
 }
 
-export function PiConversation({ session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, onSetModel, onSetThinkingLevel }: Props) {
+export function PiConversation({ session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -392,7 +396,7 @@ export function PiConversation({ session, streaming, connection, error, onSend, 
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
-              <PiInputBar hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} />
+              <PiInputBar hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} />
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>

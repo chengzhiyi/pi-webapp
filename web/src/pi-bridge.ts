@@ -54,6 +54,7 @@ export interface DirectoryListing { path: string; home: string; crumbs: Director
 export type DirectoryPickerKind = "native" | "browse";
 
 export type ConnectionState = "missing-token" | "connecting" | "connected" | "disconnected";
+export type ModelsStatus = "loading" | "ready" | "error";
 export interface ModelOption { provider: string; id: string; name: string }
 export interface CommandOption { name: string; description?: string }
 export interface AttachmentReceipt { id: string; name: string; bytes: number }
@@ -67,7 +68,11 @@ export interface ConfigView {
   installed: Record<ConfigKind, ResourceItem[]>;
 }
 export type LoginMethod = "api_key" | "oauth";
-export interface ProviderView { id: string; name: string; configured: boolean; methods: LoginMethod[] }
+export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
+export interface ProviderModelFields { id: string; name?: string; contextWindow?: number; maxTokens?: number; input?: Array<"text" | "image"> }
+export interface ProviderModelRow extends ProviderModelFields { source: "builtin" | "custom"; overridden: boolean }
+export interface ProviderModelsView { providerId: string; baseUrl?: string; models: ProviderModelRow[] }
+export type ProviderModelChange = { action: "save"; originalId?: string; model: ProviderModelFields } | { action: "remove"; id: string } | { action: "base_url"; baseUrl: string | null };
 export interface CustomProviderInput { id: string; name: string; baseUrl: string; api: "openai-completions" | "openai-responses" | "anthropic-messages"; modelId: string }
 export type LoginPrompt =
   | { type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
@@ -77,7 +82,7 @@ export type LoginEvent =
   | { type: "auth_url"; url: string; instructions?: string }
   | { type: "device_code"; userCode: string; verificationUri: string }
   | { type: "progress"; message: string };
-export interface LoginView { id: string; status: "running" | "waiting" | "done" | "error" | "cancelled"; prompt?: LoginPrompt; event?: LoginEvent; error?: string }
+export interface LoginView { id: string; providerId: string; method: LoginMethod; status: "running" | "waiting" | "done" | "error" | "cancelled"; prompt?: LoginPrompt; event?: LoginEvent; authorization?: Extract<LoginEvent, { type: "auth_url" | "device_code" }>; error?: string }
 
 const hashToken = location.hash.slice(1);
 if (hashToken) {
@@ -112,6 +117,7 @@ export function usePiBridge() {
   const [connection, setConnection] = useState<ConnectionState>(token ? "connecting" : "missing-token");
   const [error, setError] = useState("");
   const [models, setModels] = useState<ModelOption[]>([]);
+  const [modelsStatus, setModelsStatus] = useState<ModelsStatus>("loading");
   const [commands, setCommands] = useState<CommandOption[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceListView>({ items: [], activeId: null, sessions: [] });
   const [directoryPickerKind, setDirectoryPickerKind] = useState<DirectoryPickerKind | null>(null);
@@ -165,6 +171,7 @@ export function usePiBridge() {
         } catch (cause) {
           if (!alive) return;
           setConnection("disconnected");
+          setModelsStatus("loading");
           setError(cause instanceof Error ? cause.message : t("连接 Pi 失败", "Could not connect to Pi"));
           await new Promise<void>((resolve) => { timer = setTimeout(resolve, 1500); });
         }
@@ -185,8 +192,9 @@ export function usePiBridge() {
   useEffect(() => {
     if (connection !== "connected") return;
     let active = true;
-    void get<ModelOption[]>("/api/models").then((items) => { if (active) setModels(items); }).catch((cause) => {
-      if (active) setError(cause instanceof Error ? cause.message : t("无法获取模型列表", "Could not load the model list"));
+    setModelsStatus("loading");
+    void get<ModelOption[]>("/api/models").then((items) => { if (active) { setModels(items); setModelsStatus("ready"); } }).catch((cause) => {
+      if (active) { setModelsStatus("error"); setError(cause instanceof Error ? cause.message : t("无法获取模型列表", "Could not load the model list")); }
     });
     void get<CommandOption[]>("/api/commands").then((items) => { if (active) setCommands(items); }).catch(() => { if (active) setCommands([]); });
     return () => { active = false; };
@@ -206,6 +214,7 @@ export function usePiBridge() {
     connection,
     error,
     models,
+    modelsStatus,
     commands,
     workspaces,
     directoryPickerKind,
@@ -302,15 +311,29 @@ export function usePiBridge() {
     },
     async getConfig() { return get<ConfigView>("/api/config"); },
     async getProviders() { return get<ProviderView[]>("/api/providers"); },
+    async getProviderModels(providerId: string) { return get<ProviderModelsView>(`/api/provider/models?providerId=${encodeURIComponent(providerId)}`); },
+    async updateProviderModel(providerId: string, change: ProviderModelChange): Promise<void> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/provider/models", { sessionId: session.sessionId, providerId, change });
+      try { setModels(await get<ModelOption[]>("/api/models")); setModelsStatus("ready"); }
+      catch { setError(t("模型已保存，但会话模型列表暂时无法刷新。", "Model saved, but the conversation model list could not refresh.")); }
+    },
+    async logoutProvider(providerId: string): Promise<void> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/provider/logout", { sessionId: session.sessionId, providerId });
+      try { setModels(await get<ModelOption[]>("/api/models")); setModelsStatus("ready"); }
+      catch { setError(t("认证已移除，但会话模型列表暂时无法刷新。", "Credentials removed, but the conversation model list could not refresh.")); }
+    },
     async addCustomProvider(provider: CustomProviderInput): Promise<void> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/provider/custom", { sessionId: session.sessionId, provider });
     },
-    async startProviderLogin(providerId: string, method: LoginMethod): Promise<{ id: string }> {
+    async startProviderLogin(providerId: string, method: LoginMethod, initialSecret?: string): Promise<{ id: string }> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
-      return post("/api/provider/login", { sessionId: session.sessionId, providerId, method });
+      return post("/api/provider/login", { sessionId: session.sessionId, providerId, method, ...(initialSecret === undefined ? {} : { initialSecret }) });
     },
     async getProviderLogin(id: string) { return get<LoginView>(`/api/provider/login?id=${encodeURIComponent(id)}`); },
+    async getActiveProviderLogin() { return (await get<{ active: LoginView | null }>("/api/provider/login/active")).active; },
     async respondProviderLogin(id: string, value: string) {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/provider/login/respond", { sessionId: session.sessionId, id, value });
@@ -319,7 +342,7 @@ export function usePiBridge() {
       if (!session || connection !== "connected") return;
       await post("/api/provider/login/cancel", { sessionId: session.sessionId, id });
     },
-    async refreshModels() { setModels(await get<ModelOption[]>("/api/models")); },
+    async refreshModels() { setModels(await get<ModelOption[]>("/api/models")); setModelsStatus("ready"); },
     async updateConfig(kind: ConfigKind, scope: ConfigScope, action: "add" | "remove", value: string) {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/config", { sessionId: session.sessionId, kind, scope, action, value }) as Promise<ConfigView>;

@@ -224,7 +224,7 @@ test("protects model and configuration actions and validates configuration input
 test("web provider login handles a secret prompt without returning the secret", async () => {
   const bridge = await startBridge({
     ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
-    providers: async () => [{ id: "example", name: "Example", configured: false, methods: ["api_key"] }],
+    providers: async () => [{ id: "example", name: "Example", configured: false, storedCredential: false, methods: ["api_key"] }],
     async loginProvider(_provider, _method, interaction) {
       const key = await interaction.prompt({ type: "secret", message: "API key" });
       assert.equal(key, "test-secret-value");
@@ -252,10 +252,33 @@ test("web provider login handles a secret prompt without returning the secret", 
   } finally { await bridge.close(); }
 });
 
+test("inline API key connects in one request without exposing the key in login status", async () => {
+  const bridge = await startBridge({
+    ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
+    providers: async () => [{ id: "example", name: "Example", configured: false, storedCredential: false, methods: ["api_key"] }],
+    async loginProvider(_provider, _method, interaction) {
+      assert.equal(await interaction.prompt({ type: "secret", message: "API key" }), "sk-inline-test");
+    },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    const start = await fetch(`${url.origin}/api/provider/login`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", providerId: "example", method: "api_key", initialSecret: "sk-inline-test" }) });
+    assert.equal(start.status, 202);
+    const { id } = await start.json() as { id: string };
+    await new Promise((resolve) => setImmediate(resolve));
+    const status = await (await fetch(`${url.origin}/api/provider/login?id=${id}`, { headers })).text();
+    assert.match(status, /"status":"done"/);
+    assert.equal(status.includes("sk-inline-test"), false);
+    const invalid = await fetch(`${url.origin}/api/provider/login`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", providerId: "example", method: "oauth", initialSecret: "sk-inline-test" }) });
+    assert.equal(invalid.status, 400);
+  } finally { await bridge.close(); }
+});
+
 test("web provider login relays OAuth device instructions and manual code", async () => {
   const bridge = await startBridge({
     ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
-    providers: async () => [{ id: "example", name: "Example", configured: false, methods: ["oauth"] }],
+    providers: async () => [{ id: "example", name: "Example", configured: false, storedCredential: false, methods: ["oauth"] }],
     async loginProvider(_provider, _method, interaction) {
       interaction.notify({ type: "device_code", verificationUri: "https://example.com/activate", userCode: "ABCD" });
       assert.equal(await interaction.prompt({ type: "manual_code", message: "输入授权码" }), "auth-code");
@@ -272,6 +295,13 @@ test("web provider login relays OAuth device instructions and manual code", asyn
     assert.equal(prompt.event.type, "device_code");
     assert.equal(prompt.event.userCode, "ABCD");
     assert.equal(prompt.prompt.type, "manual_code");
+    assert.equal((await fetch(`${url.origin}/api/provider/login/active`)).status, 401);
+    const active = await (await fetch(`${url.origin}/api/provider/login/active`, { headers })).json();
+    assert.equal(active.active.id, id);
+    assert.equal(active.active.providerId, "example");
+    const resumed = await fetch(`${url.origin}/api/provider/login`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", providerId: "example", method: "oauth" }) });
+    assert.equal(resumed.status, 202);
+    assert.equal((await resumed.json()).id, id);
     const reply = await fetch(`${url.origin}/api/provider/login/respond`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", id, value: "auth-code" }) });
     assert.equal(reply.status, 202);
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -297,6 +327,31 @@ test("only an authenticated active session can add a valid custom provider", asy
     assert.equal((await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", provider: { ...provider, baseUrl: "file:///tmp/api" } }) })).status, 400);
     assert.equal((await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", provider }) })).status, 201);
     assert.deepEqual(added, ["my-api"]);
+  } finally { await bridge.close(); }
+});
+
+test("model edits and credential removal require the active authenticated session", async () => {
+  const changes: string[] = [];
+  const bridge = await startBridge({
+    ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
+    async providerModels(providerId) { return { providerId, models: [{ id: "model", source: "builtin" as const, overridden: false }] }; },
+    async updateProviderModel(_sessionId, providerId, change) { changes.push(`${providerId}:${change.action}`); },
+    async logoutProvider(_sessionId, providerId) { changes.push(`${providerId}:logout`); },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    const modelUrl = `${url.origin}/api/provider/models`;
+    assert.equal((await fetch(`${modelUrl}?providerId=example`)).status, 401);
+    assert.equal((await fetch(`${modelUrl}?providerId=example`, { headers })).status, 200);
+    const post = (endpoint: string, body: object, authorized = true) => fetch(`${url.origin}${endpoint}`, { method: "POST", headers: authorized ? headers : { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const save = { sessionId: "session-a", providerId: "example", change: { action: "save", model: { id: "new", contextWindow: 128000 } } };
+    assert.equal((await post("/api/provider/models", save, false)).status, 401);
+    assert.equal((await post("/api/provider/models", { ...save, sessionId: "stale" })).status, 409);
+    assert.equal((await post("/api/provider/models", { ...save, change: { action: "save", model: { id: "bad", maxTokens: -1 } } })).status, 400);
+    assert.equal((await post("/api/provider/models", save)).status, 200);
+    assert.equal((await post("/api/provider/logout", { sessionId: "session-a", providerId: "example" })).status, 200);
+    assert.deepEqual(changes, ["example:save", "example:logout"]);
   } finally { await bridge.close(); }
 });
 

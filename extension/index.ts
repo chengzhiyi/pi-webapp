@@ -10,8 +10,9 @@ import { WorkspaceRegistry, workspaceRegistryPath } from "./workspaces.ts";
 import { WorkspaceSessions } from "./workspace-sessions.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
 import { buildResourceInventory } from "./config-inventory.ts";
-import type { LoginMethod } from "./provider-login.ts";
+import { preferBrowserLogin, type LoginMethod } from "./provider-login.ts";
 import { addCustomProvider, type CustomProviderInput } from "./custom-provider.ts";
+import { getProviderModels, updateProviderModel, type ModelChange } from "./provider-model-config.ts";
 import { openWebPage } from "./open-web-page.ts";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../web/dist");
@@ -334,16 +335,56 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           },
           async providers() {
             const runtime = await currentProviderRuntime();
+            const stored = new Set((await runtime.listCredentials()).map((entry) => entry.providerId));
             return runtime.getProviders().map((provider) => ({
               id: provider.id,
               name: provider.name,
               configured: runtime.getProviderAuthStatus(provider.id).configured,
+              storedCredential: stored.has(provider.id),
               methods: [provider.auth.apiKey?.login ? "api_key" : null, provider.auth.oauth ? "oauth" : null].filter((value): value is LoginMethod => value !== null),
             }));
           },
+          async providerModels(providerId: string) {
+            const runtime = await currentProviderRuntime();
+            return getProviderModels(join(getAgentDir(), "models.json"), providerId, runtime);
+          },
+          async updateProviderModel(sessionId: string, providerId: string, change: ModelChange) {
+            activeSession(sessionId);
+            if (shared.selected === "tui" ? !sameSession(sessionId).isIdle() : !shared.workspaceSessions?.session?.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+            const selectedModel = snapshot().model;
+            if (change.action === "remove" && selectedModel === `${providerId}/${change.id}`) throw new Error("请先切换当前使用的模型");
+            if (change.action === "save" && change.originalId && change.originalId !== change.model.id && selectedModel === `${providerId}/${change.originalId}`) throw new Error("请先切换当前使用的模型");
+            const runtime = await currentProviderRuntime();
+            await updateProviderModel(join(getAgentDir(), "models.json"), providerId, change, runtime);
+            await runtime.refresh({ providers: [providerId], allowNetwork: false });
+            await shared.current?.modelRegistry.refresh({ providers: [providerId], allowNetwork: false });
+            await shared.workspaceSessions?.session?.modelRuntime.refresh({ providers: [providerId], allowNetwork: false });
+            const affectedModelId = change.action === "save" ? change.model.id : change.action === "base_url" && selectedModel?.startsWith(`${providerId}/`) ? selectedModel.slice(providerId.length + 1) : null;
+            if (affectedModelId && selectedModel === `${providerId}/${affectedModelId}`) {
+              if (shared.selected === "sdk") {
+                try { await shared.workspaceSessions!.setModel(providerId, affectedModelId); }
+                catch { throw new Error("模型已保存，请重新选择该模型以应用新参数"); }
+              }
+              else {
+                const active = sameSession(sessionId);
+                const model = active.modelRegistry.find(providerId, affectedModelId);
+                if (!model || !shared.pi || !await shared.pi.setModel(model)) throw new Error("模型已保存，请重新选择该模型以应用新参数");
+                publishSnapshot(active);
+              }
+            }
+          },
+          async logoutProvider(sessionId: string, providerId: string) {
+            activeSession(sessionId);
+            if (shared.selected === "tui" ? !sameSession(sessionId).isIdle() : !shared.workspaceSessions?.session?.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+            const runtime = await currentProviderRuntime();
+            if (!(await runtime.listCredentials()).some((entry) => entry.providerId === providerId)) throw new Error("该提供方没有已保存的认证");
+            await runtime.logout(providerId);
+            await shared.current?.modelRegistry.refresh({ providers: [providerId], allowNetwork: false });
+            await shared.workspaceSessions?.session?.modelRuntime.refresh({ providers: [providerId], allowNetwork: false });
+          },
           async loginProvider(providerId: string, method: LoginMethod, interaction: AuthInteraction) {
             const runtime = await currentProviderRuntime();
-            await runtime.login(providerId, method, interaction);
+            await runtime.login(providerId, method, preferBrowserLogin(providerId, method, interaction));
             await runtime.refresh({ providers: [providerId], allowNetwork: false });
             await shared.current?.modelRegistry.refresh({ providers: [providerId], allowNetwork: false });
             await shared.workspaceSessions?.session?.modelRuntime.refresh({ providers: [providerId], allowNetwork: false });
