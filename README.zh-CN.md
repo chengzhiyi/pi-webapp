@@ -47,6 +47,10 @@ pi -e .
 
 `npm publish` 会运行检查、测试和生产构建。`pi-package` 关键词使发布到 npm 的软件包有资格进入 [Pi 软件包目录](https://pi.dev/packages)；目录更新可能晚于 npm。
 
+GitHub Actions 会在针对 `main` 的拉取请求中运行 `check`、`test` 和 `build`。代码推送到 `main` 后会再次运行这些检查，全部通过才自动发布下一个补丁版本。发布版本根据源码版本和 npm `latest` 版本确定，仅在 CI 中写入包文件，不会提交回 Git。如需开始新的次版本或主版本，请在拉取请求中同步提高 `package.json` 和 `package-lock.json` 的版本。每次发布也会将包内 `pi.image` 的地址更新为该版本。
+
+首次自动发布前，请在 npm 的 `pi-webapp` 包设置中配置 Trusted Publishing：GitHub 所有者为 `chengzhiyi`，仓库为 `pi-webapp`，工作流文件名为 `ci.yml`，不设置环境，并允许直接执行 `npm publish`。工作流通过 GitHub OIDC 认证，无需 npm token。`package.json` 中的仓库地址应与 GitHub 仓库保持一致。
+
 ## 许可证
 
 MIT。详见 `LICENSE` 文件。
