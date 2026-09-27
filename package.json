@@ -1,6 +1,6 @@
 {
   "name": "pi-webapp",
-  "version": "0.1.6",
+  "version": "0.1.5",
   "type": "module",
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
