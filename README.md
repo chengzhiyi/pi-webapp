@@ -47,6 +47,10 @@ The source lives in `extension/`, `shared/`, and `web/src/`. The npm package con
 
 `npm publish` runs the checks, tests, and production build. The `pi-package` keyword makes the published npm package eligible for the [Pi package catalog](https://pi.dev/packages); catalog updates may lag behind npm.
 
+GitHub Actions runs `check`, `test`, and `build` on pull requests to `main`. A push to `main` repeats those checks and then publishes the next patch version to npm. The release version is selected from the greater of the source version and the npm `latest` version; it is set in the package during CI and is not committed back to Git. To start a new minor or major series, raise the version in `package.json` and `package-lock.json` in the pull request. Each release also updates the package's `pi.image` URL to its own version.
+
+Before the first automated release, configure npm Trusted Publishing for the `pi-webapp` package: GitHub owner `chengzhiyi`, repository `pi-webapp`, workflow filename `ci.yml`, no environment, and allow direct `npm publish`. This workflow uses GitHub's OIDC identity and does not need an npm token. Keep the package's repository URL in `package.json` aligned with the GitHub repository.
+
 ## License
 
 MIT. See the `LICENSE` file.

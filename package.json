@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chengzhiyi/pi-webapp.git"
+  },
   "license": "MIT",
   "keywords": [
     "pi-package"
