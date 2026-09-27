@@ -15,7 +15,7 @@
     "pi-webapp": "./bin/pi-webapp.mjs"
   },
   "pi": {
-    "image": "https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png",
+    "image": "https://raw.githubusercontent.com/chengzhiyi/pi-webapp/main/assets/cover-webapp.png",
     "extensions": [
       "./dist/extension.js"
     ]

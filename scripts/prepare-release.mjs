@@ -28,7 +28,7 @@ const next = sourceIsNewer
 execFileSync("npm", ["version", next, "--no-git-tag-version", "--allow-same-version"], {
   stdio: "inherit",
 });
-execFileSync("npm", ["pkg", "set", `pi.image=https://unpkg.com/${pkg.name}@${next}/assets/cover-webapp.png`], {
+execFileSync("npm", ["pkg", "set", `pi.image=https://cdn.jsdelivr.net/npm/${pkg.name}@${next}/assets/cover-webapp.png`], {
   stdio: "inherit",
 });
 console.log(`Publishing ${pkg.name}@${next}`);
