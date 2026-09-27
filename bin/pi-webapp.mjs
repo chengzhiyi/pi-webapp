@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
+import { openWebPage } from "./open-web-page.mjs";
 
 const minimum = [0, 87, 1];
 const launcher = fileURLToPath(import.meta.url);
@@ -211,6 +212,7 @@ async function start(args) {
   const existing = await activeState();
   if (existing) {
     console.log(existing.url ? `pi-webapp 已在后台运行：${existing.url}` : "pi-webapp 正在启动");
+    if (existing.url) await openPageIfLocal(existing.url);
     return;
   }
   const nodeVersion = versionParts(process.versions.node);
@@ -244,6 +246,16 @@ async function start(args) {
   }
   console.log(`pi-webapp 已在后台运行（PID ${ready.pid}）：${ready.url}`);
   console.log("停止服务：pi-webapp stop（源码目录中可运行 npm run stop）");
+  await openPageIfLocal(ready.url);
+}
+
+async function openPageIfLocal(url) {
+  if (process.env.PI_WEBAPP_AUTO_OPEN === "0") return;
+  try {
+    if (!await openWebPage(url)) console.log("当前没有本地图形桌面，请手动打开上方地址。");
+  } catch {
+    console.error("无法自动打开浏览器，请手动打开上方地址。");
+  }
 }
 
 async function stop() {
