@@ -16,6 +16,8 @@ npx pi-webapp
 
 This starts Pi in the background and opens the default browser on a local graphical desktop, leaving the terminal free. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` package with npm. An existing Pi installation must be version 0.87.1 or later. The launcher does not replace an older installation automatically. Running the launcher again reopens the existing server. Remote or headless sessions print the address instead; set `PI_WEBAPP_AUTO_OPEN=0` to disable automatic opening.
 
+In Settings → General → App updates, the web page checks npm for a newer `pi-webapp` release. When started by the background launcher from an npm package, **Update and restart** installs the verified release under Pi's `pi-web/releases/` data directory, restarts the server, and reloads the same browser address. Wait for any active reply to finish first. If the new version cannot start, the launcher restores the previous service. This works for both `npx` and global-command launches; later launches select the managed release automatically. It does not change the npm global installation. Source checkouts and `/web` pages opened from an existing Pi terminal show version information but cannot restart from the web page. If the service does not return, run `pi-webapp status` and check `~/.pi/agent/pi-web/launcher.log`.
+
 Use `npx pi-webapp status` to show the address and `npx pi-webapp stop` to stop the background service. After a global install, use `pi-webapp status` and `pi-webapp stop`.
 
 You can also install the launcher globally:

@@ -14,6 +14,7 @@ import { preferBrowserLogin, type LoginMethod } from "./provider-login.ts";
 import { addCustomProvider, type CustomProviderInput } from "./custom-provider.ts";
 import { getProviderModels, updateProviderModel, type ModelChange } from "./provider-model-config.ts";
 import { openWebPage } from "./open-web-page.ts";
+import { SelfUpdater } from "./self-update.ts";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../web/dist");
 const stateKey = Symbol.for("pi-web.bridge-state");
@@ -266,8 +267,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       const initialWorkspace = await shared.workspaces.add(ctx.cwd);
       if (shared.selected === "tui") shared.activeWorkspaceId = initialWorkspace.id;
       // Pi's /reload re-evaluates extensions but retains this process-wide state.
-      // A bridge created before attachment support must be replaced as well.
-      if (shared.bridge && shared.bridge.protocolVersion !== 3) {
+      // Replace an older bridge so new authenticated endpoints are available.
+      if (shared.bridge && shared.bridge.protocolVersion !== 4) {
         const previous = shared.bridge;
         shared.bridge = null;
         await previous.close();
@@ -280,6 +281,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           }
         }, () => shared.current?.model);
         shared.bridge = await startBridge({
+          selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE }),
           snapshot,
           image(sessionId, messageId, index) {
             activeSession(sessionId);

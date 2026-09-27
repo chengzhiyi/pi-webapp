@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { ConfigKind, ConfigScope, ConfigView, CustomProviderInput, LoginMethod, LoginView, ProviderModelChange, ProviderModelsView, ProviderView } from "./pi-bridge.ts";
+import type { ConfigKind, ConfigScope, ConfigView, CustomProviderInput, LoginMethod, LoginView, ProviderModelChange, ProviderModelsView, ProviderView, UpdateStatus } from "./pi-bridge.ts";
 import { PiProviderSettings } from "./PiProviderSettings.tsx";
 import { AppearanceRow } from "./ui/settings/AppearanceRow.tsx";
 import { LanguageRow } from "./ui/settings/LanguageRow.tsx";
+import { UpdateRow } from "./ui/settings/UpdateRow.tsx";
 import { SettingsPanel } from "./ui/settings/SettingsPanel.tsx";
 import { useLocale, textFor } from "./ui/locale/preference.ts";
 import { isPackageSource } from "../../shared/config-source.ts";
@@ -13,6 +14,9 @@ interface Props {
   setupMode?: boolean;
   getConfig: () => Promise<ConfigView>;
   updateConfig: (kind: ConfigKind, scope: ConfigScope, action: "add" | "remove", value: string) => Promise<ConfigView>;
+  getUpdate: () => Promise<UpdateStatus>;
+  getRunningVersion: () => Promise<{ current: string | null }>;
+  update: () => Promise<{ version: string }>;
   getProviders: () => Promise<ProviderView[]>;
   getProviderModels: (providerId: string) => Promise<ProviderModelsView>;
   updateProviderModel: (providerId: string, change: ProviderModelChange) => Promise<void>;
@@ -85,7 +89,7 @@ export function PiSettings(props: Props) {
     setError("");
   };
   return <SettingsPanel title={t("Pi 设置", "Pi Settings")} sections={sections} activeId={active} onSelect={(id) => { setActive(id as SectionId); setError(""); }} onClose={onBack}>
-    {active === "general" && <div className="pi-settings-content"><h2>{t("通用设置", "General")}</h2><p className="pi-settings-intro">{t("调整网页的显示方式。", "Choose how the web interface appears.")}</p><div className="pi-settings-general"><LanguageRow /><AppearanceRow /></div></div>}
+    {active === "general" && <div className="pi-settings-content"><h2>{t("通用设置", "General")}</h2><p className="pi-settings-intro">{t("调整网页的显示方式。", "Choose how the web interface appears.")}</p><div className="pi-settings-general"><LanguageRow /><AppearanceRow /><UpdateRow getUpdate={props.getUpdate} getRunningVersion={props.getRunningVersion} update={props.update} /></div></div>}
     {active === "models" && <PiProviderSettings setupMode={props.setupMode} onReturnToConversation={onBack} getProviders={props.getProviders} getProviderModels={props.getProviderModels} updateProviderModel={props.updateProviderModel} logoutProvider={props.logoutProvider} addCustomProvider={props.addCustomProvider} startLogin={props.startProviderLogin} getLogin={props.getProviderLogin} getActiveLogin={props.getActiveProviderLogin} respondLogin={props.respondProviderLogin} cancelLogin={props.cancelProviderLogin} refreshModels={props.refreshModels} />}
     {section && <div className="pi-settings-content" key={section.kind}>
       <h2>{section.title}</h2><p className="pi-settings-intro">{section.hint} {t("添加或移除后会重新加载 Pi 资源。", "Pi resources reload after you add or remove one.")}</p>

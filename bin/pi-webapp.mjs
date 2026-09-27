@@ -15,6 +15,8 @@ const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url)
 const agentDir = resolve((process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")).replace(/^~(?=$|[\\/])/, homedir()));
 const statePath = join(agentDir, "pi-web", "launcher.json");
 const stopPath = join(agentDir, "pi-web", "launcher.stop");
+const restartPath = join(agentDir, "pi-web", "launcher.restart");
+const updatePath = join(agentDir, "pi-web", "update.json");
 const logPath = join(agentDir, "pi-web", "launcher.log");
 
 function versionParts(value) {
@@ -112,7 +114,7 @@ async function serve(pi, args) {
   } finally { await lock?.close().catch(() => {}); }
 
   const child = spawn(pi, ["--mode", "rpc", "-e", extension, ...args], {
-    cwd: process.cwd(), env: { ...process.env, PI_WEBAPP_AUTO_OPEN: "0" }, stdio: ["pipe", "pipe", "pipe"],
+    cwd: process.cwd(), env: { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
   let ready = false;
@@ -121,6 +123,8 @@ async function serve(pi, args) {
   let closed = false;
   let stateWrite = Promise.resolve();
   let stopping = false;
+  let restartRequest = null;
+  let runningUrl = null;
   let buffer = "";
   let killTimer;
   const shutdown = () => {
@@ -140,6 +144,15 @@ async function serve(pi, args) {
   const stopTimer = setInterval(async () => {
     try { if ((await readFile(stopPath, "utf8")).trim() === nonce) shutdown(); }
     catch { /* No stop request. */ }
+    if (stopping) return;
+    try {
+      const request = JSON.parse(await readFile(restartPath, "utf8"));
+      const prepared = JSON.parse(await readFile(updatePath, "utf8"));
+      if (request.nonce === nonce && request.launcher === prepared.launcher && existsSync(request.launcher)) {
+        restartRequest = request;
+        shutdown();
+      }
+    } catch { /* No valid restart request. */ }
   }, 400);
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
@@ -175,6 +188,7 @@ async function serve(pi, args) {
       try { url = new URL(record.message.slice("pi-webapp: ".length)); }
       catch { continue; }
       if (url.hostname !== "127.0.0.1" || !url.hash) continue;
+      runningUrl = url.href;
       opening = true;
       stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href })
         .then(() => {
@@ -206,6 +220,42 @@ async function serve(pi, args) {
     try { if (JSON.parse(await readFile(statePath, "utf8")).nonce === nonce) await unlink(statePath); }
     catch { /* Already removed. */ }
   }
+  if (restartRequest && runningUrl) {
+    await unlink(restartPath).catch(() => {});
+    const oldUrl = new URL(runningUrl);
+    const fd = openSync(logPath, "a", 0o600);
+    const restartEnv = { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RESTART_PORT: oldUrl.port, PI_WEBAPP_RESTART_TOKEN: oldUrl.hash.slice(1) };
+    try {
+      const runLauncher = (path) => new Promise((resolveExit) => {
+        const next = spawnNode(process.execPath, [path, "start", ...args], { cwd: process.cwd(), env: restartEnv, stdio: ["ignore", fd, fd] });
+        next.once("error", () => resolveExit(1));
+        next.once("exit", (code) => resolveExit(code ?? 1));
+      });
+      if (await runLauncher(restartRequest.launcher) !== 0) {
+        await clearManagedLauncher(restartRequest.launcher);
+        console.error("pi-webapp: 新版启动失败，正在恢复旧版服务");
+        if (await runLauncher(launcher) !== 0) console.error(`pi-webapp: 旧版恢复失败。日志：${logPath}`);
+      }
+    } finally { closeSync(fd); }
+  }
+}
+
+async function clearManagedLauncher(path) {
+  try {
+    if (JSON.parse(await readFile(updatePath, "utf8")).launcher === path) await unlink(updatePath);
+  } catch { /* No matching managed release. */ }
+}
+
+async function managedLauncher() {
+  try {
+    if (existsSync(fileURLToPath(new URL("../.git", import.meta.url)))) return null;
+    const update = JSON.parse(await readFile(updatePath, "utf8"));
+    const current = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    if (!/^\d+\.\d+\.\d+$/.test(update.version) || !/^\d+\.\d+\.\d+$/.test(current.version)) return null;
+    if (!compatible(versionParts(update.version), versionParts(current.version))) return null;
+    if (update.version === current.version || !existsSync(update.launcher)) return null;
+    return update.launcher;
+  } catch { return null; }
 }
 
 async function start(args) {
@@ -213,6 +263,17 @@ async function start(args) {
   if (existing) {
     console.log(existing.url ? `pi-webapp 已在后台运行：${existing.url}` : "pi-webapp 正在启动");
     if (existing.url) await openPageIfLocal(existing.url);
+    return;
+  }
+  const managed = await managedLauncher();
+  if (managed) {
+    const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd: process.cwd(), env: process.env, stdio: "inherit" });
+    const code = await new Promise((resolveExit, rejectExit) => { next.once("error", rejectExit); next.once("exit", (status) => resolveExit(status)); });
+    if (code !== 0) {
+      await clearManagedLauncher(managed);
+      console.error(`pi-webapp: 新版启动失败（代码 ${code ?? "未知"}），正在恢复当前安装`);
+      await start(args);
+    }
     return;
   }
   const nodeVersion = versionParts(process.versions.node);

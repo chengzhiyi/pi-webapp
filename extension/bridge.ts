@@ -12,11 +12,13 @@ import { ProviderLoginController, type LoginMethod, type ProviderView } from "./
 import { validCustomProviderInput, type CustomProviderInput } from "./custom-provider.ts";
 import { validModelChange, type ModelChange, type ProviderModelsView } from "./provider-model-config.ts";
 import { isPackageSource } from "../shared/config-source.ts";
+import type { SelfUpdater } from "./self-update.ts";
 
 export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 
 export interface BridgeHost {
+  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart">;
   snapshot(): SessionView;
   image?(sessionId: string, messageId: string, index: number): { data: Buffer; mimeType: string } | null;
   models(): Array<{ provider: string; id: string; name: string }> | Promise<Array<{ provider: string; id: string; name: string }>>;
@@ -60,7 +62,7 @@ export interface ConfigChange {
 }
 
 export interface Bridge {
-  readonly protocolVersion: 3;
+  readonly protocolVersion: 4;
   readonly url: string;
   publish(event: { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "workspaces"; value: WorkspaceListView } | { type: "error"; message: string }): void;
   close(): Promise<void>;
@@ -108,10 +110,10 @@ async function readAttachment(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function listen(server: Server): Promise<number> {
+async function listen(server: Server, requestedPort = 0): Promise<number> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(requestedPort, "127.0.0.1", () => {
       server.off("error", reject);
       resolve();
     });
@@ -122,7 +124,8 @@ async function listen(server: Server): Promise<number> {
 }
 
 export async function startBridge(host: BridgeHost, webRoot: string): Promise<Bridge> {
-  const tokenText = randomBytes(24).toString("base64url");
+  const fixedToken = process.env.PI_WEBAPP_RESTART_TOKEN;
+  const tokenText = fixedToken && /^[A-Za-z0-9_-]{32}$/.test(fixedToken) ? fixedToken : randomBytes(24).toString("base64url");
   const token = Buffer.from(tokenText);
   const pickerKind = directoryPickerKind();
   const streams = new Set<ServerResponse>();
@@ -157,6 +160,16 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
     }
     if (!authorized(req, token)) {
       json(res, 401, { error: "访问令牌无效" });
+      return;
+    }
+    if (req.method === "GET" && path === "/api/update/version") {
+      try { json(res, 200, { current: await host.selfUpdate?.runningVersion() ?? null }); }
+      catch (error) { json(res, 503, { error: error instanceof Error ? error.message : "无法读取版本" }); }
+      return;
+    }
+    if (req.method === "GET" && path === "/api/update") {
+      try { json(res, 200, await host.selfUpdate?.check() ?? { canRestart: false, reason: "当前扩展不支持在线升级" }); }
+      catch (error) { json(res, 503, { error: error instanceof Error ? error.message : "检查更新失败" }); }
       return;
     }
     if (req.method === "GET" && path === "/api/image") {
@@ -252,7 +265,7 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       res.on("close", () => streams.delete(res));
       return;
     }
-    if (req.method === "POST" && ["/api/message", "/api/attachment/remove", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+    if (req.method === "POST" && ["/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
       if (req.headers.origin !== undefined && req.headers.origin !== origin) {
         json(res, 403, { error: "来源不匹配" });
         return;
@@ -265,6 +278,15 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
         const body = await readJson(req);
         if (typeof body !== "object" || body === null || !("sessionId" in body) || typeof body.sessionId !== "string") {
           json(res, 400, { error: "缺少会话标识" });
+          return;
+        }
+        if (path === "/api/update") {
+          if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+          if (!host.snapshot().idle) { json(res, 409, { error: "请等待当前回复结束后再升级" }); return; }
+          if (!host.selfUpdate) { json(res, 409, { error: "当前扩展不支持在线升级" }); return; }
+          const prepared = await host.selfUpdate.prepare();
+          json(res, 202, { accepted: true, version: prepared.version });
+          setTimeout(() => { void host.selfUpdate?.requestRestart(prepared).catch((error) => console.error("pi-webapp restart:", error)); }, 500).unref();
           return;
         }
         if (path === "/api/provider/custom") {
@@ -404,10 +426,11 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
     }
     json(res, 404, { error: "未找到" });
   });
-  const port = await listen(server);
+  const requestedPort = Number(process.env.PI_WEBAPP_RESTART_PORT);
+  const port = await listen(server, Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort < 65536 && fixedToken === tokenText ? requestedPort : 0);
   origin = `http://127.0.0.1:${port}`;
   return {
-    protocolVersion: 3,
+    protocolVersion: 4,
     url: `${origin}/#${tokenText}`,
     publish(event) {
       if (event.type === "snapshot") for (const [id, attachment] of attachments) if (attachment.sessionId !== event.session.sessionId) attachments.delete(id);

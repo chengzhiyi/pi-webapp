@@ -16,6 +16,8 @@ npx pi-webapp
 
 该命令会在后台启动 Pi，并在本地图形桌面用默认浏览器打开网页，终端可继续使用。若未找到 Pi，会自动通过 npm 安装官方 `@earendil-works/pi-coding-agent`。已有 Pi 需要 0.87.1 或更新版本；启动器不会自动覆盖旧版本。再次运行启动命令会重新打开已有服务。远程或无图形界面时只显示地址；设置 `PI_WEBAPP_AUTO_OPEN=0` 可关闭自动打开。
 
+网页的「设置 → 通用设置 → 应用更新」会检查 npm 上的 `pi-webapp` 新版本。通过 npm 包的后台启动器运行时，点击「升级并重启」会先将新版安装并校验到 Pi 数据目录的 `pi-web/releases/`，然后重启服务，网页会在原地址重新加载。请先等待当前回复结束。若新版无法启动，启动器会恢复旧版服务。`npx` 和全局命令启动均可使用；后续启动会自动选用已安装的新版。此操作不会改动 npm 全局安装。源码目录运行和已有 Pi 终端中的 `/web` 页面可以查看版本，但不能从网页重启。若服务未恢复，可运行 `pi-webapp status` 并查看 `~/.pi/agent/pi-web/launcher.log`。
+
 可用 `npx pi-webapp status` 查看地址，用 `npx pi-webapp stop` 停止后台服务。全局安装后可直接运行 `pi-webapp status` 和 `pi-webapp stop`。
 
 也可以将启动器安装为全局命令：

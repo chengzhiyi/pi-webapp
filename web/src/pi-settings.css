@@ -15,6 +15,9 @@
 .pi-settings-section button:disabled { opacity: .45; cursor: not-allowed; }
 .pi-settings-error { color: var(--dsw-alias-state-error-primary); font-size: 13px; }
 .pi-settings-retry { padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; font-size: 13px; }
+.pi-update-section { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
+.pi-update-section h3, .pi-update-section p { margin: 0; }
+.pi-update-section button:disabled { opacity: .45; cursor: not-allowed; }
 .pi-settings-trigger-row { flex: none; display: flex; align-items: center; gap: 8px; width: calc(100% + 4px); margin: 4px -2px; }
 .pi-settings-trigger-rail { width: 36px; margin: 8px 0 10px; }
 .pi-settings-sidebar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 42px; margin: 0; padding: 0 10px 0 8px; box-sizing: border-box; border: none; border-radius: 12px; background: transparent; overflow: hidden; font-size: 14px; line-height: 22px; }

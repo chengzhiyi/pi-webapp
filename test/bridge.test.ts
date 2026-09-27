@@ -48,7 +48,7 @@ test("requires the token to read the current session or send a message", async (
     async newSession() {},
   }, webRoot);
   try {
-    assert.equal(bridge.protocolVersion, 3);
+    assert.equal(bridge.protocolVersion, 4);
     const url = new URL(bridge.url);
     const token = url.hash.slice(1);
     const unauthorized = await fetch(`${url.origin}/api/session`);
@@ -73,6 +73,59 @@ test("requires the token to read the current session or send a message", async (
     assert.deepEqual(sent, ["hello"]);
   } finally {
     await bridge.close();
+  }
+});
+
+test("update endpoints require authorization and restart only after a validated request", async () => {
+  let restarts = 0;
+  let idle = true;
+  const bridge = await startBridge({
+    ...capabilities, snapshot: () => ({ ...fixture(), idle }), send() {}, abort() {}, async newSession() {},
+    selfUpdate: {
+      async check() { return { current: "0.1.0", latest: "0.2.0", available: true, canRestart: true }; },
+      async runningVersion() { return "0.1.0"; },
+      async prepare() { return { version: "0.2.0", launcher: "/validated/launcher.mjs" }; },
+      async requestRestart() { restarts++; },
+    },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    assert.equal((await fetch(`${url.origin}/api/update`)).status, 401);
+    assert.equal((await fetch(`${url.origin}/api/update`, { headers })).status, 200);
+    assert.deepEqual(await (await fetch(`${url.origin}/api/update/version`, { headers })).json(), { current: "0.1.0" });
+    const stale = await fetch(`${url.origin}/api/update`, { method: "POST", headers, body: JSON.stringify({ sessionId: "other" }) });
+    assert.equal(stale.status, 409);
+    assert.equal(restarts, 0);
+    idle = false;
+    const busy = await fetch(`${url.origin}/api/update`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a" }) });
+    assert.equal(busy.status, 409);
+    idle = true;
+    const accepted = await fetch(`${url.origin}/api/update`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a" }) });
+    assert.equal(accepted.status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal(restarts, 1);
+  } finally { await bridge.close(); }
+});
+
+test("supervised restart preserves the browser port and token", async () => {
+  const host = { ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {} };
+  const first = await startBridge(host, webRoot);
+  const address = new URL(first.url);
+  await first.close();
+  const beforePort = process.env.PI_WEBAPP_RESTART_PORT;
+  const beforeToken = process.env.PI_WEBAPP_RESTART_TOKEN;
+  process.env.PI_WEBAPP_RESTART_PORT = address.port;
+  process.env.PI_WEBAPP_RESTART_TOKEN = address.hash.slice(1);
+  try {
+    const restarted = await startBridge(host, webRoot);
+    try { assert.equal(restarted.url, first.url); }
+    finally { await restarted.close(); }
+  } finally {
+    if (beforePort === undefined) delete process.env.PI_WEBAPP_RESTART_PORT;
+    else process.env.PI_WEBAPP_RESTART_PORT = beforePort;
+    if (beforeToken === undefined) delete process.env.PI_WEBAPP_RESTART_TOKEN;
+    else process.env.PI_WEBAPP_RESTART_TOKEN = beforeToken;
   }
 });
 

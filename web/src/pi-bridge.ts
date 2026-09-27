@@ -67,6 +67,7 @@ export interface ConfigView {
   project: Record<ConfigKind, string[]>;
   installed: Record<ConfigKind, ResourceItem[]>;
 }
+export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; reason?: string }
 export type LoginMethod = "api_key" | "oauth";
 export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
 export interface ProviderModelFields { id: string; name?: string; contextWindow?: number; maxTokens?: number; input?: Array<"text" | "image"> }
@@ -310,6 +311,12 @@ export function usePiBridge() {
       catch (cause) { setError(cause instanceof Error ? cause.message : t("切换推理强度失败", "Could not change reasoning effort")); throw cause; }
     },
     async getConfig() { return get<ConfigView>("/api/config"); },
+    async getUpdate() { return get<UpdateStatus>("/api/update"); },
+    async getRunningVersion() { return get<{ current: string | null }>("/api/update/version"); },
+    async update(): Promise<{ version: string }> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      return post("/api/update", { sessionId: session.sessionId });
+    },
     async getProviders() { return get<ProviderView[]>("/api/providers"); },
     async getProviderModels(providerId: string) { return get<ProviderModelsView>(`/api/provider/models?providerId=${encodeURIComponent(providerId)}`); },
     async updateProviderModel(providerId: string, change: ProviderModelChange): Promise<void> {

@@ -110,3 +110,64 @@ test("launcher leaves an incompatible Pi installation untouched", { skip: proces
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("launcher restarts a prepared release at the same browser address", { skip: process.platform === "win32" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-web-restart-"));
+  const agentDir = join(directory, "agent");
+  const launchRecord = join(directory, "next-launch.json");
+  const nextLauncher = join(directory, "next-launcher.mjs");
+  const env = { ...process.env, PATH: directory, PI_WEBAPP_AUTO_OPEN: "0", PI_CODING_AGENT_DIR: agentDir,
+    PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "rpc-query"), PI_TEST_RPC_INPUT: join(directory, "rpc-input"), PI_TEST_LAUNCH_RECORD: launchRecord };
+  try {
+    await fakePi(join(directory, "pi"));
+    await writeFile(nextLauncher, 'import { writeFileSync } from "node:fs"; writeFileSync(process.env.PI_TEST_LAUNCH_RECORD, JSON.stringify({ args: process.argv.slice(2), port: process.env.PI_WEBAPP_RESTART_PORT, token: process.env.PI_WEBAPP_RESTART_TOKEN }));');
+    assert.equal(run(["start", "--test-arg"], env).status, 0);
+    const statePath = join(agentDir, "pi-web", "launcher.json");
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    await writeFile(join(agentDir, "pi-web", "update.json"), JSON.stringify({ version: "0.2.0", launcher: nextLauncher }));
+    await writeFile(join(agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: state.nonce, launcher: nextLauncher }));
+    for (let attempt = 0; attempt < 80; attempt++) {
+      try { await readFile(launchRecord); break; } catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
+    }
+    const record = JSON.parse(await readFile(launchRecord, "utf8"));
+    const address = new URL(state.url);
+    assert.deepEqual(record.args, ["start", "--test-arg"]);
+    assert.equal(record.port, address.port);
+    assert.equal(record.token, address.hash.slice(1));
+  } finally {
+    run(["stop"], env);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("launcher restores the previous service if the prepared release cannot start", { skip: process.platform === "win32" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-web-rollback-"));
+  const agentDir = join(directory, "agent");
+  const nextLauncher = join(directory, "broken-launcher.mjs");
+  const env = { ...process.env, PATH: directory, PI_WEBAPP_AUTO_OPEN: "0", PI_CODING_AGENT_DIR: agentDir,
+    PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "rpc-query"), PI_TEST_RPC_INPUT: join(directory, "rpc-input") };
+  try {
+    await fakePi(join(directory, "pi"));
+    await writeFile(nextLauncher, "process.exit(3);");
+    assert.equal(run([], env).status, 0);
+    const statePath = join(agentDir, "pi-web", "launcher.json");
+    const first = JSON.parse(await readFile(statePath, "utf8"));
+    const updatePath = join(agentDir, "pi-web", "update.json");
+    await writeFile(updatePath, JSON.stringify({ version: "0.2.0", launcher: nextLauncher }));
+    await writeFile(join(agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: first.nonce, launcher: nextLauncher }));
+    let recovered = null;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      try {
+        const state = JSON.parse(await readFile(statePath, "utf8"));
+        if (state.nonce !== first.nonce && state.url) { recovered = state; break; }
+      } catch { /* Restart in progress. */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.ok(recovered, "previous release should be started again");
+    assert.equal(recovered.url, first.url);
+    await assert.rejects(readFile(updatePath));
+  } finally {
+    run(["stop"], env);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
