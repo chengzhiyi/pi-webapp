@@ -39,7 +39,7 @@
     "build:web": "vite build",
     "build:extension": "esbuild extension/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --minify --outfile=dist/extension.js",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run check && npm run test"
+    "prepublishOnly": "npm run check && npm run build && npm run test"
   },
   "publishConfig": {
     "access": "public"
