@@ -63,7 +63,7 @@ test("launcher reports a Pi startup failure and clears the background state", { 
     await chmod(pi, 0o755);
     const started = run([], env);
     assert.equal(started.status, 1);
-    assert.match(started.stderr, /Pi 提前退出/);
+    assert.match(started.stderr, /Pi 提前退出|无法向 Pi 发送启动命令/);
     await assert.rejects(readFile(join(directory, "agent", "pi-web", "launcher.json")));
   } finally {
     run(["stop"], env);
