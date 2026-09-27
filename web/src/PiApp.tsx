@@ -55,9 +55,6 @@ export function PiApp() {
     ? { ...previous, narrowExpanded: !previous.narrowExpanded }
     : { ...previous, sidebar: previous.sidebar === 0 ? 280 : 0 });
   const useStore = <T,>(select: (state: { layoutInfo: LayoutInfo }) => T): T => select({ layoutInfo: layout });
-  const useSessions = <T,>(select: (state: { current?: string; byId: Record<string, { title: string }> }) => T): T => select(bridge.session
-    ? { current: bridge.session.sessionId, byId: { [bridge.session.sessionId]: { title: bridge.session.name } } }
-    : { byId: {} });
   const usePanelInfo = <T,>(select: (state: PanelInfo) => T): T => select({ activePanelId: null });
   const usePanels = <T,>(select: (value: readonly SidebarPanelMetadata[]) => T): T => select([]);
   const renderSidebarSlot = (key: string, owner: any, options?: { fallback?: React.ReactNode }) => {
@@ -97,7 +94,6 @@ export function PiApp() {
   };
   return <><AppFrame
     useStore={useStore}
-    useSessions={useSessions}
     usePanelInfo={usePanelInfo}
     actions={actions}
     renderSlot={renderSlot}

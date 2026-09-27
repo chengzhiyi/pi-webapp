@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { LayoutInfo, PanelInfo, SelectHook, SessionTitles, SlotRenderer } from '../contract.ts'
+import type { LayoutInfo, PanelInfo, SelectHook, SlotRenderer } from '../contract.ts'
 import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import css from './AppFrame.module.css'
@@ -24,7 +24,6 @@ import css from './AppFrame.module.css'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export interface AppFrameProps {
   useStore: SelectHook<{ layoutInfo: LayoutInfo }>
-  useSessions: SelectHook<SessionTitles>
   usePanelInfo: SelectHook<PanelInfo>
   actions: { setViewportWidth(width: number): void; setSidebar(width: number): void; setRightbar(width: number): void }
   renderSlot: SlotRenderer
@@ -120,7 +119,6 @@ function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart
 /** The three-column frame (see module doc). */
 export function AppFrame({
   useStore,
-  useSessions,
   usePanelInfo,
   actions,
   renderSlot,
@@ -213,11 +211,7 @@ export function AppFrame({
       data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
     >
-      <DocumentTitle
-        productTitle={productTitle}
-        useSessions={useSessions}
-        usePanelInfo={usePanelInfo}
-      />
+      <DocumentTitle productTitle={productTitle} />
       <div className={css.sidebarCol}>
         {sidebar}
       </div>

@@ -70,6 +70,7 @@ const files: Record<string, { path: string; type: string }> = {
   "/": { path: "index.html", type: "text/html; charset=utf-8" },
   "/assets/app.js": { path: "assets/app.js", type: "text/javascript; charset=utf-8" },
   "/assets/style.css": { path: "assets/style.css", type: "text/css; charset=utf-8" },
+  "/assets/pi-logo.svg": { path: "assets/pi-logo.svg", type: "image/svg+xml" },
 };
 
 function json(res: ServerResponse, status: number, body: unknown): void {
