@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-![pi-webapp cover](https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png)
+![pi-webapp cover](assets/cover-webapp.png)
 
 **pi-webapp** opens the active Pi coding agent session in a local browser. Pi continues to run the agent, tools, and session storage; the browser provides a live interface for conversation and control.
 

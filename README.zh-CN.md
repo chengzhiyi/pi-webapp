@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-![pi-webapp 封面](https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png)
+![pi-webapp 封面](assets/cover-webapp.png)
 
 **pi-webapp** 可以在本地浏览器中打开当前活跃的 Pi 编程 Agent 会话。Agent、工具和会话存储仍由 Pi 运行和管理；浏览器提供实时的对话与控制界面。
 
