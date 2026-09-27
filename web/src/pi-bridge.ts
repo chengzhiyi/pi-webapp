@@ -1,5 +1,6 @@
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { useEffect, useState } from "react";
+import { HttpError } from "./http-error.ts";
 
 export interface ViewBlock {
   kind: "text" | "thinking" | "image" | "toolCall";
@@ -100,14 +101,14 @@ async function post(path: string, body: object, signal?: AbortSignal) {
     signal,
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`));
+  if (!response.ok) throw new HttpError(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`), response.status);
   return result;
 }
 
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`));
+  if (!response.ok) throw new HttpError(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`), response.status);
   return result as T;
 }
 

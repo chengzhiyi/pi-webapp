@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { UpdateStatus } from "../../pi-bridge.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
+import { Button } from "../primitives/Button.tsx";
+import { updateErrorMessage } from "./update-error.ts";
+import css from "./UpdateRow.module.css";
 
 interface Props {
   getUpdate: () => Promise<UpdateStatus>;
@@ -22,7 +25,7 @@ export function UpdateRow({ getUpdate, getRunningVersion, update }: Props) {
     setChecking(true);
     setError("");
     try { setStatus(await getUpdate()); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : t("检查更新失败", "Could not check for updates")); }
+    catch (cause) { setStatus(null); setError(updateErrorMessage(cause, locale, "check")); }
     finally { setChecking(false); }
   };
   useEffect(() => { void check(); }, []);
@@ -54,18 +57,28 @@ export function UpdateRow({ getUpdate, getRunningVersion, update }: Props) {
     setInstalling(true);
     setError("");
     try { setTargetVersion((await update()).version); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : t("升级失败", "Update failed")); }
+    catch (cause) { setError(updateErrorMessage(cause, locale, "install")); }
     finally { setInstalling(false); }
   };
 
-  return <section className="pi-settings-section pi-update-section" aria-label={t("应用更新", "App updates")}>
-    <h3>{t("应用更新", "App updates")}</h3>
-    <p className="pi-settings-intro">{status ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("npm 最新版本", "Latest on npm")} ${status.latest}` : ""}` : t("正在读取版本…", "Reading version…")}</p>
-    {status && !status.available && !checking && <p role="status">{t("已是最新版本", "Up to date")}</p>}
-    {status?.reason && <p className="pi-settings-intro">{status.reason}</p>}
-    {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <button className="pi-settings-retry" type="button" disabled={installing} onClick={() => { void install(); }}>{installing ? t("正在安装新版…", "Installing update…") : t("升级并重启", "Update and restart")}</button>}
-    {targetVersion && <p role="status">{t("正在重启并等待新版连接…", "Restarting and waiting for the new version…")}</p>}
-    <button className="pi-settings-retry" type="button" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("正在检查…", "Checking…") : t("检查更新", "Check for updates")}</button>
-    {error && <p className="pi-settings-error" role="alert">{error}</p>}
+  const summary = status
+    ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("npm 最新版本", "Latest on npm")} ${status.latest}` : ""}`
+    : checking ? t("正在读取版本…", "Reading version…") : t("暂时无法读取版本", "Version unavailable");
+
+  return <section className={css.group} aria-label={t("应用更新", "App updates")}>
+    <div className={css.row}>
+      <div className={css.details}>
+        <div className={css.title}>{t("应用更新", "App updates")}</div>
+        <p className={css.summary}>{summary}</p>
+      </div>
+      <div className={css.actions}>
+        {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <Button variant="primary" disabled={installing || checking} onClick={() => { void install(); }}>{installing ? t("正在安装…", "Installing…") : t("升级并重启", "Update and restart")}</Button>}
+        <Button variant="outline" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("检查中…", "Checking…") : t("检查更新", "Check for updates")}</Button>
+      </div>
+    </div>
+    {status && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
+    {status?.reason && <p className={css.note}>{status.reason}</p>}
+    {targetVersion && <p className={css.note} role="status">{t("正在重启并等待新版连接…", "Restarting and waiting for the new version…")}</p>}
+    {error && <p className={css.error} role="alert">{error}</p>}
   </section>;
 }

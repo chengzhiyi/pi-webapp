@@ -61,7 +61,7 @@ export class SelfUpdater {
     const current = await this.current();
     const sourceCheckout = existsSync(join(this.packageRoot, ".git"));
     const status: UpdateStatus = { current, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
-    if (sourceCheckout) status.reason = "当前从源码目录运行。请通过 npm 发布版本使用网页升级。";
+    if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     try {
       const latest = JSON.parse((await this.runNpm(["view", "pi-webapp", "dist-tags.latest", "--json", "--prefer-online"])).trim());

@@ -75,6 +75,7 @@ test("source checkout reports updates without replacing development files", asyn
     const status = await updater.check();
     assert.equal(status.available, true);
     assert.equal(status.canRestart, false);
+    assert.match(status.reason ?? "", /以免覆盖本地代码/);
     await assert.rejects(updater.prepare(), /源码目录/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
