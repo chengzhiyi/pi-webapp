@@ -1,10 +1,10 @@
 import { realpath } from "node:fs/promises";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, type SessionInfo } from "@earendil-works/pi-coding-agent";
 
 /** Pi's encoded session directory can be shared by different cwd paths. */
-export async function sessionsForWorkspace(path: string) {
+export async function sessionsForWorkspace(path: string, allSessions?: SessionInfo[]) {
   const canonical = await realpath(path);
-  const saved = await SessionManager.list(canonical);
+  const saved = allSessions ?? await SessionManager.listAll();
   const belongs = await Promise.all(saved.map(async (session) =>
     session.cwd !== "" && await realpath(session.cwd).catch(() => null) === canonical));
   return saved.filter((_, index) => belongs[index]);

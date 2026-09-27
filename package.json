@@ -11,6 +11,9 @@
   "keywords": [
     "pi-package"
   ],
+  "bin": {
+    "pi-webapp": "./bin/pi-webapp.mjs"
+  },
   "pi": {
     "image": "https://unpkg.com/pi-webapp@0.1.0/assets/cover-webapp.png",
     "extensions": [
@@ -19,6 +22,7 @@
   },
   "files": [
     "assets/cover-webapp.png",
+    "bin",
     "dist",
     "web/dist",
     "README.md",
@@ -26,6 +30,9 @@
     "LICENSE"
   ],
   "scripts": {
+    "start": "npm run build && node bin/pi-webapp.mjs",
+    "status": "node bin/pi-webapp.mjs status",
+    "stop": "node bin/pi-webapp.mjs stop",
     "check": "tsc --noEmit && tsc -p web/tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "build": "npm run build:web && npm run build:extension",
@@ -57,6 +64,7 @@
   "dependencies": {
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
+    "cross-spawn": "^7.0.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
