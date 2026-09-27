@@ -1,6 +1,6 @@
 {
   "name": "pi-webapp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
@@ -15,7 +15,7 @@
     "pi-webapp": "./bin/pi-webapp.mjs"
   },
   "pi": {
-    "image": "https://raw.githubusercontent.com/chengzhiyi/pi-webapp/main/assets/cover-webapp.png",
+    "image": "https://cdn.jsdelivr.net/npm/pi-webapp@0.1.6/assets/cover-webapp.png",
     "extensions": [
       "./dist/extension.js"
     ]
