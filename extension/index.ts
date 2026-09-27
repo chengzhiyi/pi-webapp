@@ -2,7 +2,7 @@ import { dirname, join, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { DefaultPackageManager, getAgentDir, ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { DefaultPackageManager, getAgentDir, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels, type AuthInteraction } from "@earendil-works/pi-ai";
 import { startBridge, type Bridge, type ConfigChange, type ConfigView, type WorkspaceListView, type WorkspaceSessionView } from "./bridge.ts";
 import { contentBlocks, projectSession } from "./view.ts";
@@ -29,6 +29,7 @@ interface SharedState {
   workspaceSessions: WorkspaceSessions | null;
   selected: "tui" | "sdk";
   activeWorkspaceId: string | null;
+  autoOpened: boolean;
 }
 
 const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
@@ -43,6 +44,7 @@ const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
   workspaceSessions: null,
   selected: "tui",
   activeWorkspaceId: null,
+  autoOpened: false,
 });
 let authRuntime: Promise<ModelRuntime> | null = null;
 function modelAuthRuntime() { return authRuntime ??= ModelRuntime.create({ refreshOnCreate: false }); }
@@ -79,8 +81,9 @@ async function workspaceList(): Promise<WorkspaceListView> {
   const items = shared.workspaces?.list() ?? [];
   const active = snapshot();
   const activePath = await realpath(active.cwd).catch(() => active.cwd);
+  const allSessions = await SessionManager.listAll();
   const sessions: WorkspaceSessionView[] = (await Promise.all(items.map(async (workspace) => {
-    const saved = await sessionsForWorkspace(workspace.path).catch(() => []);
+    const saved = await sessionsForWorkspace(workspace.path, allSessions).catch(() => []);
     const rows: WorkspaceSessionView[] = saved.map((session) => ({ id: session.id, workspaceId: workspace.id, path: session.path, name: session.name || session.firstMessage?.slice(0, 50) || "当前会话", modified: session.modified.toISOString() }));
     if (workspace.path === activePath && !rows.some((session) => session.id === active.sessionId)) {
       rows.unshift({ id: active.sessionId, workspaceId: workspace.id, path: null, name: active.name, modified: new Date().toISOString() });
@@ -195,6 +198,12 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
         shared.bridge?.publish({ type: "error", message: error instanceof Error ? error.message : "无法注册当前工作区" });
       });
     }
+    if (process.env.PI_WEBAPP_AUTO_OPEN === "1" && ctx.mode === "tui" && !shared.autoOpened) {
+      shared.autoOpened = true;
+      void openWeb(ctx).catch((error: unknown) => {
+        ctx.ui.notify(error instanceof Error ? error.message : "Web 启动失败", "error");
+      });
+    }
   });
   pi.on("agent_start", (_event, ctx) => publishSnapshot(ctx));
   pi.on("agent_end", (_event, ctx) => publishSnapshot(ctx));
@@ -236,18 +245,22 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.workspaceSessions = null;
     shared.selected = "tui";
     shared.activeWorkspaceId = null;
+    shared.autoOpened = false;
     if (bridge) void bridge.close();
   });
 
-  pi.registerCommand("web", {
-    description: "Open the current Pi session in a local web interface",
-    handler: async (_args, ctx) => {
+  const openWeb = async (ctx: ExtensionContext | ExtensionCommandContext): Promise<void> => {
       shared.current = ctx;
-      shared.commandContext = ctx;
+      shared.commandContext = "newSession" in ctx ? ctx : null;
       shared.pi = pi;
       if (shared.workspaces === null) {
         shared.workspaces = new WorkspaceRegistry(workspaceRegistryPath(getAgentDir()));
         await shared.workspaces.load();
+      }
+      try {
+        await shared.workspaces.discover((await SessionManager.listAll()).map((session) => session.cwd));
+      } catch (error) {
+        ctx.ui.notify(`无法读取部分 Pi 历史工作区：${error instanceof Error ? error.message : String(error)}`, "warning");
       }
       const initialWorkspace = await shared.workspaces.add(ctx.cwd);
       if (shared.selected === "tui") shared.activeWorkspaceId = initialWorkspace.id;
@@ -422,7 +435,13 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             }
             const active = sameSession(sessionId);
             if (!active.isIdle()) throw new Error("Pi 正在运行，请等待当前回复结束");
-            if (shared.commandContext === null) throw new Error("请在 Pi 中重新输入 /web");
+            if (shared.commandContext === null) {
+              await shared.workspaceSessions!.open(active.cwd, "new");
+              shared.selected = "sdk";
+              shared.bridge?.publish({ type: "snapshot", session: snapshot() });
+              await publishWorkspaces();
+              return;
+            }
             const result = await shared.commandContext.newSession({
               withSession: async (ctx) => {
                 shared.commandContext = ctx;
@@ -439,6 +458,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       const opened = await openPage(shared.bridge.url).catch(() => false);
       ctx.ui.notify(`pi-webapp: ${shared.bridge.url}`, opened ? "info" : "warning");
       ctx.ui.setStatus("pi-webapp", "Web 已启动 · /web 重新打开");
-    },
+  };
+  pi.registerCommand("web", {
+    description: "Open the current Pi session in a local web interface",
+    handler: async (_args, ctx) => openWeb(ctx),
   });
 }

@@ -8,7 +8,24 @@
 
 ## 安装与打开
 
-需要 Node.js 22.19 或更新版本，以及 Pi 0.87.1 或更新版本。
+需要 Node.js 22.19 或更新版本。推荐直接运行：
+
+```bash
+npx pi-webapp
+```
+
+该命令会在后台启动 Pi 并打开浏览器，终端可继续使用。若未找到 Pi，会自动通过 npm 安装官方 `@earendil-works/pi-coding-agent`。已有 Pi 需要 0.87.1 或更新版本；启动器不会自动覆盖旧版本。再次运行启动命令会显示已有服务地址。
+
+可用 `npx pi-webapp status` 查看地址，用 `npx pi-webapp stop` 停止后台服务。全局安装后可直接运行 `pi-webapp status` 和 `pi-webapp stop`。
+
+也可以将启动器安装为全局命令：
+
+```bash
+npm install -g pi-webapp
+pi-webapp
+```
+
+如果希望在已有 Pi 终端中使用，仍可按原方式安装扩展：
 
 ```bash
 pi install npm:pi-webapp
@@ -25,9 +42,9 @@ pi
 - 通过选择、拖放或粘贴附加文件，最多 20 个，每个不超过 20 MB。图片会显示预览，并作为 Pi 图片内容发送。
 - 在设置面板中管理外观、Pi 软件包、扩展、技能和模型。模型提供商的凭据保留在 Pi 本地的身份验证存储中，不会返回给浏览器。
 
-打开 `/web` 的 Pi 终端会话会与浏览器保持同步。在其他工作区打开的会话使用 Pi SDK，并加载该工作区的技能和项目上下文；同一进程中不会再次加载扩展。
+如果通过 Pi 终端手动输入 `/web`，该终端会话会与浏览器保持同步。使用启动器时，Pi 在后台运行。在其他工作区打开的会话使用 Pi SDK，并加载该工作区的技能和项目上下文；同一进程中不会再次加载扩展。
 
-工作区记录和附件继续存放在 Pi 现有的 `pi-web/` 数据目录下，以兼容早期版本。从侧边栏移除工作区不会删除其文件或会话。
+启动时会从 Pi 已保存的会话中发现工作区，因此先前在其他目录使用 Pi 的会话也会出现在侧边栏。工作区记录和附件继续存放在 Pi 现有的 `pi-web/` 数据目录下。从侧边栏移除工作区不会删除其文件或会话；移除后如需再次显示，可以手动添加。
 
 ## 本地开发
 
@@ -36,10 +53,12 @@ npm install
 npm run check
 npm run test
 npm run build
-pi -e .
+npm run start
+npm run status
+npm run stop
 ```
 
-修改扩展后，需要重新构建扩展，再在 Pi 中依次输入 `/reload` 和 `/web`。仅刷新旧的浏览器页面不会替换正在运行的连接桥接代码。
+`npm run start` 会构建项目、在后台启动 Pi 并打开 Web 界面。修改扩展后，运行 `npm run stop`，再运行 `npm run start`；如果使用 `pi -e .` 开发，则在 Pi 中依次输入 `/reload` 和 `/web`。仅刷新旧的浏览器页面不会替换正在运行的连接桥接代码。
 
 源代码位于 `extension/`、`shared/` 和 `web/src/`。npm 软件包仅包含打包并压缩后的 JavaScript 扩展、构建后的 Web 资源、封面图片，以及英文和中文 README；不会发布 TypeScript 源码或 source map。代码压缩会增加阅读发布版本代码的难度，但不会对 JavaScript 加密。
 

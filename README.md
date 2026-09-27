@@ -8,7 +8,24 @@
 
 ## Install and open
 
-Requires Node.js 22.19 or later and Pi 0.87.1 or later.
+Requires Node.js 22.19 or later. To open the web interface directly:
+
+```bash
+npx pi-webapp
+```
+
+This starts Pi in the background and opens the browser, leaving the terminal free. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` package with npm. An existing Pi installation must be version 0.87.1 or later. The launcher does not replace an older installation automatically. Running the launcher again shows the existing server address.
+
+Use `npx pi-webapp status` to show the address and `npx pi-webapp stop` to stop the background service. After a global install, use `pi-webapp status` and `pi-webapp stop`.
+
+You can also install the launcher globally:
+
+```bash
+npm install -g pi-webapp
+pi-webapp
+```
+
+To use the extension inside an existing Pi terminal, the original workflow remains available:
 
 ```bash
 pi install npm:pi-webapp
@@ -25,9 +42,9 @@ In Pi, enter `/web` to open the interface in your default browser. Pi also print
 - Attach up to 20 files of 20 MB each by selecting, dropping, or pasting them. Images show previews and are also sent as Pi image content.
 - Manage appearance, Pi packages, extensions, skills, and models from the settings panel. Provider credentials remain in Pi's local authentication store and are never returned to the browser.
 
-The Pi terminal session that opened `/web` stays synchronized with the browser. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They do not load extensions again in the same process.
+If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They do not load extensions again in the same process.
 
-Workspace records and attachments stay under Pi's existing `pi-web/` data directory for compatibility with earlier releases. Removing a workspace from the sidebar does not delete its files or sessions.
+On startup, the app discovers workspaces from Pi's saved sessions, so conversations from other directories appear in the sidebar. Workspace records and attachments stay under Pi's existing `pi-web/` data directory. Removing a workspace from the sidebar does not delete its files or sessions; you can add it again manually.
 
 ## Develop locally
 
@@ -36,10 +53,12 @@ npm install
 npm run check
 npm run test
 npm run build
-pi -e .
+npm run start
+npm run status
+npm run stop
 ```
 
-After editing the extension, rebuild it, then enter `/reload` and `/web` in Pi. Refreshing an old browser page alone does not replace the running bridge.
+`npm run start` builds the project, starts Pi in the background, and opens the web interface. After editing the extension, run `npm run stop` followed by `npm run start`. If you develop with `pi -e .`, enter `/reload` and `/web` in Pi after rebuilding. Refreshing an old browser page alone does not replace the running bridge.
 
 The source lives in `extension/`, `shared/`, and `web/src/`. The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and the English and Chinese READMEs. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
 
