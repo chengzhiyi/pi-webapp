@@ -14,7 +14,7 @@ Requires Node.js 22.19 or later. To open the web interface directly:
 npx pi-webapp
 ```
 
-This starts Pi in the background and opens the browser, leaving the terminal free. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` package with npm. An existing Pi installation must be version 0.87.1 or later. The launcher does not replace an older installation automatically. Running the launcher again shows the existing server address.
+This starts Pi in the background and opens the default browser on a local graphical desktop, leaving the terminal free. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` package with npm. An existing Pi installation must be version 0.87.1 or later. The launcher does not replace an older installation automatically. Running the launcher again reopens the existing server. Remote or headless sessions print the address instead; set `PI_WEBAPP_AUTO_OPEN=0` to disable automatic opening.
 
 Use `npx pi-webapp status` to show the address and `npx pi-webapp stop` to stop the background service. After a global install, use `pi-webapp status` and `pi-webapp stop`.
 
@@ -40,7 +40,7 @@ In Pi, enter `/web` to open the interface in your default browser. Pi also print
 - Send messages, stop a run, start a new Pi session, and change the current model or thinking level.
 - Browse workspaces and saved sessions. Add a workspace with the native directory picker when available, or use the built-in directory browser over SSH.
 - Attach up to 20 files of 20 MB each by selecting, dropping, or pasting them. Images show previews and are also sent as Pi image content.
-- Manage appearance, Pi packages, extensions, skills, and models from the settings panel. Provider credentials remain in Pi's local authentication store and are never returned to the browser.
+- Manage appearance, Pi packages, extensions, skills, and models from the settings panel. The Models page can add models, edit display names, context windows, output limits, and input types, and restore built-in defaults; changes are saved to Pi's `models.json`. Browser sign-in opens the provider's authorization page automatically; manual code entry remains available when a callback cannot reach Pi. Stored provider credentials can also be removed there. Credentials stay in Pi's local `auth.json` and are never returned to the browser.
 
 If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They do not load extensions again in the same process.
 

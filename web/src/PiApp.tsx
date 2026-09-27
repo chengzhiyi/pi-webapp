@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppFrame } from "./ui/layout/AppFrame.tsx";
 import { SidebarRoot } from "./ui/sidebar/SidebarRoot.tsx";
 import { PiLogo } from "./ui/primitives/index.ts";
@@ -24,6 +24,10 @@ export function PiApp() {
   };
   const bridge = usePiBridge();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const needsModelSetup = bridge.connection === "connected" && bridge.session !== null && bridge.modelsStatus === "ready" && bridge.models.length === 0;
+  useEffect(() => {
+    if (needsModelSetup) setSettingsOpen(true);
+  }, [needsModelSetup]);
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".pi-settings-sidebar")?.focus());
@@ -88,7 +92,7 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <PiConversation session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} />;
+    if (key === "main") return <PiConversation session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} />;
     return null;
   };
   return <><AppFrame
@@ -98,5 +102,5 @@ export function PiApp() {
     actions={actions}
     renderSlot={renderSlot}
     t={(name: string) => labels[name] ?? name}
-  />{settingsOpen && <PiSettings onBack={closeSettings} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getProviders={bridge.getProviders} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</>;
+  />{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</>;
 }

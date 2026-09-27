@@ -54,4 +54,6 @@
 .pi-code-block pre { max-width: 100%; overflow-x: auto; margin: 0; padding: 12px 14px; font: 12px/1.6 var(--ds-font-family-code); white-space: pre; }
 .pi-image-note { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .pi-model-error { display: flex; flex-direction: column; gap: 4px; width: min(100%, 560px); padding: 12px 16px; border: 1px solid var(--dsw-alias-state-error-primary, #d54941); border-radius: 12px; background: var(--dsw-alias-interactive-bg-hover-danger, #fff1f0); color: var(--dsw-alias-state-error-primary, #b42318); font-size: 13px; line-height: 1.5; }
+.pi-model-setup-trigger { padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-state-business-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.pi-model-setup-trigger:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pi-error { width: min(100%, var(--piw-composer-card-max-width)); margin: 0 auto; padding: 6px 0; color: var(--dsw-alias-state-danger-primary, #c93b3b); font-size: 12px; }

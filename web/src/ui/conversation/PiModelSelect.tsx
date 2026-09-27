@@ -39,7 +39,7 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
     return [...grouped];
   }, [models]);
   const selected = models.find((model) => `${model.provider}/${model.id}` === current);
-  const label = selected?.name || current || t("Pi 模型", "Pi model");
+  const label = selected?.name || (current && current !== "unknown/unknown" ? current : t("选择模型", "Choose a model"));
   const effortLabel = thinkingLevels.length > 1 && thinkingLevel ? effortNames[thinkingLevel] ?? thinkingLevel : null;
 
   const close = (restoreFocus = false) => {

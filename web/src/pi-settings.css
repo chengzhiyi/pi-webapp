@@ -51,6 +51,14 @@
 .pi-provider-add-card input, .pi-provider-add-card select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
 .pi-provider-custom-form { display: grid; gap: 12px; }
 .pi-provider-custom-form > button { justify-self: start; }
+.pi-provider-key-form { display: grid; gap: 12px; }
+.pi-provider-key-form label { display: grid; gap: 6px; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.pi-provider-key-form input { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.pi-provider-key-form > button { justify-self: start; }
+.pi-provider-key-form > p { margin: 0; }
+.pi-provider-advanced { color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.pi-provider-advanced summary { width: fit-content; cursor: pointer; }
+.pi-provider-advanced label { margin-top: 10px; }
 .pi-provider-methods { display: flex; gap: 8px; flex-wrap: wrap; }
 .pi-provider-card-head button, .pi-provider-methods button, .pi-provider-add-card button, .pi-provider-flow button { padding: 7px 12px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 14px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; cursor: pointer; }
 .pi-provider-card-head button:hover, .pi-provider-methods button:hover:not(:disabled), .pi-provider-add-card button:hover:not(:disabled), .pi-provider-flow button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
@@ -62,6 +70,37 @@
 .pi-provider-flow form label { display: block; margin-bottom: 9px; font-size: 13px; }
 .pi-provider-flow form div { display: flex; gap: 8px; }
 .pi-provider-flow input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
+.pi-provider-manual-login summary { color: var(--dsw-alias-label-tertiary); cursor: pointer; font-size: 12px; }
+.pi-provider-manual-login form { margin-top: 12px; }
 .pi-provider-options { display: grid; gap: 8px; }
 .pi-provider-options button { text-align: left; }
 .pi-provider-options small { display: block; margin-top: 3px; }
+.pi-provider-name small { color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 400; }
+.pi-provider-editor { display: grid; gap: 14px; }
+.pi-provider-models { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l3); }
+.pi-provider-models-head { display: flex; align-items: baseline; gap: 8px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.pi-provider-models-head span, .pi-provider-models-endpoint, .pi-provider-models-empty { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.pi-provider-models-endpoint { overflow: hidden; margin: 0; text-overflow: ellipsis; white-space: nowrap; }
+.pi-provider-models-empty { margin: 0; }
+.pi-model-list { display: grid; gap: 8px; max-height: 360px; overflow: auto; }
+.pi-model-entry { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 12px; }
+.pi-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: center; gap: 8px; }
+.pi-model-row input, .pi-model-details input:not([type="checkbox"]), .pi-model-search { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
+.pi-model-row input:disabled { color: var(--dsw-alias-label-secondary); }
+.pi-model-row button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 20px; }
+.pi-model-row button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-model-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pi-model-details > label { display: grid; gap: 5px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-model-input-types { display: flex; grid-column: 1 / -1; align-items: center; gap: 14px; margin: 0; padding: 0; border: 0; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-model-input-types legend { float: left; margin-right: 12px; }
+.pi-model-input-types label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.pi-model-actions, .pi-model-confirm { display: flex; grid-column: 1 / -1; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pi-model-actions button, .pi-model-confirm button, .pi-model-add, .pi-provider-credential-action button { padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.pi-model-actions button:first-child { background: var(--dsw-specific-input-major); }
+.pi-model-actions button:hover:not(:disabled), .pi-model-confirm button:hover:not(:disabled), .pi-model-add:hover, .pi-provider-credential-action button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-model-confirm { padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.pi-provider-credential-action { padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l3); }
+.pi-provider-credential-action button { color: var(--dsw-alias-state-error-primary); }
+.pi-provider-auth-source { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.pi-model-add { justify-self: start; }
+@media (max-width: 640px) { .pi-model-row, .pi-model-details { grid-template-columns: minmax(0, 1fr); } .pi-model-row button { justify-self: end; } .pi-model-input-types, .pi-model-actions, .pi-model-confirm { grid-column: 1; } }

@@ -10,6 +10,7 @@ import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, imageContent, saveAttachment, ty
 import type { ResourceItem } from "./config-inventory.ts";
 import { ProviderLoginController, type LoginMethod, type ProviderView } from "./provider-login.ts";
 import { validCustomProviderInput, type CustomProviderInput } from "./custom-provider.ts";
+import { validModelChange, type ModelChange, type ProviderModelsView } from "./provider-model-config.ts";
 import { isPackageSource } from "../shared/config-source.ts";
 
 export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
@@ -20,6 +21,9 @@ export interface BridgeHost {
   image?(sessionId: string, messageId: string, index: number): { data: Buffer; mimeType: string } | null;
   models(): Array<{ provider: string; id: string; name: string }> | Promise<Array<{ provider: string; id: string; name: string }>>;
   providers?(): Promise<ProviderView[]>;
+  providerModels?(providerId: string): Promise<ProviderModelsView>;
+  updateProviderModel?(sessionId: string, providerId: string, change: ModelChange): Promise<void>;
+  logoutProvider?(sessionId: string, providerId: string): Promise<void>;
   loginProvider?(providerId: string, method: LoginMethod, interaction: import("@earendil-works/pi-ai").AuthInteraction): Promise<void>;
   addCustomProvider?(sessionId: string, input: CustomProviderInput): Promise<void>;
   commands?(): Array<{ name: string; description?: string }>;
@@ -203,6 +207,18 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       catch { json(res, 503, { error: "模型提供方不可用" }); }
       return;
     }
+    if (req.method === "GET" && path === "/api/provider/models") {
+      const providerId = new URL(req.url ?? path, origin).searchParams.get("providerId") ?? "";
+      try {
+        if (!providerId || !host.providerModels) { json(res, 400, { error: "提供方无效" }); return; }
+        json(res, 200, await host.providerModels(providerId));
+      } catch (error) { json(res, 400, { error: error instanceof Error ? error.message : "模型目录不可用" }); }
+      return;
+    }
+    if (req.method === "GET" && path === "/api/provider/login/active") {
+      json(res, 200, { active: logins.getActive() ?? null });
+      return;
+    }
     if (req.method === "GET" && path === "/api/provider/login") {
       const id = new URL(req.url ?? path, origin).searchParams.get("id") ?? "";
       const view = logins.get(id);
@@ -236,7 +252,7 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       res.on("close", () => streams.delete(res));
       return;
     }
-    if (req.method === "POST" && ["/api/message", "/api/attachment/remove", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+    if (req.method === "POST" && ["/api/message", "/api/attachment/remove", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
       if (req.headers.origin !== undefined && req.headers.origin !== origin) {
         json(res, 403, { error: "来源不匹配" });
         return;
@@ -257,6 +273,18 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
           await host.addCustomProvider(body.sessionId, body.provider);
           json(res, 201, { accepted: true }); return;
         }
+        if (path === "/api/provider/models" || path === "/api/provider/logout") {
+          if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+          if (!("providerId" in body) || typeof body.providerId !== "string") { json(res, 400, { error: "提供方无效" }); return; }
+          if (path === "/api/provider/models") {
+            if (!("change" in body) || !validModelChange(body.change) || !host.updateProviderModel) { json(res, 400, { error: "模型参数无效" }); return; }
+            await host.updateProviderModel(body.sessionId, body.providerId, body.change);
+          } else {
+            if (!host.logoutProvider) { json(res, 400, { error: "无法移除认证" }); return; }
+            await host.logoutProvider(body.sessionId, body.providerId);
+          }
+          json(res, 200, { accepted: true }); return;
+        }
         if (path.startsWith("/api/provider/login")) {
           if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
           if (path === "/api/provider/login") {
@@ -265,7 +293,9 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
             }
             const providers = await host.providers();
             if (!providers.some((item) => item.id === body.providerId && item.methods.includes(body.method as LoginMethod))) { json(res, 400, { error: "提供方不支持此登录方式" }); return; }
-            const view = logins.start(body.providerId, body.method as LoginMethod, host.loginProvider);
+            const initialSecret = "initialSecret" in body ? body.initialSecret : undefined;
+            if (initialSecret !== undefined && (body.method !== "api_key" || typeof initialSecret !== "string" || !initialSecret.trim() || initialSecret.length > 16384)) { json(res, 400, { error: "API Key 无效" }); return; }
+            const view = logins.start(body.providerId, body.method as LoginMethod, host.loginProvider, initialSecret);
             json(res, 202, { id: view.id }); return;
           }
           if (!("id" in body) || typeof body.id !== "string") { json(res, 400, { error: "登录流程无效" }); return; }

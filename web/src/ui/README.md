@@ -9,6 +9,6 @@
 - `settings/`: appearance, resources, and models.
 - `primitives/` and `theme/`: shared components, icons, and theme values.
 
-The settings dialog and appearance selector follow the existing DSH component structure. The models page adapts DSH's connected-provider list and add-provider entry points to Pi authentication and `models.json`.
+The settings dialog and appearance selector follow the existing DSH component structure. The models page adapts DSH's connected-provider list, expandable model rows, and decimal K/M capacity inputs to Pi authentication and `models.json`. Pi's own model runtime supplies the catalog and saves built-in edits as `modelOverrides`.
 
 Edit these source files directly, then run `npm run check`, `npm run test`, and `npm run build` from the project root.
