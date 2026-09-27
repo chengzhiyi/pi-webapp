@@ -20,8 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm test
       - run: npm run build
+      - run: npm test
 
   publish:
     if: github.event_name == 'push'
