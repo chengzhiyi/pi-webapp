@@ -23,9 +23,13 @@ test("launcher starts Pi RPC in the background and stops it cleanly", { skip: pr
   const argsFile = join(directory, "args");
   const rpcInput = join(directory, "rpc-input");
   const rpcQuery = join(directory, "rpc-query");
-  const env = { ...process.env, PATH: directory, PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: argsFile, PI_TEST_RPC_QUERY: rpcQuery, PI_TEST_RPC_INPUT: rpcInput, PI_TEST_WEB_NAME: "web:1" };
+  const opened = join(directory, "opened");
+  const env = { ...process.env, PATH: directory, DISPLAY: ":0", SSH_CONNECTION: undefined, SSH_TTY: undefined, SSH_CLIENT: undefined, PI_WEBAPP_AUTO_OPEN: "1", PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: argsFile, PI_TEST_RPC_QUERY: rpcQuery, PI_TEST_RPC_INPUT: rpcInput, PI_TEST_WEB_NAME: "web:1", PI_TEST_OPENED: opened };
   try {
     await fakePi(join(directory, "pi"));
+    const opener = join(directory, process.platform === "darwin" ? "open" : "xdg-open");
+    await writeFile(opener, '#!/bin/sh\nprintf "%s\\n" "$1" >> "$PI_TEST_OPENED"\n');
+    await chmod(opener, 0o755);
     const started = run([], env);
     assert.equal(started.status, 0, started.stderr);
     assert.match(started.stdout, /后台运行/);
@@ -36,8 +40,10 @@ test("launcher starts Pi RPC in the background and stops it cleanly", { skip: pr
     const state = JSON.parse(await readFile(statePath, "utf8"));
     assert.ok(state.pid > 0);
     assert.equal((await stat(statePath)).mode & 0o777, 0o600);
+    assert.deepEqual((await readFile(opened, "utf8")).trimEnd().split("\n"), [state.url]);
     assert.equal(run([], env).status, 0);
     assert.equal(JSON.parse(await readFile(statePath, "utf8")).pid, state.pid);
+    assert.deepEqual((await readFile(opened, "utf8")).trimEnd().split("\n"), [state.url, state.url]);
     assert.equal(run(["status"], env).status, 0);
     const stopped = run(["stop"], env);
     assert.equal(stopped.status, 0, stopped.stderr);
