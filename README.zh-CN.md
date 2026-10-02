@@ -68,10 +68,12 @@ npm run stop
 
 ## 发布
 
-CI 会先从 npm 解析 `@chengzhiyi/pi-web-protocol` 的已发布版本，再运行 `npm ci`；
-首次发布新宿主前，须先完成 `pi-extensions` 协议包的公开发布。源码联调可继续
-使用本地 `file:` 依赖，CI 会将它替换为准确的 npm 版本并更新锁文件，发布时
-同步回 `main`。协议版本在本仓库下一次构建时更新，不依赖相邻源码目录。
+CI 会先从 npm 解析 `@chengzhiyi/pi-web-protocol` 的已发布版本，再运行 `npm ci`。
+首次发布协议前，校验任务会将固定提交的 `pi-extensions` 检出到被忽略的 `.ci/`
+目录，构建协议并使用本地包，完整执行检查、测试与构建；Actions 摘要会说明
+宿主发布仍在等待协议初始化。正式发布始终要求准确的 npm 依赖，并将清单和
+锁文件变化同步回仓库。协议发布后可以在 Actions 手动运行工作流；协议发布
+不会主动触发这个仓库。
 
 `npm publish` 会运行检查、测试和生产构建。`pi-package` 关键词使发布到 npm 的软件包有资格进入 [Pi 软件包目录](https://pi.dev/packages)；目录更新可能晚于 npm。
 

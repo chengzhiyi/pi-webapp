@@ -9,3 +9,4 @@ dist/
 
 # Local browser screenshots, logs, snapshots, and acceptance output.
 /artifacts/
+/.ci/

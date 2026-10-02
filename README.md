@@ -69,10 +69,13 @@ The source lives in `extension/`, `shared/`, and `web/src/`. The npm package con
 ## Publish
 
 CI resolves the published `@chengzhiyi/pi-web-protocol` version before `npm ci`.
-Publish the protocol package from `pi-extensions` before releasing this host.
-Local development may keep the `file:` dependency; CI replaces it with an exact
-npm version and updates the lockfile, then syncs both back to `main` on release.
-The next host build picks up protocol updates without a sibling source checkout.
+Until the first protocol publication, verification builds a pinned `pi-extensions`
+commit in an ignored `.ci/` checkout and uses that local package. Checks, tests,
+and builds still run; the Actions summary explains why host publication is waiting.
+Release builds always require the published npm dependency. Once it exists, the
+next workflow uses its exact version and the release commit records the lockfile.
+Use Actions' manual run after initializing npm; protocol releases do not trigger
+this repository automatically.
 
 `npm publish` runs the checks, tests, and production build. The `pi-package` keyword makes the published npm package eligible for the [Pi package catalog](https://pi.dev/packages); catalog updates may lag behind npm.
 

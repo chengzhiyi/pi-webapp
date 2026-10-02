@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,21 +13,44 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    outputs:
+      protocol_published: ${{ steps.protocol.outputs.published }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
-      - name: Resolve the published protocol dependency
-        run: node scripts/sync-protocol-dependency.mjs
+      - name: Check protocol publication
+        id: protocol
+        run: node scripts/sync-protocol-dependency.mjs --probe
+      - name: Check out protocol source for initial verification
+        if: steps.protocol.outputs.published == 'false'
+        uses: actions/checkout@v6
+        with:
+          repository: chengzhiyi/pi-extensions
+          ref: e719070a1d407319841a9a23287e402265a63b8a
+          path: .ci/pi-extensions
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        if: steps.protocol.outputs.published == 'false'
+        with:
+          package_json_file: .ci/pi-extensions/package.json
+      - name: Build the protocol from the pinned source
+        if: steps.protocol.outputs.published == 'false'
+        working-directory: .ci/pi-extensions
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @chengzhiyi/pi-web-protocol build
+      - name: Resolve the protocol dependency for verification
+        run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
       - run: npm ci
       - run: npm run check
       - run: npm run build
       - run: npm test
 
   publish:
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.verify.outputs.protocol_published == 'true'
     needs: verify
     runs-on: ubuntu-latest
     concurrency:
@@ -44,6 +68,7 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - run: npm install --global npm@11
       - name: Resolve the published protocol dependency
         run: node scripts/sync-protocol-dependency.mjs
       - run: npm ci

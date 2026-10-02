@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -26,4 +26,24 @@ test('missing, unavailable, or prerelease protocol metadata stops CI before any 
     await assert.rejects(syncProtocolDependency({ root: '/does-not-exist', request: async () => response,
       run: () => assert.fail('unexpected npm install') }), /protocol|stable/i);
   }
+});
+
+test('unpublished protocol can use a built pinned checkout for verification only', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'pi-protocol-bootstrap-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, '.ci/pi-extensions/packages/protocol');
+  await mkdir(join(source, 'dist'), { recursive: true });
+  await writeFile(join(source, 'package.json'), JSON.stringify({ name: '@chengzhiyi/pi-web-protocol', version: '0.1.0', main: './dist/index.js', types: './dist/index.d.ts' }));
+  await writeFile(join(source, 'dist/index.js'), 'export {};');
+  await writeFile(join(source, 'dist/index.d.ts'), 'export {};');
+  await writeFile(join(root, 'package.json'), JSON.stringify({ devDependencies: {} }));
+  let args: string[] = [];
+  const result = await syncProtocolDependency({ root, source, request: async () => new Response('', { status: 404 }),
+    run: (_command: string, values: string[]) => { args = values; } });
+  assert.equal(result, 'file:.ci/pi-extensions/packages/protocol');
+  assert(args.includes('@chengzhiyi/pi-web-protocol@file:.ci/pi-extensions/packages/protocol'));
+  assert.equal(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).devDependencies['@chengzhiyi/pi-web-protocol'], undefined);
+  await assert.rejects(syncProtocolDependency({ root, source, request: async () => new Response('', { status: 503 }) }), /503/);
+  await rm(join(source, 'dist/index.d.ts'));
+  await assert.rejects(syncProtocolDependency({ root, source, request: async () => new Response('', { status: 404 }) }), /ENOENT/);
 });
