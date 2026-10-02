@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Resolve the published protocol dependency
+        run: node scripts/sync-protocol-dependency.mjs
       - run: npm ci
       - run: npm run check
       - run: npm run build
@@ -29,17 +31,21 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: pi-webapp-npm-publish
-      queue: max
+      cancel-in-progress: false
     permissions:
       contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: main
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Resolve the published protocol dependency
+        run: node scripts/sync-protocol-dependency.mjs
       - run: npm ci
       - name: Choose the next patch version
         run: node scripts/prepare-release.mjs

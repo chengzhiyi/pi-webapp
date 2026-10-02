@@ -68,6 +68,11 @@ npm run stop
 
 ## 发布
 
+CI 会先从 npm 解析 `@chengzhiyi/pi-web-protocol` 的已发布版本，再运行 `npm ci`；
+首次发布新宿主前，须先完成 `pi-extensions` 协议包的公开发布。源码联调可继续
+使用本地 `file:` 依赖，CI 会将它替换为准确的 npm 版本并更新锁文件，发布时
+同步回 `main`。协议版本在本仓库下一次构建时更新，不依赖相邻源码目录。
+
 `npm publish` 会运行检查、测试和生产构建。`pi-package` 关键词使发布到 npm 的软件包有资格进入 [Pi 软件包目录](https://pi.dev/packages)；目录更新可能晚于 npm。
 
 GitHub Actions 会在针对 `main` 的拉取请求中运行 `check`、`test` 和 `build`。代码推送到 `main` 后会再次运行这些检查，根据源码版本和 npm `latest` 版本确定下一个补丁版本，先将更新后的 `package.json` 和 `package-lock.json` 提交回 `main`，再发布到 npm。版本同步提交使用工作流的 `GITHUB_TOKEN`，不会再次触发工作流。如需开始新的次版本或主版本，请在拉取请求中同步提高两个包文件的版本。每次发布也会将包内 `pi.image` 的地址更新为该版本。仓库必须允许工作流推送到 `main`，发布才能继续。

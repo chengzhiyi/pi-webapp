@@ -68,6 +68,12 @@ The source lives in `extension/`, `shared/`, and `web/src/`. The npm package con
 
 ## Publish
 
+CI resolves the published `@chengzhiyi/pi-web-protocol` version before `npm ci`.
+Publish the protocol package from `pi-extensions` before releasing this host.
+Local development may keep the `file:` dependency; CI replaces it with an exact
+npm version and updates the lockfile, then syncs both back to `main` on release.
+The next host build picks up protocol updates without a sibling source checkout.
+
 `npm publish` runs the checks, tests, and production build. The `pi-package` keyword makes the published npm package eligible for the [Pi package catalog](https://pi.dev/packages); catalog updates may lag behind npm.
 
 GitHub Actions runs `check`, `test`, and `build` on pull requests to `main`. A push to `main` repeats those checks, chooses the next patch version from the source version and npm `latest`, then commits the updated `package.json` and `package-lock.json` to `main` before publishing. The release commit uses the workflow's `GITHUB_TOKEN` and does not start another workflow run. To start a new minor or major series, raise the version in both package files in the pull request. Each release also updates the package's `pi.image` URL to its own version. The repository must allow the workflow to push to `main` for publishing to proceed.
