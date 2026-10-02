@@ -188,10 +188,10 @@
 }
 
 /* Claim ghost hint as generated content after the last paragraph: the bar
-   sets --piw-composer-hint (a quoted string) while the claim's args are
+   sets --dsh-composer-hint (a quoted string) while the claim's args are
    blank; without the variable the declaration is invalid and nothing shows. */
 .input p:last-child::after {
-  content: var(--piw-composer-hint);
+  content: var(--dsh-composer-hint);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -392,3 +392,6 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+/* Keep the editor mounted while a plugin owns the visible composer. */
+.root.suspended { display: none; }

@@ -27,7 +27,8 @@
     "web/dist",
     "README.md",
     "README.zh-CN.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_LICENSE.txt"
   ],
   "scripts": {
     "start": "npm run build && node bin/pi-webapp.mjs",
@@ -37,7 +38,7 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "build": "npm run build:web && npm run build:extension",
     "build:web": "vite build",
-    "build:extension": "esbuild extension/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --minify --outfile=dist/extension.js",
+    "build:extension": "node scripts/build-extension.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run check && npm run build && npm run test"
   },
@@ -49,12 +50,16 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
+    "@chengzhiyi/pi-web-protocol": "file:../pi-extensions/packages/protocol",
     "@earendil-works/pi-ai": "0.87.1",
     "@earendil-works/pi-coding-agent": "0.87.1",
+    "@types/katex": "^0.16.7",
+    "@types/mdast": "^4.0.4",
     "@types/node": "22.19.19",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "esbuild": "^0.28.2",
+    "micromark-util-types": "^2.0.2",
     "typescript": "7.0.2",
     "vite": "^6.4.3"
   },
@@ -62,12 +67,30 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
+    "@lexical/history": "0.49.0",
+    "@lexical/plain-text": "0.49.0",
+    "@shikijs/langs": "^4.3.1",
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
     "cross-spawn": "^7.0.6",
+    "katex": "^0.16.47",
+    "lexical": "0.49.0",
+    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-math": "^3.0.0",
+    "micromark-core-commonmark": "^2.0.3",
+    "micromark-extension-gfm": "^3.0.0",
+    "micromark-extension-math": "^3.1.0",
+    "micromark-factory-space": "^2.0.1",
+    "micromark-util-character": "^2.1.1",
+    "micromark-util-classify-character": "^2.0.1",
+    "micromark-util-sanitize-uri": "^2.0.1",
+    "micromark-util-symbol": "^2.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "shiki": "^4.3.1",
+    "simple-icons": "^16.31.0"
   }
 }

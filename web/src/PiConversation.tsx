@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
+import type { LoadedPlugin } from "./plugin-runtime.tsx";
 import { HeroShell } from "./ui/conversation/EmptyHero.tsx";
 import { StateDot, IconFolderOpen16, IconPlusOutline16 } from "./ui/primitives/index.ts";
 import conversationCss from "./ui/conversation/ConversationRoot.module.css";
@@ -16,8 +18,10 @@ import { PiTrajectory } from "./ui/trajectory/PiTrajectory.tsx";
 import { PiModelSelect } from "./ui/conversation/PiModelSelect.tsx";
 import { PiAttachmentItem } from "./ui/conversation/PiAttachmentItem.tsx";
 import { PiHistoryImage } from "./ui/conversation/PiHistoryImage.tsx";
+import { PiComposerEditor, type ComposerEditorHandle } from "./ui/conversation/PiComposerEditor.tsx";
+import { buildComposerCommands, commandText, filterComposerCommands, resolveComposerCommand, type ComposerCommand } from "./composer-commands.ts";
+import { executeComposerAction, selectComposerAction } from "./composer-action.ts";
 import { PiCommandMenu, builtInCommands } from "./ui/conversation/PiCommandMenu.tsx";
-import { IconPaperclipOutline16 } from "./ui/primitives/icons/index.tsx";
 import { FileTypeIcon, fileExtension } from "./ui/primitives/FileTypeIcon.tsx";
 import { DropOverlay } from "./ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../shared/user-message.ts";
@@ -25,6 +29,11 @@ import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import "./pi-conversation.css";
 
 interface Props {
+  composerInteraction?: ReactNode;
+  rightbarControl?: ReactNode;
+  renderPluginSlot: (slot: WebSlotName, turn?: TurnReference) => ReactNode;
+  plugins: LoadedPlugin[];
+  onPluginAction: (pluginId: string, action: string, input?: unknown) => Promise<unknown>;
   session: SessionView | null;
   streaming: ViewMessage | null;
   connection: ConnectionState;
@@ -37,6 +46,7 @@ interface Props {
   onNewSession: () => Promise<void>;
   commands: CommandOption[];
   onStop: () => Promise<void>;
+  onResume: () => Promise<void>;
   models: ModelOption[];
   modelsStatus: ModelsStatus;
   onConfigureModels: () => void;
@@ -78,8 +88,8 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   );
 }
 
-function PiTurn({ turn, results, model, loadImage, onInspect, running = false, cwd }: {
-  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; running?: boolean; cwd?: string;
+function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, artifactTools, running = false, cwd }: {
+  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; artifactTools: readonly string[]; running?: boolean; cwd?: string;
 }) {
   const lastAssistant = [...turn.messages].reverse().find((message) => message.role === "assistant" && message.blocks.some((block) => block.kind === "text" && block.text.trim()));
   const answerBlocks = lastAssistant?.blocks.filter((block) => block.kind === "text") ?? [];
@@ -88,6 +98,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, running = false, c
     if (message.role !== "assistant") continue;
     message.blocks.forEach((block, index) => {
       if (message === lastAssistant && block.kind === "text") return;
+      if (block.kind === "toolCall" && artifactTools.includes(block.toolName ?? "")) return;
       process.push({ message, block, index });
     });
   }
@@ -109,6 +120,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, running = false, c
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
     {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>{t("模型请求失败", "Model request failed")}</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
     {!running && failures.length === 0 && (lastAssistant || (turn.usage && turn.usage.totalTokens > 0)) && <TurnActions text={answer} timestamp={lastAssistant?.timestamp} usage={turn.usage} model={lastAssistant?.model ?? model} />}
+    {renderPluginSlot("turn.tail", { id: turn.id, completed: !running, messageIds: turn.messages.map((message) => message.id), toolCallIds: turn.messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)) })}
   </div>;
 }
 
@@ -120,7 +132,7 @@ interface PendingAttachment {
   error?: string;
 }
 
-function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel"> & { hero: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
+function PiInputBar({ hero, suspended = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
   const locale = useLocale();
   const [draft, setDraft] = useState("");
   const [working, setWorking] = useState(false);
@@ -137,24 +149,39 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
   const form = useRef<HTMLFormElement>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const textarea = useRef<ComposerEditorHandle>(null);
+  const currentSessionId = useRef(session?.sessionId);
+  currentSessionId.current = session?.sessionId;
+  const primaryInFlight = useRef(false);
+  const previouslySuspended = useRef(suspended);
+  useEffect(() => {
+    if (previouslySuspended.current && !suspended) textarea.current?.focus();
+    previouslySuspended.current = suspended;
+  }, [suspended]);
   const ready = connection === "connected" && session !== null;
   const noModels = ready && modelsStatus === "ready" && models.length === 0;
   const modelSelected = ready && models.some((model) => `${model.provider}/${model.id}` === session.model);
-  const canAttach = ready && session.idle && !working;
+  const canAttach = ready && session.idle && !working && !suspended;
   const localCommand = attachments.length === 0 && ["/compact", "/new", "/model"].includes(draft.trim());
-  const canSend = canAttach && modelsStatus === "ready" && (modelSelected || localCommand) && (draft.trim().length > 0 || attachments.length > 0) && attachments.every((item) => item.status === "ready");
-  const canStop = ready && !session.idle && !working;
-  const availableCommands = useMemo(() => {
-    const unique = new Map<string, CommandOption>();
-    for (const command of [...builtInCommands(), ...commands]) if (!unique.has(command.name)) unique.set(command.name, command);
-    return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [commands, locale]);
+  const availableCommands = useMemo(() => buildComposerCommands(builtInCommands(), commands, plugins, locale), [commands, plugins, locale]);
+  const commandMatch = resolveComposerCommand(draft, availableCommands);
+  const pluginCommand = commandMatch?.command.pluginId ? commandMatch.command : undefined;
+  const claimToken = commandMatch?.command.input ? `${commandMatch.token}${/\s$/.test(draft) || commandMatch.text ? " " : ""}` : null;
+  const claimHint = commandMatch?.command.input && !commandMatch.text ? commandText(commandMatch.command.input.hint, locale) ?? null : null;
+  const canSend = canAttach && (modelsStatus === "ready" && modelSelected || localCommand || !!pluginCommand)
+    && (draft.trim().length > 0 || attachments.length > 0) && attachments.every((item) => item.status === "ready")
+    && (!pluginCommand || attachments.length === 0 || pluginCommand.input?.attachments === true);
+  const primaryAction = selectComposerAction(plugins, session, locale, draft, attachments.length);
+  const PrimaryIcon = primaryAction?.icon;
+  const canInvokePrimary = canAttach && (primaryAction?.kind === "resume" || primaryAction?.kind === "invoke")
+    && (primaryAction.kind === "invoke" && !primaryAction.sendResultMessage || modelsStatus === "ready" && modelSelected);
+  const running = ready && !session.idle;
+  const canStop = running && !working && !suspended;
   const query = commandMenu === "slash" ? draft.slice(1).toLowerCase() : "";
-  const visibleCommands = commandMenu === null ? [] : availableCommands.filter((command) => command.name.toLowerCase().includes(query));
+  const visibleCommands = commandMenu === null ? [] : filterComposerCommands(availableCommands, query, commandMenu === "slash");
 
   useEffect(() => {
-    setAttachments([]); setAttachmentError(""); setCommandMenu(null);
+    setDraft(""); setAttachments([]); setAttachmentError(""); setCommandMenu(null);
     return () => {
       for (const item of attachmentsRef.current) removedKeys.current.add(item.key);
       for (const controller of uploadControllers.current.values()) controller.abort();
@@ -169,18 +196,27 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
     return () => document.removeEventListener("pointerdown", outside, true);
   }, [commandMenu]);
 
-  const chooseCommand = async (command: CommandOption) => {
-    if (commandMenu === "slash" && ["model", "compact", "new"].includes(command.name)) setDraft("");
+  const chooseCommand = async (command: ComposerCommand) => {
+    if (!canAttach) return;
+    if (commandMenu === "slash" && ["file", "model", "compact", "new"].includes(command.name)) setDraft("");
     setCommandMenu(null);
-    if (command.name === "model") { setModelOpenSignal((value) => value + 1); return; }
-    if (command.name === "compact" || command.name === "new") {
+    if (!command.pluginId && command.name === "file") { fileInput.current?.click(); return; }
+    if (command.pluginId && command.action && command.menuOnly) {
+      setWorking(true);
+      try { await onPluginAction(command.pluginId, command.action, { args: [] }); setAttachmentError(""); }
+      catch (cause) { setAttachmentError(cause instanceof Error ? cause.message : String(cause)); }
+      finally { setWorking(false); }
+      return;
+    }
+    if (!command.pluginId && command.name === "model") { setModelOpenSignal((value) => value + 1); return; }
+    if (!command.pluginId && (command.name === "compact" || command.name === "new")) {
       setWorking(true);
       try { await (command.name === "compact" ? onCompact() : onNewSession()); }
       catch { /* The bridge reports the request error next to the composer. */ }
       finally { setWorking(false); }
       return;
     }
-    setDraft(`/${command.name} `);
+    setDraft(`/${commandText(command.input?.token, locale) ?? command.name} `);
     textarea.current?.focus();
   };
 
@@ -240,12 +276,20 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
     if (!localCommand) {
       setDraft("");
       setAttachments([]);
-      if (textarea.current) textarea.current.style.height = "";
     }
     try {
       if (localCommand) {
         if (text === "/model") setModelOpenSignal((value) => value + 1);
         else await (text === "/compact" ? onCompact() : onNewSession());
+        setDraft("");
+      } else if (pluginCommand?.pluginId && pluginCommand.action && commandMatch) {
+        setAttachmentError("");
+        const result = await onPluginAction(pluginCommand.pluginId, pluginCommand.action, {
+          args: commandMatch.text.split(/\s+/).filter(Boolean), text: commandMatch.text,
+          attachments: sentAttachments.map(item => item.receipt!.id),
+        }) as { message?: string };
+        if (typeof result?.message === "string" && result.message) await onSend(result.message, sentAttachments.map(item => item.receipt!.id), sentAttachments.map(item => item.file));
+        else if (sentAttachments.length) { setAttachments(sentAttachments); setAttachmentError(t("指令未发送附件，文件仍保留在输入框", "The command did not send the files; they remain in the composer")); }
         setDraft("");
       } else await onSend(text, sentAttachments.map((item) => item.receipt!.id), sentAttachments.map((item) => item.file));
     } catch {
@@ -256,40 +300,50 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
     }
   };
   const stop = async () => {
-    if (!canStop) return;
+    if (!canStop || primaryInFlight.current) return;
+    primaryInFlight.current = true;
     setWorking(true);
     try { await onStop(); }
     catch { /* The bridge displays request errors next to the composer. */ }
-    finally { setWorking(false); }
+    finally { primaryInFlight.current = false; setWorking(false); }
+  };
+
+  const invokePrimary = async () => {
+    if (!canInvokePrimary || !primaryAction || primaryInFlight.current) return;
+    primaryInFlight.current = true;
+    setWorking(true);
+    setAttachmentError("");
+    try {
+      await executeComposerAction(primaryAction, onPluginAction, message => onSend(message, [], []), onStop, () => currentSessionId.current, onResume);
+    } catch (error) {
+      if (primaryAction.kind !== "resume" && currentSessionId.current === primaryAction.sessionId) setAttachmentError(error instanceof Error ? error.message : String(error));
+    } finally {
+      primaryInFlight.current = false;
+      setWorking(false);
+    }
   };
 
   return (
-    <div className={`${inputCss.root} ${hero ? inputCss.hero : ""}`}>
+    <div hidden={suspended} className={`${inputCss.root} ${hero ? inputCss.hero : ""} ${suspended ? inputCss.suspended : ""}`}>
       {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? t("松开以上传文件", "Drop to upload files") : t("当前无法上传文件", "Files cannot be uploaded now"), desc: canAttach ? t("最多 20 个文件，每个不超过 20 MB", "Up to 20 files, 20 MB each") : undefined }} />}
       <form ref={form} className={inputCss.card} data-composer-card onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        {commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />}
+        {commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} grouped={!query} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />}
         <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label={t("选择要上传的文件", "Choose files to upload")} onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
         {attachments.length > 0 && <div className="pi-attachment-rail" role="group" aria-label={t("待发送附件", "Pending attachments")}>
           {attachments.map((item) => <PiAttachmentItem key={item.key} file={item.file} status={item.status} error={item.error} onRemove={() => removeAttachment(item)} onRetry={() => { setAttachmentError(""); setAttachments((current) => current.map((entry) => entry.key === item.key ? { ...entry, status: "uploading", error: undefined } : entry)); uploadAttachment(item.key, item.file); }} />)}
         </div>}
-        <div className={inputCss.scroll} data-input-scroll>
-          <div className={inputCss.grow}>
-            <textarea
-              ref={textarea}
-              className="pi-editor"
-              aria-label={t("给当前 Pi 会话发送消息", "Send a message to the current Pi session")}
-              placeholder={noModels ? t("先连接模型，再开始对话", "Connect a model to start chatting") : ready && modelsStatus === "ready" && !modelSelected ? t("先选择模型，再开始对话", "Choose a model to start chatting") : ready ? t("给 Pi 发送消息", "Message Pi") : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
-              value={draft}
-              onChange={(event) => {
-                const next = event.target.value;
-                setDraft(next);
-                if (/^\/[^\s]*$/.test(next)) { setCommandMenu("slash"); setActiveCommand(0); }
-                else if (commandMenu === "slash") setCommandMenu(null);
-                event.target.style.height = "auto";
-                event.target.style.height = `${Math.min(event.target.scrollHeight, 336)}px`;
-              }}
-              onPaste={(event) => { const files = [...event.clipboardData.files]; if (files.length) { event.preventDefault(); addFiles(files); } }}
-              onKeyDown={(event) => {
+        <PiComposerEditor ref={textarea} value={draft} claimToken={claimToken} hint={claimHint}
+          editable={ready && !working && !suspended} placeholder={noModels ? t("先连接模型，再开始对话", "Connect a model to start chatting") : ready && modelsStatus === "ready" && !modelSelected ? t("先选择模型，再开始对话", "Choose a model to start chatting") : ready ? (session && plugins.map((plugin) => plugin.definition.composerPlaceholder?.(session, locale)).find(Boolean) || t("给 Pi 发送消息", "Message Pi")) : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
+          ariaLabel={t("给当前 Pi 会话发送消息", "Send a message to the current Pi session")}
+          menuOpen={commandMenu !== null} activeOption={commandMenu !== null && visibleCommands[activeCommand] ? `pi-command-${activeCommand}` : undefined}
+          onChange={(next) => {
+            setDraft(next);
+            if (canAttach && /^\/[^\s]*$/.test(next)) { setCommandMenu("slash"); setActiveCommand(0); }
+            else if (commandMenu === "slash") setCommandMenu(null);
+          }}
+          onPaste={(event) => { const files = [...event.clipboardData.files]; if (files.length) { event.preventDefault(); addFiles(files); } }}
+          onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                 if (commandMenu !== null) {
                   if (event.key === "Escape") { event.preventDefault(); setCommandMenu(null); return; }
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -297,26 +351,24 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
                     setActiveCommand((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + visibleCommands.length) % Math.max(visibleCommands.length, 1));
                     return;
                   }
-                  if (event.key === "Enter" && visibleCommands[activeCommand]) { event.preventDefault(); void chooseCommand(visibleCommands[activeCommand]); return; }
+                  if ((event.key === "Enter" || event.key === "Tab") && visibleCommands[activeCommand]) { event.preventDefault(); void chooseCommand(visibleCommands[activeCommand]); return; }
                 }
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void submit();
                 }
               }}
-            />
-          </div>
-        </div>
+        />
         <div className={inputCss.row}>
           <div className={inputCss.tools}>
             <button className={inputCss.add} type="button" aria-label={t("添加指令", "Add command")} title={t("添加指令", "Add command")} aria-haspopup="listbox" aria-expanded={commandMenu !== null} disabled={!canAttach} onMouseDown={(event) => event.preventDefault()} onClick={() => { setCommandMenu(commandMenu === null ? "button" : null); setActiveCommand(0); textarea.current?.focus(); }}><IconPlusOutline16 size={16} /></button>
-            <button className={inputCss.add} type="button" aria-label={t("添加文件", "Add file")} title={t("添加文件", "Add file")} disabled={!canAttach} onClick={() => fileInput.current?.click()}><IconPaperclipOutline16 size={16} /></button>
-            <span className="pi-input-context">{t("当前 Pi 会话", "Current Pi session")}</span>
+            {renderPluginSlot("composer.controls")}
           </div>
           <div className={inputCss.trailing}>
             {noModels ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button> : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />}
-            {canStop
-              ? <button className={inputCss.primary} type="button" aria-label={t("停止运行", "Stop running")} onClick={() => { void stop(); }}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg></button>
+            {running
+              ? <button className={inputCss.primary} type="button" aria-label={primaryAction?.label ?? t("暂停执行", "Pause")} title={primaryAction?.title} disabled={!canStop} onClick={() => { void stop(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor" /></svg>}</button>
+              : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
               : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
           </div>
         </div>
@@ -326,7 +378,7 @@ function PiInputBar({ hero, session, connection, onSend, onUpload, onDiscardAtta
   );
 }
 
-export function PiConversation({ session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel }: Props) {
+export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, renderPluginSlot, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -378,7 +430,7 @@ export function PiConversation({ session, streaming, connection, error, onSend, 
               <span className={`${conversationCss.crumb} ${conversationCss.crumbCurrent}`}>{session.name}</span>
             </div>
           </div>
-          <div className={conversationCss.headerActions}><StateDot state={connection === "connected" ? session.idle ? "done" : "ongoing" : "error"} /><span className="pi-header-state">{connection === "connected" ? session.idle ? t("已连接", "Connected") : t("运行中", "Running") : t("已断开", "Disconnected")}</span></div>
+          <div className={conversationCss.headerActions}>{rightbarControl}<StateDot state={connection === "connected" ? session.idle ? "done" : "ongoing" : "error"} /><span className="pi-header-state">{connection === "connected" ? session.idle ? t("已连接", "Connected") : t("运行中", "Running") : t("已断开", "Disconnected")}</span></div>
         </div>
         <div className={conversationCss.tabs} role="tablist" aria-label={t("会话视图", "Session views")}>
           <button className={`${conversationCss.tab} ${activeTab === "chat" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={activeTab === "chat"} type="button" onClick={() => setActiveTab("chat")}>{t("对话", "Chat")}</button>
@@ -389,14 +441,15 @@ export function PiConversation({ session, streaming, connection, error, onSend, 
         <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="">
           {!empty && <div className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
-              {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} running={turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
+              {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
           <div className={conversationCss.composerSeat} data-composer-seat="">
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
-              <PiInputBar hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} />
+              {composerInteraction}
+              <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>

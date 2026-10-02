@@ -1,3 +1,4 @@
+import { createEventBus } from "@earendil-works/pi-coding-agent";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
@@ -53,8 +54,9 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     },
   } as unknown as ExtensionCommandContext;
   piWeb({
+    events: createEventBus(),
     on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
-    registerCommand(_name: string, definition: { handler: typeof command }) { command = definition.handler; },
+    registerCommand(name: string, definition: { handler: typeof command }) { if (name === "web") command = definition.handler; },
     getSessionName() { if (oldRuntimeStale) throw new Error("stale Pi API"); return undefined; },
     sendUserMessage() { if (oldRuntimeStale) throw new Error("stale Pi API"); },
   } as unknown as ExtensionAPI, async (url) => {
@@ -73,7 +75,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   assert.deepEqual(openedPages, [pageUrl, pageUrl, pageUrl]);
   assert.deepEqual(notices, ["info", "info", "warning"]);
   const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
-  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null }>)[Symbol.for("pi-web.bridge-state")];
+  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
   try {
     const created = await fetch(`${url.origin}/api/new-session`, {
       method: "POST", headers, body: JSON.stringify({ sessionId: "old" }),

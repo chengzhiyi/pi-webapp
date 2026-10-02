@@ -7,13 +7,18 @@ import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
+import { MarkdownText } from "./ui/dsh/primitives/markdown/MarkdownText.tsx";
+import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
+import { PluginInteraction, PluginSlot, useWebPlugins } from "./plugin-runtime.tsx";
+import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
 import { useLocale, localize as t } from "./ui/locale/preference.ts";
 import type { LayoutInfo, PanelInfo } from "./ui/contract.ts";
 import type { SidebarPanelMetadata } from "./ui/sidebar/contract/slots.ts";
 import "./pi.css";
+import "./plugin-rightbar.css";
 
 export function PiApp() {
-  useLocale();
+  const locale = useLocale();
   const labels: Record<string, string> = {
     "session.new.label": t("新会话", "New session"),
     "session.new": t("新会话", "New session"),
@@ -23,6 +28,9 @@ export function PiApp() {
     "brand.localBuild": "pi-webapp",
   };
   const bridge = usePiBridge();
+  const { plugins, errors: pluginErrors } = useWebPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.plugins);
+  const panel = usePluginPanel(bridge.session?.sessionId);
+  const panelId = panel.panelId;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const needsModelSetup = bridge.connection === "connected" && bridge.session !== null && bridge.modelsStatus === "ready" && bridge.models.length === 0;
   useEffect(() => {
@@ -49,8 +57,30 @@ export function PiApp() {
     setSidebar(width: number) {
       setLayout((previous) => ({ ...previous, sidebar: Math.min(420, Math.max(264, Math.round(width))) }));
     },
-    setRightbar(_width: number) {},
+    setRightbar(width: number) { setLayout((previous) => ({ ...previous, rightbar: Math.max(300, Math.min(720, Math.round(width))) })); },
   }), []);
+  const openPanel = (id: string) => {
+    panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
+    panel.controller.setExpanded(true);
+    setLayout((previous) => ({ ...previous, narrowExpanded: false }));
+  };
+  const closePanel = () => panel.controller.setExpanded(false);
+  useEffect(() => {
+    const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
+    setLayout((previous) => ({ ...previous, rightbarShown: panel.shown, rightbarTrack: panel.shown, rightbarFullscreen: fullscreen }));
+  }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth]);
+  const pluginProps = {
+    session: bridge.session,
+    locale,
+    openPanel,
+    closePanel,
+    panelId,
+    invokePluginAction: bridge.invokePluginAction,
+    resolvePluginInteraction: bridge.resolvePluginInteraction,
+    sendMessage: (text: string) => bridge.send(text, []),
+    renderMarkdown: (text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />,
+  };
+  const renderPluginSlot = (slot: WebSlotName, turn?: TurnReference) => <PluginSlot plugins={plugins} slot={slot} props={{ ...pluginProps, turn }} />;
   const toggleSidebar = () => setLayout((previous) => previous.viewportWidth < 1024
     ? { ...previous, narrowExpanded: !previous.narrowExpanded }
     : { ...previous, sidebar: previous.sidebar === 0 ? 280 : 0 });
@@ -89,7 +119,8 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <PiConversation session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} />;
+    if (key === "main") return <PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} />;
+    if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel panel={panel} width={owner.width} narrow={layout.viewportWidth < 767} plugins={plugins} props={pluginProps} />;
     return null;
   };
   return <><AppFrame
@@ -98,5 +129,5 @@ export function PiApp() {
     actions={actions}
     renderSlot={renderSlot}
     t={(name: string) => labels[name] ?? name}
-  />{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</>;
+  />{pluginErrors.length > 0 && <div className="pi-plugin-errors" role="status" title={pluginErrors.join("\n")}>{t("插件加载失败", "Plugin load failed")}: {pluginErrors.length}</div>}{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</>;
 }

@@ -1,88 +1,173 @@
-import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent } from "@earendil-works/pi-coding-agent";
+import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest } from "@chengzhiyi/pi-web-protocol";
 import { realpath } from "node:fs/promises";
-import { contentBlocks, projectEntry, sessionTitle, type SessionView, type ViewMessage } from "./view.ts";
+import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
+import { WebPluginCatalog } from "./web-plugins.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
+import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
+import { resumeMessage } from "./execution-control.ts";
+import { pluginRuntimePaths } from "./plugin-runtime-paths.ts";
 
-/** Pi SDK session for a workspace other than the attached TUI session. */
+type HostEvent = { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "error"; message: string };
+interface WorkspaceRuntime {
+  session: AgentSession;
+  cwd: string;
+  catalog: WebPluginCatalog;
+  bus: EventBusController;
+  interactions: WebInteractionHost;
+  detach: () => void;
+  releasePaths: () => Promise<void>;
+  generation: number;
+  closing: boolean;
+  waitController: AbortController;
+}
+
+/** One active SDK runtime; the host may retain it while the TUI is in front. */
 export class WorkspaceSessions {
-  private active: AgentSession | null = null;
-  private detach: (() => void) | null = null;
-  private cwd: string | null = null;
-  private lastStreamAt = 0;
-  private readonly publish: (event: { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "error"; message: string }) => void;
+  private active: WorkspaceRuntime | null = null;
+  private readonly queue = new LifecycleQueue();
+  private generation = 0;
+  private disposed = false;
+  private readonly publish: (event: HostEvent) => void;
   private readonly fallbackModel: () => ExtensionContext["model"];
+  private readonly isProjectTrusted: (cwd: string) => boolean;
 
-  constructor(publish: (event: { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "error"; message: string }) => void, fallbackModel: () => ExtensionContext["model"]) {
-    this.publish = publish;
-    this.fallbackModel = fallbackModel;
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false) {
+    this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted;
+  }
+  get session(): AgentSession | null { return this.active?.session ?? null; }
+  get path(): string | null { return this.active?.cwd ?? null; }
+  get catalog(): WebPluginCatalog | null { return this.active?.catalog ?? null; }
+
+  open(path: string, target: "continue" | "new" | { sessionFile: string }): Promise<void> {
+    return this.queue.run(async () => {
+      this.ensureAvailable();
+      const canonical = await realpath(path);
+      let manager: SessionManager;
+      if (target === "new") manager = SessionManager.create(canonical);
+      else if (target === "continue") {
+        const recent = (await sessionsForWorkspace(canonical))[0];
+        manager = recent ? SessionManager.open(recent.path) : SessionManager.create(canonical);
+      } else manager = SessionManager.open(target.sessionFile);
+      if (await realpath(manager.getCwd()) !== canonical) throw new Error("会话不属于该工作区");
+      await this.replace(canonical, manager, target === "new" ? "new" : "resume");
+    });
   }
 
-  get session(): AgentSession | null { return this.active; }
-  get path(): string | null { return this.cwd; }
-
-  async open(path: string, target: "continue" | "new" | { sessionFile: string }): Promise<void> {
-    if (this.active && !this.active.isIdle) throw new Error("请等待当前回复结束再切换工作区");
-    const canonical = await realpath(path);
-    let manager: SessionManager;
-    if (target === "new") manager = SessionManager.create(canonical);
-    else if (target === "continue") {
-      const recent = (await sessionsForWorkspace(canonical))[0];
-      manager = recent ? SessionManager.open(recent.path) : SessionManager.create(canonical);
-    } else manager = SessionManager.open(target.sessionFile);
-    if (await realpath(manager.getCwd()) !== canonical) throw new Error("会话不属于该工作区");
-    const model = manager.buildSessionProjection().model ? undefined : this.active?.model ?? this.fallbackModel();
-    // A nested SDK session must not load pi-web again: its extension holds the
-    // outer TUI bridge in process-global state. Skills/context still load.
-    const resourceLoader = new DefaultResourceLoader({ cwd: canonical, agentDir: getAgentDir(), noExtensions: true });
-    await resourceLoader.reload();
-    const { session } = await createAgentSession({ cwd: canonical, sessionManager: manager, model, resourceLoader });
-    this.detach?.();
-    this.active?.dispose();
-    this.active = session;
-    this.cwd = canonical;
-    this.detach = session.subscribe((event) => {
-      if (event.type === "message_update" && event.message.role === "assistant") {
-        const now = Date.now();
-        if (now - this.lastStreamAt >= 60) {
-          this.lastStreamAt = now;
-          this.publish({ type: "stream", message: { id: "stream", role: "assistant", timestamp: new Date(event.message.timestamp).toISOString(), blocks: contentBlocks(event.message.content) } });
+  /** Rebuild immutable extension paths and catalog while retaining session history. */
+  reload(): Promise<void> {
+    return this.queue.run(async () => {
+      this.ensureAvailable();
+      const current = this.active;
+      if (!current) throw new Error("没有活动工作区会话");
+      await this.replace(current.cwd, current.session.sessionManager, "reload");
+    });
+  }
+  private ensureAvailable() {
+    if (this.disposed) throw new Error("工作区服务已关闭");
+    if (this.active && !this.active.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
+  }
+  private diagnostic(runtime: WorkspaceRuntime, pluginId: string, stage: string, message: string) {
+    const detail = `plugin=${pluginId} session=${runtime.session.sessionManager.getSessionId()} generation=${runtime.generation} stage=${stage}: ${message}`;
+    console.error(detail);
+    if (!this.disposed) this.publish({ type: "error", message: detail });
+  }
+  private async replace(cwd: string, manager: SessionManager, reason: SessionShutdownEvent["reason"]): Promise<void> {
+    const old = this.active;
+    const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
+    const bus = createEventBus();
+    const runtimePaths = await pluginRuntimePaths(cwd, catalog.extensionRoots);
+    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus });
+    let candidate: WorkspaceRuntime | null = null;
+    try {
+      await resourceLoader.reload();
+      const loadErrors = resourceLoader.getExtensions().errors;
+      if (loadErrors.length) throw new Error(loadErrors.map(item => `${item.path}: ${item.error}`).join("; "));
+      const model = manager.buildSessionProjection().model ? undefined : old?.session.model ?? this.fallbackModel();
+      const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader });
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release };
+      candidate = runtime;
+      const publish = (event: HostEvent) => { if (!this.disposed && this.active === runtime && !runtime.closing) this.publish(event); };
+      runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
+      let lastStreamAt = 0;
+      const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
+      const offEvents = session.subscribe(event => {
+        if (event.type === "message_update" && event.message.role === "assistant" && Date.now() - lastStreamAt >= 60) {
+          lastStreamAt = Date.now();
+          publish({ type: "stream", message: { id: "stream", role: "assistant", timestamp: new Date(event.message.timestamp).toISOString(), blocks: contentBlocks(event.message.content) } });
         }
-      }
-      if (event.type === "message_end" || event.type === "agent_start" || event.type === "agent_settled" || event.type === "session_info_changed") {
-        if (event.type === "message_end" && event.message.role === "assistant") this.publish({ type: "stream", message: null });
-        this.publish({ type: "snapshot", session: this.snapshot() });
-      }
-    });
-    this.publish({ type: "stream", message: null });
-    this.publish({ type: "snapshot", session: this.snapshot() });
+        if (["message_end", "agent_start", "agent_settled", "session_info_changed", "entry_appended"].includes(event.type)) {
+          if (event.type === "message_end" && event.message.role === "assistant") publish({ type: "stream", message: null });
+          publish({ type: "snapshot", session: this.snapshotOf(runtime) });
+        }
+      });
+      runtime.detach = () => { offChanged(); offEvents(); };
+      const startupErrors: string[] = [];
+      let initializing = true;
+      await session.bindExtensions({ mode: "print", shutdownHandler: () => {}, onError: error => {
+        if (initializing) startupErrors.push(error.error);
+        this.diagnostic(runtime, catalog.plugins.find(plugin => error.extensionPath.startsWith(plugin.root + "/"))?.id ?? error.extensionPath, error.event ?? "runtime", error.error);
+      } });
+      initializing = false;
+      if (startupErrors.length) throw new Error(startupErrors.join("; "));
+      this.ensureAvailable();
+      if (old) await this.close(old, reason);
+      if (this.disposed) throw new Error("工作区服务已关闭");
+      this.active = runtime;
+      candidate = null;
+      this.publish({ type: "stream", message: null });
+      this.publish({ type: "snapshot", session: this.snapshot() });
+    } catch (error) {
+      if (candidate) await this.close(candidate, "quit"); else { bus.clear(); await runtimePaths.release(); }
+      throw error;
+    }
   }
-
-  snapshot(): SessionView {
-    const session = this.active;
-    if (!session || !this.cwd) throw new Error("没有活动工作区会话");
-    const messages = session.sessionManager.getBranch().flatMap((entry) => {
-      const message = projectEntry(entry);
-      return message ? [message] : [];
-    });
+  private async close(runtime: WorkspaceRuntime, reason: SessionShutdownEvent["reason"]): Promise<void> {
+    if (runtime.closing) return;
+    runtime.closing = true;
+    runtime.waitController.abort();
+    runtime.interactions.dispose();
+    await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.detach(); runtime.bus.clear(); });
+    await runtime.releasePaths();
+  }
+  private snapshotOf(runtime: WorkspaceRuntime): SessionView {
+    const { session, cwd, catalog } = runtime;
+    const messages = session.sessionManager.getBranch().flatMap(entry => { const message = projectEntry(entry); return message ? [message] : []; });
     return {
-      schemaVersion: 1,
-      sessionId: session.sessionManager.getSessionId(),
-      cwd: this.cwd,
+      schemaVersion: 1, sessionId: session.sessionManager.getSessionId(), cwd,
       name: sessionTitle(session.sessionManager.getSessionName(), messages),
       model: session.model ? `${session.model.provider}/${session.model.id}` : null,
-      thinkingLevel: session.thinkingLevel,
-      thinkingLevels: session.getAvailableThinkingLevels(),
-      idle: session.isIdle,
-      contextUsage: session.getContextUsage() ?? null,
-      messages,
+      thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle,
+      paused: sessionPaused(session.sessionManager.getBranch()),
+      contextUsage: session.getContextUsage() ?? null, messages,
+      interactions: runtime.interactions.pending(session.sessionManager.getSessionId()),
+      pluginEntries: projectPluginEntries(session.sessionManager.getBranch(), catalog.ids()),
     };
+  }
+  snapshot(): SessionView {
+    if (!this.active) throw new Error("没有活动工作区会话");
+    return this.snapshotOf(this.active);
+  }
+  async invokePluginAction(request: ActionRequest): Promise<unknown> {
+    const runtime = this.active;
+    if (this.disposed || !runtime || runtime.closing || request.sessionId !== runtime.session.sessionManager.getSessionId()) throw new Error("会话已切换");
+    if (!runtime.catalog.has(request.pluginId)) throw new Error("插件未启用");
+    const runner = runtime.session.extensionRunner;
+    const value = await invokeWebAction(runtime.bus, request, 15_000, runtime.waitController.signal);
+    if (this.active !== runtime || runtime.closing || runner !== runtime.session.extensionRunner) throw new Error("会话运行实例已切换");
+    this.publish({ type: "snapshot", session: this.snapshot() });
+    return value;
+  }
+  resolveInteraction(sessionId: string, pluginId: string, requestId: string, value: unknown): void {
+    if (this.disposed || !this.active || this.active.closing) throw new Error("Interaction host unavailable");
+    this.active.interactions.resolve(sessionId, pluginId, requestId, value);
   }
 
   async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = []): Promise<void> {
-    if (!this.active || !this.active.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+    if (this.disposed || !this.session || !this.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
-    const active = this.active;
+    const active = this.session;
     let accepted = false;
     let resolve!: () => void;
     let reject!: (reason: unknown) => void;
@@ -96,26 +181,53 @@ export class WorkspaceSessions {
     await preflight;
   }
 
-  async stop(): Promise<void> { await this.active?.abort(); }
+  async stop(): Promise<void> {
+    const runtime = this.active;
+    if (!runtime || runtime.session.isIdle) return;
+    runtime.session.sessionManager.appendCustomEntry(PAUSED_ENTRY);
+    await runtime.session.abort();
+    if (this.active === runtime && !runtime.closing) this.publish({ type: 'snapshot', session: this.snapshotOf(runtime) });
+  }
+
+  async resume(): Promise<void> {
+    const runtime = this.active;
+    if (this.disposed || !runtime || runtime.closing) throw new Error('Pi 会话不可用');
+    const session = runtime.session;
+    if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
+    if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');
+    if (!session.model) throw new Error('请先选择模型');
+    const authenticated = session.modelRuntime.hasConfiguredAuth(session.model.provider)
+      || await session.modelRuntime.checkAuth(session.model.provider) !== undefined;
+    if (!authenticated) throw new Error('请先连接当前模型');
+    if (this.active !== runtime || runtime.closing) throw new Error('会话已切换');
+    if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
+    if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');
+    const message = resumeMessage(this.snapshotOf(runtime).messages);
+    void session.sendCustomMessage(message, { triggerTurn: true }).catch(cause => {
+      if (this.active === runtime && !runtime.closing) this.publish({ type: 'error', message: cause instanceof Error ? cause.message : '继续失败' });
+    });
+  }
 
   async models(): Promise<Array<{ provider: string; id: string; name: string }>> {
-    const available = await this.active?.modelRuntime.getAvailable() ?? [];
+    const available = await this.session?.modelRuntime.getAvailable() ?? [];
     return available.map((model) => ({ provider: model.provider, id: model.id, name: model.name }));
   }
 
   async setModel(provider: string, id: string): Promise<void> {
-    if (!this.active || !this.active.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
-    const model = this.active.modelRuntime.getModel(provider, id);
+    if (this.disposed || !this.session || !this.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+    const model = this.session.modelRuntime.getModel(provider, id);
     if (!model) throw new Error("模型不可用");
-    await this.active.setModel(model);
+    await this.session.setModel(model);
     this.publish({ type: "snapshot", session: this.snapshot() });
   }
 
-  dispose(): void {
-    this.detach?.();
-    this.active?.dispose();
-    this.detach = null;
-    this.active = null;
-    this.cwd = null;
+  dispose(): Promise<void> {
+    this.disposed = true;
+    // disposed stops publication immediately, before queued cleanup starts.
+    return this.queue.run(async () => {
+      const runtime = this.active;
+      this.active = null;
+      if (runtime) await this.close(runtime, "quit");
+    });
   }
 }

@@ -1,6 +1,8 @@
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { useEffect, useState } from "react";
 import { HttpError } from "./http-error.ts";
+import type { PluginEntry, WebInteraction } from "@chengzhiyi/pi-web-protocol";
+import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
 
 export interface ViewBlock {
   kind: "text" | "thinking" | "image" | "toolCall";
@@ -43,8 +45,11 @@ export interface SessionView {
   thinkingLevel: string | null;
   thinkingLevels: string[];
   idle: boolean;
+  paused?: boolean;
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
   messages: ViewMessage[];
+  pluginEntries: PluginEntry[];
+  interactions?: WebInteraction[];
 }
 
 export interface WorkspaceView { id: string; path: string; title: string }
@@ -165,6 +170,7 @@ export function usePiBridge() {
                 if (event.type === "stream") setStreaming(event.message);
                 if (event.type === "workspaces") setWorkspaces(event.value);
                 if (event.type === "error") setError(event.message);
+                if (event.type === "plugins_changed") window.location.reload();
               }
               end = pending.indexOf("\n");
             }
@@ -220,6 +226,16 @@ export function usePiBridge() {
     commands,
     workspaces,
     directoryPickerKind,
+    async resolvePluginInteraction(pluginId: string, requestId: string, value: unknown): Promise<void> {
+      if (!session) throw new Error("No active session");
+      await post("/api/plugin-interaction", { sessionId: session.sessionId, pluginId, requestId, value });
+    },
+    plugins: () => get<WebPluginCatalogView>("/api/plugins"),
+    async invokePluginAction<T = unknown>(pluginId: string, action: string, input?: unknown): Promise<T> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      const response = await post("/api/plugin-action", { sessionId: session.sessionId, pluginId, action, input }) as { value: T };
+      return response.value;
+    },
     async pickDirectory(): Promise<string | null> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const result = await post("/api/directory/pick", { sessionId: session.sessionId });
@@ -270,6 +286,12 @@ export function usePiBridge() {
       if (!session || connection !== "connected") return;
       try { await post("/api/abort", { sessionId: session.sessionId }); setError(""); }
       catch (cause) { setError(cause instanceof Error ? cause.message : t("停止失败", "Could not stop")); throw cause; }
+    },
+    async resume() {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      setError("");
+      try { await post("/api/resume", { sessionId: session.sessionId }); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : t("继续失败", "Could not continue")); throw cause; }
     },
     async compact() {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));

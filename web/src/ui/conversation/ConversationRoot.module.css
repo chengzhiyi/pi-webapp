@@ -31,6 +31,8 @@
   );
   --piw-composer-card-max-width: calc(var(--piw-chat-content-width) + 32px);
   --piw-composer-side-clearance: 16px;
+  --dsh-chat-content-width: var(--piw-chat-content-width);
+  --dsh-composer-side-clearance: var(--piw-composer-side-clearance);
   --piw-composer-dock-inset: 8px;
 }
 

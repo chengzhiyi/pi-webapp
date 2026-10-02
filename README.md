@@ -39,12 +39,12 @@ In Pi, enter `/web` to open the interface in your default browser. Pi also print
 ## Features
 
 - View the current conversation with Markdown, streaming output, expandable reasoning and tool calls, token usage, and a turn-by-turn trace.
-- Send messages, stop a run, start a new Pi session, and change the current model or thinking level.
+- Send messages, pause and continue a run, start a new Pi session, and change the current model or thinking level. The bottom-right control pauses an active run; an empty composer offers Continue after pausing, including after refreshing or reopening the session. Continue uses an internal control action without adding a user message; the model makes a new request based on existing progress, and plan mode still requires fresh approval.
 - Browse workspaces and saved sessions. Add a workspace with the native directory picker when available, or use the built-in directory browser over SSH.
 - Attach up to 20 files of 20 MB each by selecting, dropping, or pasting them. Images show previews and are also sent as Pi image content.
 - Manage appearance, Pi packages, extensions, skills, and models from the settings panel. The Models page can add models, edit display names, context windows, output limits, and input types, and restore built-in defaults; changes are saved to Pi's `models.json`. Browser sign-in opens the provider's authorization page automatically; manual code entry remains available when a callback cannot reach Pi. Stored provider credentials can also be removed there. Credentials stay in Pi's local `auth.json` and are never returned to the browser.
 
-If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They do not load extensions again in the same process.
+If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They load enabled Web plugin Pi entries explicitly while keeping other Pi extensions isolated from the parent bridge.
 
 On startup, the app discovers workspaces from Pi's saved sessions, so conversations from other directories appear in the sidebar. Workspace records and attachments stay under Pi's existing `pi-web/` data directory. Removing a workspace from the sidebar does not delete its files or sessions; you can add it again manually.
 
@@ -61,6 +61,8 @@ npm run stop
 ```
 
 `npm run start` builds the project, starts Pi in the background, and opens the web interface. After editing the extension, run `npm run stop` followed by `npm run start`. If you develop with `pi -e .`, enter `/reload` and `/web` in Pi after rebuilding. Refreshing an old browser page alone does not replace the running bridge.
+
+For local Web plugin development with the sibling `pi-extensions` workspace, follow its `README.md`. Set `PI_WEBAPP_PLUGIN_DEV_ROOTS=../pi-extensions/packages/plan-mode` when starting this app; browser asset changes refresh automatically and Pi entry changes trigger a safe reload when the agent is idle.
 
 The source lives in `extension/`, `shared/`, and `web/src/`. The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and the English and Chinese READMEs. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
 

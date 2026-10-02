@@ -6,3 +6,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local browser screenshots, logs, snapshots, and acceptance output.
+/artifacts/

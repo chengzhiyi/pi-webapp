@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { spawn as spawnNode } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, openSync } from "node:fs";
+import { closeSync, existsSync, openSync, watch } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
@@ -113,7 +113,8 @@ async function serve(pi, args) {
     return;
   } finally { await lock?.close().catch(() => {}); }
 
-  const child = spawn(pi, ["--mode", "rpc", "-e", extension, ...args], {
+  const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
+  const child = spawn(pi, ["--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
     cwd: process.cwd(), env: { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
@@ -127,6 +128,10 @@ async function serve(pi, args) {
   let runningUrl = null;
   let buffer = "";
   let killTimer;
+  const devWatchers = [];
+  let devReloadTimer;
+  let devReloadCount = 0;
+  let devReloadCommand;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
@@ -157,7 +162,7 @@ async function serve(pi, args) {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   child.stdout?.on("data", (chunk) => {
-    if (ready || opening || failed) return;
+    if (failed) return;
     buffer += chunk.toString("utf8");
     if (buffer.length > 8 * 1024 * 1024) { fail("Pi RPC 输出超出预期大小"); return; }
     for (let index; (index = buffer.indexOf("\n")) !== -1;) {
@@ -165,6 +170,11 @@ async function serve(pi, args) {
       buffer = buffer.slice(index + 1);
       let record;
       try { record = JSON.parse(line); } catch { continue; }
+      if (record?.type === "response" && /^dev-reload-\d+$/.test(record.id ?? "")) {
+        console.error(`pi-webapp: ${record.id} /${devReloadCommand ?? "web-dev-reload"}: ${record.success === true ? "reloaded" : `failed: ${record.error ?? "Unknown RPC error"}`}`);
+        continue;
+      }
+      if (ready || opening) continue;
       if (record?.type === "response" && record.id === "list-commands") {
         if (record.success !== true || !Array.isArray(record.data?.commands)) {
           fail("无法读取 Pi 扩展命令列表");
@@ -176,6 +186,8 @@ async function serve(pi, args) {
           fail("Pi 没有加载当前项目的 Web 扩展");
           return;
         }
+        devReloadCommand = record.data.commands.find((item) => item?.source === "extension"
+          && item.sourceInfo?.path === extension && /^web-dev-reload(?::\d+)?$/.test(item.name))?.name;
         child.stdin?.write(JSON.stringify({ id: "open-web", type: "prompt", message: `/${command.name}` }) + "\n");
         continue;
       }
@@ -196,6 +208,19 @@ async function serve(pi, args) {
           ready = true;
           clearTimeout(startupTimer);
           notifyParent({ type: "ready", pid: process.pid, url: url.href });
+          for (const root of pluginRoots) {
+            try {
+              devWatchers.push(watch(join(root, "dist"), (_event, file) => {
+                if (String(file ?? "") !== "extension.js") return;
+                clearTimeout(devReloadTimer);
+                devReloadTimer = setTimeout(() => {
+                  if (closed || stopping) return;
+                  if (!devReloadCommand) { console.error("pi-webapp: development reload unavailable: local extension command not found"); return; }
+                  child.stdin?.write(JSON.stringify({ id: `dev-reload-${++devReloadCount}`, type: "prompt", message: `/${devReloadCommand}` }) + "\n");
+                }, 250);
+              }));
+            } catch (error) { console.error(`pi-webapp: cannot watch plugin ${root}: ${error}`); }
+          }
         })
         .catch((error) => fail(`无法保存启动状态：${error.message}`));
       return;
@@ -213,6 +238,8 @@ async function serve(pi, args) {
   });
   await stateWrite;
   clearTimeout(startupTimer);
+  clearTimeout(devReloadTimer);
+  for (const watcher of devWatchers) watcher.close();
   clearInterval(stopTimer);
   clearTimeout(killTimer);
   try { if ((await readFile(stopPath, "utf8")).trim() === nonce) await unlink(stopPath); } catch { /* Already removed. */ }

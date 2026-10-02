@@ -1,3 +1,4 @@
+import { createEventBus } from "@earendil-works/pi-coding-agent";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
@@ -22,6 +23,7 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
   let resolveOpened!: (url: string) => void;
   const opened = new Promise<string>((resolve) => { resolveOpened = resolve; });
   piWeb({
+    events: createEventBus(),
     on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
     registerCommand() {},
   } as unknown as ExtensionAPI, async (url) => {
@@ -43,7 +45,12 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
     getContextUsage: () => undefined,
     ui: { notify() {}, setStatus() {} },
   };
-  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null; autoOpened: boolean }>)[Symbol.for("pi-web.bridge-state")];
+  const legacyKey = Symbol.for("pi-web.bridge-state");
+  const globals = globalThis as Record<symbol, unknown>;
+  const previousLegacy = globals[legacyKey];
+  const legacyState = { bridge: { close() { throw new Error("Legacy bridge closed"); } } };
+  globals[legacyKey] = legacyState;
+  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null; autoOpened: boolean }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
   try {
     handlers.get("session_start")?.({}, context);
     handlers.get("session_start")?.({}, context);
@@ -53,6 +60,10 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
     assert.equal(response.status, 200);
     assert.equal((await response.json()).sessionId, "startup");
     assert.equal(openCount, 1);
+    handlers.get("session_shutdown")?.({ reason: "reload" }, context);
+    await handlers.get("session_start")?.({ reason: "reload" }, context);
+    assert.equal((await fetch(`${url.origin}/api/session`, { headers })).status, 200);
+    assert.equal(globals[legacyKey], legacyState);
     const workspaces = await (await fetch(`${url.origin}/api/workspaces`, { headers })).json();
     const canonicalPreviousWorkspace = await realpath(previousWorkspace);
     const restored = workspaces.items.find((item: { path: string }) => item.path === canonicalPreviousWorkspace);
@@ -66,6 +77,7 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
     const current = await (await fetch(`${url.origin}/api/session`, { headers })).json();
     assert.notEqual(current.sessionId, "startup");
   } finally {
+    if (previousLegacy === undefined) delete globals[legacyKey]; else globals[legacyKey] = previousLegacy;
     await shared.bridge?.close();
     shared.bridge = null;
     shared.autoOpened = false;

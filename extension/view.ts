@@ -1,6 +1,7 @@
 import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { displayUserMessage } from "../shared/user-message.ts";
+import type { PluginEntry, WebInteraction } from "@chengzhiyi/pi-web-protocol";
 
 export interface ViewBlock {
   kind: "text" | "thinking" | "image" | "toolCall";
@@ -41,8 +42,46 @@ export interface SessionView {
   thinkingLevel: string | null;
   thinkingLevels: string[];
   idle: boolean;
+  paused?: boolean;
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
   messages: ViewMessage[];
+  pluginEntries: PluginEntry[];
+  interactions?: WebInteraction[];
+}
+
+export const PAUSED_ENTRY = 'pi-webapp/paused';
+export const RESUME_MESSAGE = 'pi-webapp/resume';
+
+/** A branch-local marker also covers cancellation during tool execution. */
+export function sessionPaused(entries: readonly SessionEntry[]): boolean {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]!;
+    if (entry.type === 'custom_message' && entry.customType === RESUME_MESSAGE) return false;
+    if (entry.type === 'custom' && entry.customType === PAUSED_ENTRY) return true;
+    if (entry.type !== 'message') continue;
+    if (entry.message.role === 'user') return false;
+    if (entry.message.role === 'assistant') {
+      if (entry.message.stopReason === 'aborted') return true;
+      if (entry.message.stopReason === 'stop' || entry.message.stopReason === 'length' || entry.message.stopReason === 'error') return false;
+    }
+  }
+  return false;
+}
+
+export function projectPluginEntries(entries: readonly SessionEntry[], pluginIds: readonly string[]): PluginEntry[] {
+  const projected: PluginEntry[] = [];
+  let afterMessageId: string | undefined;
+  for (const entry of entries) {
+    if (entry.type === "message") afterMessageId = entry.id;
+    if (entry.type !== "custom") continue;
+    const pluginId = pluginIds.find((id) => entry.customType.startsWith(`${id}/`));
+    if (!pluginId) continue;
+    try {
+      if (JSON.stringify(entry.data).length > 128 * 1024) continue;
+    } catch { continue; }
+    projected.push({ id: entry.id, pluginId, kind: entry.customType, data: entry.data, timestamp: entry.timestamp, ...(afterMessageId ? { afterMessageId } : {}) });
+  }
+  return projected;
 }
 
 type ContentPart =
@@ -117,7 +156,7 @@ export function sessionTitle(name: string | undefined, messages: ViewMessage[]):
   return text ? text.slice(0, 50) : "当前会话";
 }
 
-export function projectSession(ctx: ExtensionContext, name?: string): SessionView {
+export function projectSession(ctx: ExtensionContext, name?: string, pluginIds: readonly string[] = []): SessionView {
   const messages = ctx.sessionManager.getBranch().flatMap((entry) => {
     const message = projectEntry(entry);
     return message ? [message] : [];
@@ -131,7 +170,9 @@ export function projectSession(ctx: ExtensionContext, name?: string): SessionVie
     thinkingLevel: ctx.thinkingLevel ?? null,
     thinkingLevels: ctx.model ? getSupportedThinkingLevels(ctx.model) : ["off"],
     idle: ctx.isIdle(),
+    paused: sessionPaused(ctx.sessionManager.getBranch()),
     contextUsage: ctx.getContextUsage() ?? null,
     messages,
+    pluginEntries: projectPluginEntries(ctx.sessionManager.getBranch(), pluginIds),
   };
 }

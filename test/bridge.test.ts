@@ -21,6 +21,7 @@ function fixture(): SessionView {
     idle: true,
     contextUsage: null,
     messages: [],
+    pluginEntries: [],
   };
 }
 
@@ -38,6 +39,54 @@ const capabilities = {
   async updateConfig() { return this.config(); },
 };
 
+test('abort awaits the host and reports asynchronous cancellation errors', async () => {
+  let fail = true;
+  let settled = false;
+  const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() {}, async newSession() {},
+    async abort() { await new Promise(resolve => setImmediate(resolve)); if (fail) throw new Error('Pause failed'); settled = true; },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, 'Content-Type': 'application/json', Origin: url.origin };
+    const request = () => fetch(`${url.origin}/api/abort`, { method: 'POST', headers, body: JSON.stringify({ sessionId: 'session-a' }) });
+    const rejected = await request();
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).error, 'Pause failed');
+    fail = false;
+    assert.equal((await request()).status, 202);
+    assert.equal(settled, true);
+  } finally { await bridge.close(); }
+});
+
+test('resume is an authenticated control action that never calls the user-message sender', async () => {
+  let paused = true, idle = true, reviewing = false, fail = false, resumes = 0;
+  const bridge = await startBridge({ ...capabilities,
+    snapshot: () => ({ ...fixture(), idle, paused, interactions: reviewing ? [{ requestId: 'review', sessionId: 'session-a', pluginId: 'plan', kind: 'review', data: {} }] : [] }),
+    send() { throw new Error('Resume must not send a user message'); }, abort() {}, async newSession() {},
+    async resume() { if (fail) throw new Error('Resume failed'); resumes++; idle = false; },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, 'Content-Type': 'application/json', Origin: url.origin };
+    const request = (sessionId = 'session-a', selectedHeaders = headers) => fetch(`${url.origin}/api/resume`, { method: 'POST', headers: selectedHeaders, body: JSON.stringify({ sessionId }) });
+    assert.equal((await request('session-a', { ...headers, Authorization: 'Bearer invalid' })).status, 401);
+    assert.equal((await request('session-a', { ...headers, Origin: 'https://example.com' })).status, 403);
+    assert.equal((await request('session-b')).status, 409);
+    paused = false;
+    assert.equal((await request()).status, 409);
+    paused = true; reviewing = true;
+    assert.equal((await request()).status, 409);
+    reviewing = false; fail = true;
+    const failed = await request();
+    assert.equal(failed.status, 400);
+    assert.equal((await failed.json()).error, 'Resume failed');
+    fail = false;
+    assert.equal((await request()).status, 202);
+    assert.equal((await request()).status, 409, 'a repeated click must not start another run');
+    assert.equal(resumes, 1);
+  } finally { await bridge.close(); }
+});
+
 test("requires the token to read the current session or send a message", async () => {
   const sent: string[] = [];
   const bridge = await startBridge({
@@ -48,7 +97,7 @@ test("requires the token to read the current session or send a message", async (
     async newSession() {},
   }, webRoot);
   try {
-    assert.equal(bridge.protocolVersion, 4);
+    assert.equal(bridge.protocolVersion, 7);
     const url = new URL(bridge.url);
     const token = url.hash.slice(1);
     const unauthorized = await fetch(`${url.origin}/api/session`);
@@ -74,6 +123,28 @@ test("requires the token to read the current session or send a message", async (
   } finally {
     await bridge.close();
   }
+});
+
+test("Web plugin actions require the active authenticated session", async () => {
+  const calls: string[] = [];
+  const bridge = await startBridge({
+    ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
+    plugins: () => ({ plugins: [{ id: "@example/plan", client: "/plugins/%40example%2Fplan/client.js" }], errors: [] }),
+    async invokePluginAction(_sessionId, pluginId, action) { calls.push(`${pluginId}/${action}`); return { enabled: true }; },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    const body = (sessionId: string) => JSON.stringify({ sessionId, pluginId: "@example/plan", action: "plan.setMode", input: { enabled: true } });
+    assert.equal((await fetch(`${url.origin}/api/plugins`)).status, 401);
+    assert.equal((await fetch(`${url.origin}/api/plugin-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: body("session-a") })).status, 401);
+    assert.equal((await fetch(`${url.origin}/api/plugin-action`, { method: "POST", headers, body: body("session-b") })).status, 409);
+    assert.deepEqual(calls, []);
+    const accepted = await fetch(`${url.origin}/api/plugin-action`, { method: "POST", headers, body: body("session-a") });
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(await accepted.json(), { value: { enabled: true } });
+    assert.deepEqual(calls, ["@example/plan/plan.setMode"]);
+  } finally { await bridge.close(); }
 });
 
 test("update endpoints require authorization and restart only after a validated request", async () => {
@@ -434,4 +505,35 @@ test("browses folders and creates a child through the authenticated directory AP
     await bridge.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("plugin review decisions require authentication, origin and matching session", async () => {
+  const decisions: unknown[] = [];
+  const bridge = await startBridge({
+    ...capabilities, snapshot: () => ({ ...fixture(), idle: false }), send() {}, abort() {}, async newSession() {},
+    async resolvePluginInteraction(_sessionId, pluginId, requestId, value) {
+      if (pluginId !== "example" || requestId !== "review" || decisions.length) throw new Error("Interaction expired");
+      decisions.push(value);
+    },
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    const body = JSON.stringify({ sessionId: "session-a", pluginId: "example", requestId: "review", value: { decision: "approve" } });
+    const send = (payload: string, requestHeaders = headers) => fetch(`${url.origin}/api/plugin-interaction`, { method: "POST", headers: requestHeaders, body: payload });
+    assert.equal((await send(body, { ...headers, Authorization: "" })).status, 401);
+    assert.equal((await send(body, { ...headers, Origin: "https://example.com" })).status, 403);
+    assert.equal((await send(body.replace("session-a", "session-b"))).status, 409);
+    assert.equal((await send(JSON.stringify({ sessionId: "session-a", pluginId: "example" }))).status, 400);
+    assert.deepEqual(decisions, []);
+    assert.equal((await send(body)).status, 200); // Reviews are resolved while the agent is running.
+    assert.deepEqual(decisions, [{ decision: "approve" }]);
+    assert.notEqual((await send(body)).status, 200);
+    assert.equal(decisions.length, 1);
+    const grammar = await fetch(`${url.origin}/assets/python.js`);
+    assert.equal(grammar.status, 200);
+    assert.match(grammar.headers.get("content-type") ?? "", /javascript/);
+    assert.equal((await fetch(`${url.origin}/assets/unknown-secret.js`)).status, 404);
+    assert.equal((await fetch(`${url.origin}/assets/KaTeX_Main-Regular.woff2`)).status, 200);
+  } finally { await bridge.close(); }
 });

@@ -114,8 +114,6 @@
   /* Surface tokens match the Menu primitive card (ui-primitives
    * Menu.module.css) so every dropdown reads as the same material. */
   border: 0;
-  border-radius: 20px;
-  background: var(--dsw-specific-menu);
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
   box-shadow: var(--dsw-elevation-prominent);
   color: var(--dsw-alias-label-primary);
@@ -181,7 +179,7 @@
   top: 0;
   z-index: 1;
   padding: 5px 8px 3px;
-  background: var(--dsw-specific-menu);
+  background: var(--dsw-alias-menu-group-header-fill);
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;

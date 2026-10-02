@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import type { SessionView, ViewMessage } from "./view.ts";
@@ -13,12 +13,17 @@ import { validCustomProviderInput, type CustomProviderInput } from "./custom-pro
 import { validModelChange, type ModelChange, type ProviderModelsView } from "./provider-model-config.ts";
 import { isPackageSource } from "../shared/config-source.ts";
 import type { SelfUpdater } from "./self-update.ts";
+import type { WebPluginCatalogView } from "./web-plugins.ts";
 
 export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 
 export interface BridgeHost {
+  plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
+  pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
+  invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
   selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart">;
+  resolvePluginInteraction?(sessionId: string, pluginId: string, requestId: string, value: unknown): Promise<void>;
   snapshot(): SessionView;
   image?(sessionId: string, messageId: string, index: number): { data: Buffer; mimeType: string } | null;
   models(): Array<{ provider: string; id: string; name: string }> | Promise<Array<{ provider: string; id: string; name: string }>>;
@@ -35,7 +40,8 @@ export interface BridgeHost {
   config(): ConfigView | Promise<ConfigView>;
   updateConfig(change: ConfigChange): Promise<ConfigView>;
   send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>): void | Promise<void>;
-  abort(sessionId: string): void;
+  abort(sessionId: string): void | Promise<void>;
+  resume?(sessionId: string): void | Promise<void>;
   newSession(sessionId: string): Promise<void>;
   workspaces(): Promise<WorkspaceListView>;
   addWorkspace(path: string, create: boolean): Promise<void>;
@@ -62,9 +68,9 @@ export interface ConfigChange {
 }
 
 export interface Bridge {
-  readonly protocolVersion: 4;
+  readonly protocolVersion: 7;
   readonly url: string;
-  publish(event: { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "workspaces"; value: WorkspaceListView } | { type: "error"; message: string }): void;
+  publish(event: { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "workspaces"; value: WorkspaceListView } | { type: "error"; message: string } | { type: "plugins_changed" }): void;
   close(): Promise<void>;
 }
 
@@ -132,6 +138,15 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
   const attachments = new Map<string, UploadedAttachment>();
   const logins = new ProviderLoginController();
   let origin = "";
+  // DSH Markdown loads language grammars and KaTeX fonts lazily. Only files
+  // inventoried from the compiled assets directory can be served here.
+  const assets = { ...files };
+  for (const name of await readdir(join(webRoot, "assets")).catch(() => [])) {
+    const match = /^[\w.-]+\.(js|css|woff2?|ttf)$/.exec(name);
+    if (!match) continue;
+    const mime: Record<string, string> = { js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" };
+    assets[`/assets/${name}`] = { path: `assets/${name}`, type: mime[match[1]!]! };
+  }
   const server = createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -143,7 +158,7 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       json(res, 400, { error: "请求地址无效" });
       return;
     }
-    const asset = files[path];
+    const asset = assets[path];
     if (req.method === "GET" && asset) {
       try {
         const bytes = await readFile(join(webRoot, asset.path));
@@ -152,6 +167,15 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       } catch {
         json(res, 500, { error: "页面文件不可用" });
       }
+      return;
+    }
+    if (req.method === "GET" && path.startsWith("/plugins/")) {
+      try {
+        const pluginAsset = await host.pluginAsset?.(req.url ?? path);
+        if (!pluginAsset) { json(res, 404, { error: "插件资源不存在" }); return; }
+        res.writeHead(200, { "Content-Type": pluginAsset.type, "Cache-Control": "no-store" });
+        res.end(pluginAsset.bytes);
+      } catch { json(res, 404, { error: "插件资源不可用" }); }
       return;
     }
     if (!path.startsWith("/api/")) {
@@ -215,6 +239,11 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       }
       return;
     }
+    if (req.method === "GET" && path === "/api/plugins") {
+      try { json(res, 200, await host.plugins?.() ?? { plugins: [], errors: [] }); }
+      catch { json(res, 503, { error: "插件目录不可用" }); }
+      return;
+    }
     if (req.method === "GET" && path === "/api/providers") {
       try { json(res, 200, await host.providers?.() ?? []); }
       catch { json(res, 503, { error: "模型提供方不可用" }); }
@@ -265,7 +294,7 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
       res.on("close", () => streams.delete(res));
       return;
     }
-    if (req.method === "POST" && ["/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+    if (req.method === "POST" && ["/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
       if (req.headers.origin !== undefined && req.headers.origin !== origin) {
         json(res, 403, { error: "来源不匹配" });
         return;
@@ -278,6 +307,24 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
         const body = await readJson(req);
         if (typeof body !== "object" || body === null || !("sessionId" in body) || typeof body.sessionId !== "string") {
           json(res, 400, { error: "缺少会话标识" });
+          return;
+        }
+        if (path === "/api/plugin-interaction") {
+          if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+          if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("requestId" in body) || typeof body.requestId !== "string" || body.requestId.length > 200 || !host.resolvePluginInteraction || !("value" in body)) {
+            json(res, 400, { error: "插件交互响应无效" }); return;
+          }
+          await host.resolvePluginInteraction(body.sessionId, body.pluginId, body.requestId, body.value);
+          json(res, 200, { accepted: true });
+          return;
+        }
+        if (path === "/api/plugin-action") {
+          if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+          if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("action" in body) || typeof body.action !== "string" || body.action.length > 100 || !host.invokePluginAction) {
+            json(res, 400, { error: "插件动作无效" }); return;
+          }
+          const value = await host.invokePluginAction(body.sessionId, body.pluginId, body.action, "input" in body ? body.input : undefined);
+          json(res, 200, { value });
           return;
         }
         if (path === "/api/update") {
@@ -412,8 +459,16 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
         } else if (path === "/api/compact") {
           if (!host.compact) throw new Error("当前会话不支持压缩");
           await host.compact(body.sessionId);
+        } else if (path === "/api/resume") {
+          const session = host.snapshot();
+          if (body.sessionId !== session.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+          if (!session.idle) { json(res, 409, { error: "Pi 正在运行，请等待当前回复结束" }); return; }
+          if (!session.paused) { json(res, 409, { error: "当前会话没有暂停的任务" }); return; }
+          if (session.interactions?.length) { json(res, 409, { error: "请先完成当前交互或审批" }); return; }
+          if (!host.resume) throw new Error("当前服务不支持继续，请重载 Pi");
+          await host.resume(body.sessionId);
         } else if (path === "/api/abort") {
-          host.abort(body.sessionId);
+          await host.abort(body.sessionId);
         } else {
           await host.newSession(body.sessionId);
         }
@@ -430,7 +485,7 @@ export async function startBridge(host: BridgeHost, webRoot: string): Promise<Br
   const port = await listen(server, Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort < 65536 && fixedToken === tokenText ? requestedPort : 0);
   origin = `http://127.0.0.1:${port}`;
   return {
-    protocolVersion: 4,
+    protocolVersion: 7,
     url: `${origin}/#${tokenText}`,
     publish(event) {
       if (event.type === "snapshot") for (const [id, attachment] of attachments) if (attachment.sessionId !== event.session.sessionId) attachments.delete(id);

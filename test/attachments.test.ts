@@ -21,7 +21,7 @@ test("uploads a file, sends its saved path, and rejects stale or foreign receipt
   process.env.PI_CODING_AGENT_DIR = root;
   const sent: Array<{ text: string; images: unknown[] }> = [];
   const bridge = await startBridge({
-    snapshot: () => ({ schemaVersion: 1, sessionId: "session-a", cwd: root, name: "test", model: null, thinkingLevel: null, thinkingLevels: [], idle: true, contextUsage: null, messages: [] }),
+    snapshot: () => ({ schemaVersion: 1, sessionId: "session-a", cwd: root, name: "test", model: null, thinkingLevel: null, thinkingLevels: [], idle: true, contextUsage: null, messages: [], pluginEntries: [] }),
     models: () => [], async setModel() {}, async setThinkingLevel() {},
     config: () => ({ projectTrusted: true, global: { packages: [], extensions: [], skills: [] }, project: { packages: [], extensions: [], skills: [] }, installed: { packages: [], extensions: [], skills: [] } }),
     async updateConfig() { return this.config(); },

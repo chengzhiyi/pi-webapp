@@ -1,11 +1,12 @@
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
+import { realpathSync, watch, type FSWatcher } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DefaultPackageManager, getAgentDir, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels, type AuthInteraction } from "@earendil-works/pi-ai";
-import { startBridge, type Bridge, type ConfigChange, type ConfigView, type WorkspaceListView, type WorkspaceSessionView } from "./bridge.ts";
-import { contentBlocks, projectSession } from "./view.ts";
+import { startBridge, type Bridge, type BridgeHost, type ConfigChange, type ConfigView, type WorkspaceListView, type WorkspaceSessionView } from "./bridge.ts";
+import { contentBlocks, projectSession, PAUSED_ENTRY } from "./view.ts";
 import { WorkspaceRegistry, workspaceRegistryPath } from "./workspaces.ts";
 import { WorkspaceSessions } from "./workspace-sessions.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
@@ -15,9 +16,15 @@ import { addCustomProvider, type CustomProviderInput } from "./custom-provider.t
 import { getProviderModels, updateProviderModel, type ModelChange } from "./provider-model-config.ts";
 import { openWebPage } from "./open-web-page.ts";
 import { SelfUpdater } from "./self-update.ts";
+import { randomUUID } from "node:crypto";
+import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
+import { WebPluginCatalog } from "./web-plugins.ts";
+import { LifecycleQueue } from "./lifecycle.ts";
+import { resumeMessage } from "./execution-control.ts";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../web/dist");
-const stateKey = Symbol.for("pi-web.bridge-state");
+// Keep reload state for this copy; an installed older copy must not close it.
+const stateKey = Symbol.for(`pi-web.bridge-state:${import.meta.url}`);
 
 interface SharedState {
   bridge: Bridge | null;
@@ -32,6 +39,13 @@ interface SharedState {
   selected: "tui" | "sdk";
   activeWorkspaceId: string | null;
   autoOpened: boolean;
+  tuiCatalog: WebPluginCatalog | null;
+  stopPluginWatch: (() => void) | null;
+  interactions: WebInteractionHost | null;
+  lifecycle: LifecycleQueue;
+  tuiGeneration: number;
+  stopChanged: (() => void) | null;
+  tuiWaitController: AbortController;
 }
 
 const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
@@ -47,7 +61,22 @@ const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
   selected: "tui",
   activeWorkspaceId: null,
   autoOpened: false,
+  tuiCatalog: null,
+  stopPluginWatch: null,
+  interactions: null,
+  lifecycle: new LifecycleQueue(),
+  tuiGeneration: 0,
+  stopChanged: null,
+  tuiWaitController: new AbortController(),
 });
+// Initialize fields when a development reload retained an older bridge state.
+shared.lifecycle ??= new LifecycleQueue();
+shared.tuiGeneration ??= 0;
+shared.stopChanged ??= null;
+shared.tuiWaitController ??= new AbortController();
+function activeCatalog(): WebPluginCatalog | null {
+  return shared.selected === "sdk" ? shared.workspaceSessions?.catalog ?? null : shared.tuiCatalog;
+}
 let authRuntime: Promise<ModelRuntime> | null = null;
 function modelAuthRuntime() { return authRuntime ??= ModelRuntime.create({ refreshOnCreate: false }); }
 const mirroredProviders = new Map<string, object>();
@@ -72,7 +101,7 @@ async function currentProviderRuntime(): Promise<ModelRuntime> {
 function snapshot() {
   if (shared.selected === "sdk") return shared.workspaceSessions?.snapshot() ?? (() => { throw new Error("没有活动会话"); })();
   if (shared.current === null) throw new Error("没有活动会话");
-  return projectSession(shared.current, shared.current.sessionManager.getSessionName());
+  return { ...projectSession(shared.current, shared.current.sessionManager.getSessionName(), activeCatalog()?.ids() ?? []), interactions: shared.interactions?.pending(shared.current.sessionManager.getSessionId()) ?? [] };
 }
 
 function activeSession(sessionId: string) {
@@ -176,21 +205,41 @@ async function changeConfig(change: ConfigChange): Promise<ConfigView> {
     if (shared.commandContext) await shared.commandContext.reload();
     if (shared.current) publishSnapshot(shared.current);
   } else {
-    await shared.workspaceSessions?.session?.resourceLoader.reload();
-    shared.workspaceSessions?.session?.refreshContext();
+    await shared.workspaceSessions?.reload();
+    shared.bridge?.publish({ type: "plugins_changed" });
   }
   return await configView();
 }
 
 export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promise<boolean> = openWebPage): void {
   shared.pi = pi;
+  shared.interactions?.dispose();
+  shared.interactions = new WebInteractionHost(pi.events, (request) => !!shared.bridge && shared.selected === "tui" && request.sessionId === shared.current?.sessionManager.getSessionId() && !!shared.tuiCatalog?.has(request.pluginId), () => { if (shared.current && shared.selected === "tui") publishSnapshot(shared.current); });
+  const bindChanged = () => {
+    shared.stopChanged?.();
+    shared.stopChanged = pi.events.on(PLUGIN_CHANGED, () => {
+      if (shared.selected === "tui" && shared.current) publishSnapshot(shared.current);
+    });
+  };
+  bindChanged();
 
-  pi.on("session_start", (_event, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
+    shared.tuiWaitController.abort();
+    shared.tuiWaitController = new AbortController();
+    shared.tuiGeneration++;
+    bindChanged();
+    shared.current = ctx;
+    if (shared.bridge) {
+      const catalog = await WebPluginCatalog.discover(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
+      if (shared.current !== ctx) return;
+      shared.tuiCatalog = catalog;
+    }
     if (shared.replacementSessionId !== ctx.sessionManager.getSessionId()) {
       shared.replacementContext = null;
       shared.replacementSessionId = null;
     }
     publishSnapshot(ctx);
+    if (shared.bridge) shared.bridge.publish({ type: "plugins_changed" });
     if (shared.selected === "tui" && shared.workspaces) {
       void shared.workspaces.add(ctx.cwd).then(async (workspace) => {
         if (shared.selected !== "tui" || shared.current?.sessionManager.getSessionId() !== ctx.sessionManager.getSessionId()) return;
@@ -234,27 +283,37 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       },
     });
   });
-  pi.on("session_shutdown", (event) => {
+  pi.on("session_shutdown", async (event) => {
+    shared.tuiWaitController.abort();
+    shared.tuiGeneration++;
+    shared.stopChanged?.();
+    shared.stopChanged = null;
+    shared.interactions?.cancelAll();
     shared.current = null;
-    if (event.reason === "new" || event.reason === "resume" || event.reason === "fork") return;
+    if (event.reason === "new" || event.reason === "resume" || event.reason === "fork" || event.reason === "reload") return;
     const bridge = shared.bridge;
     shared.bridge = null;
     shared.commandContext = null;
     shared.replacementContext = null;
     shared.replacementSessionId = null;
     shared.pi = null;
-    shared.workspaceSessions?.dispose();
+    const workspaceSessions = shared.workspaceSessions;
     shared.workspaceSessions = null;
+    await workspaceSessions?.dispose();
     shared.selected = "tui";
     shared.activeWorkspaceId = null;
     shared.autoOpened = false;
-    if (bridge) void bridge.close();
+    shared.tuiCatalog = null;
+    shared.stopPluginWatch?.();
+    shared.stopPluginWatch = null;
+    if (bridge) await bridge.close();
   });
 
   const openWeb = async (ctx: ExtensionContext | ExtensionCommandContext): Promise<void> => {
       shared.current = ctx;
       shared.commandContext = "newSession" in ctx ? ctx : null;
       shared.pi = pi;
+      shared.tuiCatalog = await WebPluginCatalog.discover(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
       if (shared.workspaces === null) {
         shared.workspaces = new WorkspaceRegistry(workspaceRegistryPath(getAgentDir()));
         await shared.workspaces.load();
@@ -268,7 +327,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       if (shared.selected === "tui") shared.activeWorkspaceId = initialWorkspace.id;
       // Pi's /reload re-evaluates extensions but retains this process-wide state.
       // Replace an older bridge so new authenticated endpoints are available.
-      if (shared.bridge && shared.bridge.protocolVersion !== 4) {
+      if (shared.bridge && shared.bridge.protocolVersion !== 7) {
         const previous = shared.bridge;
         shared.bridge = null;
         await previous.close();
@@ -279,10 +338,40 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             shared.bridge?.publish(event);
             if (event.type === "snapshot" && event.session.idle) void publishWorkspaces();
           }
-        }, () => shared.current?.model);
-        shared.bridge = await startBridge({
+        }, () => shared.current?.model, (cwd) => {
+          try { return !!shared.current && realpathSync(shared.current.cwd) === cwd && (shared.current.isProjectTrusted?.() ?? false); }
+          catch { return false; }
+        });
+        const host: BridgeHost = {
           selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE }),
           snapshot,
+          plugins: async () => {
+            const catalog = activeCatalog();
+            await catalog?.refreshAssets();
+            return catalog?.view() ?? { plugins: [], errors: [] };
+          },
+          pluginAsset: async (path) => activeCatalog()?.asset(path) ?? null,
+          async invokePluginAction(sessionId, pluginId, action, input) {
+            activeSession(sessionId);
+            if (!activeCatalog()?.has(pluginId)) throw new Error("插件未启用");
+            const selected = shared.selected;
+            const generation = shared.tuiGeneration;
+            const workspaceSession = shared.workspaceSessions?.session;
+            const request = { requestId: randomUUID(), sessionId, pluginId, action, input };
+            const result = shared.selected === "sdk"
+              ? await shared.workspaceSessions!.invokePluginAction(request)
+              : await invokeWebAction(shared.pi!.events, request, 15_000, shared.tuiWaitController.signal);
+            activeSession(sessionId);
+            if (selected !== shared.selected || (selected === "tui" ? generation !== shared.tuiGeneration : workspaceSession !== shared.workspaceSessions?.session)) throw new Error("会话运行实例已切换");
+            if (shared.selected === "tui" && shared.current) publishSnapshot(shared.current);
+            return result;
+          },
+          async resolvePluginInteraction(sessionId, pluginId, requestId, value) {
+            activeSession(sessionId);
+            if (!activeCatalog()?.has(pluginId)) throw new Error("插件未启用");
+            if (shared.selected === "sdk") shared.workspaceSessions!.resolveInteraction(sessionId, pluginId, requestId, value);
+            else shared.interactions!.resolve(sessionId, pluginId, requestId, value);
+          },
           image(sessionId, messageId, index) {
             activeSession(sessionId);
             const entries = shared.selected === "sdk"
@@ -402,7 +491,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             await shared.workspaceSessions?.session?.modelRuntime.refresh({ allowNetwork: false });
           },
           commands() {
-            return shared.selected === "tui" ? (shared.pi?.getCommands() ?? []).filter((command) => command.name !== "web").map((command) => ({ name: command.name, description: command.description })) : [];
+            return shared.selected === "tui" ? (shared.pi?.getCommands() ?? []).filter((command) => command.name !== "web" && command.name !== "web-dev-reload").map((command) => ({ name: command.name, description: command.description })) : [];
           },
           async compact(sessionId) {
             activeSession(sessionId);
@@ -462,10 +551,25 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             if (shared.pi === null) throw new Error("Pi 会话不可用");
             shared.pi.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true });
           },
-          abort(sessionId) {
+          async abort(sessionId) {
             activeSession(sessionId);
-            if (shared.selected === "sdk") void shared.workspaceSessions!.stop();
-            else sameSession(sessionId).abort();
+            if (shared.selected === "sdk") await shared.workspaceSessions!.stop();
+            else {
+              const active = sameSession(sessionId);
+              if (active.isIdle()) return;
+              if (!shared.pi) throw new Error("Pi 会话不可用");
+              shared.pi.appendEntry(PAUSED_ENTRY);
+              active.abort();
+            }
+          },
+          async resume(sessionId) {
+            activeSession(sessionId);
+            if (shared.selected === "sdk") { await shared.workspaceSessions!.resume(); return; }
+            const active = sameSession(sessionId);
+            if (!active.isIdle()) throw new Error("Pi 正在运行，请等待当前回复结束");
+            if (!active.model || !shared.pi) throw new Error("请先选择模型");
+            if (!active.modelRegistry.hasConfiguredAuth(active.model)) throw new Error("请先连接当前模型");
+            shared.pi.sendMessage(resumeMessage(snapshot().messages), { triggerTurn: true });
           },
           async newSession(sessionId) {
             activeSession(sessionId);
@@ -496,7 +600,30 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             if (result.cancelled) throw new Error("新会话已取消");
             await publishWorkspaces();
           },
-        }, webRoot);
+        };
+        host.addWorkspace = shared.lifecycle.wrap(host.addWorkspace);
+        host.selectWorkspace = shared.lifecycle.wrap(host.selectWorkspace);
+        host.newSessionInWorkspace = shared.lifecycle.wrap(host.newSessionInWorkspace);
+        host.removeWorkspace = shared.lifecycle.wrap(host.removeWorkspace);
+        host.selectSession = shared.lifecycle.wrap(host.selectSession);
+        host.newSession = shared.lifecycle.wrap(host.newSession);
+        host.updateConfig = shared.lifecycle.wrap(host.updateConfig);
+        shared.bridge = await startBridge(host, webRoot);
+      }
+      if (shared.stopPluginWatch === null && process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS) {
+        const watchers: FSWatcher[] = [];
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+        for (const root of (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean)) {
+          try {
+            watchers.push(watch(join(resolve(root), "dist"), (_event, file) => {
+              const name = String(file ?? "");
+              if (!["client.js", "client.css"].includes(name)) return;
+              if (refreshTimer) clearTimeout(refreshTimer);
+              refreshTimer = setTimeout(() => shared.bridge?.publish({ type: "plugins_changed" }), 180);
+            }));
+          } catch (error) { shared.bridge?.publish({ type: "error", message: `插件监听失败：${root}: ${String(error)}` }); }
+        }
+        shared.stopPluginWatch = () => { for (const watcher of watchers) watcher.close(); if (refreshTimer) clearTimeout(refreshTimer); };
       }
       const opened = await openPage(shared.bridge.url).catch(() => false);
       ctx.ui.notify(`pi-webapp: ${shared.bridge.url}`, opened ? "info" : "warning");
@@ -505,5 +632,17 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   pi.registerCommand("web", {
     description: "Open the current Pi session in a local web interface",
     handler: async (_args, ctx) => openWeb(ctx),
+  });
+  pi.registerCommand("web-dev-reload", {
+    description: "Reload local pi-webapp plugins during development",
+    handler: async (_args, ctx) => {
+      if (!process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS) return;
+      await ctx.waitForIdle();
+      await shared.lifecycle.run(async () => {
+        const sdk = shared.workspaceSessions?.session;
+        if (sdk) { await sdk.waitForIdle(); await shared.workspaceSessions!.reload(); }
+        await ctx.reload();
+      });
+    },
   });
 }

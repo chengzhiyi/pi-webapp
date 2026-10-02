@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSP
 import { createPortal } from "react-dom";
 import { IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14, IconDataOutline16 } from "../primitives/icons/index.tsx";
 import type { ModelOption } from "../../pi-bridge.ts";
+import { MenuSurface } from "../dsh/primitives/MenuSurface.tsx";
 import css from "./ModelSelect.module.css";
 import { localize as t } from "../locale/preference.ts";
 
@@ -100,7 +101,7 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
       {effortLabel && <span className={css.triggerEffort}>{effortLabel}</span>}
       <IconChevronDownOutline14 className={`${css.chevron} ${open ? css.chevronOpen : ""}`} />
     </button>
-    {open && createPortal(<div ref={menuRef} id={`${id}-menu`} role="menu" aria-label={t("选择模型", "Choose model")} className={css.menu} style={position}>
+    {open && createPortal(<MenuSurface ref={menuRef} id={`${id}-menu`} role="menu" aria-label={t("选择模型", "Choose model")} className={css.menu} style={position}>
       {pane === "root" ? <><button type="button" role="menuitem" className={css.cell} onClick={() => setPane("model")}><span className={css.cellLabel}>{t("模型", "Model")}</span><span className={css.cellValue}>{label}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>{effortLabel && <button type="button" role="menuitem" className={css.cell} onClick={() => setPane("effort")}><span className={css.cellLabel}>{t("推理强度", "Reasoning effort")}</span><span className={css.cellValue}>{effortLabel}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>}</> : pane === "model" ? <>
         <div className={css.groups}>
           {groups.map(([provider, options]) => <section className={css.group} role="group" aria-label={provider} key={provider}>
@@ -110,6 +111,6 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
         </div>
         {models.length === 0 && <div className={css.empty}>{t("暂无可用模型", "No models available")}</div>}
       </> : <div className={css.groups}>{thinkingLevels.map((level) => <button key={level} type="button" role="menuitemradio" aria-checked={level === thinkingLevel} className={`${css.option} ${level === thinkingLevel ? css.selected : ""}`} disabled={busy} onClick={() => { void chooseEffort(level); }}><span className={css.optionCopy}><span className={css.modelName}>{effortNames[level] ?? level}</span></span><span className={css.check}>{level === thinkingLevel && <IconCheckOutline16 />}</span></button>)}</div>}
-    </div>, document.body)}
+    </MenuSurface>, document.body)}
   </div>;
 }
