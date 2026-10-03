@@ -1,6 +1,6 @@
 {
   "name": "pi-webapp",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
@@ -15,7 +15,7 @@
     "pi-webapp": "./bin/pi-webapp.mjs"
   },
   "pi": {
-    "image": "https://cdn.jsdelivr.net/npm/pi-webapp@0.1.7/assets/cover-webapp.png",
+    "image": "https://cdn.jsdelivr.net/npm/pi-webapp@0.1.8/assets/cover-webapp.png",
     "extensions": [
       "./dist/extension.js"
     ]
@@ -56,6 +56,9 @@
     "@chengzhiyi/pi-web-protocol": "0.1.0",
     "@earendil-works/pi-ai": "0.87.1",
     "@earendil-works/pi-coding-agent": "0.87.1",
+    "@playwright/test": "1.63.0",
+    "@sentry/esbuild-plugin": "5.4.0",
+    "@sentry/vite-plugin": "5.4.0",
     "@types/katex": "^0.16.7",
     "@types/mdast": "^4.0.4",
     "@types/node": "22.19.19",
@@ -64,10 +67,7 @@
     "esbuild": "^0.28.2",
     "micromark-util-types": "^2.0.2",
     "typescript": "7.0.2",
-    "vite": "^6.4.3",
-    "@playwright/test": "1.63.0",
-    "@sentry/esbuild-plugin": "5.4.0",
-    "@sentry/vite-plugin": "5.4.0"
+    "vite": "^6.4.3"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -75,6 +75,9 @@
   "dependencies": {
     "@lexical/history": "0.49.0",
     "@lexical/plain-text": "0.49.0",
+    "@sentry/core": "11.4.0",
+    "@sentry/node": "11.4.0",
+    "@sentry/react": "11.4.0",
     "@shikijs/langs": "^4.3.1",
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
@@ -97,9 +100,6 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.3.1",
-    "simple-icons": "^16.31.0",
-    "@sentry/core": "11.4.0",
-    "@sentry/node": "11.4.0",
-    "@sentry/react": "11.4.0"
+    "simple-icons": "^16.31.0"
   }
 }
