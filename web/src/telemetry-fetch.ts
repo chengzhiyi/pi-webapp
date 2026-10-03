@@ -4,7 +4,7 @@ import { isContentOperation, opaqueError, type ErrorCorrelation } from "../../sh
 
 export interface CorrelatedResponse { response: Response; correlation: ErrorCorrelation; route: string }
 
-export async function bridgeFetch(path: string, options: RequestInit = {}): Promise<CorrelatedResponse> {
+export async function bridgeFetch(path: string, options: RequestInit = {}, telemetry: { expectedNetworkFailure?: boolean } = {}): Promise<CorrelatedResponse> {
   const requestId = crypto.randomUUID();
   const route = path.split("?")[0]!;
   const operationId = route === "/api/message" ? crypto.randomUUID() : undefined;
@@ -20,7 +20,12 @@ export async function bridgeFetch(path: string, options: RequestInit = {}): Prom
     correlation.operationId = response.headers.get("X-Operation-ID") || operationId;
     breadcrumb("request_end", { ...correlation, route, status: response.status, durationMs: Math.round(performance.now() - started) });
     return { response, correlation, route };
-  } catch (cause) { reportError(cause, { ...correlation, route, stage: "network" }); throw cause; }
+  } catch (cause) {
+    const context = { ...correlation, route, stage: "network", durationMs: Math.round(performance.now() - started) };
+    breadcrumb("request_failed", context);
+    if (!telemetry.expectedNetworkFailure) reportError(cause, context);
+    throw cause;
+  }
 }
 
 export async function bridgeJson(result: CorrelatedResponse): Promise<any> {

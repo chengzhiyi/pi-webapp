@@ -357,7 +357,10 @@ export function usePiBridge() {
     },
     async getConfig() { return get<ConfigView>("/api/config"); },
     async getUpdate() { return get<UpdateStatus>("/api/update"); },
-    async getRunningVersion() { return get<{ current: string | null }>("/api/update/version"); },
+    async getRunningVersion(signal?: AbortSignal) {
+      // Restart polling expects the service to be briefly unavailable; HTTP/parse errors still report normally.
+      return bridgeJson(await bridgeFetch("/api/update/version", { headers: { Authorization: `Bearer ${token}` }, signal }, { expectedNetworkFailure: true })) as Promise<{ current: string | null }>;
+    },
     async update(): Promise<{ version: string }> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/update", { sessionId: session.sessionId });

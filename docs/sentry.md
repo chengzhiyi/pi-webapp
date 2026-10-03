@@ -53,6 +53,8 @@ Filter Sentry by `side:node`, `toolName`, `failureKind` and `errorCode`, then in
 
 ## Performance and reliability
 
+After an accepted update, browser version polling retains temporary network failures as `request_failed` breadcrumbs while waiting for the restarted service. If the target version is still unavailable after 60 seconds, it stops polling and reports one `stage=update_restart`, `code=update_restart_timeout` error, even if a request is still pending. Closing settings cancels the pending request and deadline. HTTP and response parsing failures, and network failures from other requests, retain normal reporting.
+
 Each side sends at most 20 events/minute and one event per fingerprint/minute. Repetition counts appear on the next retained event. Startup and transport queues are bounded to 20 events. Transport requests time out after 3 seconds, do not persist offline, and do not retry indefinitely. Rate-limited/dropped events are intentionally lossy. Browser configuration has a 1-second timeout and never gates rendering; SDKs load only when reporting is enabled. No tracing, profiling, automatic console/DOM instrumentation or token-by-token logging is enabled.
 
 Request failures and asynchronous error events include additive `errorId`, `requestId`, `operationId`, `errorCode` and `errorReported` metadata. `errorReported` prevents the browser from bypassing server-side deduplication/rate limits. Protocol version 7 is retained. A `shutdown` event stops reconnection on normal exit; controlled launcher upgrades mark it with `reconnect: true` so the browser reconnects without reporting the expected interruption. A changed build ID replaces a retained bridge on `/web` after `/reload` so its static manifest matches the new assets.

@@ -3,11 +3,12 @@ import type { UpdateStatus } from "../../pi-bridge.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { Button } from "../primitives/Button.tsx";
 import { updateErrorMessage } from "./update-error.ts";
+import { reportError } from "../../telemetry.ts";
 import css from "./UpdateRow.module.css";
 
 interface Props {
   getUpdate: () => Promise<UpdateStatus>;
-  getRunningVersion: () => Promise<{ current: string | null }>;
+  getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
   update: () => Promise<{ version: string }>;
 }
 
@@ -33,24 +34,29 @@ export function UpdateRow({ getUpdate, getRunningVersion, update }: Props) {
   useEffect(() => {
     if (!targetVersion) return;
     let cancelled = false;
-    const deadline = Date.now() + 60_000;
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    // An independent deadline also ends a poll whose request never returns.
+    const timeout = setTimeout(() => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+      setTargetVersion(null);
+      setRestartTimedOut(true);
+      setError(t("新版启动超时。请运行 pi-webapp status 查看状态，或重新启动 pi-webapp。", "The new version did not start in time. Check pi-webapp status or start pi-webapp again."));
+      reportError(new Error("Updated service did not become ready within 60 seconds"), { stage: "update_restart", code: "update_restart_timeout", route: "/api/update/version", timeoutMs: 60_000 });
+    }, 60_000);
     const poll = async () => {
       try {
-        const result = await getRunningVersion();
-        if (result.current === targetVersion) { location.reload(); return; }
+        const result = await getRunningVersion(controller.signal);
+        if (cancelled) return;
+        if (result.current === targetVersion) { clearTimeout(timeout); location.reload(); return; }
       } catch { /* The old service is shutting down. */ }
       if (cancelled) return;
-      if (Date.now() >= deadline) {
-        setTargetVersion(null);
-        setRestartTimedOut(true);
-        setError(t("新版启动超时。请运行 pi-webapp status 查看状态，或重新启动 pi-webapp。", "The new version did not start in time. Check pi-webapp status or start pi-webapp again."));
-        return;
-      }
       timer = setTimeout(() => { void poll(); }, 1200);
     };
     timer = setTimeout(() => { void poll(); }, 1200);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
   }, [targetVersion]);
 
   const install = async () => {

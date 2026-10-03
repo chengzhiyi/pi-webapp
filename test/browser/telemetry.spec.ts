@@ -39,6 +39,124 @@ async function open(page: Page, bridge: Bridge) {
   await expect(page.getByRole("textbox")).toBeEnabled();
 }
 
+async function openUpdate(page: Page, bridge: Bridge) {
+  await page.route("**/api/update", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(route.request().method() === "POST"
+    ? { version: "0.1.10" }
+    : { current: "0.1.9", latest: "0.1.10", available: true, canRestart: true }) }));
+  await open(page, bridge);
+  await page.getByRole("button", { name: /^(Pi 设置|Pi Settings)$/ }).click();
+  await expect(page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ })).toBeVisible();
+}
+
+test("update polling tolerates restart disconnects and reloads the target version without reporting errors", async ({ page }) => {
+  const f = await fixture(page);
+  let attempts = 0;
+  await page.route("**/api/update/version", (route) => ++attempts <= 2 ? route.abort("connectionrefused") : route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "0.1.10" }) }));
+  try {
+    await openUpdate(page, f.bridge); await f.sdkReady;
+    const reloaded = page.waitForEvent("domcontentloaded");
+    await page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ }).click();
+    await reloaded;
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    expect(attempts).toBe(3);
+    expect(f.browserEvents).toEqual([]);
+  } finally { await f.bridge.close(); }
+});
+
+for (const failure of ["disconnected", "stale-version", "pending"] as const) {
+  test(`update restart timeout reports once even when the version request is ${failure}`, async ({ page }) => {
+    const f = await fixture(page);
+    let attempts = 0;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/update/version", async (route) => {
+      attempts++;
+      if (failure === "disconnected") { await route.abort("connectionrefused"); return; }
+      if (failure === "pending") await pending;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "0.1.9" }) }).catch(() => {});
+    });
+    try {
+      await openUpdate(page, f.bridge); await f.sdkReady;
+      await page.clock.install();
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+      await page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ }).click();
+      await expect(page.getByText(/^(正在重启并等待新版连接…|Restarting and waiting for the new version…)$/)).toBeVisible();
+      await page.clock.fastForward(1200);
+      await expect.poll(() => attempts).toBe(1);
+      await page.clock.fastForward(60_000);
+      await expect(page.getByRole("alert")).toContainText(/新版启动超时|The new version did not start in time/);
+      await expect.poll(() => f.browserEvents.length).toBe(1);
+      expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ stage: "update_restart", code: "update_restart_timeout", route: "/api/update/version", timeoutMs: 60_000 });
+      if (failure === "disconnected") expect(f.browserEvents[0]?.breadcrumbs?.some((item) => item.category === "request_failed" && item.data?.route === "/api/update/version")).toBe(true);
+      const stoppedAt = attempts;
+      await page.clock.fastForward(60_000);
+      expect(attempts).toBe(stoppedAt);
+      expect(f.browserEvents).toHaveLength(1);
+    } finally { release(); await f.bridge.close(); }
+  });
+}
+
+test("closing update settings cancels polling without a later timeout report", async ({ page }) => {
+  const f = await fixture(page);
+  let attempts = 0;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/update/version", async (route) => {
+    attempts++;
+    await pending;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "0.1.10" }) }).catch(() => {});
+  });
+  try {
+    await openUpdate(page, f.bridge); await f.sdkReady;
+    let reloads = 0;
+    page.on("domcontentloaded", () => { reloads++; });
+    await page.clock.install();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ }).click();
+    await expect(page.getByText(/^(正在重启并等待新版连接…|Restarting and waiting for the new version…)$/)).toBeVisible();
+    await page.clock.fastForward(1200);
+    await expect.poll(() => attempts).toBe(1);
+    const cancelled = page.waitForEvent("requestfailed", (request) => new URL(request.url()).pathname === "/api/update/version");
+    await page.getByRole("button", { name: /^(关闭 Pi 设置|Close Pi settings)$/ }).click();
+    await cancelled;
+    release();
+    await page.clock.fastForward(120_000);
+    expect(attempts).toBe(1);
+    expect(reloads).toBe(0);
+    expect(f.browserEvents).toEqual([]);
+  } finally { release(); await f.bridge.close(); }
+});
+
+test("update polling still reports HTTP and response parsing failures", async ({ page }) => {
+  const f = await fixture(page);
+  let attempts = 0;
+  await page.route("**/api/update/version", (route) => {
+    attempts++;
+    return route.fulfill({ contentType: "application/json", status: attempts === 1 ? 500 : 200, body: attempts === 1
+      ? JSON.stringify({ error: "Synthetic version endpoint failure" })
+      : attempts === 2 ? "invalid-json" : JSON.stringify({ current: "0.1.10" }) });
+  });
+  try {
+    await openUpdate(page, f.bridge); await f.sdkReady;
+    const reloaded = page.waitForEvent("domcontentloaded");
+    await page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ }).click();
+    await reloaded;
+    await expect.poll(() => f.browserEvents.length).toBe(2);
+    expect(f.browserEvents.map((event) => event.contexts?.diagnostic?.stage).sort()).toEqual(["http", "response_parse"]);
+  } finally { await f.bridge.close(); }
+});
+
+test("ordinary update-check network failures are still reported", async ({ page }) => {
+  const f = await fixture(page);
+  try {
+    await openUpdate(page, f.bridge); await f.sdkReady;
+    await page.route("**/api/update", (route) => route.abort("connectionrefused"));
+    await page.getByRole("button", { name: /^(检查更新|Check for updates)$/ }).click();
+    await expect.poll(() => f.browserEvents.length).toBe(1);
+    expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ route: "/api/update", stage: "network" });
+  } finally { await f.bridge.close(); }
+});
+
 test("when disabled the page works, SDK stays unloaded, and console stays clean", async ({ page }) => {
   const errors: string[] = [];
   const sdk: string[] = [];

@@ -15,7 +15,7 @@ interface Props {
   getConfig: () => Promise<ConfigView>;
   updateConfig: (kind: ConfigKind, scope: ConfigScope, action: "add" | "remove", value: string) => Promise<ConfigView>;
   getUpdate: () => Promise<UpdateStatus>;
-  getRunningVersion: () => Promise<{ current: string | null }>;
+  getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
   update: () => Promise<{ version: string }>;
   getProviders: () => Promise<ProviderView[]>;
   getProviderModels: (providerId: string) => Promise<ProviderModelsView>;
