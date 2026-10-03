@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const launcher = fileURLToPath(new URL("../bin/pi-webapp.mjs", import.meta.url));
@@ -64,7 +66,10 @@ test("launcher reports a Pi startup failure and clears the background state", { 
     const started = run([], env);
     assert.equal(started.status, 1);
     assert.match(started.stderr, /Pi 提前退出|无法向 Pi 发送启动命令/);
-    await assert.rejects(readFile(join(directory, "agent", "pi-web", "launcher.json")));
+    const statePath = join(directory, "agent", "pi-web", "launcher.json");
+    // The parent receives the failure before the background worker finishes cleanup.
+    for (let attempt = 0; attempt < 150 && existsSync(statePath); attempt++) await delay(20);
+    await assert.rejects(readFile(statePath), { code: "ENOENT" });
   } finally {
     run(["stop"], env);
     await rm(directory, { recursive: true, force: true });
