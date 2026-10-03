@@ -190,6 +190,7 @@ test("browser maps normalize owned sources before upload without changing Debug 
   // @ts-ignore Build-only JavaScript helper.
   const { prepareSourceMaps, root } = await import("../scripts/build-config.mjs");
   const { readFile } = await import("node:fs/promises");
+  await mkdir(join(root, ".ci"), { recursive: true });
   const directory = await mkdtemp(join(root, ".ci/source-map-test-"));
   try {
     await put(directory, "assets/app.js", code(browserId));
