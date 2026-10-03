@@ -8,6 +8,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
+import { npmCommand } from "./npm-command.mjs";
 
 const minimum = [0, 87, 1];
 const launcher = fileURLToPath(import.meta.url);
@@ -47,13 +48,15 @@ function probe(command) {
 
 function installPi() {
   console.error("未找到 Pi，正在通过 npm 安装 @earendil-works/pi-coding-agent …");
-  const result = spawn.sync("npm", ["install", "-g", "--ignore-scripts", "@earendil-works/pi-coding-agent"], { stdio: "inherit" });
+  const install = npmCommand(["install", "-g", "--ignore-scripts", "@earendil-works/pi-coding-agent"]);
+  const result = spawn.sync(install.file, install.args, { stdio: "inherit", windowsHide: true });
   if (result.error || result.status !== 0) {
     throw new Error(`Pi 安装失败。请手动运行 npm install -g --ignore-scripts @earendil-works/pi-coding-agent${result.error ? `（${result.error.message}）` : ""}`);
   }
   const inPath = probe("pi");
   if (inPath) return inPath;
-  const prefix = spawn.sync("npm", ["prefix", "-g"], { encoding: "utf8" });
+  const prefixCommand = npmCommand(["prefix", "-g"]);
+  const prefix = spawn.sync(prefixCommand.file, prefixCommand.args, { encoding: "utf8", windowsHide: true });
   if (prefix.status === 0) {
     const installed = process.platform === "win32" ? join(prefix.stdout.trim(), "pi.cmd") : join(prefix.stdout.trim(), "bin", "pi");
     if (existsSync(installed)) return probe(installed);

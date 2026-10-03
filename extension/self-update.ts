@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { npmCommand } from "../bin/npm-command.mjs";
 
 const execFileAsync = promisify(execFile);
 const releasePattern = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
@@ -26,7 +27,8 @@ export function compareVersions(a: string, b: string): number {
 
 async function npm(args: string[]): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("npm", args, { timeout: 180_000, maxBuffer: 1024 * 1024, encoding: "utf8" });
+    const command = npmCommand(args);
+    const { stdout } = await execFileAsync(command.file, command.args, { timeout: 180_000, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true });
     return stdout;
   } catch (error) {
     const detail = error as Error & { stderr?: string };

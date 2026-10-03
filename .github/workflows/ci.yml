@@ -49,9 +49,24 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  platform-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      # These tests use only Node's built-ins and can run before npm ci.
+      - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts
+
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.verify.outputs.protocol_published == 'true'
-    needs: verify
+    needs: [verify, platform-smoke]
     runs-on: ubuntu-latest
     concurrency:
       group: pi-webapp-npm-publish

@@ -75,12 +75,10 @@ test("launcher installs Pi when missing before starting the background RPC host"
   const directory = await mkdtemp(join(tmpdir(), "pi-web-launch-"));
   const source = join(directory, "pi-source");
   const npmArgsFile = join(directory, "npm-args");
-  const env = { ...process.env, PATH: directory, PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "rpc-query"), PI_TEST_RPC_INPUT: join(directory, "rpc-input"), PI_TEST_NPM_ARGS: npmArgsFile, PI_TEST_PI_SOURCE: source, PI_TEST_BIN: directory };
+  const env = { ...process.env, PATH: directory, npm_execpath: join(directory, "npm-cli.js"), PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "rpc-query"), PI_TEST_RPC_INPUT: join(directory, "rpc-input"), PI_TEST_NPM_ARGS: npmArgsFile, PI_TEST_PI_SOURCE: source, PI_TEST_BIN: directory };
   try {
     await fakePi(source);
-    const npm = join(directory, "npm");
-    await writeFile(npm, '#!/bin/sh\nprintf "%s\\n" "$@" > "$PI_TEST_NPM_ARGS"\n/bin/cp "$PI_TEST_PI_SOURCE" "$PI_TEST_BIN/pi"\n/bin/chmod +x "$PI_TEST_BIN/pi"\n');
-    await chmod(npm, 0o755);
+    await writeFile(env.npm_execpath, 'const fs = require("node:fs"); const path = require("node:path"); fs.writeFileSync(process.env.PI_TEST_NPM_ARGS, process.argv.slice(2).join("\\n") + "\\n"); fs.copyFileSync(process.env.PI_TEST_PI_SOURCE, path.join(process.env.PI_TEST_BIN, "pi")); fs.chmodSync(path.join(process.env.PI_TEST_BIN, "pi"), 0o755);');
     const started = run([], env);
     assert.equal(started.status, 0, started.stderr);
     assert.match(started.stdout, /后台运行/);
