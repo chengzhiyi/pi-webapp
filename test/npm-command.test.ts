@@ -16,7 +16,9 @@ for (const layout of ["windows", "unix"]) {
         : join(root, "lib", "node_modules", "npm", "bin", "npm-cli.js");
       await mkdir(dirname(cli), { recursive: true });
       await writeFile(cli, "");
-      assert.equal(resolveNpmCli({ execPath, env: { PATH: "", npm_execpath: join(root, "missing", "npm-cli.js") } }), await realpath(cli));
+      const resolved = resolveNpmCli({ execPath, env: { PATH: "", npm_execpath: join(root, "missing", "npm-cli.js") } });
+      // Normalize both sides with the same API; Windows sync realpath can retain 8.3 aliases.
+      assert.equal(await realpath(resolved), await realpath(cli));
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 }
@@ -27,7 +29,8 @@ test("finds npm installed separately on a case-insensitive Windows Path", async 
     const cli = join(root, "node_modules", "npm", "bin", "npm-cli.js");
     await mkdir(dirname(cli), { recursive: true });
     await writeFile(cli, "");
-    assert.equal(resolveNpmCli({ execPath: join(root, "elsewhere", "node"), env: { Path: root } }), await realpath(cli));
+    const resolved = resolveNpmCli({ execPath: join(root, "elsewhere", "node"), env: { Path: root } });
+    assert.equal(await realpath(resolved), await realpath(cli));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
