@@ -1,13 +1,13 @@
 import { useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
-import { DockController, DockLayout, getPane, getTab, dockPaneIds } from "./ui/dsh/dockkit/index.ts";
-import { PanelChrome } from "./ui/dsh/sidebar/PanelChrome.tsx";
-import { dockLabels } from "./ui/dsh/sidebar/labels.ts";
-import { zh, en } from "./ui/dsh/sidebar/locales.ts";
-import { Button } from "./ui/dsh/primitives/Button.tsx";
-import { Tooltip } from "./ui/dsh/primitives/Tooltip.tsx";
-import { IconPanelLeftOutlineRegular } from "./ui/dsh/primitives/icons/index.tsx";
-import css from "./ui/dsh/sidebar/SidebarRight.module.css";
-import expandCss from "./ui/dsh/sidebar/ExpandButton.module.css";
+import { DockController, DockLayout, getPane, getTab, dockPaneIds } from "./ui/shared/dockkit/index.ts";
+import { PanelChrome } from "./ui/shared/sidebar/PanelChrome.tsx";
+import { dockLabels } from "./ui/shared/sidebar/labels.ts";
+import { zh, en } from "./ui/shared/sidebar/locales.ts";
+import { Button } from "./ui/shared/primitives/Button.tsx";
+import { Tooltip } from "./ui/shared/primitives/Tooltip.tsx";
+import { IconPanelLeftOutlineRegular } from "./ui/shared/primitives/icons/index.tsx";
+import css from "./ui/shared/sidebar/SidebarRight.module.css";
+import expandCss from "./ui/shared/sidebar/ExpandButton.module.css";
 import { PluginSlot, type LoadedPlugin, type PluginHostProps } from "./plugin-runtime.tsx";
 
 /** Each session retains its own DSH docking controller across navigation. */

@@ -2,8 +2,8 @@ import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState, typ
 import { $createLineBreakNode, $createParagraphNode, $createTextNode, $getRoot, $addUpdateTag, CLEAR_HISTORY_COMMAND, SKIP_DOM_SELECTION_TAG, createEditor, BLUR_COMMAND, SELECTION_CHANGE_COMMAND, RootNode, COMMAND_PRIORITY_CRITICAL } from 'lexical';
 import { registerPlainText } from '@lexical/plain-text';
 import { createEmptyHistoryState, registerHistory } from '@lexical/history';
-import { ComposerContentEditable } from '../dsh/composer/ComposerContentEditable.tsx';
-import { refreshClaimDecoration, registerClaimDecoration } from '../dsh/composer/claim-decor.ts';
+import { ComposerContentEditable } from '../shared/composer/ComposerContentEditable.tsx';
+import { refreshClaimDecoration, registerClaimDecoration } from '../shared/composer/claim-decor.ts';
 import css from './InputBar.module.css';
 
 export interface ComposerEditorHandle { focus(): void }

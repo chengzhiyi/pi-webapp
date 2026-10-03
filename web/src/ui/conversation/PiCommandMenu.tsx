@@ -1,8 +1,8 @@
 import { Fragment, useLayoutEffect, useRef } from "react";
 import type { ComposerCommand } from "../../composer-commands.ts";
-import { IconCompactOutlineRegular, IconDataOutlineRegular, IconNewChatOutlineRegular, IconPaperclipOutlineRegular } from "../dsh/primitives/icons/index.tsx";
+import { IconCompactOutlineRegular, IconDataOutlineRegular, IconNewChatOutlineRegular, IconPaperclipOutlineRegular } from "../shared/primitives/icons/index.tsx";
 import { useAnchoredMaxHeight } from "../primitives/useAnchoredMaxHeight.ts";
-import { MenuSurface } from "../dsh/primitives/MenuSurface.tsx";
+import { MenuSurface } from "../shared/primitives/MenuSurface.tsx";
 import css from "./MenuView.module.css";
 import { localize as t } from "../locale/preference.ts";
 

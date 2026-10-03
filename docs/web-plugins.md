@@ -26,8 +26,8 @@ PI_WEBAPP_PLUGIN_DEV_ROOTS=../pi-extensions/packages/plan-mode npm run start
 避免旧加载结果在切换会话后重新激活。浏览器断线保留后端待处理交互。
 
 面板、Markdown 和输入编辑器使用本地引入的 UI 组件；来源与改动说明见
-[组件说明](../web/src/ui/dsh/README.md)，版权说明保留在
-[THIRD_PARTY_LICENSE.txt](../THIRD_PARTY_LICENSE.txt)。
+[组件说明](../web/src/ui/shared/README.md)，版权说明保留在
+[组件许可证](../web/src/ui/shared/LICENSE.txt)。
 
 ## 暂停与继续
 

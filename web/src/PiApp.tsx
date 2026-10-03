@@ -7,7 +7,7 @@ import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
-import { MarkdownText } from "./ui/dsh/primitives/markdown/MarkdownText.tsx";
+import { MarkdownText } from "./ui/shared/primitives/markdown/MarkdownText.tsx";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
 import { PluginInteraction, PluginSlot, useWebPlugins } from "./plugin-runtime.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";

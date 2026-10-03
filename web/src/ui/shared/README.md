@@ -1,4 +1,4 @@
-# Vendored DSH presentation sources
+# Shared UI presentation sources
 
 Source: DeepSeek Harness, https://github.com/deepseek-ai/deepseek-harness
 Commit: 477b4f420553e8a52c2fbccc464d7561b239c443

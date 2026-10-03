@@ -28,7 +28,7 @@
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
-    "THIRD_PARTY_LICENSE.txt",
+    "web/src/ui/shared/LICENSE.txt",
     "docs/sentry.md"
   ],
   "scripts": {

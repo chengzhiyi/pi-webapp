@@ -8,6 +8,7 @@
 - `workspace/` and `sidebar/`: workspaces, sessions, and navigation.
 - `settings/`: appearance, resources, and models.
 - `primitives/` and `theme/`: shared components, icons, and theme values.
+- `shared/`: docking, Markdown rendering, composer editing, and supporting presentation components; source attribution and license are kept alongside the code.
 
 The settings dialog and appearance selector follow the existing DSH component structure. The models page adapts DSH's connected-provider list, expandable model rows, and decimal K/M capacity inputs to Pi authentication and `models.json`. Pi's own model runtime supplies the catalog and saves built-in edits as `modelOverrides`.
 

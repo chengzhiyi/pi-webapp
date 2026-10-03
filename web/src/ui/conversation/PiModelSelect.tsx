@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSP
 import { createPortal } from "react-dom";
 import { IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14, IconDataOutline16 } from "../primitives/icons/index.tsx";
 import type { ModelOption } from "../../pi-bridge.ts";
-import { MenuSurface } from "../dsh/primitives/MenuSurface.tsx";
+import { MenuSurface } from "../shared/primitives/MenuSurface.tsx";
 import css from "./ModelSelect.module.css";
 import { localize as t } from "../locale/preference.ts";
 
