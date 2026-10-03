@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { startBridge } from "../extension/bridge.ts";
 import type { SessionView } from "../extension/view.ts";
+import { NodeTelemetry } from "../extension/telemetry.ts";
+import type { Event } from "@sentry/core";
 
 const webRoot = fileURLToPath(new URL("../web/dist/", import.meta.url));
 
@@ -85,6 +87,56 @@ test('resume is an authenticated control action that never calls the user-messag
     assert.equal((await request()).status, 409, 'a repeated click must not start another run');
     assert.equal(resumes, 1);
   } finally { await bridge.close(); }
+});
+
+test("telemetry config is authenticated; unexpected request errors preserve status and carry correlated Sentry IDs", async () => {
+  const events: Event[] = [];
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  });
+  const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() { throw new Error("send failed token=private"); }, abort() {}, async newSession() {} }, webRoot, telemetry);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", "X-Request-ID": "550e8400-e29b-41d4-a716-446655440000", "X-Operation-ID": "550e8400-e29b-41d4-a716-446655440001" };
+    assert.equal((await fetch(`${url.origin}/api/telemetry/config`)).status, 401);
+    const config = await fetch(`${url.origin}/api/telemetry/config`, { headers });
+    assert.equal((await config.json()).dsn, "https://public@example.com/12");
+    assert.match(config.headers.get("content-security-policy")!, /connect-src 'self' https:\/\/example.com;/);
+    const response = await fetch(`${url.origin}/api/message`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", text: "private prompt" }) });
+    assert.equal(response.status, 400);
+    const error = await response.json();
+    assert.equal(error.requestId, headers["X-Request-ID"]);
+    assert.equal(error.operationId, headers["X-Operation-ID"]);
+    assert.match(error.errorId, /^[a-f0-9]{32}$/);
+    assert.equal(error.errorCode, "unexpected_error");
+    const invalid = await fetch(`${url.origin}/api/message`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", text: "" }) });
+    assert.equal((await invalid.json()).errorCode, "validation_error");
+    assert.equal((await fetch(`${url.origin}/assets/app.js.map`)).status, 404);
+  } finally { await bridge.close(); }
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.contexts?.diagnostic?.operationId, "550e8400-e29b-41d4-a716-446655440001");
+  assert.ok(!JSON.stringify(events).includes("private prompt"));
+});
+
+test("plugin execution errors never upload unquoted user input", async () => {
+  const events: Event[] = [];
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  });
+  const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},
+    async invokePluginAction(_sessionId, _pluginId, _action, input) { throw new Error(`Cannot process ${(input as { text: string }).text}`); },
+  }, webRoot, telemetry);
+  try {
+    const url = new URL(bridge.url);
+    const response = await fetch(`${url.origin}/api/plugin-action`, { method: "POST",
+      headers: { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin },
+      body: JSON.stringify({ sessionId: "session-a", pluginId: "example", action: "run", input: { text: "my private unquoted draft" } }),
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).errorId, /^[a-f0-9]{32}$/);
+  } finally { await bridge.close(); }
+  assert.equal(events.length, 1);
+  assert.ok(!JSON.stringify(events).includes("my private unquoted draft"));
 });
 
 test("requires the token to read the current session or send a message", async () => {
@@ -530,7 +582,10 @@ test("plugin review decisions require authentication, origin and matching sessio
     assert.deepEqual(decisions, [{ decision: "approve" }]);
     assert.notEqual((await send(body)).status, 200);
     assert.equal(decisions.length, 1);
-    const grammar = await fetch(`${url.origin}/assets/python.js`);
+    const manifest = JSON.parse(await readFile(join(webRoot, ".vite/manifest.json"), "utf8"));
+    const python = Object.values(manifest).find((entry) => (entry as { name?: string }).name === "python") as { file: string };
+    assert.ok(python?.file);
+    const grammar = await fetch(`${url.origin}/${python.file}`);
     assert.equal(grammar.status, 200);
     assert.match(grammar.headers.get("content-type") ?? "", /javascript/);
     assert.equal((await fetch(`${url.origin}/assets/unknown-secret.js`)).status, 404);

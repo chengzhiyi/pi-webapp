@@ -1,0 +1,225 @@
+import { test, expect, type Page } from "@playwright/test";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import { startBridge, type Bridge, type BridgeHost } from "../../extension/bridge.ts";
+import { DEFAULT_SENTRY_DSN, NodeTelemetry } from "../../extension/telemetry.ts";
+import type { Event } from "@sentry/core";
+import type { SessionView } from "../../extension/view.ts";
+
+const snapshot: SessionView = { schemaVersion: 1, sessionId: "private-session", cwd: "/private/workspace", name: "Test session", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
+const root = fileURLToPath(new URL("../../web/dist/", import.meta.url));
+const host: BridgeHost = {
+  snapshot: () => snapshot, models: () => [{ provider: "example", id: "model", name: "Example model" }], commands: () => [], send() {}, abort() {}, async newSession() {},
+  async setModel() {}, async setThinkingLevel() {},
+  config: () => ({ projectTrusted: true, global: { packages: [], extensions: [], skills: [] }, project: { packages: [], extensions: [], skills: [] }, installed: { packages: [], extensions: [], skills: [] } }),
+  async updateConfig() { return this.config(); }, async workspaces() { return { items: [], activeId: null, sessions: [] }; },
+  async addWorkspace() {}, async selectWorkspace() {}, async newSessionInWorkspace() {}, async removeWorkspace() {}, async selectSession() {},
+};
+
+async function fixture(page: Page, enabled: boolean | "default" = true, overrides: Partial<BridgeHost> = {}) {
+  const browserEvents: Event[] = [];
+  const nodeEvents: Event[] = [];
+  const destination = enabled === "default" ? new URL(DEFAULT_SENTRY_DSN).origin : "https://telemetry.example";
+  await page.route(`${destination}/**`, async (route) => {
+    const lines = route.request().postData()?.split("\n") ?? [];
+    if (JSON.parse(lines[1] ?? "{}").type === "event") browserEvents.push(JSON.parse(lines[2]!));
+    await route.fulfill({ status: 200, body: "{}", headers: { "Access-Control-Allow-Origin": "*" } });
+  });
+  const telemetryOptions: ConstructorParameters<typeof NodeTelemetry>[0] = { env: enabled === "default" ? {} : enabled ? { PI_WEB_SENTRY_DSN: "https://public@telemetry.example/1" } : { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") nodeEvents.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  };
+  const telemetry = new NodeTelemetry(telemetryOptions);
+  const bridge = await startBridge({ ...host, ...overrides }, root, telemetry);
+  const sdkReady = enabled ? page.waitForResponse((r) => r.url().includes("telemetry-client-")).catch(() => undefined) : undefined;
+  return { bridge, browserEvents, nodeEvents, sdkReady, newTelemetry: () => new NodeTelemetry(telemetryOptions) };
+}
+
+async function open(page: Page, bridge: Bridge) {
+  await page.goto(bridge.url);
+  await expect(page.getByRole("textbox")).toBeEnabled();
+}
+
+test("when disabled the page works, SDK stays unloaded, and console stays clean", async ({ page }) => {
+  const errors: string[] = [];
+  const sdk: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => { if (request.url().includes("telemetry-client-")) sdk.push(request.url()); });
+  const f = await fixture(page, false);
+  try { await open(page, f.bridge); await page.getByRole("textbox").fill("synthetic prompt"); await page.getByRole("button", { name: /^(发送消息|Send message)$/ }).click(); }
+  finally { await f.bridge.close(); }
+  expect(errors).toEqual([]);
+  expect(sdk).toEqual([]);
+  expect(f.browserEvents).toEqual([]);
+});
+
+test("the built-in DSN enables browser reporting without environment configuration", async ({ page }) => {
+  const f = await fixture(page, "default");
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    await page.evaluate(() => { setTimeout(() => { throw new Error("Synthetic default DSN test"); }, 0); });
+    await expect.poll(() => f.browserEvents.length).toBe(1);
+    expect(f.browserEvents[0]?.contexts?.diagnostic?.stage).toBe("global");
+  } finally { await f.bridge.close(); }
+});
+
+test("backend failures keep correlation and are not reported twice by the browser", async ({ page }) => {
+  const f = await fixture(page, true, { send() { throw new Error("Synthetic backend failure token=server-secret"); } });
+  try {
+    await open(page, f.bridge);
+    await f.sdkReady;
+    await page.getByRole("textbox").fill("private prompt contents");
+    await page.getByRole("button", { name: /^(发送消息|Send message)$/ }).click();
+    await expect.poll(() => f.nodeEvents.length).toBe(1);
+    expect(f.nodeEvents[0]?.contexts?.diagnostic?.operationId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(JSON.stringify(f.nodeEvents)).not.toContain("private prompt contents");
+    expect(JSON.stringify(f.nodeEvents)).not.toContain("server-secret");
+    expect(f.browserEvents).toEqual([]);
+  } finally { await f.bridge.close(); }
+});
+
+test("startup-buffered global errors and unhandled rejections reach the mock Sentry without secrets", async ({ page }) => {
+  await page.route("**/api/telemetry/config", async (route) => { await new Promise((resolve) => setTimeout(resolve, 300)); await route.continue(); });
+  const f = await fixture(page);
+  try {
+    await open(page, f.bridge);
+    await page.evaluate(() => {
+      setTimeout(() => { throw new Error("Synthetic global failure token=browser-secret"); }, 0);
+      void Promise.reject(new Error("Synthetic rejection password=another-secret"));
+    });
+    await expect.poll(() => f.browserEvents.length).toBe(2);
+    expect(JSON.stringify(f.browserEvents)).not.toMatch(/browser-secret|another-secret|private-session|private\/workspace/);
+    expect(f.browserEvents.map((e) => e.contexts?.diagnostic?.stage).sort()).toEqual(["global", "unhandled_rejection"]);
+  } finally { await f.bridge.close(); }
+});
+
+test("Sentry configuration timeout never delays the usable page", async ({ page }) => {
+  await page.route("**/api/telemetry/config", async (route) => { await new Promise((resolve) => setTimeout(resolve, 1500)); await route.continue().catch(() => {}); });
+  const f = await fixture(page);
+  try {
+    const started = Date.now();
+    await page.goto(f.bridge.url, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    expect(Date.now() - started).toBeLessThan(1000);
+  } finally { await f.bridge.close(); }
+});
+
+test("invalid protocol events are captured with build debug IDs and the app can reconnect", async ({ page }) => {
+  const f = await fixture(page);
+  try {
+    const connected = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/events" && r.status() === 200);
+    await test.step("open", () => open(page, f.bridge));
+    await connected;
+    await test.step("SDK ready", async () => { await f.sdkReady; });
+    const reconnected = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/events" && r.status() === 200);
+    f.bridge.publish({ type: "snapshot", session: { ...snapshot, schemaVersion: 99 } } as unknown as Parameters<Bridge["publish"]>[0]);
+    await test.step("capture", async () => { await expect.poll(() => f.browserEvents.length).toBe(1); });
+    expect(f.browserEvents[0]?.debug_meta?.images?.some((image) => image.debug_id)).toBe(true);
+    for (const image of f.browserEvents[0]?.debug_meta?.images ?? []) {
+      const file = image.code_file?.replace("app:///", "");
+      if (!file?.startsWith("assets/")) continue;
+      const map = JSON.parse(await readFile(fileURLToPath(new URL(`../../.sentry-artifacts/${f.browserEvents[0]!.dist}/browser/${file}.map`, import.meta.url)), "utf8"));
+      expect(map.debug_id).toBe(image.debug_id);
+    }
+    expect(f.browserEvents[0]?.exception?.values?.[0]?.stacktrace?.frames?.some((frame) => frame.filename?.startsWith("app:///assets/"))).toBe(true);
+    await test.step("reconnect", async () => { await reconnected; await expect(page.getByRole("textbox")).toBeEnabled(); });
+  } finally { await test.step("close", () => f.bridge.close()); }
+});
+
+test("React render failures show a refresh fallback and attach a component stack", async ({ page }) => {
+  const f = await fixture(page);
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    f.bridge.publish({ type: "snapshot", session: { ...snapshot, messages: [{ id: "broken", role: "assistant", timestamp: new Date().toISOString(), blocks: null }] } } as unknown as Parameters<Bridge["publish"]>[0]);
+    await expect(page.getByRole("button", { name: /^(刷新页面|Refresh page)$/ })).toBeVisible();
+    await expect.poll(() => f.browserEvents.some((e) => e.contexts?.diagnostic?.stage === "react")).toBe(true);
+    expect(f.browserEvents.find((e) => e.contexts?.diagnostic?.stage === "react")?.contexts?.diagnostic?.componentStack).toBeTruthy();
+  } finally { await f.bridge.close(); }
+});
+
+test("invalid NDJSON is captured once without uploading the response body", async ({ page }) => {
+  await page.route("**/api/events", (route) => route.fulfill({ contentType: "application/x-ndjson", body: `${JSON.stringify({ type: "snapshot", session: snapshot })}\n{"secret": "private-response-body"\n` }));
+  const f = await fixture(page);
+  try {
+    await page.goto(f.bridge.url); await f.sdkReady;
+    await expect.poll(() => f.browserEvents.length).toBe(1);
+    expect(f.browserEvents[0]?.contexts?.diagnostic?.stage).toBe("ndjson_parse");
+    expect(JSON.stringify(f.browserEvents)).not.toContain("private-response-body");
+  } finally { await f.bridge.close(); }
+});
+
+test("controlled launcher restart reconnects at the same address without an error report", async ({ page }) => {
+  const f = await fixture(page);
+  let replacement: Bridge | undefined;
+  const previousPort = process.env.PI_WEBAPP_RESTART_PORT;
+  const previousToken = process.env.PI_WEBAPP_RESTART_TOKEN;
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    const connected = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/events" && response.status() === 200);
+    const url = new URL(f.bridge.url);
+    await f.bridge.close({ reconnect: true });
+    process.env.PI_WEBAPP_RESTART_PORT = url.port;
+    process.env.PI_WEBAPP_RESTART_TOKEN = url.hash.slice(1);
+    replacement = await startBridge(host, root, f.newTelemetry());
+    expect(replacement.url).toBe(f.bridge.url);
+    await connected;
+    await expect(page.getByRole("textbox")).toBeEditable();
+    expect(f.browserEvents).toEqual([]);
+    expect(f.nodeEvents).toEqual([]);
+  } finally {
+    if (previousPort === undefined) delete process.env.PI_WEBAPP_RESTART_PORT; else process.env.PI_WEBAPP_RESTART_PORT = previousPort;
+    if (previousToken === undefined) delete process.env.PI_WEBAPP_RESTART_TOKEN; else process.env.PI_WEBAPP_RESTART_TOKEN = previousToken;
+    await replacement?.close();
+  }
+});
+
+test("plugin asset updates still reload the page instead of becoming protocol errors", async ({ page }) => {
+  const f = await fixture(page);
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    const reloaded = page.waitForEvent("domcontentloaded");
+    f.bridge.publish({ type: "plugins_changed" });
+    await reloaded;
+    await expect(page.getByRole("textbox")).toBeEditable();
+    expect(f.browserEvents).toEqual([]);
+    await page.screenshot({ path: "artifacts/sentry-integration.png", fullPage: true });
+  } finally { await f.bridge.close(); }
+});
+
+test("streaming frame budget with and without telemetry", async ({ browser }) => {
+  test.skip(process.env.PI_WEB_BENCHMARK !== "true", "Run with PI_WEB_BENCHMARK=true for the performance comparison");
+  test.setTimeout(60_000);
+  const samples: Array<{ enabled: boolean; frameP95Ms: number; longTasks: number }> = [];
+  const history = Array.from({ length: 100 }, (_, i) => ({ id: `history-${i}`, role: i % 2 ? "assistant" as const : "user" as const, timestamp: new Date().toISOString(), blocks: [{ kind: "text" as const, text: `Synthetic history ${i}` }] }));
+  for (const enabled of [false, true, true, false]) {
+    const page = await browser.newPage();
+    const f = await fixture(page, enabled, { snapshot: () => ({ ...snapshot, messages: history }) });
+    try {
+      await open(page, f.bridge); if (enabled) await f.sdkReady;
+      await page.evaluate(() => {
+        const target = window as unknown as { piBenchmark: { frames: number[]; longTasks: number; active: boolean } };
+        target.piBenchmark = { frames: [], longTasks: 0, active: true };
+        new PerformanceObserver((entries) => { target.piBenchmark.longTasks += entries.getEntries().length; }).observe({ entryTypes: ["longtask"] });
+        let last = performance.now();
+        const frame = (now: number) => { target.piBenchmark.frames.push(now - last); last = now; if (target.piBenchmark.active) requestAnimationFrame(frame); };
+        requestAnimationFrame(frame);
+      });
+      for (let i = 0; i < 40; i++) {
+        f.bridge.publish({ type: "stream", message: { id: "stream", role: "assistant", timestamp: new Date().toISOString(), blocks: [{ kind: "text", text: `Streaming update ${i}: ${"Synthetic text. ".repeat(100)}` }] } });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      const measured = await page.evaluate(() => {
+        const target = window as unknown as { piBenchmark: { frames: number[]; longTasks: number; active: boolean } };
+        target.piBenchmark.active = false;
+        const frames = target.piBenchmark.frames.slice(5).sort((a, b) => a - b);
+        return { frameP95Ms: frames[Math.floor(frames.length * 0.95)]!, longTasks: target.piBenchmark.longTasks };
+      });
+      samples.push({ enabled, ...measured });
+      expect(f.browserEvents).toEqual([]);
+    } finally { await page.close(); await f.bridge.close(); }
+  }
+  const average = (enabled: boolean) => samples.filter((s) => s.enabled === enabled).reduce((sum, s) => sum + s.frameP95Ms, 0) / 2;
+  const deltaPercent = (average(true) / average(false) - 1) * 100;
+  console.log(JSON.stringify({ samples, frameP95DeltaPercent: Number(deltaPercent.toFixed(2)), targetPercent: 2 }));
+  // A wider guard detects obvious regressions; the 2% target requires interpreting timing noise.
+  expect(average(true)).toBeLessThan(average(false) * 1.1);
+});

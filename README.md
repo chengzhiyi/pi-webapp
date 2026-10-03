@@ -66,6 +66,10 @@ For local Web plugin development with the sibling `pi-extensions` workspace, fol
 
 The source lives in `extension/`, `shared/`, and `web/src/`. The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and the English and Chinese READMEs. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
 
+## Error collection
+
+Frontend and extension Sentry error reporting is enabled by default with the built-in public DSN. Set `PI_WEB_SENTRY_DSN` in the Pi process environment to use another project, or `PI_WEB_SENTRY_ENABLED=false` to disable reporting. Collection is limited to sanitized stacks, semantic breadcrumbs and state summaries; conversations, source contents, attachments, credentials and session recordings are excluded. See [Sentry configuration](docs/sentry.md) for the default destination, separate destinations, limits and private source-map uploads.
+
 ## Publish
 
 CI resolves the published `@chengzhiyi/pi-web-protocol` version before `npm ci`.

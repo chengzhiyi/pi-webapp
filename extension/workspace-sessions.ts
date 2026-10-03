@@ -1,4 +1,4 @@
-import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, VERSION } from "@earendil-works/pi-coding-agent";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest } from "@chengzhiyi/pi-web-protocol";
 import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
@@ -7,8 +7,10 @@ import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
 import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
 import { resumeMessage } from "./execution-control.ts";
 import { pluginRuntimePaths } from "./plugin-runtime-paths.ts";
+import type { BridgeEvent } from "./bridge.ts";
+import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../shared/telemetry.ts";
 
-type HostEvent = { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "error"; message: string };
+type HostEvent = BridgeEvent;
 interface WorkspaceRuntime {
   session: AgentSession;
   cwd: string;
@@ -20,10 +22,13 @@ interface WorkspaceRuntime {
   generation: number;
   closing: boolean;
   waitController: AbortController;
+  operation?: ErrorCorrelation;
+  agentErrorReported?: boolean;
 }
 
 /** One active SDK runtime; the host may retain it while the TUI is in front. */
 export class WorkspaceSessions {
+  readonly telemetryVersion = 1;
   private active: WorkspaceRuntime | null = null;
   private readonly queue = new LifecycleQueue();
   private generation = 0;
@@ -31,15 +36,16 @@ export class WorkspaceSessions {
   private readonly publish: (event: HostEvent) => void;
   private readonly fallbackModel: () => ExtensionContext["model"];
   private readonly isProjectTrusted: (cwd: string) => boolean;
+  private readonly reportError: (cause: unknown, context: DiagnosticFields) => string | undefined;
 
-  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false) {
-    this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted;
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined) {
+    this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted; this.reportError = reportError;
   }
   get session(): AgentSession | null { return this.active?.session ?? null; }
   get path(): string | null { return this.active?.cwd ?? null; }
   get catalog(): WebPluginCatalog | null { return this.active?.catalog ?? null; }
 
-  open(path: string, target: "continue" | "new" | { sessionFile: string }): Promise<void> {
+  open(path: string, target: "continue" | "new" | { sessionFile: string } | { sessionManager: SessionManager }): Promise<void> {
     return this.queue.run(async () => {
       this.ensureAvailable();
       const canonical = await realpath(path);
@@ -48,7 +54,7 @@ export class WorkspaceSessions {
       else if (target === "continue") {
         const recent = (await sessionsForWorkspace(canonical))[0];
         manager = recent ? SessionManager.open(recent.path) : SessionManager.create(canonical);
-      } else manager = SessionManager.open(target.sessionFile);
+      } else manager = "sessionManager" in target ? target.sessionManager : SessionManager.open(target.sessionFile);
       if (await realpath(manager.getCwd()) !== canonical) throw new Error("会话不属于该工作区");
       await this.replace(canonical, manager, target === "new" ? "new" : "resume");
     });
@@ -92,6 +98,15 @@ export class WorkspaceSessions {
       let lastStreamAt = 0;
       const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       const offEvents = session.subscribe(event => {
+        if (this.active === runtime && !runtime.closing) {
+          if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
+            runtime.agentErrorReported = true;
+            const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
+            publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...runtime.operation });
+          }
+          if (event.type === "message_end" && event.message.role === "toolResult" && event.message.isError) this.reportError(new Error("Tool execution failed"), { ...runtime.operation, stage: "tool", code: "tool_failed", piVersion: VERSION });
+          if (event.type === "agent_settled") runtime.operation = undefined;
+        }
         if (event.type === "message_update" && event.message.role === "assistant" && Date.now() - lastStreamAt >= 60) {
           lastStreamAt = Date.now();
           publish({ type: "stream", message: { id: "stream", role: "assistant", timestamp: new Date(event.message.timestamp).toISOString(), blocks: contentBlocks(event.message.content) } });
@@ -163,11 +178,14 @@ export class WorkspaceSessions {
     this.active.interactions.resolve(sessionId, pluginId, requestId, value);
   }
 
-  async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = []): Promise<void> {
+  async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = [], correlation?: ErrorCorrelation): Promise<void> {
     if (this.disposed || !this.session || !this.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
     const active = this.session;
+    const runtime = this.active!;
+    runtime.operation = correlation;
+    runtime.agentErrorReported = false;
     let accepted = false;
     let resolve!: () => void;
     let reject!: (reason: unknown) => void;
@@ -176,9 +194,12 @@ export class WorkspaceSessions {
       if (ok) { accepted = true; resolve(); }
     } }).then(() => { if (!accepted) resolve(); }).catch((cause: unknown) => {
       if (!accepted) reject(cause);
-      else this.publish({ type: "error", message: cause instanceof Error ? cause.message : "Pi 请求失败" });
+      else if (this.active === runtime && !runtime.closing && !runtime.agentErrorReported) {
+        const errorId = this.reportError(opaqueError(cause, "Agent response failed"), { ...correlation, stage: "agent", code: "agent_failed", piVersion: VERSION });
+        this.publish({ type: "error", message: cause instanceof Error ? cause.message : "Pi 请求失败", errorCode: "unexpected_error", errorId, ...correlation });
+      }
     });
-    await preflight;
+    try { await preflight; } catch (cause) { runtime.operation = undefined; throw cause; }
   }
 
   async stop(): Promise<void> {

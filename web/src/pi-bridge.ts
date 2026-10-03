@@ -1,8 +1,10 @@
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { useEffect, useState } from "react";
-import { HttpError } from "./http-error.ts";
 import type { PluginEntry, WebInteraction } from "@chengzhiyi/pi-web-protocol";
 import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
+import { accessToken } from "./access-token.ts";
+import { bridgeFetch, bridgeJson } from "./telemetry-fetch.ts";
+import { breadcrumb, reportError, setTelemetryState } from "./telemetry.ts";
 
 export interface ViewBlock {
   kind: "text" | "thinking" | "image" | "toolCall";
@@ -89,32 +91,19 @@ export type LoginEvent =
   | { type: "auth_url"; url: string; instructions?: string }
   | { type: "device_code"; userCode: string; verificationUri: string }
   | { type: "progress"; message: string };
-export interface LoginView { id: string; providerId: string; method: LoginMethod; status: "running" | "waiting" | "done" | "error" | "cancelled"; prompt?: LoginPrompt; event?: LoginEvent; authorization?: Extract<LoginEvent, { type: "auth_url" | "device_code" }>; error?: string }
+export interface LoginView { id: string; providerId: string; method: LoginMethod; status: "running" | "waiting" | "done" | "error" | "cancelled"; prompt?: LoginPrompt; event?: LoginEvent; authorization?: Extract<LoginEvent, { type: "auth_url" | "device_code" }>; error?: string; errorId?: string }
 
-const hashToken = location.hash.slice(1);
-if (hashToken) {
-  sessionStorage.setItem("pi-web-token", hashToken);
-  history.replaceState(null, "", location.pathname);
-}
-const token = hashToken || sessionStorage.getItem("pi-web-token");
+const token = accessToken();
 
 async function post(path: string, body: object, signal?: AbortSignal) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
-  const result = await response.json();
-  if (!response.ok) throw new HttpError(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`), response.status);
-  return result;
+  return bridgeJson(await bridgeFetch(path, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body), signal,
+  }));
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-  const result = await response.json();
-  if (!response.ok) throw new HttpError(result.error || t(`请求失败：${response.status}`, `Request failed: ${response.status}`), response.status);
-  return result as T;
+  return bridgeJson(await bridgeFetch(path, { headers: { Authorization: `Bearer ${token}` } })) as Promise<T>;
 }
 
 export function usePiBridge() {
@@ -136,21 +125,27 @@ export function usePiBridge() {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let alive = true;
+    let streamingActive = false;
 
     const follow = async () => {
       while (alive) {
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
         try {
           setConnection("connecting");
-          const response = await fetch("/api/events", {
+          const followed = await bridgeFetch("/api/events", {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           });
-          if (!response.ok || !response.body) {
+          const { response, correlation } = followed;
+          if (!response.ok) await bridgeJson(followed);
+          if (!response.body) {
             throw new Error(response.status === 401 ? t("访问令牌无效，请在 Pi 中重新输入 /web。", "Invalid access token. Run /web again in Pi.") : t("连接 Pi 失败", "Could not connect to Pi"));
           }
           setConnection("connected");
+          setTelemetryState({ connection: "connected" });
+          breadcrumb("stream_connected", { ...correlation });
           setError("");
-          const reader = response.body.getReader();
+          reader = response.body.getReader();
           const decoder = new TextDecoder();
           let pending = "";
           while (alive) {
@@ -162,14 +157,38 @@ export function usePiBridge() {
               const line = pending.slice(0, end);
               pending = pending.slice(end + 1);
               if (line) {
-                const event = JSON.parse(line);
+                let event;
+                try { event = JSON.parse(line); } catch (cause) { reportError(cause, { ...correlation, stage: "ndjson_parse" }); throw cause; }
+                if (!event || typeof event !== "object" || typeof event.type !== "string") throw new Error("Invalid stream event");
+                if (!["snapshot", "stream", "workspaces", "error", "shutdown", "plugins_changed"].includes(event.type)) throw new Error("Unsupported stream event");
+                if (event.type === "shutdown") {
+                  void reader.cancel().catch(() => {});
+                  if (event.reconnect === true) throw new DOMException("Pi web service is restarting", "AbortError");
+                  alive = false;
+                  setConnection("disconnected"); setTelemetryState({ connection: "disconnected" });
+                  breadcrumb("bridge_shutdown");
+                  setError(t("Pi 网页服务已关闭，请在 Pi 中重新输入 /web。", "The Pi web service stopped. Run /web again in Pi."));
+                  return;
+                }
+                if (event.type === "snapshot" && event.session?.schemaVersion !== 1) throw new Error("Unsupported session schema");
+                if (event.type === "snapshot" && (!Array.isArray(event.session.messages) || typeof event.session.sessionId !== "string")) throw new Error("Invalid session snapshot");
                 if (event.type === "snapshot" && event.session?.schemaVersion === 1) {
                   setSession(event.session);
+                  setTelemetryState({ sessionId: event.session.sessionId, idle: event.session.idle, model: event.session.model, thinkingLevel: event.session.thinkingLevel, messageCount: event.session.messages?.length ?? 0 });
                   if (event.session.idle) setStreaming(null);
                 }
-                if (event.type === "stream") setStreaming(event.message);
+                if (event.type === "stream") {
+                  const active = event.message !== null;
+                  if (active !== streamingActive) breadcrumb(active ? "stream_start" : "stream_end");
+                  streamingActive = active;
+                  setStreaming(event.message);
+                }
                 if (event.type === "workspaces") setWorkspaces(event.value);
-                if (event.type === "error") setError(event.message);
+                if (event.type === "error") {
+                  setError(event.message);
+                  if (!event.errorId && !event.errorReported && event.errorCode !== "validation_error") reportError(new Error("Agent response failed"), { stage: "agent", code: "agent_failed", requestId: event.requestId, operationId: event.operationId });
+                  breadcrumb("agent_error", { errorId: event.errorId, requestId: event.requestId, operationId: event.operationId });
+                }
                 if (event.type === "plugins_changed") window.location.reload();
               }
               end = pending.indexOf("\n");
@@ -177,7 +196,11 @@ export function usePiBridge() {
           }
           throw new Error(t("Pi 网页连接已关闭", "The Pi web connection has closed"));
         } catch (cause) {
+          void reader?.cancel().catch(() => {});
           if (!alive) return;
+          reportError(cause, { stage: "stream" });
+          setTelemetryState({ connection: "disconnected" });
+          breadcrumb("stream_disconnected");
           setConnection("disconnected");
           setModelsStatus("loading");
           setError(cause instanceof Error ? cause.message : t("连接 Pi 失败", "Could not connect to Pi"));
@@ -254,16 +277,15 @@ export function usePiBridge() {
     async upload(file: File, signal?: AbortSignal): Promise<AttachmentReceipt> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const url = `/api/attachment?sessionId=${encodeURIComponent(session.sessionId)}&name=${encodeURIComponent(file.name)}`;
-      const response = await fetch(url, {
+      const uploaded = await bridgeFetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" },
         body: file,
         signal,
       });
-      const result = await response.json();
+      const response = uploaded.response;
       if (response.status === 404) throw new Error(t("当前 Pi 桥接服务仍是旧版。请在 Pi 中输入 /reload，再输入 /web 并打开新地址，然后重试上传。", "The Pi bridge is outdated. Run /reload, then /web in Pi, open the new address, and retry the upload."));
-      if (!response.ok) throw new Error(result.error || t(`上传失败：${response.status}`, `Upload failed: ${response.status}`));
-      return result as AttachmentReceipt;
+      return await bridgeJson(uploaded) as AttachmentReceipt;
     },
     async discardAttachment(id: string): Promise<void> {
       if (!session || connection !== "connected") return;
@@ -278,9 +300,9 @@ export function usePiBridge() {
     async loadMessageImage(messageId: string, index: number): Promise<Blob> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       const url = `/api/image?sessionId=${encodeURIComponent(session.sessionId)}&messageId=${encodeURIComponent(messageId)}&index=${index}`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) throw new Error(t("图片读取失败", "Could not load image"));
-      return response.blob();
+      const result = await bridgeFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!result.response.ok) await bridgeJson(result);
+      try { return await result.response.blob(); } catch (cause) { reportError(cause, { ...result.correlation, stage: "image_read" }); throw cause; }
     },
     async stop() {
       if (!session || connection !== "connected") return;

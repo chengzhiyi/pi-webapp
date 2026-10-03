@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import piWeb from "../extension/index.ts";
+import type { Bridge } from "../extension/bridge.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "pi-web-flow-"));
@@ -75,7 +76,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   assert.deepEqual(openedPages, [pageUrl, pageUrl, pageUrl]);
   assert.deepEqual(notices, ["info", "info", "warning"]);
   const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
-  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
+  const shared = (globalThis as Record<symbol, { bridge: Bridge | null; workspaceSessions: unknown; selected: "tui" | "sdk" }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
   try {
     const created = await fetch(`${url.origin}/api/new-session`, {
       method: "POST", headers, body: JSON.stringify({ sessionId: "old" }),
@@ -119,7 +120,46 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     });
     assert.equal(switched.status, 202, await switched.text());
     assert.equal((await (await fetch(`${url.origin}/api/session`, { headers })).json()).sessionId, other.getSessionId());
+    const retired = shared.bridge!;
+    const sdkSessions = shared.workspaceSessions;
+    // Simulate /reload retaining a bridge from a different production build.
+    (retired as { buildId: string }).buildId = "prior-build";
+    await command("", fresh);
+    assert.notEqual(shared.bridge, retired);
+    assert.equal(shared.workspaceSessions, sdkSessions);
+    const reopened = new URL(pageUrl);
+    const retained = await fetch(`${reopened.origin}/api/session`, { headers: { Authorization: `Bearer ${reopened.hash.slice(1)}` } });
+    assert.equal((await retained.json()).sessionId, other.getSessionId());
+    // Old bridges can survive /reload until /web upgrades them.
+    const oldBridge = shared.bridge!;
+    (oldBridge as unknown as { breadcrumb?: unknown }).breadcrumb = undefined;
+    (oldBridge as unknown as { reportError?: unknown }).reportError = undefined;
+    assert.doesNotThrow(() => handlers.get("agent_start")?.({}, fresh));
+    assert.doesNotThrow(() => handlers.get("agent_settled")?.({}, fresh));
+    // A pre-Sentry SDK class must be recreated without losing its session manager.
+    const legacy = shared.workspaceSessions as { telemetryVersion?: number };
+    Object.defineProperty(legacy, "telemetryVersion", { value: undefined, configurable: true });
+    await command("", fresh);
+    assert.notEqual(shared.workspaceSessions, legacy);
+    assert.equal((shared.workspaceSessions as { telemetryVersion: number }).telemetryVersion, 1);
+    const upgraded = new URL(pageUrl);
+    const migrated = await fetch(`${upgraded.origin}/api/session`, { headers: { Authorization: `Bearer ${upgraded.hash.slice(1)}` } });
+    assert.equal((await migrated.json()).sessionId, other.getSessionId());
+    // A legacy host used only through the TUI has no active SDK session.
+    const inactive = shared.workspaceSessions as { dispose(): Promise<void> };
+    await inactive.dispose();
+    shared.selected = "tui";
+    Object.defineProperty(inactive, "telemetryVersion", { value: undefined, configurable: true });
+    (shared.bridge as unknown as { reportError?: unknown }).reportError = undefined;
+    await command("", fresh);
+    assert.notEqual(shared.workspaceSessions, inactive);
+    assert.equal((shared.workspaceSessions as { session: unknown }).session, null);
+    const tuiBridge = new URL(pageUrl);
+    const tuiSession = await fetch(`${tuiBridge.origin}/api/session`, { headers: { Authorization: `Bearer ${tuiBridge.hash.slice(1)}` } });
+    assert.equal((await tuiSession.json()).sessionId, "new");
   } finally {
+    await (shared.workspaceSessions as { dispose(): Promise<void> } | null)?.dispose();
+    shared.workspaceSessions = null;
     await shared.bridge?.close();
     shared.bridge = null;
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;

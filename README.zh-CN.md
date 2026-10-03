@@ -66,6 +66,10 @@ npm run stop
 
 源代码位于 `extension/`、`shared/` 和 `web/src/`。npm 软件包仅包含打包并压缩后的 JavaScript 扩展、构建后的 Web 资源、封面图片，以及英文和中文 README；不会发布 TypeScript 源码或 source map。代码压缩会增加阅读发布版本代码的难度，但不会对 JavaScript 加密。
 
+## 错误采集
+
+前后端 Sentry 错误采集默认开启，使用内置公共 DSN，无需额外配置。在启动 Pi 的环境中设置 `PI_WEB_SENTRY_DSN` 可覆盖默认项目，使用 `PI_WEB_SENTRY_ENABLED=false` 关闭。默认只采集脱敏堆栈、操作轨迹和状态摘要，不采集对话、源码正文、附件内容或凭据，不启用界面录制。默认上报地址、独立前后端 DSN 和私有 sourcemap 上传步骤见 [Sentry 配置说明](docs/sentry.md)。
+
 ## 发布
 
 CI 会先从 npm 解析 `@chengzhiyi/pi-web-protocol` 的已发布版本，再运行 `npm ci`。

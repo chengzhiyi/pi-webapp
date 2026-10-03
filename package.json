@@ -28,19 +28,22 @@
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
-    "THIRD_PARTY_LICENSE.txt"
+    "THIRD_PARTY_LICENSE.txt",
+    "docs/sentry.md"
   ],
   "scripts": {
     "start": "npm run build && node bin/pi-webapp.mjs",
     "status": "node bin/pi-webapp.mjs status",
     "stop": "node bin/pi-webapp.mjs stop",
     "check": "tsc --noEmit && tsc -p web/tsconfig.json",
-    "test": "node --experimental-strip-types --test test/*.test.ts",
-    "build": "npm run build:web && npm run build:extension",
-    "build:web": "vite build",
-    "build:extension": "node scripts/build-extension.mjs",
+    "test": "node --import ./test/setup-env.mjs --experimental-strip-types --test test/*.test.ts",
+    "build": "node scripts/build.mjs",
+    "build:web": "node scripts/build.mjs browser",
+    "build:extension": "node scripts/build.mjs node",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run check && npm run build && npm run test"
+    "prepublishOnly": "npm run check && npm run build && npm run test",
+    "build:sentry": "node scripts/build.mjs all --sentry",
+    "test:browser": "playwright test"
   },
   "publishConfig": {
     "access": "public"
@@ -61,7 +64,10 @@
     "esbuild": "^0.28.2",
     "micromark-util-types": "^2.0.2",
     "typescript": "7.0.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "@playwright/test": "1.63.0",
+    "@sentry/esbuild-plugin": "5.4.0",
+    "@sentry/vite-plugin": "5.4.0"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -91,6 +97,9 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.3.1",
-    "simple-icons": "^16.31.0"
+    "simple-icons": "^16.31.0",
+    "@sentry/core": "11.4.0",
+    "@sentry/node": "11.4.0",
+    "@sentry/react": "11.4.0"
   }
 }

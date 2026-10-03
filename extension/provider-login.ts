@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { AuthEvent, AuthInteraction, AuthPrompt } from "@earendil-works/pi-ai";
+import type { DiagnosticFields, ErrorCorrelation } from "../shared/telemetry.ts";
 
 export type LoginMethod = "api_key" | "oauth";
 
@@ -26,6 +27,7 @@ export interface LoginView {
   event?: AuthEvent;
   authorization?: Extract<AuthEvent, { type: "auth_url" | "device_code" }>;
   error?: string;
+  errorId?: string;
 }
 
 interface Flow {
@@ -38,8 +40,10 @@ interface Flow {
 /** A single local browser login at a time. Secrets only pass through prompt promises. */
 export class ProviderLoginController {
   private readonly flows = new Map<string, Flow>();
+  private readonly reportError: (cause: unknown, context: DiagnosticFields) => string | undefined;
+  constructor(reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined) { this.reportError = reportError; }
 
-  start(providerId: string, method: LoginMethod, login: (providerId: string, method: LoginMethod, interaction: AuthInteraction) => Promise<void>, initialSecret?: string): LoginView {
+  start(providerId: string, method: LoginMethod, login: (providerId: string, method: LoginMethod, interaction: AuthInteraction) => Promise<void>, initialSecret?: string, correlation?: ErrorCorrelation): LoginView {
     const active = this.getActive();
     if (active) {
       if (active.providerId === providerId && active.method === method && initialSecret === undefined) return active;
@@ -71,8 +75,13 @@ export class ProviderLoginController {
       },
     }).then(() => {
       if (flow.view.status !== "cancelled") flow.view = { id, providerId, method, status: "done" };
-    }).catch(() => {
-      if (flow.view.status !== "cancelled") flow.view = { id, providerId, method, status: "error", error: "登录失败，请检查提供方提示并重试。" };
+    }).catch((cause: unknown) => {
+      if (flow.view.status !== "cancelled") {
+        const error = new Error("Provider login failed");
+        if (cause instanceof Error && cause.stack) error.stack = `${error.message}\n${cause.stack.split("\n").slice(1).join("\n")}`;
+        const errorId = this.reportError(error, { ...correlation, stage: "provider_login" });
+        flow.view = { id, providerId, method, status: "error", error: "登录失败，请检查提供方提示并重试。", errorId };
+      }
     });
     return { ...flow.view };
   }
