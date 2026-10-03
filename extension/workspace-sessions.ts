@@ -9,6 +9,7 @@ import { resumeMessage } from "./execution-control.ts";
 import { pluginRuntimePaths } from "./plugin-runtime-paths.ts";
 import type { BridgeEvent } from "./bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../shared/telemetry.ts";
+import { ToolDiagnostics } from "./tool-diagnostics.ts";
 
 type HostEvent = BridgeEvent;
 interface WorkspaceRuntime {
@@ -24,11 +25,18 @@ interface WorkspaceRuntime {
   waitController: AbortController;
   operation?: ErrorCorrelation;
   agentErrorReported?: boolean;
+  tools: ToolDiagnostics;
+}
+
+export interface WorkspaceTelemetry {
+  enabled(): boolean;
+  breadcrumb(category: string, context: DiagnosticFields): void;
+  anonymize(value: string): string;
 }
 
 /** One active SDK runtime; the host may retain it while the TUI is in front. */
 export class WorkspaceSessions {
-  readonly telemetryVersion = 1;
+  readonly telemetryVersion = 2;
   private active: WorkspaceRuntime | null = null;
   private readonly queue = new LifecycleQueue();
   private generation = 0;
@@ -37,9 +45,15 @@ export class WorkspaceSessions {
   private readonly fallbackModel: () => ExtensionContext["model"];
   private readonly isProjectTrusted: (cwd: string) => boolean;
   private readonly reportError: (cause: unknown, context: DiagnosticFields) => string | undefined;
+  private readonly telemetry: WorkspaceTelemetry;
 
-  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined) {
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }) {
     this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted; this.reportError = reportError;
+    this.telemetry = {
+      enabled: () => { try { return telemetry.enabled(); } catch { return false; } },
+      breadcrumb: (category, context) => { try { if (telemetry.enabled()) telemetry.breadcrumb(category, context); } catch { /* Failed instrumentation cannot break a session. */ } },
+      anonymize: value => { try { return telemetry.enabled() ? telemetry.anonymize(value) : "unavailable"; } catch { return "unavailable"; } },
+    };
   }
   get session(): AgentSession | null { return this.active?.session ?? null; }
   get path(): string | null { return this.active?.cwd ?? null; }
@@ -91,7 +105,8 @@ export class WorkspaceSessions {
       if (loadErrors.length) throw new Error(loadErrors.map(item => `${item.path}: ${item.error}`).join("; "));
       const model = manager.buildSessionProjection().model ? undefined : old?.session.model ?? this.fallbackModel();
       const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release };
+      const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools };
       candidate = runtime;
       const publish = (event: HostEvent) => { if (!this.disposed && this.active === runtime && !runtime.closing) this.publish(event); };
       runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
@@ -99,13 +114,17 @@ export class WorkspaceSessions {
       const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       const offEvents = session.subscribe(event => {
         if (this.active === runtime && !runtime.closing) {
+          const context: DiagnosticFields = { ...runtime.operation, session: this.telemetry.anonymize(session.sessionManager.getSessionId()), piVersion: VERSION, model: session.model ? `${session.model.provider}/${session.model.id}` : null, thinkingLevel: session.thinkingLevel };
+          if (event.type === "agent_start") this.telemetry.breadcrumb("agent_start", context);
+          if (event.type === "tool_execution_start") tools.start(event, context);
+          if (event.type === "tool_execution_end") tools.end(event, context);
           if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
             runtime.agentErrorReported = true;
             const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
             publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...runtime.operation });
           }
-          if (event.type === "message_end" && event.message.role === "toolResult" && event.message.isError) this.reportError(new Error("Tool execution failed"), { ...runtime.operation, stage: "tool", code: "tool_failed", piVersion: VERSION });
-          if (event.type === "agent_settled") runtime.operation = undefined;
+          if (event.type === "message_end" && event.message.role === "toolResult") tools.message(event.message, context);
+          if (event.type === "agent_settled") { this.telemetry.breadcrumb("agent_end", context); tools.clear(); runtime.operation = undefined; }
         }
         if (event.type === "message_update" && event.message.role === "assistant" && Date.now() - lastStreamAt >= 60) {
           lastStreamAt = Date.now();
@@ -140,6 +159,7 @@ export class WorkspaceSessions {
   private async close(runtime: WorkspaceRuntime, reason: SessionShutdownEvent["reason"]): Promise<void> {
     if (runtime.closing) return;
     runtime.closing = true;
+    runtime.tools.clear();
     runtime.waitController.abort();
     runtime.interactions.dispose();
     await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.detach(); runtime.bus.clear(); });
@@ -185,6 +205,7 @@ export class WorkspaceSessions {
     const active = this.session;
     const runtime = this.active!;
     runtime.operation = correlation;
+    this.telemetry.breadcrumb("send", { ...correlation, piVersion: VERSION });
     runtime.agentErrorReported = false;
     let accepted = false;
     let resolve!: () => void;
@@ -205,12 +226,14 @@ export class WorkspaceSessions {
   async stop(): Promise<void> {
     const runtime = this.active;
     if (!runtime || runtime.session.isIdle) return;
+    runtime.tools.cancel();
+    this.telemetry.breadcrumb("cancel", { ...runtime.operation });
     runtime.session.sessionManager.appendCustomEntry(PAUSED_ENTRY);
     await runtime.session.abort();
     if (this.active === runtime && !runtime.closing) this.publish({ type: 'snapshot', session: this.snapshotOf(runtime) });
   }
 
-  async resume(): Promise<void> {
+  async resume(correlation?: ErrorCorrelation): Promise<void> {
     const runtime = this.active;
     if (this.disposed || !runtime || runtime.closing) throw new Error('Pi 会话不可用');
     const session = runtime.session;
@@ -224,8 +247,14 @@ export class WorkspaceSessions {
     if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
     if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');
     const message = resumeMessage(this.snapshotOf(runtime).messages);
+    runtime.operation = correlation;
+    runtime.agentErrorReported = false;
+    this.telemetry.breadcrumb("resume", { ...correlation });
     void session.sendCustomMessage(message, { triggerTurn: true }).catch(cause => {
-      if (this.active === runtime && !runtime.closing) this.publish({ type: 'error', message: cause instanceof Error ? cause.message : '继续失败' });
+      if (this.active === runtime && !runtime.closing && !runtime.agentErrorReported) {
+        const errorId = this.reportError(opaqueError(cause, "Agent resume failed"), { ...correlation, stage: "agent", code: "agent_failed" });
+        this.publish({ type: 'error', message: cause instanceof Error ? cause.message : '继续失败', errorId, ...correlation });
+      }
     });
   }
 

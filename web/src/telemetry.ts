@@ -5,6 +5,7 @@ import { buildId, release } from "../../shared/build-info.ts";
 let reporter: ErrorReporter | undefined;
 let pending = true;
 let installed = false;
+let verificationRequested = false;
 let early: Array<{ error: Error; context: DiagnosticFields }> = [];
 const observed = new WeakSet<object>();
 const sessions = new Map<string, string>();
@@ -39,6 +40,8 @@ export function setTelemetryState(next: DiagnosticFields & { sessionId?: string 
 export function installBrowserTelemetry(): void {
   if (installed) return;
   installed = true;
+  // accessToken() removes both the token hash and query string; capture the explicit probe flag first.
+  verificationRequested = new URL(location.href).searchParams.get("sentry_release_probe") === "1";
   window.addEventListener("error", (event: Event) => {
     if (event instanceof ErrorEvent) reportError(event.error ?? new Error(event.message), { stage: "global" });
     else if (event.target instanceof HTMLScriptElement || event.target instanceof HTMLLinkElement) reportError(new Error("Application resource failed to load"), { stage: "resource" });
@@ -62,6 +65,10 @@ async function initialize(): Promise<void> {
     reporter.setState({ ...state, browser, platform: navigator.platform });
     state = { ...state, browser, platform: navigator.platform };
     for (const item of early) reporter.capture(item.error, item.context);
+    // Only a verification-configured server plus an explicit URL flag can emit this synthetic probe.
+    if (config.environment === "sentry-verification" && verificationRequested) {
+      reporter.capture(new Error("Sentry browser release verification"), { stage: "release_verification", code: "sentry_release_probe" });
+    }
   } catch { /* Missing config, old bridges and unreachable telemetry do not block startup. */ }
   finally { early = []; pending = false; }
 }

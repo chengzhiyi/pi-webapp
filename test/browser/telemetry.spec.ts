@@ -16,7 +16,7 @@ const host: BridgeHost = {
   async addWorkspace() {}, async selectWorkspace() {}, async newSessionInWorkspace() {}, async removeWorkspace() {}, async selectSession() {},
 };
 
-async function fixture(page: Page, enabled: boolean | "default" = true, overrides: Partial<BridgeHost> = {}) {
+async function fixture(page: Page, enabled: boolean | "default" = true, overrides: Partial<BridgeHost> = {}, environment = "production") {
   const browserEvents: Event[] = [];
   const nodeEvents: Event[] = [];
   const destination = enabled === "default" ? new URL(DEFAULT_SENTRY_DSN).origin : "https://telemetry.example";
@@ -25,7 +25,7 @@ async function fixture(page: Page, enabled: boolean | "default" = true, override
     if (JSON.parse(lines[1] ?? "{}").type === "event") browserEvents.push(JSON.parse(lines[2]!));
     await route.fulfill({ status: 200, body: "{}", headers: { "Access-Control-Allow-Origin": "*" } });
   });
-  const telemetryOptions: ConstructorParameters<typeof NodeTelemetry>[0] = { env: enabled === "default" ? {} : enabled ? { PI_WEB_SENTRY_DSN: "https://public@telemetry.example/1" } : { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false,
+  const telemetryOptions: ConstructorParameters<typeof NodeTelemetry>[0] = { env: enabled === "default" ? {} : enabled ? { PI_WEB_SENTRY_DSN: "https://public@telemetry.example/1", PI_WEB_SENTRY_ENVIRONMENT: environment } : { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") nodeEvents.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   };
   const telemetry = new NodeTelemetry(telemetryOptions);
@@ -60,6 +60,26 @@ test("the built-in DSN enables browser reporting without environment configurati
     await expect.poll(() => f.browserEvents.length).toBe(1);
     expect(f.browserEvents[0]?.contexts?.diagnostic?.stage).toBe("global");
   } finally { await f.bridge.close(); }
+});
+
+test("release probes require a verification environment and explicit URL flag", async ({ page }) => {
+  const production = await fixture(page);
+  try {
+    const url = new URL(production.bridge.url); url.searchParams.set("sentry_release_probe", "1");
+    await page.goto(url.href); await production.sdkReady;
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    expect(production.browserEvents).toEqual([]);
+  } finally { await production.bridge.close(); }
+  const verification = await fixture(page, true, {}, "sentry-verification");
+  try {
+    const url = new URL(verification.bridge.url); url.searchParams.set("sentry_release_probe", "1");
+    await page.goto(url.href); await verification.sdkReady;
+    await expect.poll(() => verification.browserEvents.length).toBe(1);
+    expect(verification.browserEvents[0]?.environment).toBe("sentry-verification");
+    expect(verification.browserEvents[0]?.contexts?.diagnostic?.code).toBe("sentry_release_probe");
+    expect(verification.browserEvents[0]?.debug_meta?.images?.length).toBeGreaterThan(0);
+    expect(verification.browserEvents[0]?.exception?.values?.[0]?.stacktrace?.frames?.some(frame => frame.filename === "app:///assets/app.js")).toBe(true);
+  } finally { await verification.bridge.close(); }
 });
 
 test("backend failures keep correlation and are not reported twice by the browser", async ({ page }) => {

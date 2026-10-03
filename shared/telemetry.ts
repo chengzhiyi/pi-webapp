@@ -2,9 +2,21 @@ import type { BaseTransportOptions, Breadcrumb, Client, Event, EventHint, StackF
 
 export interface TelemetryConfig { enabled: boolean; dsn?: string; environment: string; release: string; buildId: string }
 export interface ErrorCorrelation { errorId?: string; requestId?: string; operationId?: string }
-export type DiagnosticFields = Record<string, unknown>;
+export type ToolFailureKind = "cancelled" | "blocked" | "validation" | "not_found" | "permission" | "timeout" | "process_exit" | "unknown";
+export const builtinToolNames = new Set(["bash", "powershell", "read", "write", "edit", "grep", "find", "ls"]);
+const failureKinds = new Set<ToolFailureKind>(["cancelled", "blocked", "validation", "not_found", "permission", "timeout", "process_exit", "unknown"]);
+export interface DiagnosticFields extends Record<string, unknown> {
+  requestId?: string; operationId?: string; errorId?: string;
+}
+export interface ToolDiagnosticFields extends DiagnosticFields {
+  toolName: string; toolId?: string; toolCallId: string; failureKind?: ToolFailureKind;
+  errorCode?: string; exitCode?: number; timeoutMs?: number; durationMs?: number;
+  diagnosticSource?: "tool_execution_end" | "message_end";
+  originalStackAvailable?: boolean; errorSummary?: string; summaryOmitted?: boolean;
+  summaryOmittedReason?: string; level?: "warning" | "error";
+}
 export const privateDataCollection = { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false, genAI: { inputs: false, outputs: false }, graphQL: { document: false, variables: false }, databaseQueryData: false, queues: false, stackFrameVariables: false, frameContextLines: 0 } as const;
-const fields = new Set(["stage", "route", "method", "status", "durationMs", "connection", "idle", "model", "thinkingLevel", "messageCount", "attachmentCount", "session", "requestId", "operationId", "errorId", "repeats", "dropped", "componentStack", "eventType", "sequence", "nodeVersion", "piVersion", "platform", "browser", "buildId", "code"]);
+const fields = new Set(["stage", "route", "method", "status", "durationMs", "connection", "idle", "model", "thinkingLevel", "messageCount", "attachmentCount", "session", "requestId", "operationId", "errorId", "repeats", "dropped", "componentStack", "eventType", "sequence", "nodeVersion", "piVersion", "platform", "browser", "buildId", "code", "toolName", "toolId", "toolCallId", "failureKind", "errorCode", "exitCode", "timeoutMs", "diagnosticSource", "originalStackAvailable", "errorSummary", "summaryOmitted", "summaryOmittedReason", "level"]);
 const routes = new Set([
   "/api/plugins", "/api/plugin-action", "/api/plugin-interaction", "/api/resume", "/api/update", "/api/update/version", "/api/provider/models", "/api/provider/logout", "/api/provider/login/active",
   "/api/telemetry/config", "/api/image", "/api/attachment", "/api/attachment/remove", "/api/session", "/api/providers", "/api/models", "/api/config", "/api/workspaces", "/api/commands", "/api/events", "/api/message", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level",
@@ -19,13 +31,16 @@ export function isContentOperation(route: string): boolean {
 
 export function scrub(value: string): string {
   return value.slice(0, 8192)
+    .replace(/-----BEGIN [^-\n]+-----[\s\S]*?(?:-----END [^-\n]+-----|$)/g, "[redacted]")
+    .replace(/(["'`])[\s\S]*?\1/g, "[quoted]")
     .replace(/(?:Bearer\s+\S+|(?:api[_-]?key|token|password|secret|authorization)\s*[=:]\s*\S+)/gi, "[redacted]")
     .replace(/\b(?:sk-|sntrys_|eyJ)[A-Za-z0-9_.-]+/g, "[redacted]")
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]")
     .replace(/https?:\/\/[^\s)]+/gi, "[url]")
     .replace(/(?:file:\/\/)?(?:\/[\w.~-]+){2,}(?::\d+(?::\d+)?)?/g, "[path]")
     .replace(/[A-Za-z]:\\[^\s)]+/g, "[path]")
-    .replace(/(["'`])[^\n]*?\1/g, "[quoted]")
+    .replace(/(?:^|\s)(?:\.\.?[\\/]|~[\\/])[^\s)]+/g, " [path]")
+    .replace(/\b(?:[\w.-]+[\\/])+[\w.-]+/g, "[path]")
     .replace(/\{[^\n]*\}/g, "[object]")
     .replace(/\b[A-Za-z0-9_-]{24,}\b/g, "[redacted]")
     .slice(0, 1024);
@@ -35,8 +50,15 @@ export function safeFields(input: DiagnosticFields): DiagnosticFields {
   const output: DiagnosticFields = {};
   for (const key of fields) {
     const value = input[key];
-    if (key === "route" && typeof value === "string") output[key] = routes.has(value.split("?")[0]!) ? value.split("?")[0] : "[route]";
-    else if (typeof value === "string") output[key] = ["requestId", "operationId", "errorId", "session", "buildId"].includes(key) && /^[\w-]{1,80}$/.test(value) ? value : scrub(value);
+    if (key === "toolName") { if (typeof value === "string" && (builtinToolNames.has(value) || value === "custom")) output[key] = value; }
+    else if (key === "failureKind") { if (failureKinds.has(value as ToolFailureKind)) output[key] = value; }
+    else if (key === "level") { if (value === "warning" || value === "error") output[key] = value; }
+    else if (key === "diagnosticSource") { if (value === "tool_execution_end" || value === "message_end") output[key] = value; }
+    else if (key === "errorCode") { if (typeof value === "string" && /^(?:E[A-Z0-9]{1,20}|nonzero_exit|timeout|cancelled|blocked|invalid_arguments|tool_not_found|unknown)$/.test(value)) output[key] = value; }
+    else if (key === "toolId") { if (typeof value === "string" && /^[a-f0-9]{16}$/.test(value)) output[key] = value; }
+    else if (key === "route" && typeof value === "string") output[key] = routes.has(value.split("?")[0]!) ? value.split("?")[0] : "[route]";
+    else if (key === "model" && typeof value === "string" && /^[\w.-]+\/[\w.-]+$/.test(value)) output[key] = value.split("/").map(scrub).join("/");
+    else if (typeof value === "string") output[key] = ["requestId", "operationId", "errorId", "session", "buildId", "toolId", "toolCallId"].includes(key) && /^[\w-]{1,80}$/.test(value) ? value : scrub(value).slice(0, key === "errorSummary" ? 512 : 1024);
     else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || value === null) output[key] = value;
   }
   return output;
@@ -64,7 +86,7 @@ export function sanitizeError(cause: unknown, depth = 0): Error {
       return scrub(line);
     });
     error.stack = `${error.name}: ${error.message}\n${frames.join("\n")}`;
-  }
+  } else error.stack = undefined;
   if (depth < 3 && original.cause !== undefined) error.cause = sanitizeError(original.cause, depth + 1);
   return error;
 }
@@ -89,6 +111,8 @@ function safeFrame(frame: StackFrame): StackFrame {
 
 /** Rebuild rather than redact arbitrary SDK fields. No request/user/body/source context can escape. */
 export function sanitizeEvent<T extends Event>(event: T): T {
+  const diagnostic = safeFields(event.contexts?.diagnostic ?? {});
+  const fingerprint = toolFingerprint(diagnostic);
   return {
     event_id: event.event_id, timestamp: event.timestamp, platform: event.platform, level: event.level,
     release: event.release, dist: event.dist, environment: scrub(event.environment ?? "production"),
@@ -98,13 +122,20 @@ export function sanitizeEvent<T extends Event>(event: T): T {
       ...(value.stacktrace ? { stacktrace: { frames: value.stacktrace.frames?.slice(-30).map(safeFrame) } } : {}),
       ...(value.mechanism ? { mechanism: { type: value.mechanism.type, handled: value.mechanism.handled } } : {}),
     })) } : undefined,
-    tags: { side: event.tags?.side, buildId: event.tags?.buildId },
-    contexts: { diagnostic: safeFields(event.contexts?.diagnostic ?? {}) },
+    tags: { side: event.tags?.side, buildId: event.tags?.buildId, ...(diagnostic.toolName ? { toolName: diagnostic.toolName } : {}), ...(diagnostic.failureKind ? { failureKind: diagnostic.failureKind } : {}), ...(diagnostic.errorCode ? { errorCode: diagnostic.errorCode } : {}) },
+    ...(fingerprint ? { fingerprint } : {}),
+    contexts: { diagnostic },
     breadcrumbs: event.breadcrumbs?.slice(-100).map((item) => ({ timestamp: item.timestamp, category: scrub(item.category ?? "app"), data: safeFields(item.data ?? {}) })),
     debug_meta: event.debug_meta ? { images: event.debug_meta.images?.slice(0, 10).map((image) => ({
       type: image.type, debug_id: image.debug_id, ...(image.code_file ? { code_file: safeFilename(image.code_file) } : {}),
     })) } : undefined,
   } as unknown as T;
+}
+
+/** Result-only errors have no failure stack; group by stable, allowlisted diagnostic identity. */
+function toolFingerprint(context: DiagnosticFields): string[] | undefined {
+  if (context.stage !== "tool" || context.originalStackAvailable !== false || !context.toolName || !context.failureKind) return;
+  return ["pi-webapp-tool-result", String(context.toolName), String(context.toolId ?? "builtin"), String(context.failureKind), String(context.errorCode ?? "unknown")];
 }
 
 export function privateBeforeSend<T extends Event>(event: T, hint: EventHint): T {
@@ -175,13 +206,17 @@ export class ErrorReporter {
         this.seen.add(cause);
       }
       const error = sanitizeError(cause);
-      const fingerprint = `${error.name}:${error.message}:${error.stack?.split("\n")[1] ?? ""}:${context.stage ?? ""}`;
+      const diagnostic = safeFields({ ...this.state, ...context });
+      const grouping = toolFingerprint(diagnostic);
+      const fingerprint = grouping ? JSON.stringify(grouping) : `${error.name}:${error.message}:${error.stack?.split("\n")[1] ?? ""}:${context.stage ?? ""}`;
       const allowed = this.budget.take(fingerprint);
       if (!allowed) return;
       const scope = new this.scopeClass();
       scope.setClient(this.client);
       scope.setTags({ side: this.side, buildId: this.buildId });
-      scope.setContext("diagnostic", safeFields({ ...this.state, ...context, repeats: allowed.repeats }));
+      if (diagnostic.level === "warning") scope.setLevel("warning");
+      if (grouping) scope.setFingerprint(grouping);
+      scope.setContext("diagnostic", { ...diagnostic, repeats: allowed.repeats });
       for (const item of this.breadcrumbs.snapshot()) scope.addBreadcrumb(item, 100);
       return scope.captureException(error, eventId ? { event_id: eventId } : undefined);
     } catch { return; }

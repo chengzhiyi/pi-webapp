@@ -89,6 +89,28 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     });
     assert.equal(sent.status, 202);
     assert.deepEqual(delivered, ["hello"]);
+    // TUI events use the same observer, including start-time correlation and end/message deduplication.
+    const instrumented = shared as unknown as { telemetry: { enabled: boolean; session(value: string): string }; operation?: { requestId: string; operationId: string }; bridge: Bridge };
+    const previousTelemetry = instrumented.telemetry;
+    const report = instrumented.bridge.reportError;
+    const diagnostic: Record<string, unknown>[] = [];
+    instrumented.telemetry = { enabled: true, session: () => "anonymous" };
+    instrumented.bridge.reportError = (_cause, context = {}) => { diagnostic.push(context); return "event"; };
+    try {
+      instrumented.operation = { requestId: "request-start", operationId: "operation-start" };
+      handlers.get("tool_execution_start")?.({ toolCallId: "private-call", toolName: "bash", args: { command: "private command" } }, fresh);
+      instrumented.operation = { requestId: "request-new", operationId: "operation-new" };
+      const content = [{ type: "text", text: "private output\n\nCommand exited with code 7" }];
+      handlers.get("tool_execution_end")?.({ toolCallId: "private-call", toolName: "bash", isError: true, result: { content } }, fresh);
+      handlers.get("message_end")?.({ message: { role: "toolResult", toolCallId: "private-call", toolName: "bash", isError: true, content } }, fresh);
+      assert.equal(diagnostic.length, 1);
+      assert.equal(diagnostic[0]?.operationId, "operation-start");
+      assert.equal(diagnostic[0]?.exitCode, 7);
+      assert.equal(diagnostic[0]?.level, "warning");
+      assert.ok(!JSON.stringify(diagnostic).includes("private"));
+    } finally {
+      instrumented.telemetry = previousTelemetry; instrumented.bridge.reportError = report; instrumented.operation = undefined;
+    }
     const nextDirectory = join(temporary, "another-project");
     const added = await fetch(`${url.origin}/api/workspace/add`, {
       method: "POST", headers, body: JSON.stringify({ sessionId: "new", path: nextDirectory, create: true }),
@@ -141,7 +163,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     Object.defineProperty(legacy, "telemetryVersion", { value: undefined, configurable: true });
     await command("", fresh);
     assert.notEqual(shared.workspaceSessions, legacy);
-    assert.equal((shared.workspaceSessions as { telemetryVersion: number }).telemetryVersion, 1);
+    assert.equal((shared.workspaceSessions as { telemetryVersion: number }).telemetryVersion, 2);
     const upgraded = new URL(pageUrl);
     const migrated = await fetch(`${upgraded.origin}/api/session`, { headers: { Authorization: `Bearer ${upgraded.hash.slice(1)}` } });
     assert.equal((await migrated.json()).sessionId, other.getSessionId());

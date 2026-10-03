@@ -4,6 +4,7 @@ import { ErrorBudget, BreadcrumbBuffer, sanitizeError, sanitizeEvent, safeFields
 import { DEFAULT_SENTRY_DSN, NodeTelemetry, readTelemetryConfig } from "../extension/telemetry.ts";
 import { getClient, getCurrentScope, getGlobalScope, type Event } from "@sentry/core";
 import { ProviderLoginController } from "../extension/provider-login.ts";
+import { verifySentryNodeRelease } from "../extension/sentry-verification.ts";
 
 test("DSN configuration defaults on, supports per-side overrides, and never inherits host Sentry settings", () => {
   const dsn = "https://public@example.com/12";
@@ -33,6 +34,10 @@ test("DSN configuration defaults on, supports per-side overrides, and never inhe
   }
 });
 
+test("the explicit Node release entry cannot send without verification mode", async () => {
+  await assert.rejects(verifySentryNodeRelease(), /not enabled/);
+});
+
 test("outgoing events exclude bodies, credentials, source lines and personal paths, retaining stack locations", () => {
   const original = new Error('failed token=super-secret-token email=jane@example.com file /Users/jane/private/project.txt "prompt contents"');
   original.stack = original.message + "\n    at send (file:///Users/jane/project/extension/bridge.ts:20:4)";
@@ -59,6 +64,32 @@ test("rate limiting bounds distinct errors and carries repeat counts into the ne
   for (let i = 0; i < 19; i++) assert.ok(budget.take(`other-${i}`, 2));
   assert.equal(budget.take("overflow", 3), undefined);
   assert.deepEqual(budget.take("same", 60_001), { repeats: 1 });
+});
+
+test("tool result envelopes retain warning severity and stable grouping without an observer stack", async () => {
+  const events: Event[] = [];
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  });
+  await telemetry.ready;
+  const context = { stage: "tool", code: "tool_failed", toolName: "bash", failureKind: "process_exit", errorCode: "nonzero_exit", exitCode: 2, level: "warning", originalStackAvailable: false, diagnosticSource: "tool_execution_end", summaryOmitted: false, errorSummary: "Command exited with code 2", toolCallId: "anonymous-call" };
+  try {
+    const failure = new Error("bash: process_exit (nonzero_exit)"); failure.stack = undefined;
+    telemetry.capture(failure, context);
+    const duplicate = new Error(failure.message); duplicate.stack = undefined;
+    telemetry.capture(duplicate, { ...context, operationId: "other-operation", errorSummary: "different safe summary" });
+    const other = new Error("read: not_found (ENOENT)"); other.stack = undefined;
+    telemetry.capture(other, { ...context, toolName: "read", failureKind: "not_found", errorCode: "ENOENT" });
+  } finally { await telemetry.close(); }
+  assert.equal(events.length, 2);
+  assert.equal(events[0]?.level, "warning");
+  assert.equal(events[0]?.contexts?.diagnostic?.exitCode, 2);
+  assert.equal(events[0]?.contexts?.diagnostic?.toolCallId, "anonymous-call");
+  assert.equal(events[0]?.contexts?.diagnostic?.errorSummary, "Command exited with code 2");
+  assert.equal(events[0]?.tags?.toolName, "bash");
+  assert.equal(events[0]?.exception?.values?.[0]?.stacktrace, undefined);
+  assert.ok(events[0]?.fingerprint?.includes("process_exit"));
+  assert.notDeepEqual(events[0]?.fingerprint, events[1]?.fingerprint);
 });
 
 test("breadcrumbs remain bounded and discard fields outside the allowlist", () => {

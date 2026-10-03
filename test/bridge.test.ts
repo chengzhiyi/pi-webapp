@@ -62,10 +62,11 @@ test('abort awaits the host and reports asynchronous cancellation errors', async
 
 test('resume is an authenticated control action that never calls the user-message sender', async () => {
   let paused = true, idle = true, reviewing = false, fail = false, resumes = 0;
+  let correlation: { operationId?: string; requestId?: string } | undefined;
   const bridge = await startBridge({ ...capabilities,
     snapshot: () => ({ ...fixture(), idle, paused, interactions: reviewing ? [{ requestId: 'review', sessionId: 'session-a', pluginId: 'plan', kind: 'review', data: {} }] : [] }),
     send() { throw new Error('Resume must not send a user message'); }, abort() {}, async newSession() {},
-    async resume() { if (fail) throw new Error('Resume failed'); resumes++; idle = false; },
+    async resume(_sessionId, received) { if (fail) throw new Error('Resume failed'); correlation = received; resumes++; idle = false; },
   }, webRoot);
   try {
     const url = new URL(bridge.url);
@@ -83,7 +84,11 @@ test('resume is an authenticated control action that never calls the user-messag
     assert.equal(failed.status, 400);
     assert.equal((await failed.json()).error, 'Resume failed');
     fail = false;
-    assert.equal((await request()).status, 202);
+    const accepted = await request();
+    assert.equal(accepted.status, 202);
+    assert.equal(correlation?.operationId, accepted.headers.get('X-Operation-ID'));
+    assert.equal(correlation?.requestId, accepted.headers.get('X-Request-ID'));
+    assert.match(correlation?.operationId ?? '', /^[a-f0-9-]{36}$/);
     assert.equal((await request()).status, 409, 'a repeated click must not start another run');
     assert.equal(resumes, 1);
   } finally { await bridge.close(); }

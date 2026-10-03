@@ -82,6 +82,10 @@ export class NodeTelemetry {
   setState(state: DiagnosticFields): void { this.state = safeFields({ ...this.state, ...state }); this.reporter?.setState(this.state); }
   breadcrumb(category: string, context: DiagnosticFields = {}): void { if (this.enabled) this.breadcrumbs.add(category, context); }
   session(id: string): string { return createHash("sha256").update(this.salt).update(id).digest("hex").slice(0, 16); }
+  async flush(timeoutMs = 3000): Promise<boolean> {
+    await this.ready;
+    try { return this.enabled && !!await this.client?.flush(timeoutMs); } catch { return false; }
+  }
   async close(): Promise<void> {
     const started = performance.now();
     let timer: ReturnType<typeof setTimeout> | undefined;

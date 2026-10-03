@@ -46,7 +46,7 @@ export interface BridgeHost {
   updateConfig(change: ConfigChange): Promise<ConfigView>;
   send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation): void | Promise<void>;
   abort(sessionId: string): void | Promise<void>;
-  resume?(sessionId: string): void | Promise<void>;
+  resume?(sessionId: string, correlation?: ErrorCorrelation): void | Promise<void>;
   newSession(sessionId: string): Promise<void>;
   workspaces(): Promise<WorkspaceListView>;
   addWorkspace(path: string, create: boolean): Promise<void>;
@@ -513,7 +513,10 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (!session.paused) { json(res, 409, { error: "当前会话没有暂停的任务" }); return; }
             if (session.interactions?.length) { json(res, 409, { error: "请先完成当前交互或审批" }); return; }
             if (!host.resume) throw new Error("当前服务不支持继续，请重载 Pi");
-            await host.resume(body.sessionId);
+            correlation.operationId ??= randomUUID();
+            res.setHeader("X-Operation-ID", correlation.operationId);
+            telemetry.breadcrumb("resume", { ...correlation });
+            await host.resume(body.sessionId, correlation);
           } else if (path === "/api/abort") {
             await host.abort(body.sessionId);
           } else {
