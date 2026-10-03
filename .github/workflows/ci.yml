@@ -48,6 +48,8 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
 
   platform-smoke:
     strategy:
@@ -89,7 +91,37 @@ jobs:
       - run: npm ci
       - name: Choose the next patch version
         run: node scripts/prepare-release.mjs
-      - name: Sync the release version to main
+      - run: npm run check
+      # The integration tests serve web/dist; this local build does not upload.
+      - run: npm run build
+      - run: npm test
+      - name: Build and upload exact release source maps
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'soft' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'pi-webapp' }}
+          SENTRY_NODE_PROJECT: ${{ vars.SENTRY_NODE_PROJECT }}
+          SENTRY_BROWSER_PROJECT: ${{ vars.SENTRY_BROWSER_PROJECT }}
+          SENTRY_URL: ${{ vars.SENTRY_URL || 'https://us.sentry.io/' }}
+        run: npm run build:sentry
+      - name: Pack uploaded artifacts without rebuilding
+        run: |
+          mkdir -p .ci/release
+          npm pack --ignore-scripts --json --pack-destination .ci/release > .ci/release/pack.json
+          npm run verify:package -- --pack-manifest .ci/release/pack.json
+      - run: npx playwright install --with-deps chromium
+      - name: Verify real Node and browser source resolution
+        env:
+          SENTRY_VERIFY_AUTH_TOKEN: ${{ secrets.SENTRY_VERIFY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'soft' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'pi-webapp' }}
+          SENTRY_NODE_PROJECT: ${{ vars.SENTRY_NODE_PROJECT }}
+          SENTRY_BROWSER_PROJECT: ${{ vars.SENTRY_BROWSER_PROJECT }}
+          SENTRY_URL: ${{ vars.SENTRY_URL || 'https://us.sentry.io/' }}
+          PI_WEB_SENTRY_NODE_DSN: ${{ vars.PI_WEB_SENTRY_NODE_DSN || 'https://070c0b7c5ac18d940c294e63ecfa0793@o4506663318716416.ingest.us.sentry.io/4512191040716800' }}
+          PI_WEB_SENTRY_BROWSER_DSN: ${{ vars.PI_WEB_SENTRY_BROWSER_DSN || 'https://070c0b7c5ac18d940c294e63ecfa0793@o4506663318716416.ingest.us.sentry.io/4512191040716800' }}
+        run: npm run verify:sentry -- --pack-manifest .ci/release/pack.json
+      - name: Sync verified release version to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -98,4 +130,5 @@ jobs:
             git commit -m "chore: sync release version [skip ci]"
             git push origin HEAD:main
           fi
-      - run: npm publish
+      - name: Publish the verified tarball without lifecycle rebuilds
+        run: node scripts/publish-verified-release.mjs

@@ -43,6 +43,8 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run check && npm run build && npm run test",
     "build:sentry": "node scripts/build.mjs all --sentry",
+    "verify:package": "node scripts/verify-sentry-release.mjs --package-only",
+    "verify:sentry": "node scripts/verify-sentry-release.mjs --live",
     "test:browser": "playwright test"
   },
   "publishConfig": {

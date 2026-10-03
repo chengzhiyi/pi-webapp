@@ -20,9 +20,36 @@ Replace the example with your project's public DSN. `PI_WEB_SENTRY_BROWSER_DSN` 
 - Extension request/workspace/configuration failures, asynchronous Agent and tool failures, and provider-login failures. Fatal exceptions attributable to this extension are best effort; process exit can prevent delivery.
 - Sanitized stack locations and causes, build/release versions, runtime/platform, model and session-state summaries, anonymous session identifiers, request/operation IDs and up to 100 semantic breadcrumbs (64 KiB total).
 
-User cancellation, stopping an Agent, normal shutdown, known validation failures and stale-session conflicts are excluded. No conversation, source contents, attachments, login values, request/response bodies, console output or DOM recordings are deliberately collected. Agent/provider error messages are replaced with generic diagnostic labels. Other exception text is scrubbed for credentials, URLs, quoted values, email addresses and absolute paths. Arbitrary free-form exception messages cannot be classified perfectly; do not put private data in exceptions.
+User cancellation, stopping an Agent, normal shutdown, known request validation failures and stale-session conflicts are excluded. Recognized tool validation failures remain as warning events. No conversation, source contents, attachments, login values, request/response bodies, console output or DOM recordings are deliberately collected. Agent/provider error messages are replaced with generic diagnostic labels. Other exception text is scrubbed for credentials, URLs, quoted values (including multiple lines), email addresses and paths. Arbitrary free-form exception messages cannot be classified perfectly; do not put private data in exceptions.
 
 Browser events go directly to the configured Sentry host with no Pi authorization header, cookies or referrer. The authenticated configuration endpoint returns only the public DSN and build metadata. Node reporting uses a private client and explicit scopes without initializing a global SDK or changing Pi's uncaught-error/async-context handling; inherited SDK attachments are discarded before sending.
+
+## Diagnosing a tool failure
+
+Both TUI and SDK workspace sessions observe `tool_execution_start/end`. A failed `message_end` is a fallback only: the same tool call is not reported twice. Tool execution behavior and visible results are unchanged.
+
+| Diagnostic field | Meaning |
+| --- | --- |
+| `toolName`, `toolId` | Standard built-in name, or `custom` with a stable 16-character SHA-256 identifier; private custom tool names are not uploaded. |
+| `toolCallId`, `session` | Salted anonymous identities for correlation within the running process. |
+| `requestId`, `operationId` | Correlation copied at tool start; `/api/resume` receives a new operation ID. |
+| `failureKind`, `errorCode` | Classified reason and recognized code, including `ENOENT`, `EACCES`, or `nonzero_exit`. |
+| `exitCode`, `durationMs`, `timeoutMs` | Known process status, monotonic elapsed time, and timeout. Missing evidence stays absent. |
+| `diagnosticSource` | `tool_execution_end` or `message_end`. |
+| `originalStackAvailable` | Whether the captured failure includes an original exception stack. |
+| `errorSummary`, `summaryOmitted`, `summaryOmittedReason` | At most two diagnostic lines / 512 characters, or an explicit explanation of unavailable text. |
+
+`cancelled` and explicit `blocked` results produce breadcrumbs without error events. Recognized `validation`, `not_found`, `permission`, `timeout`, and `process_exit` tool results are warnings. `unknown` failures and actual program exceptions remain errors. Cancellation requires a marked in-progress call or an exact SDK cancellation format; merely clearing a session does not classify its failures as cancelled. A cancellation request does not suppress an independent program exception.
+
+Summaries are reconstructed from recognized diagnostic formats rather than uploading redacted stdout/stderr. For example, `bash: process_exit (nonzero_exit)` carries `Command exited with code 127`; a file failure carries `ENOENT: no such file or directory` and a recognized filesystem operation when available. Paths, arbitrary output, arguments, and error details objects are not uploaded. Unrecognized free text is omitted. Actual tool exception types, stack frames and Error cause chains are retained, but arbitrary exception messages are replaced with a safe diagnostic label.
+
+Pi can convert an exception to a tool-result string before pi-webapp sees it. These events have `originalStackAvailable=false` and **no synthetic observer stack**. Source maps cannot recover a stack that the SDK discarded. The local tool card remains the source of full output; this release adds no diagnostic export or SDK changes.
+
+Result-only errors group by tool identity, failure kind and stable error code; request IDs, release versions, summaries and timestamps do not fragment the issue. Actual exceptions use Sentry's stack-based grouping. The same key controls local rate limiting, so `repeats` counts suppressed events of the same diagnostic class, not necessarily retries of the same call. Unknown causes within the same tool remain grouped because their missing text cannot safely distinguish them.
+
+Breadcrumbs include `agent_start`, `agent_end`, `tool_start`, `tool_end`, `tool_failed`, `tool_cancelled`, `tool_blocked`, `cancel` and `resume`. Do not infer a retry relationship from separate calls. Each runtime retains at most 256 pending snapshots and 256 completion markers, with oldest-first eviction and cleanup at settle, switch, shutdown and reload. Evicted calls can still report failures, but may lack timing or deduplication evidence. Disabled reporting does not retain diagnostic snapshots or inspect results.
+
+Filter Sentry by `side:node`, `toolName`, `failureKind` and `errorCode`, then inspect the diagnostic context and the correlated breadcrumbs. Reproduce the recognized condition with a regression test; after publishing, compare events across releases and check whether the same condition still occurs. Configure urgent error alerts for `level:error`, excluding `environment:sentry-verification`. Retain warning issues for diagnosis and trends rather than urgent paging. Updating the alert rules is a Sentry administration step, independent of the code changes.
 
 ## Performance and reliability
 
@@ -44,6 +71,38 @@ npm run build:sentry
 ```
 
 Use `SENTRY_BROWSER_PROJECT` / `SENTRY_NODE_PROJECT` for separate projects. The upload-required command fails on missing credentials or upload failure, and still removes maps from public output. Do not publish after a failed command. Auth tokens are never part of runtime configuration. The ordinary npm `prepack` rebuilds locally without uploading; use `npm pack --ignore-scripts` or `npm publish --ignore-scripts` only after checks and a successful `build:sentry` to package the exact uploaded artifacts.
+
+### Required Actions configuration
+
+The publishing workflow now fails closed until both credentials exist:
+
+- Repository secret `SENTRY_AUTH_TOKEN`: source-map upload and release permissions.
+- Repository secret `SENTRY_VERIFY_AUTH_TOKEN`: event/project read permission (`project:read` or equivalent).
+- Optional repository variables `SENTRY_ORG` (default `soft`), `SENTRY_PROJECT` (default `pi-webapp`), `SENTRY_NODE_PROJECT`, `SENTRY_BROWSER_PROJECT`, and `SENTRY_URL` (default `https://us.sentry.io/`).
+- Optional public DSN variables `PI_WEB_SENTRY_NODE_DSN` and `PI_WEB_SENTRY_BROWSER_DSN`. Both default to the built-in project; when using separate projects, configure each matching DSN as well.
+
+Setting repository secrets requires an existing credential from the Sentry administrator. The code does not generate credentials or grant Sentry access. Do not put tokens in Actions variables or runtime configuration.
+
+### Verify and publish the exact package
+
+After the uploaded build, run:
+
+```sh
+mkdir -p .ci/release
+npm pack --ignore-scripts --json --pack-destination .ci/release > .ci/release/pack.json
+npm run verify:package -- --pack-manifest .ci/release/pack.json
+# Requires SENTRY_VERIFY_AUTH_TOKEN, SENTRY_ORG and the destination project(s).
+npm run verify:sentry -- --pack-manifest .ci/release/pack.json
+node scripts/publish-verified-release.mjs
+```
+
+`verify:package` checks every packaged Node/browser asset against `.sentry-artifacts/<buildId>/`, confirms matching release literals and JS/map Debug IDs, rejects extra or missing assets, and checks that private maps are excluded. To inspect an older archive explicitly, pass `--archive PATH`. Both verification commands also accept `--tarball FILE`.
+
+`verify:sentry` first checks credentials and the package, then invokes the packaged Node verification entry and serves the packaged browser assets on loopback with synthetic configuration. It sends only synthetic events to the configured Sentry DSNs with `environment=sentry-verification`; normal imports and normal browser environments do not run these probes. The Node entry requires `PI_WEB_SENTRY_VERIFY_RELEASE=true` and the verification environment; the browser requires a verification-configured server and the explicit `sentry_release_probe=1` URL flag. The CLI sets up these guards itself.
+
+The verifier waits at most 120 seconds for the real events, checks release/build/side/Debug IDs, and requires original application frames to resolve to TypeScript. The synthetic exception must resolve to the exact source file and line recorded in the archived map. Browser maps give application sources stable `app:///web/src/` and `app:///shared/` paths before upload. Unmapped external SDK dependencies do not invalidate resolved application frames. A successful run writes `.ci/release/verified.json` with event IDs and the tarball SHA-256. The publisher verifies that receipt and hash before publishing that tarball with lifecycle scripts disabled. Missing credentials, failed uploads, mismatched package assets, unmapped application frames, missing receipts, or changed tarballs block publication. Version synchronization to main occurs only after these checks succeed.
+
+For mapping failures, use Sentry's event source-map debugger or its `source-map-debug` API, and inspect matching Debug IDs for application bundles. Old tool-result events without original stacks remain limited even after source maps are uploaded.
 
 ## Verification and finding an error
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { resolve, relative } from "node:path";
+import { resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
@@ -16,12 +16,25 @@ export async function prepareSourceMaps(directory, repairMissing = false) {
     const code = await readFile(file.slice(0, -4), "utf8");
     const id = code.match(/sentry-dbid-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)?.[1];
     const map = JSON.parse(await readFile(file, "utf8"));
+    let changed = false;
+    // Vite's ../../src paths would resolve as /src in Sentry. Give owned
+    // sources stable repository paths before its upload hook runs.
+    if (repairMissing && Array.isArray(map.sources)) {
+      map.sources = map.sources.map(source => {
+        if (typeof source !== "string" || /^[a-z]+:/i.test(source)) return source;
+        const owned = relative(root, resolve(dirname(file), map.sourceRoot || "", source)).replace(/\\/g, "/");
+        if (!/^(?:web\/src|shared|extension)\//.test(owned)) return source;
+        changed = true;
+        return `app:///${owned}`;
+      });
+    }
     if (!id || [map.debug_id, map.debugId].some((value) => value && value !== id)) throw new Error(`Invalid Sentry Debug ID for ${entry.name}`);
     if (map.debug_id !== id || map.debugId !== id) {
       if (!repairMissing) throw new Error(`Missing Sentry Debug ID for ${entry.name}`);
       map.debug_id = map.debugId = id;
-      await writeFile(file, JSON.stringify(map));
+      changed = true;
     }
+    if (changed) await writeFile(file, JSON.stringify(map));
   }
 }
 export async function buildInfo() {
@@ -47,7 +60,7 @@ export function sentryBuildOptions(side, info, output) {
   if (upload && (!process.env.SENTRY_AUTH_TOKEN || !process.env.SENTRY_ORG || !project)) throw new Error(`Sentry ${side} upload requires SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT (or per-side project).`);
   return {
     telemetry: false, silent: !upload,
-    ...(upload ? { authToken: process.env.SENTRY_AUTH_TOKEN, org: process.env.SENTRY_ORG, project } : {}),
+    ...(upload ? { authToken: process.env.SENTRY_AUTH_TOKEN, org: process.env.SENTRY_ORG, project, ...(process.env.SENTRY_URL ? { url: process.env.SENTRY_URL } : {}) } : {}),
     release: { name: info.release, dist: info.buildId, inject: false, create: upload, finalize: upload },
     sourcemaps: { disable: upload ? false : "disable-upload", assets: [`${output}/**/*.js`, `${output}/**/*.map`] },
     errorHandler: (error) => { throw error; },
