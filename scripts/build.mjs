@@ -4,7 +4,7 @@ import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { root, buildInfo, sentryBuildOptions, prepareSourceMaps } from "./build-config.mjs";
+import { root, buildInfo, sentryBuildOptions, prepareSourceMaps, nodeSourceMapPlugin } from "./build-config.mjs";
 
 const side = process.argv[2] ?? "all";
 if (!["all", "browser", "node"].includes(side)) throw new Error("Unknown build target");
@@ -43,7 +43,7 @@ if (side !== "browser") {
       define: { __PI_WEB_RELEASE__: JSON.stringify(info.release), __PI_WEB_BUILD_ID__: JSON.stringify(info.buildId) },
       plugins: [{ name: "bundle-local-protocol", setup(builder) {
         builder.onResolve({ filter: /^@chengzhiyi\/pi-web-protocol$/ }, () => ({ path: fileURLToPath(import.meta.resolve("@chengzhiyi/pi-web-protocol")) }));
-      } }, sentryEsbuildPlugin(sentryBuildOptions("node", info, resolve(root, "dist")))],
+      } }, nodeSourceMapPlugin(resolve(root, "dist")), sentryEsbuildPlugin(sentryBuildOptions("node", info, resolve(root, "dist")))],
     });
     await preserveAndStrip(resolve(root, "dist"), "node");
   } finally { await stripMaps(resolve(root, "dist")).catch(() => {}); }

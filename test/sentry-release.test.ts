@@ -204,3 +204,25 @@ test("browser maps normalize owned sources before upload without changing Debug 
     await prepareSourceMaps(directory);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("Node upload mode stamps the on-disk map before Sentry uploads its temporary copy", async () => {
+  const { build } = await import("esbuild");
+  const { sentryEsbuildPlugin } = await import("@sentry/esbuild-plugin");
+  // @ts-ignore Build-only JavaScript helper.
+  const { nodeSourceMapPlugin, prepareSourceMaps } = await import("../scripts/build-config.mjs");
+  const { readFile } = await import("node:fs/promises");
+  const directory = await mkdtemp(join(tmpdir(), "pi-web-node-map-"));
+  try {
+    await put(directory, "entry.js", "console.log(new Error('synthetic build fixture'));");
+    await build({ entryPoints: [join(directory, "entry.js")], outfile: join(directory, "out/extension.js"), bundle: true, sourcemap: "external", plugins: [
+      nodeSourceMapPlugin(join(directory, "out")),
+      sentryEsbuildPlugin({ telemetry: false, silent: true, release: { inject: false, create: false, finalize: false }, sourcemaps: { assets: [] } }),
+    ] });
+    // Empty assets prevent network uploads, while exercising the upload-mode
+    // hook that leaves the original map unstamped without our preceding hook.
+    await prepareSourceMaps(join(directory, "out"));
+    const contents = JSON.parse(await readFile(join(directory, "out/extension.js.map"), "utf8"));
+    assert.match(contents.debug_id, /^[a-f0-9-]{36}$/i);
+    assert.equal(contents.debugId, contents.debug_id);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

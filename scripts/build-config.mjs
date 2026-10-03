@@ -5,6 +5,15 @@ import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 
+export function nodeSourceMapPlugin(output) {
+  // Register before Sentry: its upload hook stamps only a temporary map copy.
+  return { name: "prepare-node-source-maps", setup(builder) {
+    builder.onEnd(async result => {
+      if (result.errors.length === 0) await prepareSourceMaps(output, true);
+    });
+  } };
+}
+
 // Vite can regenerate an entry map after Sentry's generateBundle hook. Run this
 // on the final files, before Sentry's writeBundle upload hook, then verify again
 // before archiving. Never inject a new ID: it must match the shipped JS.
