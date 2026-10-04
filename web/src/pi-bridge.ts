@@ -54,7 +54,7 @@ export interface SessionView {
   interactions?: WebInteraction[];
 }
 
-export interface WorkspaceView { id: string; path: string; title: string }
+export interface WorkspaceView { id: string; path: string; title: string; available?: boolean }
 export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 export interface DirectoryEntry { name: string; path: string; hidden: boolean }

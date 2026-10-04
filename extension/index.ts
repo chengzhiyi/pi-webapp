@@ -1,13 +1,12 @@
 import { delimiter, dirname, join, resolve } from "node:path";
 import { realpathSync, watch, type FSWatcher } from "node:fs";
-import { realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DefaultPackageManager, getAgentDir, ModelRuntime, SessionManager, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels, type AuthInteraction } from "@earendil-works/pi-ai";
 import { startBridge, type Bridge, type BridgeHost, type ConfigChange, type ConfigView, type WorkspaceListView, type WorkspaceSessionView } from "./bridge.ts";
 import { contentBlocks, projectSession, PAUSED_ENTRY } from "./view.ts";
-import { WorkspaceRegistry, workspaceRegistryPath } from "./workspaces.ts";
+import { WorkspaceRegistry, workspaceRegistryPath, workspaceDirectory, requireWorkspaceDirectory, WorkspaceUnavailableError } from "./workspaces.ts";
 import { WorkspaceSessions } from "./workspace-sessions.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
 import { buildResourceInventory } from "./config-inventory.ts";
@@ -117,12 +116,16 @@ function activeSession(sessionId: string) {
 }
 
 async function workspaceList(): Promise<WorkspaceListView> {
-  const items = shared.workspaces?.list() ?? [];
+  const items = (shared.workspaces?.list() ?? []).map((workspace) => ({ ...workspace }));
   const active = snapshot();
-  const activePath = await realpath(active.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return active.cwd; });
+  const activePath = await workspaceDirectory(active.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return null; });
   const allSessions = await SessionManager.listAll();
   const sessions: WorkspaceSessionView[] = (await Promise.all(items.map(async (workspace) => {
-    const saved = await sessionsForWorkspace(workspace.path, allSessions).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_sessions" }); return []; });
+    const saved = await sessionsForWorkspace(workspace.path, allSessions).catch((cause) => {
+      if (cause instanceof WorkspaceUnavailableError) workspace.available = false;
+      else shared.bridge?.reportError?.(cause, { stage: "workspace_sessions" });
+      return [];
+    });
     const rows: WorkspaceSessionView[] = saved.map((session) => ({ id: session.id, workspaceId: workspace.id, path: session.path, name: session.name || session.firstMessage?.slice(0, 50) || "当前会话", modified: session.modified.toISOString() }));
     if (workspace.path === activePath && !rows.some((session) => session.id === active.sessionId)) {
       rows.unshift({ id: active.sessionId, workspaceId: workspace.id, path: null, name: active.name, modified: new Date().toISOString() });
@@ -140,8 +143,8 @@ async function publishWorkspaces(): Promise<void> {
 async function selectWorkspace(id: string, fresh = false): Promise<void> {
   const workspace = shared.workspaces?.get(id);
   if (!workspace) throw new Error("工作区不存在");
-  await realpath(workspace.path);
-  if (!fresh && shared.current && workspace.path === await realpath(shared.current.cwd)) {
+  await requireWorkspaceDirectory(workspace.path);
+  if (!fresh && shared.current && workspace.path === await workspaceDirectory(shared.current.cwd)) {
     if (shared.selected === "sdk" && shared.workspaceSessions?.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
     shared.selected = "tui";
     shared.activeWorkspaceId = id;
@@ -444,7 +447,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             async selectSession(workspaceId, id, path) {
               const workspace = shared.workspaces?.get(workspaceId);
               if (!workspace) throw new Error("工作区不存在");
-              if (id === shared.current?.sessionManager.getSessionId() && workspace.path === await realpath(shared.current.cwd)) {
+              await requireWorkspaceDirectory(workspace.path);
+              if (id === shared.current?.sessionManager.getSessionId() && workspace.path === await workspaceDirectory(shared.current.cwd)) {
                 if (shared.selected === "sdk" && shared.workspaceSessions?.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换会话");
                 shared.selected = "tui";
                 shared.activeWorkspaceId = workspaceId;

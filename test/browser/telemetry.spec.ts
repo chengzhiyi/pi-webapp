@@ -39,6 +39,40 @@ async function open(page: Page, bridge: Bridge) {
   await expect(page.getByRole("textbox")).toBeEnabled();
 }
 
+test("unavailable workspaces disable session actions, recover and can be removed", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let removed = false;
+  const unavailable = { id: "missing", path: "/missing/worktree", title: "Deleted worktree", available: false };
+  const healthy = { id: "healthy", path: snapshot.cwd, title: "Healthy project" }; // Older hosts omit availability.
+  const value = { items: [healthy, unavailable], activeId: "healthy", sessions: [] };
+  const f = await fixture(page, true, {
+    async workspaces() { return value; },
+    async removeWorkspace(id) { removed = id === unavailable.id; f.bridge.publish({ type: "workspaces", value: { ...value, items: [healthy] } }); },
+  });
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    const missing = page.getByRole("treeitem", { name: /Deleted worktree/ });
+    await expect(missing).toContainText(/不可用|Unavailable/);
+    await expect(page.getByRole("button", { name: /(?:在 Deleted worktree 新建会话|Create a session in Deleted worktree)/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /(?:在 Healthy project 新建会话|Create a session in Healthy project)/ })).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath("unavailable-workspace.png") });
+    f.bridge.publish({ type: "workspaces", value: { ...value, items: [healthy, { ...unavailable, available: true }] } });
+    await expect(missing).not.toContainText(/不可用|Unavailable/);
+    await expect(page.getByRole("button", { name: /(?:在 Deleted worktree 新建会话|Create a session in Deleted worktree)/ })).toBeEnabled();
+    f.bridge.publish({ type: "workspaces", value });
+    await expect(missing).toContainText(/不可用|Unavailable/);
+    await missing.hover();
+    await page.getByRole("button", { name: /^(?:移除 Deleted worktree|Remove Deleted worktree)$/ }).click();
+    await expect(missing).toHaveCount(0);
+    expect(removed).toBe(true);
+    expect(errors).toEqual([]);
+    expect(f.browserEvents).toEqual([]);
+    expect(f.nodeEvents).toEqual([]);
+  } finally { await f.bridge.close(); }
+});
+
 async function openUpdate(page: Page, bridge: Bridge) {
   await page.route("**/api/update", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(route.request().method() === "POST"
     ? { version: "0.1.10" }

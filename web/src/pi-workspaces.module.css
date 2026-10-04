@@ -3,6 +3,7 @@
 .workspaceButton { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; text-align: left; }
 .workspaceButton.active { color: var(--dsw-alias-state-business-primary); }
 .folder { display: inline-flex; }
+.unavailable { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .chevron { display: none; align-items: center; transform: rotate(-90deg); }
 .chevronOpen { transform: none; }
 .workspaceButton:hover .folder, .workspaceButton:focus-visible .folder { display: none; }

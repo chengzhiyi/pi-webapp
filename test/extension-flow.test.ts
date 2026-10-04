@@ -1,12 +1,13 @@
 import { createEventBus } from "@earendil-works/pi-coding-agent";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import piWeb from "../extension/index.ts";
 import type { Bridge } from "../extension/bridge.ts";
+import type { WorkspaceRegistry } from "../extension/workspaces.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "pi-web-flow-"));
@@ -89,6 +90,53 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     });
     assert.equal(sent.status, 202);
     assert.deepEqual(delivered, ["hello"]);
+    // A deleted workspace must not turn unrelated list refreshes into Sentry errors.
+    const registry = (shared as unknown as { workspaces: WorkspaceRegistry }).workspaces;
+    const stalePath = join(temporary, "removed-worktree");
+    const stale = await registry.add(stalePath, true);
+    const savedSession = SessionManager.create(stale.path);
+    savedSession.appendMessage({ role: "user", content: "saved before removal", timestamp: Date.now() });
+    savedSession.appendMessage({ role: "assistant", content: [{ type: "text", text: "saved" }], timestamp: Date.now() } as Parameters<SessionManager["appendMessage"]>[0]);
+    await rm(stalePath, { recursive: true });
+    const workspaceErrors: unknown[] = [];
+    const originalReport = shared.bridge!.reportError;
+    shared.bridge!.reportError = (cause) => { workspaceErrors.push(cause); return "event"; };
+    try {
+      for (let refresh = 0; refresh < 2; refresh++) {
+        const listing = await (await fetch(`${url.origin}/api/workspaces`, { headers })).json();
+        assert.equal(listing.items.find((item: { id: string }) => item.id === stale.id).available, false);
+        assert.ok(listing.sessions.some((item: { id: string }) => item.id === "new"));
+        assert.ok(!listing.sessions.some((item: { workspaceId: string }) => item.workspaceId === stale.id));
+      }
+      const healthy = registry.list().find((item) => item.path === canonicalTemporary)!;
+      const selected = await fetch(`${url.origin}/api/session/select`, {
+        method: "POST", headers, body: JSON.stringify({ sessionId: "new", workspaceId: healthy.id, id: "new", path: "" }),
+      });
+      assert.equal(selected.status, 202);
+      assert.deepEqual(workspaceErrors, []);
+      for (const route of ["/api/workspace/select", "/api/workspace/new-session", "/api/session/select"]) {
+        const response = await fetch(`${url.origin}${route}`, {
+          method: "POST", headers,
+          body: JSON.stringify({ sessionId: "new", id: stale.id, workspaceId: stale.id, path: "stale-session.jsonl" }),
+        });
+        const body = await response.json();
+        assert.equal(body.error, "工作区目录不可用，请恢复目录或从列表移除后重新添加");
+        assert.equal(body.errorCode, "validation_error");
+        assert.equal((await (await fetch(`${url.origin}/api/session`, { headers })).json()).sessionId, "new");
+      }
+      await mkdir(stalePath);
+      const restored = await (await fetch(`${url.origin}/api/workspaces`, { headers })).json();
+      assert.notEqual(restored.items.find((item: { id: string }) => item.id === stale.id).available, false);
+      assert.ok(restored.sessions.some((item: { id: string }) => item.id === savedSession.getSessionId()));
+      await rm(stalePath, { recursive: true });
+      const removed = await fetch(`${url.origin}/api/workspace/remove`, {
+        method: "POST", headers, body: JSON.stringify({ sessionId: "new", id: stale.id }),
+      });
+      assert.equal(removed.status, 202);
+      assert.deepEqual(workspaceErrors, []);
+    } finally {
+      shared.bridge!.reportError = originalReport;
+    }
     // TUI events use the same observer, including start-time correlation and end/message deduplication.
     const instrumented = shared as unknown as { telemetry: { enabled: boolean; session(value: string): string }; operation?: { requestId: string; operationId: string }; bridge: Bridge };
     const previousTelemetry = instrumented.telemetry;

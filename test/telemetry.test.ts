@@ -5,6 +5,22 @@ import { DEFAULT_SENTRY_DSN, NodeTelemetry, readTelemetryConfig } from "../exten
 import { getClient, getCurrentScope, getGlobalScope, type Event } from "@sentry/core";
 import { ProviderLoginController } from "../extension/provider-login.ts";
 import { verifySentryNodeRelease } from "../extension/sentry-verification.ts";
+import { WorkspaceUnavailableError } from "../extension/workspaces.ts";
+
+test("unavailable workspace errors are not sent to Sentry while filesystem failures remain reportable", async () => {
+  const events: Event[] = [];
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [header, event] of envelope[1]) if (header.type === "event") events.push(event as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  });
+  try {
+    telemetry.capture(new WorkspaceUnavailableError(), { stage: "workspace_sessions" });
+    await telemetry.flush();
+    assert.equal(events.length, 0);
+    telemetry.capture(Object.assign(new Error("workspace permission denied"), { code: "EACCES" }), { stage: "workspace_sessions" });
+    await telemetry.flush();
+    assert.equal(events.length, 1);
+  } finally { await telemetry.close(); }
+});
 
 test("DSN configuration defaults on, supports per-side overrides, and never inherits host Sentry settings", () => {
   const dsn = "https://public@example.com/12";

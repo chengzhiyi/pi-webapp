@@ -1,10 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { sessionsForWorkspace } from "../extension/sessions-for-workspace.ts";
+
+test("unavailable workspace directories have an actionable error and recover when restored", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-web-missing-workspace-"));
+  const project = join(root, "project");
+  try {
+    for (const path of [project, join(project, "child")]) {
+      await assert.rejects(sessionsForWorkspace(path, []), { message: "工作区目录不可用，请恢复目录或从列表移除后重新添加" });
+    }
+    await writeFile(project, "not a directory");
+    for (const path of [project, join(project, "child")]) {
+      await assert.rejects(sessionsForWorkspace(path, []), { message: "工作区目录不可用，请恢复目录或从列表移除后重新添加" });
+    }
+    await rm(project);
+    await mkdir(project);
+    assert.deepEqual(await sessionsForWorkspace(project, []), []);
+    await rm(project, { recursive: true });
+    await symlink(project, project);
+    await assert.rejects(sessionsForWorkspace(project, []), { code: "ELOOP" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("sessions in colliding Pi storage directories stay with their actual workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-web-session-collision-"));

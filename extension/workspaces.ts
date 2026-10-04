@@ -7,6 +7,30 @@ export interface WorkspaceView {
   id: string;
   path: string;
   title: string;
+  /** Computed for list responses; omitted by older hosts and persisted records. */
+  available?: boolean;
+}
+
+export class WorkspaceUnavailableError extends Error {
+  constructor() { super("工作区目录不可用，请恢复目录或从列表移除后重新添加"); }
+}
+
+/** Missing directories are expected; permission and I/O failures still propagate. */
+export async function workspaceDirectory(path: string): Promise<string | null> {
+  try {
+    const canonical = await realpath(path);
+    return (await stat(canonical)).isDirectory() ? canonical : null;
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw cause;
+  }
+}
+
+export async function requireWorkspaceDirectory(path: string): Promise<string> {
+  const canonical = await workspaceDirectory(path);
+  if (canonical === null) throw new WorkspaceUnavailableError();
+  return canonical;
 }
 
 export class WorkspaceRegistry {

@@ -4,6 +4,7 @@ import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
 import { WebPluginCatalog } from "./web-plugins.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
+import { requireWorkspaceDirectory } from "./workspaces.ts";
 import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
 import { resumeMessage } from "./execution-control.ts";
 import { pluginRuntimePaths } from "./plugin-runtime-paths.ts";
@@ -62,7 +63,7 @@ export class WorkspaceSessions {
   open(path: string, target: "continue" | "new" | { sessionFile: string } | { sessionManager: SessionManager }): Promise<void> {
     return this.queue.run(async () => {
       this.ensureAvailable();
-      const canonical = await realpath(path);
+      const canonical = await requireWorkspaceDirectory(path);
       let manager: SessionManager;
       if (target === "new") manager = SessionManager.create(canonical);
       else if (target === "continue") {
