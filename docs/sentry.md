@@ -26,6 +26,8 @@ Browser events go directly to the configured Sentry host with no Pi authorizatio
 
 ## Diagnosing a tool failure
 
+For CLI + Codex analysis of existing issues, including classifications and repair decisions, see [Sentry triage](sentry-triage.md). Run `npm run sentry:triage` from the repository after authenticating the Sentry and Codex CLIs.
+
 Both TUI and SDK workspace sessions observe `tool_execution_start/end`. A failed `message_end` is a fallback only: the same tool call is not reported twice. Tool execution behavior and visible results are unchanged.
 
 | Diagnostic field | Meaning |

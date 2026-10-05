@@ -29,7 +29,8 @@
     "README.zh-CN.md",
     "LICENSE",
     "web/src/ui/shared/LICENSE.txt",
-    "docs/sentry.md"
+    "docs/sentry.md",
+    "docs/sentry-triage.md"
   ],
   "scripts": {
     "start": "npm run build && node bin/pi-webapp.mjs",
@@ -45,6 +46,7 @@
     "build:sentry": "node scripts/build.mjs all --sentry",
     "verify:package": "node scripts/verify-sentry-release.mjs --package-only",
     "verify:sentry": "node scripts/verify-sentry-release.mjs --live",
+    "sentry:triage": "node scripts/sentry-triage.mjs",
     "test:browser": "playwright test"
   },
   "publishConfig": {
