@@ -5,6 +5,7 @@ import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
 import { accessToken } from "./access-token.ts";
 import { bridgeFetch, bridgeJson } from "./telemetry-fetch.ts";
 import { breadcrumb, reportError, setTelemetryState } from "./telemetry.ts";
+import type { ErrorCorrelation } from "../../shared/telemetry.ts";
 
 export interface ViewBlock {
   kind: "text" | "thinking" | "image" | "toolCall";
@@ -130,13 +131,16 @@ export function usePiBridge() {
     const follow = async () => {
       while (alive) {
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+        let correlation: ErrorCorrelation | undefined;
+        let stage = "stream_connect";
         try {
           setConnection("connecting");
           const followed = await bridgeFetch("/api/events", {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           });
-          const { response, correlation } = followed;
+          const { response } = followed;
+          correlation = followed.correlation;
           if (!response.ok) await bridgeJson(followed);
           if (!response.body) {
             throw new Error(response.status === 401 ? t("访问令牌无效，请在 Pi 中重新输入 /web。", "Invalid access token. Run /web again in Pi.") : t("连接 Pi 失败", "Could not connect to Pi"));
@@ -149,8 +153,10 @@ export function usePiBridge() {
           const decoder = new TextDecoder();
           let pending = "";
           while (alive) {
+            stage = "stream_read";
             const { done, value } = await reader.read();
             if (done) break;
+            stage = "stream_event";
             pending += decoder.decode(value, { stream: true });
             let end = pending.indexOf("\n");
             while (end !== -1) {
@@ -194,13 +200,15 @@ export function usePiBridge() {
               end = pending.indexOf("\n");
             }
           }
+          stage = "stream_end";
           throw new Error(t("Pi 网页连接已关闭", "The Pi web connection has closed"));
         } catch (cause) {
           void reader?.cancel().catch(() => {});
           if (!alive) return;
-          reportError(cause, { stage: "stream" });
           setTelemetryState({ connection: "disconnected" });
-          breadcrumb("stream_disconnected");
+          const context = { ...correlation, route: "/api/events", stage, connection: "disconnected" };
+          reportError(cause, context);
+          breadcrumb("stream_disconnected", context);
           setConnection("disconnected");
           setModelsStatus("loading");
           setError(cause instanceof Error ? cause.message : t("连接 Pi 失败", "Could not connect to Pi"));

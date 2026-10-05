@@ -39,6 +39,39 @@ async function open(page: Page, bridge: Bridge) {
   await expect(page.getByRole("textbox")).toBeEnabled();
 }
 
+for (const failure of ["read", "end"] as const) {
+  test(`stream ${failure} failures retain request correlation and disconnected state, then reconnect`, async ({ page }) => {
+    const f = await fixture(page);
+    const requestId = "550e8400-e29b-41d4-a716-446655440000";
+    await page.addInitScript(({ snapshot, requestId, failure }) => {
+      const originalFetch = window.fetch;
+      let injected = false;
+      window.fetch = async (...args) => {
+        if (!injected && String(args[0]) === "/api/events") {
+          injected = true;
+          const body = new ReadableStream({ start(controller) {
+            controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ type: "snapshot", session: snapshot })}\n`));
+            Object.assign(window, { failTestStream: () => failure === "read" ? controller.error(new TypeError("Synthetic stream read failed")) : controller.close() });
+          } });
+          return new Response(body, { headers: { "Content-Type": "application/x-ndjson", "X-Request-ID": requestId } });
+        }
+        return originalFetch(...args);
+      };
+    }, { snapshot, requestId, failure });
+    try {
+      await open(page, f.bridge); await f.sdkReady;
+      const reconnected = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/events");
+      await page.evaluate(() => (window as unknown as { failTestStream(): void }).failTestStream());
+      await expect.poll(() => f.browserEvents.length).toBe(1);
+      expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ stage: `stream_${failure}`, requestId, route: "/api/events", connection: "disconnected" });
+      await reconnected;
+      await expect(page.getByRole("textbox")).toBeEnabled();
+      expect(f.browserEvents).toHaveLength(1);
+      expect(f.nodeEvents).toEqual([]);
+    } finally { await f.bridge.close(); }
+  });
+}
+
 test("unavailable workspaces disable session actions, recover and can be removed", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors: string[] = [];
