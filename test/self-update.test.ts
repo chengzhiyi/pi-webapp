@@ -32,7 +32,35 @@ test("compares npm release versions numerically", () => {
   assert.throws(() => compareVersions("latest", "0.1.0"), /版本/);
 });
 
-test("installs a checked release before requesting a supervised restart", async () => {
+test("update checks accept npm string and single-version array results", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-web-update-"));
+  try {
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.11" }));
+    for (const version of ["0.1.10", "0.1.11", "0.2.0"]) {
+      for (const result of [version, [version]]) {
+        await t.test(JSON.stringify(result), async () => {
+          const updater = new SelfUpdater({ agentDir: root, packageRoot: root, launcherNonce: "nonce", runNpm: async () => `\n${JSON.stringify(result)}\n` });
+          assert.deepEqual(await updater.check(), { current: "0.1.11", latest: version, available: version === "0.2.0", canRestart: true });
+        });
+      }
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("update checks reject ambiguous or invalid npm version results", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-web-update-"));
+  try {
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.11" }));
+    for (const result of [[], ["0.2.0", "0.3.0"], [["0.2.0"]], [null], [123], ["latest"], null, { version: "0.2.0" }, "latest"]) {
+      await t.test(JSON.stringify(result), async () => {
+        const updater = new SelfUpdater({ agentDir: root, packageRoot: root, runNpm: async () => JSON.stringify(result) });
+        await assert.rejects(updater.check(), /检查 npm 更新失败：npm 返回的版本号无效/);
+      });
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("installs a checked npm array release before requesting a supervised restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-web-update-"));
   const packageRoot = join(root, "source");
   const agentDir = join(root, "agent");
@@ -42,7 +70,7 @@ test("installs a checked release before requesting a supervised restart", async 
     await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.0" }));
     const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", runNpm: async (args) => {
       calls.push(args);
-      if (args[0] === "view") return '"0.2.0"';
+      if (args[0] === "view") return '["0.2.0"]';
       const prefix = args[args.indexOf("--prefix") + 1];
       const installed = join(prefix, "node_modules", "pi-webapp");
       await mkdir(join(installed, "bin"), { recursive: true });
@@ -58,6 +86,7 @@ test("installs a checked release before requesting a supervised restart", async 
     const prepared = await updater.prepare();
     assert.equal(prepared.version, "0.2.0");
     assert.equal(calls.filter((args) => args[0] === "install").length, 1);
+    assert.equal(calls.find((args) => args[0] === "install")?.[1], "pi-webapp@0.2.0");
     const manifest = JSON.parse(await readFile(join(agentDir, "pi-web", "update.json"), "utf8"));
     assert.equal(manifest.version, "0.2.0");
     assert.equal(manifest.launcher, prepared.launcher);

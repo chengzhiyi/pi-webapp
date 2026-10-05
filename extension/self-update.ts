@@ -66,7 +66,9 @@ export class SelfUpdater {
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     try {
-      const latest = JSON.parse((await this.runNpm(["view", "pi-webapp", "dist-tags.latest", "--json", "--prefer-online"])).trim());
+      const result: unknown = JSON.parse((await this.runNpm(["view", "pi-webapp", "dist-tags.latest", "--json", "--prefer-online"])).trim());
+      // npm 12 wraps scalar JSON results in an array; older npm returns a string.
+      const latest = Array.isArray(result) && result.length === 1 ? result[0] : result;
       if (typeof latest !== "string" || !releasePattern.test(latest)) throw new Error("npm 返回的版本号无效");
       status.latest = latest;
       status.available = compareVersions(latest, current) > 0;
