@@ -68,6 +68,40 @@ test("diagnostic summaries omit relative paths, quoted multi-line text and crede
   for (const secret of ["customer.json", "secrets", "private-token", "first private line", "second private line"]) assert.ok(!wire.includes(secret), secret);
 });
 
+test("Pi edit matching diagnostics are validation failures without uploading paths or input", () => {
+  const path = "C:\\Users\\private-person\\private-token@example.com.txt";
+  // Verified against the published Pi 1.0.2 edit-diff diagnostic contract.
+  const cases = [
+    [`Could not find the exact text in ${path}. The old text must match exactly including all whitespace and newlines.`, "edit_text_not_found"],
+    [`Could not find edits[1] in ${path}. The oldText must match exactly including all whitespace and newlines.`, "edit_text_not_found"],
+    [`Found 2 occurrences of the text in ${path}. The text must be unique. Please provide more context to make it unique.`, "edit_text_ambiguous"],
+    [`Found 3 occurrences of edits[1] in ${path}. Each oldText must be unique. Please provide more context to make it unique.`, "edit_text_ambiguous"],
+    [`oldText must not be empty in ${path}.`, "invalid_arguments"],
+    [`edits[1].oldText must not be empty in ${path}.`, "invalid_arguments"],
+    [`No changes made to ${path}. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.`, "edit_no_change"],
+    [`No changes made to ${path}. The replacements produced identical content.`, "edit_no_change"],
+    [`edits[0] and edits[1] overlap in ${path}. Merge them into one edit or target disjoint regions.`, "edit_overlap"],
+  ];
+  for (const [message, code] of cases) {
+    const diagnostic = classifyToolFailure(result(message!), "edit");
+    assert.equal(diagnostic.failureKind, "validation", message);
+    assert.equal(diagnostic.errorCode, code);
+    assert.equal(diagnostic.level, "warning");
+    assert.equal(diagnostic.summaryOmitted, false);
+    assert.ok(diagnostic.errorSummary);
+    assert.ok(!JSON.stringify(diagnostic).includes("private"));
+    assert.equal(classifyToolFailure(result(message!), "bash").failureKind, "unknown");
+    const exception = classifyToolFailure(new Error(message), "edit");
+    assert.equal(exception.level, "error");
+    assert.equal(exception.originalStackAvailable, true);
+  }
+  for (const message of ["Could not find the exact text in private-file.txt. Unrecognized reason.", `${cases[0]![0]}\nprivate conversation`]) {
+    const diagnostic = classifyToolFailure(result(message), "edit");
+    assert.equal(diagnostic.failureKind, "unknown");
+    assert.equal(diagnostic.errorSummary, undefined);
+  }
+});
+
 test("arbitrary error output is explicitly unknown and omitted instead of uploaded", () => {
   const diagnostic = classifyToolFailure(result("private conversation and the command supplied by the user"), "custom_tool");
   assert.equal(diagnostic.failureKind, "unknown");

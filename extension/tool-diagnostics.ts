@@ -21,6 +21,14 @@ const systemErrors: Record<string, { kind: ToolFailureKind; summary: string }> =
   EINVAL: { kind: "validation", summary: "invalid argument" },
 };
 const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === "object" ? value as Record<string, unknown> : undefined;
+// Pi edit-diff diagnostics (including 1.0.2). Reconstruct summaries; never copy the path or oldText.
+const editDiagnostics = [
+  { pattern: /^Could not find (?:the exact text in [^\r\n]+\. The old text|edits\[\d+\] in [^\r\n]+\. The oldText) must match exactly including all whitespace and newlines\.$/, code: "edit_text_not_found", summary: "Edit text does not match the file" },
+  { pattern: /^Found \d+ occurrences of (?:the text in [^\r\n]+\. The text|edits\[\d+\] in [^\r\n]+\. Each oldText) must be unique\. Please provide more context to make it unique\.$/, code: "edit_text_ambiguous", summary: "Edit text matches multiple locations" },
+  { pattern: /^(?:edits\[\d+\]\.)?oldText must not be empty in [^\r\n]+\.$/, code: "invalid_arguments", summary: "Edit oldText must not be empty" },
+  { pattern: /^No changes made to [^\r\n]+\. (?:The replacement produced identical content\. This might indicate an issue with special characters or the text not existing as expected\.|The replacements produced identical content\.)$/, code: "edit_no_change", summary: "Edit replacement produced no changes" },
+  { pattern: /^edits\[\d+\] and edits\[\d+\] overlap in [^\r\n]+\. Merge them into one edit or target disjoint regions\.$/, code: "edit_overlap", summary: "Edit replacements overlap" },
+];
 
 /** Never upload arbitrary output. Summaries are reconstructed from recognized diagnostic formats. */
 export function classifyToolFailure(result: unknown, toolName: string): ToolFailure {
@@ -78,6 +86,10 @@ export function classifyToolFailure(result: unknown, toolName: string): ToolFail
     else if (/^Validation failed for tool\b/.test(first) || first === "Edit tool input is invalid. edits must contain at least one replacement." || /^Invalid timeout:/.test(first)) {
       accept("validation", "invalid_arguments", first.startsWith("Invalid timeout:") ? "Invalid timeout argument" : "Invalid tool arguments");
     } else if (/^Offset \d+ is beyond end of file \(\d+ lines total\)$/.test(text)) accept("validation", "invalid_arguments", "Read offset is beyond end of file");
+    else if (toolName === "edit") {
+      const known = editDiagnostics.find(item => item.pattern.test(text));
+      if (known) accept("validation", known.code, known.summary);
+    }
   }
   return diagnostic;
 }
