@@ -35,7 +35,10 @@ function arrayResult(value) {
 function exceptionData(value) {
   return { values: (value?.values ?? []).map(item => ({
     ...pick(item, ["type", "value", "mechanism"]),
-    ...(item.stacktrace ? { stacktrace: { frames: (item.stacktrace.frames ?? []).map(frame => pick(frame, ["filename", "abs_path", "function", "module", "package", "lineno", "colno", "in_app"])) } } : {}),
+    ...(item.stacktrace ? { stacktrace: { frames: (item.stacktrace.frames ?? []).map(frame => ({
+      ...pick(frame, ["filename", "function", "module", "package"]),
+      ...pick({ abs_path: frame.abs_path ?? frame.absPath, lineno: frame.lineno ?? frame.lineNo, colno: frame.colno ?? frame.colNo, in_app: frame.in_app ?? frame.inApp }, ["abs_path", "lineno", "colno", "in_app"]),
+    })) } } : {}),
   })) };
 }
 function eventData(event) {

@@ -19,6 +19,17 @@ test("offline Sentry JSON retains diagnostic evidence without request data or fr
   for (const secret of ["session-secret", "private@example.com", "password", '"vars"']) assert.ok(!wire.includes(secret));
 });
 
+test("Sentry CLI camelCase stack frames retain resolved line numbers without source context", () => {
+  const event = { eventID: "abc", entries: [{ type: "exception", data: { values: [{ type: "TypeError", stacktrace: { frames: [{ filename: "/web/src/telemetry-fetch.ts", absPath: "app:///web/src/telemetry-fetch.ts", lineNo: 18, colNo: 28, inApp: true, context: [[18, "private source"]], vars: { token: "secret" } }] } }] } }] };
+  const bundle = normalizeInput(event, options);
+  const frame = bundle.issues[0].events[0].entries[0].data.values[0].stacktrace.frames[0];
+  assert.equal(frame.lineno, 18);
+  assert.equal(frame.colno, 28);
+  assert.equal(frame.in_app, true);
+  assert.equal(frame.abs_path, "app:///web/src/telemetry-fetch.ts");
+  assert.ok(!JSON.stringify(bundle).includes("private source"));
+});
+
 test("collector keeps partial failures visible and uses literal argument arrays for queries", async () => {
   const calls: string[][] = [];
   const bundle = await collectIssues(options, async (args: string[]) => {
