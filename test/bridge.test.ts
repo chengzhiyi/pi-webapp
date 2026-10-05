@@ -123,6 +123,41 @@ test("telemetry config is authenticated; unexpected request errors preserve stat
   assert.ok(!JSON.stringify(events).includes("private prompt"));
 });
 
+test("directory validation returns validation_error without Sentry events; filesystem failures remain reported", async () => {
+  const events: Event[] = [];
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
+  });
+  const directory = await mkdtemp(join(tmpdir(), "pi-directory-validation-"));
+  const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {} }, webRoot, telemetry);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+    const request = (route: string, body: object) => fetch(`${url.origin}${route}`, { method: "POST", headers, body: JSON.stringify({ sessionId: "session-a", ...body }) });
+    for (const [route, body, message] of [
+      ["/api/directory/list", { path: "." }, "目录路径必须是绝对路径"],
+      ["/api/directory/create", { path: ".", name: "child" }, "父目录路径必须是绝对路径"],
+      ["/api/directory/create", { path: directory, name: "../child" }, "文件夹名称无效"],
+    ] as const) {
+      const response = await request(route, body);
+      assert.equal(response.status, 400);
+      const error = await response.json();
+      assert.equal(error.error, message);
+      assert.equal(error.errorCode, "validation_error");
+      assert.equal(error.errorId, undefined);
+    }
+    await telemetry.flush();
+    assert.equal(events.length, 0);
+    const failure = await request("/api/directory/list", { path: join(directory, "missing") });
+    assert.equal(failure.status, 400);
+    const error = await failure.json();
+    assert.equal(error.errorCode, "unexpected_error");
+    assert.match(error.errorId, /^[a-f0-9]{32}$/);
+  } finally { await bridge.close(); await rm(directory, { recursive: true, force: true }); }
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.contexts?.diagnostic?.route, "/api/directory/list");
+});
+
 test("plugin execution errors never upload unquoted user input", async () => {
   const events: Event[] = [];
   const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
