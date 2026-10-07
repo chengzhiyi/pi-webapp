@@ -20,6 +20,70 @@ function run(args: string[], env: NodeJS.ProcessEnv) {
   return spawnSync(process.execPath, [launcher, ...args], { env, encoding: "utf8", timeout: 15000 });
 }
 
+interface LifecycleRecord {
+  event: string; timestamp: string; instanceId: string; reason?: string;
+  ready?: boolean; signal?: string | null; exitCode?: number | null;
+  uptimeMs: number; port?: number | null; forceStopRequested?: boolean;
+}
+
+async function lifecycleLog(agentDir: string): Promise<LifecycleRecord[]> {
+  const log = await readFile(join(agentDir, "pi-web", "launcher.log"), "utf8");
+  assert.ok(!log.includes("test-token"), "lifecycle diagnostics must not include the access token");
+  return log.split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line));
+}
+
+test("launcher records Pi lifecycle after readiness", async (t) => {
+  for (const mode of ["nonzero_exit", "signal_exit", "requested_stop", "forced_stop"] as const) await t.test(mode,
+    { skip: process.platform === "win32" && (mode === "signal_exit" || mode === "forced_stop") }, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-web-exit-"));
+    const agentDir = join(directory, "agent");
+    const trigger = join(directory, "exit-request");
+    const env = { ...process.env, PATH: directory, PI_WEBAPP_AUTO_OPEN: "0", PI_CODING_AGENT_DIR: agentDir,
+      PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "query"), PI_TEST_RPC_INPUT: join(directory, "input") };
+    try {
+      const pi = join(directory, process.platform === "win32" ? "pi.cmd" : "pi");
+      const script = process.platform === "win32" ? join(directory, "fake-pi.mjs") : pi;
+      await writeFile(script, `#!${process.execPath}
+import { existsSync } from "node:fs";
+import { createInterface } from "node:readline";
+if (process.argv[2] === "--version") { console.log("0.87.1"); process.exit(0); }
+createInterface({ input: process.stdin }).on("line", line => {
+  const request = JSON.parse(line);
+  if (request.type === "get_commands") console.log(JSON.stringify({ type: "response", id: request.id, success: true, data: { commands: [{ name: "web", source: "extension", sourceInfo: { path: process.argv[5] } }] } }));
+  else console.log(JSON.stringify({ type: "extension_ui_request", method: "notify", message: "pi-webapp: http://127.0.0.1:12345/#test-token" }));
+});
+process.stdin.on("end", () => { ${mode === "forced_stop" ? "" : "process.exit(0);"} });
+setInterval(() => { if (existsSync(${JSON.stringify(trigger)})) process.exit(7); }, 20);
+`);
+      if (process.platform === "win32") await writeFile(pi, `@"${process.execPath}" "${script}" %*\r\n`);
+      else await chmod(pi, 0o755);
+      const started = run([], env);
+      assert.equal(started.status, 0, started.stderr);
+      const statePath = join(agentDir, "pi-web", "launcher.json");
+      const state = JSON.parse(await readFile(statePath, "utf8"));
+      if (mode === "signal_exit") process.kill(state.piPid, "SIGTERM");
+      else if (mode === "nonzero_exit") await writeFile(trigger, "exit");
+      else { const stopped = run(["stop"], env); assert.equal(stopped.status, 0, stopped.stderr); }
+      for (let attempt = 0; attempt < 150 && existsSync(statePath); attempt++) await delay(20);
+      const records = await lifecycleLog(agentDir);
+      const ready = records.find(record => record.event === "launcher_ready");
+      const exited = records.filter(record => record.event === "pi_process_exit");
+      assert.ok(ready, "readiness must be logged before a later exit");
+      assert.equal(exited.length, 1);
+      assert.equal(exited[0]!.reason, mode.endsWith("stop") ? "stop_request" : "unexpected_exit");
+      assert.equal(exited[0]!.ready, true);
+      assert.equal(exited[0]!.instanceId, ready.instanceId);
+      assert.equal(exited[0]!.signal, mode === "signal_exit" || mode === "forced_stop" ? "SIGTERM" : null);
+      assert.equal(exited[0]!.exitCode, mode === "nonzero_exit" ? 7 : mode === "requested_stop" ? 0 : null);
+      assert.equal(exited[0]!.forceStopRequested, mode === "forced_stop");
+      if (mode === "forced_stop") assert.equal(records.filter(record => record.event === "pi_force_stop").length, 1);
+      assert.ok(Number.isFinite(Date.parse(exited[0]!.timestamp)));
+      assert.ok(exited[0]!.uptimeMs >= 0);
+      assert.notEqual(ready.instanceId, state.nonce, "log identity must not reuse the control nonce");
+    } finally { run(["stop"], env); await rm(directory, { recursive: true, force: true }); }
+  });
+});
+
 test("launcher starts Pi RPC in the background and stops it cleanly", { skip: process.platform === "win32" }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-web-launch-"));
   const argsFile = join(directory, "args");
@@ -50,6 +114,16 @@ test("launcher starts Pi RPC in the background and stops it cleanly", { skip: pr
     const stopped = run(["stop"], env);
     assert.equal(stopped.status, 0, stopped.stderr);
     await assert.rejects(readFile(statePath));
+    const records = await lifecycleLog(join(directory, "agent"));
+    const ready = records.filter(record => record.event === "launcher_ready");
+    assert.equal(ready.length, 1, "opening the running service must not create a new lifecycle");
+    assert.equal(ready[0]!.port, 12345);
+    const exited = records.filter(record => record.event === "pi_process_exit");
+    assert.equal(exited.length, 1);
+    assert.equal(exited[0]!.instanceId, ready[0]!.instanceId);
+    assert.equal(exited[0]!.reason, "stop_request");
+    assert.equal(exited[0]!.exitCode, 0);
+    assert.equal(exited[0]!.signal, null);
   } finally {
     run(["stop"], env);
     await rm(directory, { recursive: true, force: true });
@@ -137,6 +211,10 @@ test("launcher restarts a prepared release at the same browser address", { skip:
     assert.deepEqual(record.args, ["start", "--test-arg"]);
     assert.equal(record.port, address.port);
     assert.equal(record.token, address.hash.slice(1));
+    const exited = (await lifecycleLog(agentDir)).find(record => record.event === "pi_process_exit");
+    assert.ok(exited);
+    assert.equal(exited.reason, "restart_request");
+    assert.equal(exited.exitCode, 0);
   } finally {
     run(["stop"], env);
     await rm(directory, { recursive: true, force: true });

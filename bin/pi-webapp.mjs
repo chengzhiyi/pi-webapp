@@ -131,26 +131,43 @@ async function serve(pi, args) {
   let runningUrl = null;
   let buffer = "";
   let killTimer;
+  let stopReason;
+  let forceStopRequested = false;
+  const instanceId = randomUUID();
+  const startedAt = performance.now();
+  const lifecycle = (event, fields = {}) => {
+    try {
+      console.error(JSON.stringify({ timestamp: new Date().toISOString(), event,
+        level: event === "pi_process_exit" && (!stopping || failed) ? "error" : "info",
+        instanceId, pid: process.pid, piPid: child.pid, uptimeMs: Math.round(performance.now() - startedAt), ...fields }));
+    } catch { /* Diagnostics must not interrupt process supervision. */ }
+  };
   const devWatchers = [];
   let devReloadTimer;
   let devReloadCount = 0;
   let devReloadCommand;
-  const shutdown = () => {
+  const shutdown = (reason) => {
     if (stopping) return;
     stopping = true;
+    stopReason = reason;
+    lifecycle("launcher_stop_requested", { reason });
     child.stdin?.end();
-    killTimer = setTimeout(() => child.kill("SIGTERM"), 5000);
+    killTimer = setTimeout(() => {
+      forceStopRequested = true;
+      lifecycle("pi_force_stop", { reason, signal: "SIGTERM" });
+      child.kill("SIGTERM");
+    }, 5000);
     killTimer.unref();
   };
   const fail = (message) => {
     if (failed || ready) return;
     failed = true;
     notifyParent({ type: "error", message });
-    shutdown();
+    shutdown("startup_failure");
   };
   const startupTimer = setTimeout(() => fail(`Pi 启动超时。日志：${logPath}`), 60000);
   const stopTimer = setInterval(async () => {
-    try { if ((await readFile(stopPath, "utf8")).trim() === nonce) shutdown(); }
+    try { if ((await readFile(stopPath, "utf8")).trim() === nonce) shutdown("stop_request"); }
     catch { /* No stop request. */ }
     if (stopping) return;
     try {
@@ -158,12 +175,12 @@ async function serve(pi, args) {
       const prepared = JSON.parse(await readFile(updatePath, "utf8"));
       if (request.nonce === nonce && request.launcher === prepared.launcher && existsSync(request.launcher)) {
         restartRequest = request;
-        shutdown();
+        shutdown("restart_request");
       }
     } catch { /* No valid restart request. */ }
   }, 400);
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", () => shutdown("signal_sigterm"));
+  process.on("SIGINT", () => shutdown("signal_sigint"));
   child.stdout?.on("data", (chunk) => {
     if (failed) return;
     buffer += chunk.toString("utf8");
@@ -210,6 +227,7 @@ async function serve(pi, args) {
           if (closed || failed) return;
           ready = true;
           clearTimeout(startupTimer);
+          lifecycle("launcher_ready", { port: Number(url.port) });
           notifyParent({ type: "ready", pid: process.pid, url: url.href });
           for (const root of pluginRoots) {
             try {
@@ -233,8 +251,11 @@ async function serve(pi, args) {
   child.stdin?.write(JSON.stringify({ id: "list-commands", type: "get_commands" }) + "\n");
   await new Promise((resolveExit) => {
     child.once("error", (error) => { fail(`无法启动 Pi：${error.message}`); resolveExit(); });
-    child.once("close", (code) => {
+    child.once("close", (code, signal) => {
       closed = true;
+      lifecycle("pi_process_exit", { ready, exitCode: code, signal,
+        reason: stopReason ?? (ready ? "unexpected_exit" : "startup_failure"), forceStopRequested,
+        port: runningUrl ? Number(new URL(runningUrl).port) : null });
       if (!ready) fail(`Pi 提前退出（代码 ${code ?? "未知"}）。日志：${logPath}`);
       resolveExit();
     });
