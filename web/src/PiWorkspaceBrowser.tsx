@@ -106,7 +106,7 @@ export function PiWorkspaceBrowser({ wide, expandSidebar, session, workspaces, o
             {!active && <button type="button" className={css.rowAction} title={t("从列表移除工作区", "Remove workspace from list")} aria-label={t(`移除 ${workspace.title}`, `Remove ${workspace.title}`)} disabled={busy} onClick={() => { void run(() => onRemove(workspace.id)); }}>×</button>}
           </div>
           {open && workspaces.sessions.filter((item) => item.workspaceId === workspace.id && (!needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || item.name.toLocaleLowerCase().includes(needle))).map((item) => <button key={item.id} type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${active && session?.sessionId === item.id ? rowsCss.selected : ""}`} role="treeitem" aria-current={active && session?.sessionId === item.id ? "page" : undefined} disabled={busy || unavailable} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
-            <span className={rowsCss.slot}><StateDot state={session?.sessionId === item.id && !session.idle ? "ongoing" : "done"} /></span><span className={rowsCss.title}>{item.name}</span>
+            <span className={rowsCss.slot}><StateDot state={(session?.sessionId === item.id ? !session.idle : item.idle === false) ? "ongoing" : "done"} /></span><span className={rowsCss.title}>{item.name}</span>
           </button>)}
         </div>;
       })}

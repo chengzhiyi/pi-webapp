@@ -8,6 +8,8 @@ import { SessionManager, type ExtensionAPI, type ExtensionCommandContext } from 
 import piWeb from "../extension/index.ts";
 import type { Bridge } from "../extension/bridge.ts";
 import type { WorkspaceRegistry } from "../extension/workspaces.ts";
+import type { WorkspaceSessions } from "../extension/workspace-sessions.ts";
+import { controlledReply } from "./helpers/controlled-reply.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "pi-web-flow-"));
@@ -190,6 +192,40 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     });
     assert.equal(switched.status, 202, await switched.text());
     assert.equal((await (await fetch(`${url.origin}/api/session`, { headers })).json()).sessionId, other.getSessionId());
+    const sessions = shared.workspaceSessions as WorkspaceSessions;
+    const running = sessions.session!;
+    const reply = await controlledReply(running, "Background reply completed");
+    await sessions.send("Continue in the background"); await reply.ready;
+    handlers.get("message_update")?.({ message: { role: "assistant", timestamp: Date.now(), content: [{ type: "text", text: "TUI partial progress" }] } }, fresh);
+    const selectTui = await fetch(`${url.origin}/api/session/select`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: other.getSessionId(), workspaceId: initialWorkspace.id, id: "new", path: "" }),
+    });
+    assert.equal(selectTui.status, 202, await selectTui.text());
+    assert.ok(JSON.stringify((await (await fetch(`${url.origin}/api/session`, { headers })).json()).streaming).includes("TUI partial progress"));
+    handlers.get("message_end")?.({ message: { role: "assistant", content: [] } }, fresh);
+    assert.equal(running.isIdle, false, "switching to the TUI must not stop SDK work");
+    const freshChat = await fetch(`${url.origin}/api/workspace/new-session`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: "new", id: initialWorkspace.id }),
+    });
+    assert.equal(freshChat.status, 202, await freshChat.text());
+    const emptyId = sessions.snapshot().sessionId;
+    const emptyFile = sessions.session!.sessionManager.getSessionFile();
+    const returnToRunning = () => fetch(`${url.origin}/api/session/select`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: sessions.snapshot().sessionId, workspaceId: otherWorkspace.id, id: other.getSessionId(), path: "" }),
+    });
+    assert.equal((await returnToRunning()).status, 202, "cached sessions can be selected without a saved path");
+    assert.equal(sessions.session, running);
+    const withBackground = await (await fetch(`${url.origin}/api/workspaces`, { headers })).json();
+    assert.ok(withBackground.sessions.some((item: { id: string }) => item.id === emptyId), "unsaved background chats stay in the sidebar");
+    assert.ok(withBackground.sessions.some((item: { id: string }) => item.id === "new"), "the TUI stays reachable while in the background");
+    const returnToEmpty = await fetch(`${url.origin}/api/session/select`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: other.getSessionId(), workspaceId: initialWorkspace.id, id: emptyId, path: emptyFile ?? "" }),
+    });
+    assert.equal(returnToEmpty.status, 202, await returnToEmpty.text());
+    reply.finish(); await running.waitForIdle();
+    assert.equal((await (await fetch(`${url.origin}/api/session`, { headers })).json()).sessionId, emptyId);
+    assert.equal((await returnToRunning()).status, 202);
+    assert.ok(JSON.stringify(sessions.snapshot().messages).includes("Background reply completed"));
     const retired = shared.bridge!;
     const sdkSessions = shared.workspaceSessions;
     // Simulate /reload retaining a bridge from a different production build.

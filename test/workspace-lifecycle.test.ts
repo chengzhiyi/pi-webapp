@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { WorkspaceSessions } from "../extension/workspace-sessions.ts";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 
-test("SDK replacement emits shutdown, startup errors preserve the old session, and dispose is idempotent", async () => {
+test("SDK switching retains runtimes, reload emits shutdown, and dispose closes every session once", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-lifecycle-"));
   const pkg = join(root, "plugin"); const cwd = join(root, "workspace");
   const savedAgent = process.env.PI_CODING_AGENT_DIR;
@@ -40,8 +40,13 @@ test("SDK replacement emits shutdown, startup errors preserve the old session, a
   try {
     await host.open(cwd, "new");
     assert.equal(host.snapshot().interactions?.length, 1, "interaction host must exist before startup");
+    const firstId = host.snapshot().sessionId;
     await host.open(cwd, "new");
-    assert.equal(probe.filter(x => x === "new").length, 1);
+    const secondId = host.snapshot().sessionId;
+    await host.open(cwd, { sessionId: firstId });
+    assert.equal(host.snapshot().interactions?.length, 1, "switching preserves pending plugin interactions");
+    await host.open(cwd, { sessionId: secondId });
+    assert.equal(probe.filter(x => x === "new").length, 0, "new chats must keep the previous runtime alive");
     const old = host.session;
     global.__PI_LIFECYCLE_FAIL__ = true;
     await assert.rejects(host.open(cwd, "new"), /startup failed/);
@@ -73,7 +78,7 @@ test("SDK replacement emits shutdown, startup errors preserve the old session, a
     await host.reload();
     assert.equal(await echo(), "ok");
     await host.dispose(); await host.dispose();
-    assert.equal(probe.filter(x => x === "quit").length, 2);
+    assert.equal(probe.filter(x => x === "quit").length, 3, "both retained sessions and the failed candidate close exactly once");
   } finally {
     await host.dispose();
     delete global.__PI_LIFECYCLE_PROBE__; delete global.__PI_LIFECYCLE_FAIL__;

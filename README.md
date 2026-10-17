@@ -46,6 +46,8 @@ In Pi, enter `/web` to open the interface in your default browser. Pi also print
 
 If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They load enabled Web plugin Pi entries explicitly while keeping other Pi extensions isolated from the parent bridge.
 
+Chats run independently: switching workspaces or chats, or creating a new chat, leaves existing tasks running in the background. Returning to a chat restores its running output, history, and pending plugin interactions. Stop affects only the selected chat. Sessions remain in memory until the Pi service stops; stopping or restarting the service ends background tasks.
+
 On startup, the app discovers workspaces from Pi's saved sessions, so conversations from other directories appear in the sidebar. Workspace records and attachments stay under Pi's existing `pi-web/` data directory. Removing a workspace from the sidebar does not delete its files or sessions; you can add it again manually.
 
 ## Develop locally

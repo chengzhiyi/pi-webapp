@@ -20,7 +20,7 @@ import { VERSION } from "@earendil-works/pi-coding-agent";
 import { buildId } from "../shared/build-info.ts";
 import { readAssetManifest } from "./web-assets.ts";
 
-export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
+export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 
 export interface BridgeHost {
