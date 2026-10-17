@@ -11,5 +11,6 @@ dist/
 !.env.example
 
 # Local browser screenshots, logs, snapshots, and acceptance output.
+/.design/
 /artifacts/
 /.ci/
