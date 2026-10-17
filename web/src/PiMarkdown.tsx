@@ -2,6 +2,8 @@ import { useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { localize as t } from "./ui/locale/preference.ts";
+import { useMarkdownDelegate } from "./ui/shared/primitives/markdown/MarkdownDelegate.tsx";
+import { parseFileLink } from "./ui/shared/primitives/markdown/file-link.ts";
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const code = useRef<HTMLPreElement>(null);
@@ -19,8 +21,16 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 }
 
 export function PiMarkdown({ text }: { text: string }) {
+  const { openFile } = useMarkdownDelegate();
   return <div className="pi-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
     pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
-    a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+    a: ({ href, children }) => {
+      const file = href ? parseFileLink(href) : undefined;
+      const local = file !== undefined && openFile !== undefined;
+      return <a href={href} target={local || href?.startsWith("#") ? undefined : "_blank"} rel="noopener noreferrer" onClick={local ? event => {
+        event.preventDefault();
+        openFile(file.path, file.line === undefined ? undefined : { line: file.line });
+      } : undefined}>{children}</a>;
+    },
   }}>{text}</ReactMarkdown></div>;
 }

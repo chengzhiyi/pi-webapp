@@ -22,6 +22,13 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
   await writeFile(join(other, "other.txt"), "Different workspace");
   let session: SessionView = { schemaVersion: 1, sessionId: "files-a", cwd, name: "Files A", model: "example/model", thinkingLevel: "off",
     thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
+  if (width === 1440) {
+    await mkdir(join(cwd, "docs"));
+    await writeFile(join(cwd, "docs", "协作内核与插件协议设计.md"), "# 中文文件链接预览\n");
+    session.messages = [{ id: "file-links", role: "assistant", timestamp: new Date().toISOString(), blocks: [{ kind: "text", text:
+      `[《协作内核与插件协议设计》](docs/${encodeURIComponent("协作内核与插件协议设计.md")})\n\n[再次打开](./docs/${encodeURIComponent("协作内核与插件协议设计.md")})\n\n[绝对路径](${cwd}/README.md)\n\n[外部网站](https://example.com/)`,
+    }] }];
+  }
   let bridge: Bridge;
   const host: BridgeHost = {
     snapshot: () => session, models: () => [{ provider: "example", id: "model", name: "Example" }], send() {}, abort() {}, async newSession() {}, async setModel() {}, async setThinkingLevel() {},
@@ -47,7 +54,23 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
   };
   try {
     await page.goto(bridge.url);
+    if (width === 1440) {
+      const popups: string[] = [];
+      page.on("popup", popup => popups.push(popup.url()));
+      const link = page.getByRole("link", { name: "《协作内核与插件协议设计》", exact: true });
+      await link.click();
+      await expect(rightbar.getByRole("heading", { name: "中文文件链接预览", exact: true })).toBeVisible();
+      expect(popups).toEqual([]);
+      await page.getByRole("link", { name: "再次打开", exact: true }).click();
+      await expect(rightbar.getByRole("tab", { name: /协作内核与插件协议设计/ })).toHaveCount(1);
+      await page.getByRole("link", { name: "绝对路径", exact: true }).click();
+      await expect(rightbar.getByRole("heading", { name: "Workspace preview", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "外部网站", exact: true })).toHaveAttribute("target", "_blank");
+      await expect(page).toHaveURL(new URL(bridge.url).origin + "/");
+      await rightbar.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();
+    }
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
+    if (width === 1440) await rightbar.getByRole("button", { name: "New tab", exact: true }).click();
     await rightbar.getByRole("button", { name: "Workspace files", exact: true }).click();
     await tree.getByRole("treeitem", { name: "src", exact: true }).click();
     const main = tree.getByRole("treeitem", { name: "main.ts", exact: true });
@@ -58,7 +81,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await src.press("ArrowRight"); await expect(main).toBeVisible();
     await main.focus(); await main.press("Enter");
     await expect(rightbar.locator("pre:visible")).toContainText("Hello files");
-    await expect(rightbar.getByText("Read only", { exact: true })).toBeVisible();
+    await expect(rightbar.getByText("Read only", { exact: true }).filter({ visible: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`code-${width}.png`) });
     await writeFile(join(cwd, "src", "main.ts"), "export const message = 'Updated files';\n");
     await rightbar.getByRole("button", { name: "Reload file", exact: true }).click();
@@ -123,6 +146,8 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     for (let index = 0; index < 12; index++) {
       const close = rightbar.getByRole("button", { name: "Close", exact: true });
       if (!await close.count()) break;
+      // Inactive tab close controls become interactive on hover or keyboard focus.
+      await close.first().focus();
       await close.first().click();
     }
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();

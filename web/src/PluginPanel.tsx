@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
 import { DockController, DockLayout, getPane, getTab, dockPaneIds, findTabPane, activeDockPaneId, type PaneId, type TabId } from "./ui/shared/dockkit/index.ts";
 import { PanelChrome } from "./ui/shared/sidebar/PanelChrome.tsx";
 import { dockLabels } from "./ui/shared/sidebar/labels.ts";
@@ -38,19 +38,7 @@ export function usePluginPanel(sessionId: string | undefined) {
     if (Object.keys(controller.getSnapshot().state.tabs).length === 0) controller.openContent({ kind: "guide", contentId: "guide", title: "开始" });
     controller.setExpanded(true);
   };
-  return { controller, snapshot, panelId, trees, expand, shown: state.expanded && Object.keys(state.tabs).length > 0 };
-}
-
-export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
-  panel: ReturnType<typeof usePluginPanel>; width: number; narrow: boolean;
-  plugins: readonly LoadedPlugin[]; props: PluginHostProps; cwd?: string;
-}) {
-  const { controller, snapshot } = panel;
-  const { state } = snapshot;
-  const fullscreen = narrow || state.mode === "fullscreen";
-  const dictionary: Record<string, string> = props.locale === "zh" ? zh : en;
-  const t = (key: string) => dictionary[key] ?? key;
-  const open = (kind: string, contentId: string, title: string, paneId?: PaneId) => {
+  const openContent = useCallback((kind: string, contentId: string, title: string, paneId?: PaneId) => {
     const current = controller.getSnapshot().state;
     const target = paneId && getPane(current, paneId).host === "dock" ? paneId : activeDockPaneId(current);
     const pane = getPane(current, target);
@@ -61,7 +49,19 @@ export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
     if (guide) controller.closeTab(guide);
     controller.setExpanded(true);
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-dockkit-content="${opened}"]`)?.focus());
-  };
+  }, [controller]);
+  return { controller, snapshot, panelId, trees, expand, openContent, shown: state.expanded && Object.keys(state.tabs).length > 0 };
+}
+
+export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
+  panel: ReturnType<typeof usePluginPanel>; width: number; narrow: boolean;
+  plugins: readonly LoadedPlugin[]; props: PluginHostProps; cwd?: string;
+}) {
+  const { controller, snapshot, openContent: open } = panel;
+  const { state } = snapshot;
+  const fullscreen = narrow || state.mode === "fullscreen";
+  const dictionary: Record<string, string> = props.locale === "zh" ? zh : en;
+  const t = (key: string) => dictionary[key] ?? key;
   const collapse = () => {
     controller.setExpanded(false);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus());

@@ -8,6 +8,8 @@ import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
 import { MarkdownText } from "./ui/shared/primitives/markdown/MarkdownText.tsx";
+import { MarkdownDelegateProvider } from "./ui/shared/primitives/markdown/MarkdownDelegate.tsx";
+import { workspacePreviewPath } from "./ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
 import { PluginInteraction, PluginSlot, useWebPlugins } from "./plugin-runtime.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
@@ -65,6 +67,12 @@ export function PiApp() {
     setLayout((previous) => ({ ...previous, narrowExpanded: false }));
   };
   const closePanel = () => panel.controller.setExpanded(false);
+  const openWorkspaceFile = useCallback((path: string) => {
+    if (!bridge.session) return;
+    const relative = workspacePreviewPath(bridge.session.cwd, path);
+    panel.openContent("file-preview", relative, relative.split("/").at(-1)!);
+    setLayout(previous => ({ ...previous, narrowExpanded: false }));
+  }, [bridge.session?.cwd, panel.openContent]);
   useEffect(() => {
     const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
     setLayout((previous) => ({ ...previous, rightbarShown: panel.shown, rightbarTrack: panel.shown, rightbarFullscreen: fullscreen }));
@@ -120,7 +128,7 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} />;
+    if (key === "main") return <MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider>;
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} plugins={plugins} props={pluginProps} />;
     return null;
   };
