@@ -19,6 +19,8 @@ import { NodeTelemetry } from "./telemetry.ts";
 import { isExpectedError, isContentOperation, opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../shared/telemetry.ts";
 import { VERSION } from "@earendil-works/pi-coding-agent";
 import { buildId } from "../shared/build-info.ts";
+import { TerminalRegistry } from "./terminals.ts";
+import { terminalRoute } from "./terminal-routes.ts";
 import { readAssetManifest } from "./web-assets.ts";
 
 export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
@@ -151,6 +153,8 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const token = Buffer.from(tokenText);
   const pickerKind = directoryPickerKind();
   const streams = new Set<ServerResponse>();
+  const terminals = new TerminalRegistry();
+  const terminalStreams = new Set<ServerResponse>();
   const attachments = new Map<string, UploadedAttachment>();
   const logins = new ProviderLoginController((cause, context) => telemetry.capture(cause, context));
   const remember = (session: SessionView) => telemetry.setState({ nodeVersion: process.version, platform: process.platform, session: telemetry.session(session.sessionId), idle: session.idle, model: session.model, thinkingLevel: session.thinkingLevel, messageCount: session.messages.length });
@@ -334,7 +338,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && ["/api/workspace/files/list", "/api/workspace/files/preview", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && ["/api/terminal/create", "/api/terminal/attach", "/api/terminal/input", "/api/terminal/resize", "/api/terminal/close", "/api/workspace/files/list", "/api/workspace/files/preview", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -351,6 +355,10 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           if (typeof body !== "object" || body === null || !("sessionId" in body) || typeof body.sessionId !== "string") {
             json(res, 400, { error: "缺少会话标识" });
+            return;
+          }
+          if (path.startsWith("/api/terminal/")) {
+            await terminalRoute(path, body as { sessionId: string } & Record<string, unknown>, res, () => host.snapshot(), terminals, terminalStreams);
             return;
           }
           if (path === "/api/workspace/files/list" || path === "/api/workspace/files/preview") {
@@ -574,6 +582,9 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
     },
     async close(options) {
       logins.close();
+      for (const stream of terminalStreams) stream.end();
+      terminalStreams.clear();
+      await terminals.close();
       for (const stream of streams) stream.end(`${JSON.stringify({ type: "shutdown", reconnect: options?.reconnect ?? restarting })}\n`);
       streams.clear();
       let force: ReturnType<typeof setTimeout> | undefined;
