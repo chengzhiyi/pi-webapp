@@ -1,6 +1,7 @@
 import { isExpectedError, sanitizeError, safeFields, type ErrorReporter, type DiagnosticFields, type TelemetryConfig } from "../../shared/telemetry.ts";
 import { accessToken } from "./access-token.ts";
 import { buildId, release } from "../../shared/build-info.ts";
+import { randomUUID } from "./random-uuid.ts";
 
 let reporter: ErrorReporter | undefined;
 let pending = true;
@@ -29,7 +30,7 @@ export function setTelemetryState(next: DiagnosticFields & { sessionId?: string 
   if (next.sessionId) {
     if (!sessions.has(next.sessionId)) {
       if (sessions.size >= 32) sessions.delete(sessions.keys().next().value!);
-      sessions.set(next.sessionId, crypto.randomUUID());
+      sessions.set(next.sessionId, randomUUID());
     }
     next = { ...next, session: sessions.get(next.sessionId) };
   }

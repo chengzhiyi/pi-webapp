@@ -26,6 +26,7 @@ import { FileTypeIcon, fileExtension } from "./ui/primitives/FileTypeIcon.tsx";
 import { DropOverlay } from "./ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../shared/user-message.ts";
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
+import { randomUUID } from "./random-uuid.ts";
 import "./pi-conversation.css";
 
 interface Props {
@@ -248,7 +249,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
     const accepted = files.slice(0, available).filter((file) => file.size > 0 && file.size <= 20 * 1024 * 1024);
     if (accepted.length !== files.length) setAttachmentError(t("最多添加 20 个文件，单个文件不得超过 20 MB 且不能为空", "Add up to 20 nonempty files, each no larger than 20 MB"));
     else setAttachmentError("");
-    const pending = accepted.map((file) => ({ key: crypto.randomUUID(), file, status: "uploading" as const }));
+    const pending = accepted.map((file) => ({ key: randomUUID(), file, status: "uploading" as const }));
     setAttachments((current) => [...current, ...pending]);
     pending.forEach((item) => uploadAttachment(item.key, item.file));
   }, [attachments.length, canAttach, uploadAttachment]);
@@ -394,7 +395,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
   const empty = session === null || (session.messages.length === 0 && streaming === null && pending === null);
   const sendWithEcho = async (text: string, attachments: string[], files: File[]) => {
     if (!session) return;
-    const id = `pending-${crypto.randomUUID()}`;
+    const id = `pending-${randomUUID()}`;
     setOptimistic({ id, sessionId: session.sessionId, text, files, knownIds: new Set(session.messages.map((message) => message.id)), timestamp: new Date().toISOString() });
     try { await onSend(text, attachments); }
     catch (cause) { setOptimistic((current) => current?.id === id ? null : current); throw cause; }

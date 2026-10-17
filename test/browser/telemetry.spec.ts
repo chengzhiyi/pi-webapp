@@ -39,6 +39,41 @@ async function open(page: Page, bridge: Bridge) {
   await expect(page.getByRole("textbox")).toBeEnabled();
 }
 
+for (const enabled of [true, false]) {
+  test(`missing native randomUUID still connects, uploads and sends with telemetry ${enabled}`, async ({ page }) => {
+    const errors: string[] = [];
+    const requestIds: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith("/api/") && !path.startsWith("/api/telemetry/")) requestIds.push(request.headers()["x-request-id"]);
+    });
+    await page.addInitScript(() => { Object.defineProperty(crypto, "randomUUID", { value: undefined }); });
+    const f = await fixture(page, enabled);
+    await page.route("**/api/attachment?*", route => route.fulfill({ contentType: "application/json", body: JSON.stringify({ id: "test-attachment", name: "note.txt", bytes: 4 }) }));
+    await page.route("**/api/message", route => route.fulfill({ status: 202, contentType: "application/json", body: "{}" }));
+    try {
+      await open(page, f.bridge); await f.sdkReady;
+      await page.getByRole("textbox").fill("Synthetic UUID compatibility test");
+      await page.locator('input[type="file"]').setInputFiles({ name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("test") });
+      const send = page.getByRole("button", { name: /^(发送消息|Send message)$/ });
+      await expect(send).toBeEnabled();
+      const sent = page.waitForRequest(request => new URL(request.url()).pathname === "/api/message");
+      await send.click();
+      const message = await sent;
+      expect(message.postDataJSON()).toMatchObject({ text: "Synthetic UUID compatibility test", attachments: ["test-attachment"] });
+      expect(message.headers()["x-operation-id"]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      await expect(page.getByRole("textbox")).toBeEmpty();
+      expect(requestIds.length).toBeGreaterThan(3);
+      for (const id of requestIds) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(new Set(requestIds).size).toBe(requestIds.length);
+      expect(errors).toEqual([]);
+      expect(f.browserEvents).toEqual([]);
+      expect(f.nodeEvents).toEqual([]);
+    } finally { await f.bridge.close(); }
+  });
+}
+
 for (const failure of ["read", "end"] as const) {
   test(`stream ${failure} failures retain request correlation and disconnected state, then reconnect`, async ({ page }) => {
     const f = await fixture(page);

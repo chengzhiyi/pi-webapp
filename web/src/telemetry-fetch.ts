@@ -1,13 +1,14 @@
 import { HttpError } from "./http-error.ts";
+import { randomUUID } from "./random-uuid.ts";
 import { breadcrumb, ignoreError, reportError } from "./telemetry.ts";
 import { isContentOperation, opaqueError, type ErrorCorrelation } from "../../shared/telemetry.ts";
 
 export interface CorrelatedResponse { response: Response; correlation: ErrorCorrelation; route: string }
 
 export async function bridgeFetch(path: string, options: RequestInit = {}, telemetry: { expectedNetworkFailure?: boolean } = {}): Promise<CorrelatedResponse> {
-  const requestId = crypto.randomUUID();
+  const requestId = randomUUID();
   const route = path.split("?")[0]!;
-  const operationId = route === "/api/message" ? crypto.randomUUID() : undefined;
+  const operationId = route === "/api/message" ? randomUUID() : undefined;
   const headers = new Headers(options.headers);
   headers.set("X-Request-ID", requestId);
   if (operationId) headers.set("X-Operation-ID", operationId);
