@@ -1,11 +1,15 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import type { SessionView, ViewMessage } from "./view.ts";
 import type { WorkspaceView } from "./workspaces.ts";
 import { createDirectory, listDirectory } from "./directory-picker.ts";
 import { listWorkspaceFiles, previewWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
+import { WorkspaceGitError } from "./git-command.ts";
+import { workspaceGitWrite, withGitWorktreeLease } from "./workspace-git-write.ts";
+import type { GitControlState } from "../shared/workspace-git.ts";
+import { workspaceGitRequest, workspaceGitRoutes } from "./workspace-git-request.ts";
 import { directoryPickerKind, pickNativeDirectory } from "./native-directory-picker.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, imageContent, saveAttachment, type UploadedAttachment } from "./attachments.ts";
 import type { ResourceItem } from "./config-inventory.ts";
@@ -33,6 +37,8 @@ export interface BridgeHost {
   selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart">;
   resolvePluginInteraction?(sessionId: string, pluginId: string, requestId: string, value: unknown): Promise<void>;
   snapshot(): SessionView;
+  /** Canonical cwd paths of every retained running chat, including background chats. */
+  busyGitWorkspaces?(): string[];
   image?(sessionId: string, messageId: string, index: number): { data: Buffer; mimeType: string } | null;
   models(): Array<{ provider: string; id: string; name: string }> | Promise<Array<{ provider: string; id: string; name: string }>>;
   providers?(): Promise<ProviderView[]>;
@@ -339,7 +345,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && ["/api/terminal/create", "/api/terminal/attach", "/api/terminal/input", "/api/terminal/resize", "/api/terminal/close", "/api/workspace/files/list", "/api/workspace/files/preview", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && ["/api/terminal/create", "/api/terminal/attach", "/api/terminal/input", "/api/terminal/resize", "/api/terminal/close", ...workspaceGitRoutes, "/api/workspace/files/list", "/api/workspace/files/preview", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -360,6 +366,37 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           if (path.startsWith("/api/terminal/")) {
             await terminalRoute(path, body as { sessionId: string } & Record<string, unknown>, res, () => host.snapshot(), terminals, terminalStreams);
+            return;
+          }
+          if (workspaceGitRoutes.includes(path)) {
+            const session = host.snapshot();
+            if (body.sessionId !== session.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            try {
+              const busy = (root: string) => !host.snapshot().idle || (host.busyGitWorkspaces?.() ?? []).some(cwd => {
+                const inside = (a: string, b: string) => { const path = relative(a, b); return path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path); };
+                return inside(root, cwd) || inside(cwd, root);
+              });
+              const guard = (root: string) => {
+                const current = host.snapshot();
+                if (current.sessionId !== session.sessionId || current.cwd !== session.cwd) throw new WorkspaceGitError("会话已切换", 409, "session_changed");
+                if (busy(root)) throw new WorkspaceGitError("共用此工作树的聊天正在运行", 409, "agent_busy");
+              };
+              const writing = path.endsWith("/write");
+              const value = writing ? await workspaceGitWrite(session.cwd, body as Record<string, unknown>, guard) : await workspaceGitRequest(path, session.cwd, body as Record<string, unknown>);
+              // A completed mutation belongs to the original session even if the UI has since switched.
+              if (!writing) {
+                const current = host.snapshot();
+                if (current.sessionId !== session.sessionId || current.cwd !== session.cwd) { json(res, 409, { error: "会话已切换" }); return; }
+                if (path.endsWith("/control")) {
+                  const control = value as GitControlState;
+                  if (control.root && busy(control.root)) control.blocked ??= "agent_busy";
+                }
+              }
+              json(res, 200, value);
+            } catch (error) {
+              if (error instanceof WorkspaceGitError || error instanceof WorkspaceFileError) json(res, error.status, { error: error.message, errorCode: "validation_error", ...(error instanceof WorkspaceGitError ? { reason: error.reason } : {}) });
+              else throw opaqueError(error, "Git 操作失败");
+            }
             return;
           }
           if (path === "/api/workspace/files/list" || path === "/api/workspace/files/preview") {
@@ -384,7 +421,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("requestId" in body) || typeof body.requestId !== "string" || body.requestId.length > 200 || !host.resolvePluginInteraction || !("value" in body)) {
               json(res, 400, { error: "插件交互响应无效" }); return;
             }
-            await host.resolvePluginInteraction(body.sessionId, body.pluginId, body.requestId, body.value);
+            await withGitWorktreeLease(host.snapshot().cwd, async () => host.resolvePluginInteraction!(body.sessionId as string, body.pluginId as string, body.requestId as string, body.value), true);
             json(res, 200, { accepted: true });
             return;
           }
@@ -393,7 +430,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("action" in body) || typeof body.action !== "string" || body.action.length > 100 || !host.invokePluginAction) {
               json(res, 400, { error: "插件动作无效" }); return;
             }
-            const value = await host.invokePluginAction(body.sessionId, body.pluginId, body.action, "input" in body ? body.input : undefined);
+            const value = await withGitWorktreeLease(host.snapshot().cwd, async () => host.invokePluginAction!(body.sessionId as string, body.pluginId as string, body.action as string, "input" in body ? body.input : undefined), true);
             json(res, 200, { value });
             return;
           }
@@ -528,7 +565,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             correlation.operationId ??= randomUUID();
             res.setHeader("X-Operation-ID", correlation.operationId);
             telemetry.breadcrumb("send", { ...correlation, attachmentCount: files.length });
-            await host.send(body.sessionId, text, images, correlation);
+            await withGitWorktreeLease(host.snapshot().cwd, async () => host.send(body.sessionId as string, text, images, correlation), true);
             for (const id of ids) attachments.delete(id);
           } else if (path === "/api/compact") {
             if (!host.compact) throw new Error("当前会话不支持压缩");
@@ -543,7 +580,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             correlation.operationId ??= randomUUID();
             res.setHeader("X-Operation-ID", correlation.operationId);
             telemetry.breadcrumb("resume", { ...correlation });
-            await host.resume(body.sessionId, correlation);
+            await withGitWorktreeLease(session.cwd, async () => host.resume!(body.sessionId as string, correlation), true);
           } else if (path === "/api/abort") {
             await host.abort(body.sessionId);
           } else {
@@ -551,6 +588,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           json(res, 202, { accepted: true });
         } catch (error) {
+          if (error instanceof WorkspaceGitError) { json(res, error.status, { error: error.message, errorCode: "validation_error", reason: error.reason }); return; }
           const message = error instanceof Error ? error.message : "请求失败";
           fail(error, message === "会话已切换" ? 409 : 400, message);
         }

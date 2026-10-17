@@ -411,6 +411,13 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           const host: BridgeHost = {
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE }),
             snapshot,
+            busyGitWorkspaces: () => {
+              const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
+              if (shared.current && !shared.current.isIdle()) {
+                try { paths.push(realpathSync(shared.current.cwd)); } catch { paths.push(shared.current.cwd); }
+              }
+              return paths;
+            },
             plugins: async () => {
               const catalog = activeCatalog();
               await catalog?.refreshAssets();
