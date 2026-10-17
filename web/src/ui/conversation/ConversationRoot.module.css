@@ -41,6 +41,13 @@
    meet at the column edge. The rows add up to it — 10px top inset, the 30px
    title row, the tab strip's 10px margin, a 16px tab line, and its 9px bottom
    inset — so no row below may grow past its figure. */
+.heroTools {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  z-index: 5;
+}
+
 .header {
   flex: none;
   box-sizing: border-box;

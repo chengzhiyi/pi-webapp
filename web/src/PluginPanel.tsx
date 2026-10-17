@@ -1,5 +1,5 @@
-import { useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
-import { DockController, DockLayout, getPane, getTab, dockPaneIds } from "./ui/shared/dockkit/index.ts";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
+import { DockController, DockLayout, getPane, getTab, dockPaneIds, findTabPane, activeDockPaneId, type PaneId, type TabId } from "./ui/shared/dockkit/index.ts";
 import { PanelChrome } from "./ui/shared/sidebar/PanelChrome.tsx";
 import { dockLabels } from "./ui/shared/sidebar/labels.ts";
 import { zh, en } from "./ui/shared/sidebar/locales.ts";
@@ -9,15 +9,21 @@ import { IconPanelLeftOutlineRegular } from "./ui/shared/primitives/icons/index.
 import css from "./ui/shared/sidebar/SidebarRight.module.css";
 import expandCss from "./ui/shared/sidebar/ExpandButton.module.css";
 import { PluginSlot, type LoadedPlugin, type PluginHostProps } from "./plugin-runtime.tsx";
+import { FileTypeIcon } from "./ui/primitives/FileTypeIcon.tsx";
+import { localize } from "./ui/locale/preference.ts";
+import { WorkspaceFiles, createWorkspaceTree, type WorkspaceTreeState } from "./WorkspaceFiles.tsx";
+import { WorkspaceFilePreview } from "./WorkspaceFilePreview.tsx";
+import filesCss from "./workspace-files.module.css";
 
 /** Each session retains its own DSH docking controller across navigation. */
 export function usePluginPanel(sessionId: string | undefined) {
-  const controllers = useRef(new Map<string, DockController>());
-  const controller = useMemo(() => {
+  const controllers = useRef(new Map<string, { controller: DockController; trees: Map<string, WorkspaceTreeState> }>());
+  const { controller, trees } = useMemo(() => {
     const key = sessionId ?? "";
     let value = controllers.current.get(key);
     if (!value) {
-      value = new DockController({ makePaneTab: (id) => ({ id, kind: "guide", contentId: "guide", title: "开始" }) });
+      const guide = (id: TabId) => ({ id, kind: "guide", contentId: "guide", title: "开始" });
+      value = { controller: new DockController({ makeInitialTab: guide, makePaneTab: guide }), trees: new Map() };
       controllers.current.set(key, value);
     }
     return value;
@@ -25,33 +31,74 @@ export function usePluginPanel(sessionId: string | undefined) {
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const { state } = snapshot;
   const activeTab = getPane(state, state.activePaneId).activeTabId;
-  const panelId = activeTab ? getTab(state, activeTab).contentId : null;
-  return { controller, snapshot, panelId, shown: state.expanded && Object.keys(state.tabs).length > 0 };
+  const tab = activeTab ? getTab(state, activeTab) : undefined;
+  const panelId = tab?.kind === "plugin" ? tab.contentId : null;
+  useEffect(() => { for (const id of trees.keys()) if (!state.tabs[id as TabId]) trees.delete(id); }, [state.tabs, trees]);
+  const expand = () => {
+    if (Object.keys(controller.getSnapshot().state.tabs).length === 0) controller.openContent({ kind: "guide", contentId: "guide", title: "开始" });
+    controller.setExpanded(true);
+  };
+  return { controller, snapshot, panelId, trees, expand, shown: state.expanded && Object.keys(state.tabs).length > 0 };
 }
 
-export function PluginPanel({ panel, width, narrow, plugins, props }: {
+export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
   panel: ReturnType<typeof usePluginPanel>; width: number; narrow: boolean;
-  plugins: readonly LoadedPlugin[]; props: PluginHostProps;
+  plugins: readonly LoadedPlugin[]; props: PluginHostProps; cwd?: string;
 }) {
   const { controller, snapshot } = panel;
   const { state } = snapshot;
   const fullscreen = narrow || state.mode === "fullscreen";
   const dictionary: Record<string, string> = props.locale === "zh" ? zh : en;
   const t = (key: string) => dictionary[key] ?? key;
+  const open = (kind: string, contentId: string, title: string, paneId?: PaneId) => {
+    const current = controller.getSnapshot().state;
+    const target = paneId && getPane(current, paneId).host === "dock" ? paneId : activeDockPaneId(current);
+    const pane = getPane(current, target);
+    const guide = pane.activeTabId && current.tabs[pane.activeTabId]?.kind === "guide" ? pane.activeTabId : undefined;
+    const existing = kind === "files" ? pane.tabs.find(id => current.tabs[id]?.kind === kind && current.tabs[id]?.contentId === contentId) : undefined;
+    const opened = existing ?? controller.openContent({ kind, contentId, title, paneId: target, revealIfOpened: kind !== "files" });
+    if (existing) controller.focusTab(existing);
+    if (guide) controller.closeTab(guide);
+    controller.setExpanded(true);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-dockkit-content="${opened}"]`)?.focus());
+  };
+  const collapse = () => {
+    controller.setExpanded(false);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus());
+  };
   return <div className={css.panel} style={{ width: fullscreen ? "100vw" : width, "--dsh-sidebar-width": fullscreen ? "100vw" : `${width}px` } as CSSProperties}
     data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
     <div className={css.panelBody}><DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
       intents={controller} labels={dockLabels(t)} active keepMounted={() => true}
-      renderTab={(tab) => tab.kind === "guide" ? <p className={css.unavailable}>{props.locale === "zh" ? "从对话中打开扩展文档。" : "Open an extension document from the conversation."}</p> : <PluginSlot plugins={plugins} slot="rightbar.panel" props={{ ...props, panelId: tab.contentId }} />}
-      renderTabTitle={(tab) => tab.kind === "guide" ? t("tab.guide.title") : <PluginSlot plugins={plugins} slot="rightbar.title" props={{ ...props, panelId: tab.contentId }} />}
-      chrome={<PanelChrome sessionId={props.session?.sessionId ?? ""} fullscreen={fullscreen} shortcuts={[]} t={t} actions={{ toggleExpanded: () => controller.toggleExpanded() }} toggleFullscreen={() => narrow ? controller.setExpanded(false) : controller.setMode(fullscreen ? "push" : "fullscreen")} />} />
+      renderTab={(tab) => {
+        const paneId = findTabPane(state, tab.id).id;
+        const openFiles = () => open("files", "workspace", localize("工作区文件", "Workspace files"), paneId);
+        if (tab.kind === "guide") return <div className={filesCss.guide}>
+          <h2 className={filesCss.guideHeading}>{localize("工作区工具", "Workspace tools")}</h2>
+          <button type="button" className={filesCss.guideEntry} disabled={!props.session || !cwd} aria-label={localize("工作区文件", "Workspace files")} onClick={openFiles}>
+            <FileTypeIcon kind="folder" size={28} /><span className={filesCss.guideCopy}><span>{localize("工作区文件", "Workspace files")}</span><span className={filesCss.guideDescription}>{localize("浏览当前会话的文件并打开预览", "Browse this session’s files and open previews")}</span></span>
+          </button>
+        </div>;
+        if (tab.kind === "files" && props.session && cwd) {
+          let tree = panel.trees.get(tab.id);
+          if (!tree) { tree = createWorkspaceTree(); panel.trees.set(tab.id, tree); }
+          return <WorkspaceFiles sessionId={props.session.sessionId} cwd={cwd} state={tree} onOpen={path => open("file-preview", path, path.split("/").at(-1)!, paneId)} />;
+        }
+        if (tab.kind === "file-preview" && props.session) return <WorkspaceFilePreview sessionId={props.session.sessionId} path={tab.contentId} renderMarkdown={props.renderMarkdown} />;
+        return <PluginSlot plugins={plugins} slot="rightbar.panel" props={{ ...props, panelId: tab.contentId }} />;
+      }}
+      renderTabTitle={(tab) => tab.kind === "guide" ? t("tab.guide.title")
+        : tab.kind === "files" || tab.kind === "file-preview" ? <span className={filesCss.title} title={tab.kind === "files" ? cwd : tab.contentId}>
+          {tab.kind === "files" ? <FileTypeIcon kind="folder" size={16} /> : <FileTypeIcon path={tab.contentId} size={16} />}<span>{tab.kind === "files" ? localize("文件", "Files") : tab.title}</span>
+        </span> : <PluginSlot plugins={plugins} slot="rightbar.title" props={{ ...props, panelId: tab.contentId }} />}
+      chrome={<PanelChrome sessionId={props.session?.sessionId ?? ""} fullscreen={fullscreen} shortcuts={[]} t={t} actions={{ toggleExpanded: collapse }} toggleFullscreen={() => narrow ? collapse() : controller.setMode(fullscreen ? "push" : "fullscreen")} />} />
     </div>
   </div>;
 }
 
 export function PluginPanelExpand({ panel, locale }: { panel: ReturnType<typeof usePluginPanel>; locale: "zh" | "en" }) {
-  if (panel.shown || Object.keys(panel.snapshot.state.tabs).length === 0) return null;
+  if (panel.shown) return null;
   const dictionary = locale === "zh" ? zh : en;
   return <Tooltip label={dictionary["chrome.expand"]} side="bottom" delayMs={500}><Button size="sm" className={expandCss.button} aria-label={dictionary["chrome.expandAria"]}
-    data-sidebar-right-expand onClick={() => panel.controller.setExpanded(true)}><IconPanelLeftOutlineRegular className={expandCss.icon} /></Button></Tooltip>;
+    data-sidebar-right-expand onClick={panel.expand}><IconPanelLeftOutlineRegular className={expandCss.icon} /></Button></Tooltip>;
 }

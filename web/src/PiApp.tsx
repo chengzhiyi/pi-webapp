@@ -69,6 +69,7 @@ export function PiApp() {
     const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
     setLayout((previous) => ({ ...previous, rightbarShown: panel.shown, rightbarTrack: panel.shown, rightbarFullscreen: fullscreen }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth]);
+  const renderMarkdown = useCallback((text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
   const pluginProps = {
     session: bridge.session,
     locale,
@@ -78,7 +79,7 @@ export function PiApp() {
     invokePluginAction: bridge.invokePluginAction,
     resolvePluginInteraction: bridge.resolvePluginInteraction,
     sendMessage: (text: string) => bridge.send(text, []),
-    renderMarkdown: (text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />,
+    renderMarkdown,
   };
   const renderPluginSlot = (slot: WebSlotName, turn?: TurnReference) => <PluginSlot plugins={plugins} slot={slot} props={{ ...pluginProps, turn }} />;
   const toggleSidebar = () => setLayout((previous) => previous.viewportWidth < 1024
@@ -120,7 +121,7 @@ export function PiApp() {
       renderSlot={renderSidebarSlot}
     />;
     if (key === "main") return <PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} />;
-    if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel panel={panel} width={owner.width} narrow={layout.viewportWidth < 767} plugins={plugins} props={pluginProps} />;
+    if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} plugins={plugins} props={pluginProps} />;
     return null;
   };
   return <><AppFrame

@@ -424,6 +424,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
 
   return (
     <div ref={root} className={conversationCss.root} data-phase={empty ? "hero" : "active"} style={{ "--piw-conversation-column-width": `${columnWidth}px` } as React.CSSProperties}>
+      {empty && <div className={conversationCss.heroTools}>{rightbarControl}</div>}
       {session && !empty && <header className={conversationCss.header}>
         <div className={conversationCss.titleRow}>
           <div className={conversationCss.titleCluster}>
