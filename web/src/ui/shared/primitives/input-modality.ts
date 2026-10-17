@@ -37,6 +37,7 @@ if (typeof window !== 'undefined') {
     publish()
   }, true)
   window.addEventListener('keydown', (event) => {
+    if (typeof event.key !== 'string') return
     pointer = false
     if (event.isComposing) {
       keyFocusOrigin = undefined

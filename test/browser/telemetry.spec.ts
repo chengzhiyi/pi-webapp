@@ -74,6 +74,31 @@ for (const enabled of [true, false]) {
   });
 }
 
+test("malformed key events are ignored and normal keyboard navigation still works", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const f = await fixture(page);
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    await page.getByRole("textbox").click();
+    await expect(page.locator("html")).toHaveAttribute("data-input-modality", "pointer");
+    await page.evaluate(() => {
+      for (const key of [undefined, null, 42]) {
+        const event = new Event("keydown", { bubbles: true });
+        if (key !== undefined) Object.defineProperty(event, "key", { value: key });
+        window.dispatchEvent(event);
+      }
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-input-modality", "pointer");
+    await page.keyboard.press("Tab");
+    await expect(page.locator("html")).toHaveAttribute("data-input-modality", "keyboard");
+    await page.getByRole("textbox").fill("Keyboard remains usable");
+    expect(errors).toEqual([]);
+    expect(f.browserEvents).toEqual([]);
+    expect(f.nodeEvents).toEqual([]);
+  } finally { await f.bridge.close(); }
+});
+
 for (const failure of ["read", "end"] as const) {
   test(`stream ${failure} failures retain request correlation and disconnected state, then reconnect`, async ({ page }) => {
     const f = await fixture(page);
