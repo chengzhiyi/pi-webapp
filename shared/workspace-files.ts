@@ -15,5 +15,5 @@ export type WorkspaceFilePreview = { path: string; size: number } & (
   | { kind: "text"; text: string }
   | { kind: "image"; mimeType: string; data: string }
   | { kind: "unsupported" }
-  | { kind: "too-large"; limit: number }
+  | { kind: "too-large"; limit: number; unit: "bytes" | "lines" }
 );

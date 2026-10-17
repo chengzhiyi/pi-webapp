@@ -63,6 +63,10 @@ test("previews handle empty, UTF-8, active markup, binary, image and oversized f
     assert.equal((await previewWorkspaceFile(root, "not-utf8.txt")).kind, "unsupported");
     await writeFile(join(root, "big.txt"), Buffer.alloc(1024 * 1024, 65));
     assert.equal((await previewWorkspaceFile(root, "big.txt")).kind, "too-large");
+    await writeFile(join(root, "many-lines.txt"), "\n".repeat(20000));
+    const manyLines = await previewWorkspaceFile(root, "many-lines.txt");
+    assert.equal(manyLines.kind, "too-large");
+    if (manyLines.kind === "too-large") assert.equal(manyLines.unit, "lines");
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
     await writeFile(join(root, "image.png"), Buffer.from(png, "base64"));
     const image = await previewWorkspaceFile(root, "image.png");

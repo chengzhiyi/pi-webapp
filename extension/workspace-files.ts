@@ -6,6 +6,7 @@ import type { WorkspaceFileEntry, WorkspaceFileListing, WorkspaceFilePreview } f
 const MAX_ENTRIES = 1000;
 const MAX_TEXT_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_TEXT_LINES = 10000;
 const names = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 export class WorkspaceFileError extends Error {
@@ -87,7 +88,7 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       await file.read(head, 0, head.length, 0);
       const mimeType = imageType(head);
       const limit = mimeType ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES;
-      if (info.size > limit) return { ...meta, kind: "too-large", limit };
+      if (info.size > limit) return { ...meta, kind: "too-large", limit, unit: "bytes" };
       // Read at most limit + 1 even if the file grows after stat.
       const buffer = Buffer.alloc(Math.min(info.size + 1, limit + 1));
       let length = 0;
@@ -100,6 +101,10 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       const bytes = buffer.subarray(0, length);
       if (mimeType) return { ...meta, kind: "image", mimeType, data: bytes.toString("base64") };
       if (bytes.some(byte => byte === 0 || (byte < 32 && ![9, 10, 12, 13, 27].includes(byte)))) return { ...meta, kind: "unsupported" };
+      let lines = 1;
+      for (let index = 0; index < bytes.length - 1; index++) {
+        if (bytes[index] === 10 && ++lines > MAX_TEXT_LINES) return { ...meta, kind: "too-large", limit: MAX_TEXT_LINES, unit: "lines" };
+      }
       try { return { ...meta, kind: "text", text: new TextDecoder("utf-8", { fatal: true }).decode(bytes) }; }
       catch { return { ...meta, kind: "unsupported" }; }
     } finally { await file.close(); }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,7 @@ test("workspace file endpoints require the active session, token and same origin
     assert.equal(error.errorCode, "validation_error");
     assert.equal(error.errorId, undefined);
     assert.equal((await fetch(`${url.origin}/api/workspace/files/preview`, { method: "PUT", headers, body: JSON.stringify({ sessionId: "files-a", path: "readme.md", text: "changed" }) })).status, 404);
+    assert.equal(await readFile(join(cwd, "readme.md"), "utf8"), "# Local only\n");
     // Simulate a switch between the initial snapshot and the completed disk read.
     let reads = 0;
     host.snapshot = () => ++reads === 1 ? session : { ...session, sessionId: "files-b" };
