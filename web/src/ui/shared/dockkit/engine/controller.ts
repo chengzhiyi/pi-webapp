@@ -19,11 +19,12 @@ import { canSplit } from './constraints.ts'
 import { createIdMinter, createInitialState, type IdMinter, type TabFactory } from './initial.ts'
 import {
   activeDockPaneId as dockedActivePane, planAddTab, planDropTab, planDuplicateTab, planFloatTab, planOpenContent, planPlaceTab,
-  planResizeSplit, planSetExpanded, planSetMode, planSplitPane, planUnfloatPane,
+  planResizeSplit, planSetExpanded, planSetMode, planSettle, planSplitPane, planUnfloatPane,
   type OpenContentInput,
 } from './planner.ts'
 import type { Mint } from './planner.ts'
 import { Sequencer } from './sequence.ts'
+import { replay } from './operations.ts'
 
 export type { OpenContentInput } from './planner.ts'
 
@@ -110,10 +111,17 @@ export class DockController {
   /**
    * Record a planned intent as one history entry.
    * @param ops - the planner's operations; empty plans nothing.
+   * @param settle - merge panes emptied by a close or move in the same history entry.
    * @returns whether anything was recorded.
    */
-  private run(ops: readonly LayoutOp[]): boolean {
+  private run(ops: readonly LayoutOp[], settle = false): boolean {
     if (ops.length === 0) return false
+    if (settle) {
+      const next = replay(this.state, ops)
+      // With floats still open, the dock needs a usable landing tab. Closing
+      // every tab otherwise leaves an empty root so the host can collapse it.
+      ops = [...ops, ...planSettle(next, this.mint, next.floats.length > 0 ? this.makePaneTab : undefined)]
+    }
     this.sequencer.dispatchAll(ops)
     this.commit()
     return true
@@ -185,7 +193,7 @@ export class DockController {
    * @param tabId - the tab to close.
    */
   closeTab(tabId: TabId): void {
-    this.run([{ type: 'closeTab', tabId }])
+    this.run([{ type: 'closeTab', tabId }], true)
   }
 
   /**
@@ -222,7 +230,7 @@ export class DockController {
    * @returns false when the placement changes nothing.
    */
   placeTab(tabId: TabId, toPaneId: PaneId, index: number): boolean {
-    return this.run(planPlaceTab(this.state, tabId, toPaneId, index))
+    return this.run(planPlaceTab(this.state, tabId, toPaneId, index), true)
   }
 
   /**
@@ -233,7 +241,7 @@ export class DockController {
    * @returns false when the drop changes nothing or the grid is full.
    */
   dropTab(tabId: TabId, targetPaneId: PaneId, zone: DockZone): boolean {
-    return this.run(planDropTab(this.state, this.mint, tabId, targetPaneId, zone))
+    return this.run(planDropTab(this.state, this.mint, tabId, targetPaneId, zone), true)
   }
 
   /**
@@ -244,7 +252,7 @@ export class DockController {
    */
   floatTab(tabId: TabId, rect?: FloatRect): PaneId {
     const planned = planFloatTab(this.state, this.mint, tabId, rect)
-    this.run(planned.ops)
+    this.run(planned.ops, true)
     return planned.paneId
   }
 

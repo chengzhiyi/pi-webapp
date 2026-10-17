@@ -142,6 +142,17 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
       await rightbar.getByRole("button", { name: "Workspace files", exact: true }).click();
       await expect(tree).toHaveCount(2);
       await page.screenshot({ path: testInfo.outputPath("files-split.png") });
+      const secondPane = rightbar.locator('[data-dockkit-pane][data-dockkit-column="1"]');
+      await secondPane.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(rightbar.locator("[data-dockkit-empty]")).toHaveCount(0);
+      await expect(rightbar.locator("[data-dockkit-pane]")).toHaveCount(1);
+      await expect(tree).toHaveCount(1);
+      await rightbar.getByRole("button", { name: "Split", exact: true }).click();
+      await expect(rightbar.getByRole("heading", { name: "Workspace tools", exact: true })).toBeVisible();
+      await secondPane.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(rightbar.locator("[data-dockkit-empty]")).toHaveCount(0);
+      await expect(tree).toHaveCount(1);
+      await page.screenshot({ path: testInfo.outputPath("files-close-empty-split.png") });
     }
     for (let index = 0; index < 12; index++) {
       const close = rightbar.getByRole("button", { name: "Close", exact: true });
