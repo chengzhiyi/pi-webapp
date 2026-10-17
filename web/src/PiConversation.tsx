@@ -27,6 +27,7 @@ import { DropOverlay } from "./ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../shared/user-message.ts";
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
+import { useConversationScroll } from "./use-conversation-scroll.ts";
 import "./pi-conversation.css";
 
 interface Props {
@@ -401,7 +402,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     catch (cause) { setOptimistic((current) => current?.id === id ? null : current); throw cause; }
   };
   const root = useRef<HTMLDivElement>(null);
-  const scroll = useRef<HTMLDivElement>(null);
+  const { scroll, content, composer, onScroll, onWheel, showLatest, returnToLatest } = useConversationScroll(session?.sessionId, !empty && activeTab === "chat", pending?.id);
   const [columnWidth, setColumnWidth] = useState(0);
   useLayoutEffect(() => {
     const element = root.current;
@@ -412,7 +413,6 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => { if (!empty && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [empty, session?.messages.length, streaming?.blocks, pending?.id]);
   const workspace = session?.cwd.split(/[\\/]/).filter(Boolean).at(-1) || t("Pi 工作区", "Pi workspace");
   const liveMessages = [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])];
   const results = toolResults(liveMessages);
@@ -440,13 +440,13 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         </div>
       </header>}
       <div className={conversationCss.body}>
-        <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="">
-          {!empty && <div className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
+        <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="" onScroll={onScroll} onWheel={onWheel}>
+          {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
               {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
-          <div className={conversationCss.composerSeat} data-composer-seat="">
+          <div ref={composer} className={conversationCss.composerSeat} data-composer-seat="">
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
@@ -455,6 +455,11 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>
+          {showLatest && <div className={chatCss.toBottomSlot}>
+            <button className={chatCss.toBottom} type="button" aria-label={t("回到最新", "Back to latest")} title={t("回到最新并继续跟随", "Back to latest and resume following")} onClick={returnToLatest}>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2v12m-5-5 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          </div>}
         </div>
       </div>
     </div>
