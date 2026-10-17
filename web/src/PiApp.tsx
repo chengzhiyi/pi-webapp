@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppFrame } from "./ui/layout/AppFrame.tsx";
+import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "./ui/layout/columns.ts";
 import { SidebarRoot } from "./ui/sidebar/SidebarRoot.tsx";
 import { PiLogo } from "./ui/primitives/index.ts";
 import { IconSettingsOutline14, IconSettingsOutline16 } from "./ui/primitives/icons/index.tsx";
@@ -59,7 +60,7 @@ export function PiApp() {
     setSidebar(width: number) {
       setLayout((previous) => ({ ...previous, sidebar: Math.min(420, Math.max(264, Math.round(width))) }));
     },
-    setRightbar(width: number) { setLayout((previous) => ({ ...previous, rightbar: Math.max(300, Math.min(720, Math.round(width))) })); },
+    setRightbar(width: number) { setLayout((previous) => ({ ...previous, rightbar: clampWidth(width, RIGHTBAR_MIN, previous.viewportWidth * RIGHTBAR_MAX_RATIO) })); },
   }), []);
   const openPanel = (id: string) => {
     panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
