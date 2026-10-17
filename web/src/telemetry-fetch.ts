@@ -35,7 +35,7 @@ export async function bridgeJson(result: CorrelatedResponse): Promise<any> {
   try { body = await response.json(); }
   catch (cause) { reportError(cause, { ...correlation, route, status: response.status, stage: "response_parse" }); throw cause; }
   if (!response.ok) {
-    const error = new HttpError(typeof body?.error === "string" ? body.error : `Request failed: ${response.status}`, response.status);
+    const error = new HttpError(typeof body?.error === "string" ? body.error : `Request failed: ${response.status}`, response.status, typeof body?.reason === "string" ? body.reason : undefined);
     const serverCaptured = typeof body?.errorId === "string" && /^[a-f0-9]{32}$/.test(body.errorId);
     const expected = body?.errorCode === "validation_error" || (response.status < 500 && body?.errorCode !== "unexpected_error");
     if (serverCaptured || body?.errorReported === true || expected) ignoreError(error);

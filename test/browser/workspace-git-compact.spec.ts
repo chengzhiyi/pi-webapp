@@ -1,0 +1,64 @@
+import { test, expect } from "@playwright/test";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { startBridge } from "../../extension/bridge.ts";
+import { terminalHost } from "../helpers/terminal-host.ts";
+
+for (const width of [1280, 768, 375]) for (const theme of ["light", "dark"]) test(`compact Git layout at ${width}px in ${theme}`, async ({ page }, testInfo) => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-git-compact-"));
+  const git = async (...args: string[]) => promisify(execFile)("git", ["-c", "user.name=Layout Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd });
+  await git("init", "-b", "main"); await mkdir(join(cwd, "src"));
+  await writeFile(join(cwd, "src/main.ts"), "base\n"); await git("add", "."); await git("commit", "-m", "base");
+  await git("branch", "feature/compact-panel");
+  await writeFile(join(cwd, "src/main.ts"), "staged\n"); await git("add", ".");
+  for (let index = 0; index < 70; index++) await writeFile(join(cwd, `src/change-${String(index).padStart(2, "0")}.ts`), "new\n");
+  const { host, switchSession } = terminalHost(cwd);
+  const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(theme => { localStorage.setItem("pi-web-locale", "en"); localStorage.setItem("pi-web-theme", theme); }, theme);
+  await page.setViewportSize({ width, height: width === 1280 ? 800 : width === 768 ? 1024 : 812 });
+  const panel = page.locator("[data-sidebar-right-session]");
+  const trigger = panel.getByRole("button", { name: "Manage branches", exact: true });
+  const composer = panel.getByRole("form", { name: "Create commit", exact: true });
+  try {
+    await page.goto(bridge.url); await page.getByRole("button", { name: "Open right sidebar", exact: true }).click(); await panel.getByRole("button", { name: "Git changes", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "src/main.ts, Modified", exact: true })).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    await expect(panel.getByRole("form", { name: "Create branch", exact: true })).toHaveCount(0);
+    const first = await panel.getByRole("button", { name: "src/main.ts, Modified", exact: true }).boundingBox();
+    const pane = await panel.boundingBox(); const before = await composer.boundingBox();
+    expect(first!.y - pane!.y).toBeLessThan(150); expect(before!.height).toBeLessThan(115);
+    expect(before!.y + before!.height).toBeLessThanOrEqual(pane!.y + pane!.height + 1);
+    const scroll = panel.getByRole("region", { name: "Changed files", exact: true });
+    await scroll.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await expect(panel.getByRole("button", { name: "Stage src/change-69.ts", exact: true })).toBeVisible();
+    const after = await composer.boundingBox(); expect(after!.y).toBe(before!.y);
+    await scroll.evaluate(element => { element.scrollTop = 0; });
+    await page.screenshot({ path: testInfo.outputPath(`compact-${width}-${theme}.png`) });
+    if (width === 1280 && theme === "light") await panel.screenshot({ path: testInfo.outputPath("panel-desktop-light.png") });
+    await trigger.click(); const picker = panel.getByRole("dialog", { name: "Manage branches", exact: true });
+    await expect(picker.getByRole("searchbox", { name: "Search branches", exact: true })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath(`branch-list-${width}-${theme}.png`) });
+    await page.keyboard.press("Shift+Tab"); await expect(picker.getByRole("button", { name: "Close branches", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab"); await expect(picker.getByRole("button", { name: "New branch", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(picker.getByRole("button", { name: "Close branches", exact: true })).toBeFocused();
+    await picker.getByRole("searchbox").fill("no-matching-branch"); await expect(picker.getByText("No matching branches.", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape"); await expect(picker).toHaveCount(0); await expect(trigger).toBeFocused();
+    await trigger.press("Enter"); await picker.getByRole("button", { name: "New branch", exact: true }).click();
+    await expect(picker.getByRole("textbox", { name: "New branch name", exact: true })).toBeFocused();
+    await picker.getByRole("textbox").fill("feature/draft"); await page.screenshot({ path: testInfo.outputPath(`branch-picker-${width}-${theme}.png`) });
+    await page.keyboard.press("Escape"); await expect(trigger).toBeFocused();
+    await trigger.click(); await expect(picker.getByRole("searchbox")).toBeVisible();
+    await page.getByRole("button", { name: "Refresh Git status", exact: true }).click(); await expect(picker).toHaveCount(0);
+    // A subdirectory has a concise explanation in place of an unusable commit form.
+    bridge.publish({ type: "snapshot", session: switchSession("scope-chat", join(cwd, "src")) });
+    await page.getByRole("button", { name: "Open right sidebar", exact: true }).click(); await panel.getByRole("button", { name: "Git changes", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "main.ts, Modified", exact: true })).toBeVisible(); await expect(composer).toHaveCount(0);
+    await expect(panel.getByText("Commit from repository root", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(errors).toEqual([]);
+  } finally { await bridge.close(); await rm(cwd, { recursive: true, force: true }); }
+});
