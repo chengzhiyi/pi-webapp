@@ -15,6 +15,15 @@ test("all terminal routes enforce auth, origin, active session and terminal owne
   const id = randomUUID();
   const request = (action: string, body: object = {}, selected = headers) => fetch(`${url.origin}/api/terminal/${action}`, { method: "POST", headers: selected, body: JSON.stringify({ sessionId: "terminal-a", id, cols: 80, rows: 24, data: "echo test\r", ...body }) });
   try {
+    const page = await fetch(url.origin);
+    const html = await page.text();
+    const nonce = /name="pi-style-nonce" content="([^"]+)"/.exec(html)?.[1];
+    assert.ok(nonce);
+    assert.ok(page.headers.get("content-security-policy")?.includes(`style-src 'self' 'nonce-${nonce}'`));
+    assert.ok(page.headers.get("content-security-policy")?.includes("style-src-attr 'unsafe-inline'"));
+    assert.match(page.headers.get("content-security-policy")!, /script-src 'self';/);
+    const secondPage = await (await fetch(url.origin)).text();
+    assert.notEqual(/name="pi-style-nonce" content="([^"]+)"/.exec(secondPage)?.[1], nonce);
     for (const action of ["create", "attach", "input", "resize", "close"]) {
       assert.equal((await request(action, {}, { ...headers, Authorization: "" })).status, 401);
       assert.equal((await request(action, {}, { ...headers, Origin: "https://evil.example" })).status, 403);
@@ -23,6 +32,10 @@ test("all terminal routes enforce auth, origin, active session and terminal owne
     }
     assert.equal((await request("create", { cols: 0 })).status, 400);
     assert.equal((await request("create", { rows: 301 })).status, 400);
+    const cwd = host.snapshot().cwd;
+    switchSession("terminal-a", "/no/such/pi-terminal-workspace");
+    assert.equal((await request("create")).status, 400);
+    switchSession("terminal-a", cwd);
     assert.equal((await request("create")).status, 201);
     assert.equal((await request("create")).status, 201);
     assert.equal((await request("input", { data: "a".repeat(16_385) })).status, 400);

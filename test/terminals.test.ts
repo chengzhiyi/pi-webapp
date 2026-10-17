@@ -57,3 +57,37 @@ test("closing and service shutdown reap running shells; launch failures leave no
   assert.throws(() => bad.get("bad", "a"));
   await bad.close();
 });
+
+test("abandoned connections expire; attached shells remain alive and terminal limits are bounded", async () => {
+  const registry = new TerminalRegistry({ shell: "/bin/bash", shellArgs: ["--noprofile", "--norc", "-i"], graceMs: 80 });
+  try {
+    const abandoned = registry.create("abandoned", "a", tmpdir(), 80, 24);
+    const retained = registry.create("retained", "a", tmpdir(), 80, 24);
+    const detach = await retained.attach(() => true);
+    await until(() => { try { process.kill(abandoned.pid, 0); return false; } catch { return true; } });
+    assert.doesNotThrow(() => process.kill(retained.pid, 0));
+    detach();
+    await until(() => { try { process.kill(retained.pid, 0); return false; } catch { return true; } });
+  } finally { await registry.close(); }
+  const limited = new TerminalRegistry({ shell: "/bin/bash", shellArgs: ["--noprofile", "--norc", "-i"] });
+  try {
+    for (let i = 0; i < 8; i++) limited.create(String(i), "a", tmpdir(), 80, 24);
+    assert.throws(() => limited.create("overflow", "a", tmpdir(), 80, 24), /上限/);
+  } finally { await limited.close(); }
+});
+
+test("closing a terminal also kills a shell job in a separate process group", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-terminal-child-"));
+  const registry = new TerminalRegistry({ shell: "/bin/bash", shellArgs: ["--noprofile", "--norc", "-i"] });
+  try {
+    const terminal = registry.create("child", "a", cwd, 80, 24);
+    let output = "";
+    await terminal.attach(frame => { if (frame.type === "output") output += frame.data; return true; });
+    terminal.write("sleep 30 & printf 'CHILD:'; jobs -p; wait\r");
+    await until(() => /CHILD:\d+/.test(output));
+    const child = Number(/CHILD:(\d+)/.exec(output)![1]);
+    assert.doesNotThrow(() => process.kill(child, 0));
+    await registry.remove("child", "a");
+    await until(() => { try { process.kill(child, 0); return false; } catch { return true; } });
+  } finally { await registry.close(); await rm(cwd, { recursive: true, force: true }); }
+});

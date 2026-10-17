@@ -1,0 +1,4 @@
+.root { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; background: #fff; }
+:global(body[data-ds-dark-theme]) .root { background: #151618; }
+.screen { flex: 1; min-height: 0; min-width: 0; overflow: hidden; padding: 8px; }
+.status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; color: var(--ds-fg-secondary); font-size: 12px; }

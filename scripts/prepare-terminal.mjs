@@ -8,6 +8,6 @@ if (process.platform === "darwin") {
   const require = createRequire(import.meta.url);
   const root = dirname(require.resolve("node-pty/package.json"));
   const helper = join(root, "prebuilds", `darwin-${process.arch}`, "spawn-helper");
-  try { const info = await stat(helper); await chmod(helper, info.mode | 0o100); }
+  try { const info = await stat(helper); await chmod(helper, info.mode | 0o111); }
   catch (error) { if (error.code !== "ENOENT") throw error; } // Source builds provide their own executable.
 }

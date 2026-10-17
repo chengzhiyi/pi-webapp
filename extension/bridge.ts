@@ -170,6 +170,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
     assets[`/assets/${name}`] = { path: `assets/${name}`, type: mime[match[1]!]! };
   }
   const server = createServer(async (req, res) => {
+    const styleNonce = randomBytes(18).toString("base64");
     const validId = (id: unknown): id is string => typeof id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
     const requestId = validId(req.headers["x-request-id"]) ? req.headers["x-request-id"] : randomUUID();
     const correlation = { requestId, operationId: validId(req.headers["x-operation-id"]) ? req.headers["x-operation-id"] : undefined };
@@ -189,7 +190,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
     try {
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Referrer-Policy", "no-referrer");
-      res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'${telemetry.config.browser.dsn ? ` ${new URL(telemetry.config.browser.dsn).origin}` : ""}; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`);
+      res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; style-src 'self' 'nonce-${styleNonce}'; style-src-attr 'unsafe-inline'; font-src 'self' data:; connect-src 'self'${telemetry.config.browser.dsn ? ` ${new URL(telemetry.config.browser.dsn).origin}` : ""}; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`);
       try {
         path = new URL(req.url ?? "/", origin).pathname;
       } catch {
@@ -201,7 +202,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         try {
           const bytes = await readFile(join(webRoot, asset.path));
           res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
-          res.end(bytes);
+          res.end(path === "/" ? bytes.toString("utf8").replace("<head>", `<head><meta name="pi-style-nonce" content="${styleNonce}">`) : bytes);
         } catch (cause) {
           fail(cause, 500, "页面文件不可用");
         }
