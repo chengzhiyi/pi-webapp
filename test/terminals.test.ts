@@ -27,8 +27,9 @@ test("PTY retains one session shell, streams output, resizes, interrupts and exi
     terminal.write("sleep 30\r");
     await new Promise(resolve => setTimeout(resolve, 100));
     terminal.write("\x03");
-    terminal.write("printf 'INTERRUPT_OK\\n'\r");
-    await until(() => output.includes("\r\nINTERRUPT_OK"));
+    // Readline may insert control sequences before output; the echoed command must not satisfy this check.
+    terminal.write("printf 'INTERRUPT_%s\\n' OK\r");
+    await until(() => output.includes("INTERRUPT_OK"));
     detach();
     terminal.write("printf 'DETACHED_OK\\n'\r");
     await new Promise(resolve => setTimeout(resolve, 100));
