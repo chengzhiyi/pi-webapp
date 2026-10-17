@@ -18,6 +18,7 @@ export interface ToolDiagnosticFields extends DiagnosticFields {
 export const privateDataCollection = { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false, genAI: { inputs: false, outputs: false }, graphQL: { document: false, variables: false }, databaseQueryData: false, queues: false, stackFrameVariables: false, frameContextLines: 0 } as const;
 const fields = new Set(["stage", "route", "method", "status", "durationMs", "connection", "idle", "model", "thinkingLevel", "messageCount", "attachmentCount", "session", "requestId", "operationId", "errorId", "repeats", "dropped", "componentStack", "eventType", "sequence", "nodeVersion", "piVersion", "platform", "browser", "buildId", "code", "toolName", "toolId", "toolCallId", "failureKind", "errorCode", "exitCode", "timeoutMs", "diagnosticSource", "originalStackAvailable", "errorSummary", "summaryOmitted", "summaryOmittedReason", "level"]);
 const routes = new Set([
+  "/api/workspace/files/list", "/api/workspace/files/preview",
   "/api/plugins", "/api/plugin-action", "/api/plugin-interaction", "/api/resume", "/api/update", "/api/update/version", "/api/provider/models", "/api/provider/logout", "/api/provider/login/active",
   "/api/telemetry/config", "/api/image", "/api/attachment", "/api/attachment/remove", "/api/session", "/api/providers", "/api/models", "/api/config", "/api/workspaces", "/api/commands", "/api/events", "/api/message", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level",
   "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/capability", "/api/directory/list", "/api/directory/create", "/api/directory/pick",
@@ -25,7 +26,7 @@ const routes = new Set([
 
 /** These handlers may throw errors that contain conversations, plugin input or credentials. */
 export function isContentOperation(route: string): boolean {
-  return route === "/api/message" || route.startsWith("/api/provider/")
+  return route === "/api/message" || route.startsWith("/api/provider/") || route.startsWith("/api/workspace/files/")
     || ["/api/plugin-action", "/api/plugin-interaction", "/api/resume", "/api/compact"].includes(route);
 }
 

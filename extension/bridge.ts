@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { SessionView, ViewMessage } from "./view.ts";
 import type { WorkspaceView } from "./workspaces.ts";
 import { createDirectory, listDirectory } from "./directory-picker.ts";
+import { listWorkspaceFiles, previewWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
 import { directoryPickerKind, pickNativeDirectory } from "./native-directory-picker.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, imageContent, saveAttachment, type UploadedAttachment } from "./attachments.ts";
 import type { ResourceItem } from "./config-inventory.ts";
@@ -333,7 +334,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && ["/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && ["/api/workspace/files/list", "/api/workspace/files/preview", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -350,6 +351,23 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           if (typeof body !== "object" || body === null || !("sessionId" in body) || typeof body.sessionId !== "string") {
             json(res, 400, { error: "缺少会话标识" });
+            return;
+          }
+          if (path === "/api/workspace/files/list" || path === "/api/workspace/files/preview") {
+            const session = host.snapshot();
+            if (body.sessionId !== session.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            if (!("path" in body) || typeof body.path !== "string" || body.path.length > 4096) {
+              json(res, 400, { error: "工作区文件路径无效" }); return;
+            }
+            try {
+              const value = path.endsWith("/list") ? await listWorkspaceFiles(session.cwd, body.path) : await previewWorkspaceFile(session.cwd, body.path);
+              const current = host.snapshot();
+              if (current.sessionId !== session.sessionId || current.cwd !== session.cwd) { json(res, 409, { error: "会话已切换" }); return; }
+              json(res, 200, value);
+            } catch (error) {
+              if (error instanceof WorkspaceFileError) json(res, error.status, { error: error.message, errorCode: "validation_error" });
+              else throw opaqueError(error, "工作区文件读取失败");
+            }
             return;
           }
           if (path === "/api/plugin-interaction") {
