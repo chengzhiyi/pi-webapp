@@ -47,6 +47,7 @@ export interface SessionView {
   messages: ViewMessage[];
   pluginEntries: PluginEntry[];
   interactions?: WebInteraction[];
+  streaming?: ViewMessage | null;
 }
 
 export const PAUSED_ENTRY = 'pi-webapp/paused';

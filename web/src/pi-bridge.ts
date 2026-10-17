@@ -53,10 +53,11 @@ export interface SessionView {
   messages: ViewMessage[];
   pluginEntries: PluginEntry[];
   interactions?: WebInteraction[];
+  streaming?: ViewMessage | null;
 }
 
 export interface WorkspaceView { id: string; path: string; title: string; available?: boolean }
-export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string }
+export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 export interface DirectoryEntry { name: string; path: string; hidden: boolean }
 export interface DirectoryListing { path: string; home: string; crumbs: DirectoryEntry[]; entries: DirectoryEntry[]; truncated: boolean }
@@ -181,7 +182,7 @@ export function usePiBridge() {
                 if (event.type === "snapshot" && event.session?.schemaVersion === 1) {
                   setSession(event.session);
                   setTelemetryState({ sessionId: event.session.sessionId, idle: event.session.idle, model: event.session.model, thinkingLevel: event.session.thinkingLevel, messageCount: event.session.messages?.length ?? 0 });
-                  if (event.session.idle) setStreaming(null);
+                  if (event.session.idle || "streaming" in event.session) setStreaming(event.session.streaming ?? null);
                 }
                 if (event.type === "stream") {
                   const active = event.message !== null;
