@@ -1,54 +1,9 @@
 import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { displayUserMessage } from "../shared/user-message.ts";
-import type { PluginEntry, WebInteraction } from "@chengzhiyi/pi-web-protocol";
-
-export interface ViewBlock {
-  kind: "text" | "thinking" | "image" | "toolCall";
-  text: string;
-  toolName?: string;
-  toolCallId?: string;
-}
-
-export interface ViewUsage {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  reasoning?: number;
-  totalTokens: number;
-  cost: number;
-}
-
-export interface ViewMessage {
-  id: string;
-  role: "user" | "assistant" | "tool" | "notice";
-  timestamp: string;
-  blocks: ViewBlock[];
-  isError?: boolean;
-  toolCallId?: string;
-  toolName?: string;
-  usage?: ViewUsage;
-  model?: string;
-  error?: string;
-}
-
-export interface SessionView {
-  schemaVersion: 1;
-  sessionId: string;
-  cwd: string;
-  name: string;
-  model: string | null;
-  thinkingLevel: string | null;
-  thinkingLevels: string[];
-  idle: boolean;
-  paused?: boolean;
-  contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
-  messages: ViewMessage[];
-  pluginEntries: PluginEntry[];
-  interactions?: WebInteraction[];
-  streaming?: ViewMessage | null;
-}
+import type { PluginEntry } from "@chengzhiyi/pi-web-protocol";
+import type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../shared/bridge-contract.ts";
+export type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../shared/bridge-contract.ts";
 
 export const PAUSED_ENTRY = 'pi-webapp/paused';
 export const RESUME_MESSAGE = 'pi-webapp/resume';

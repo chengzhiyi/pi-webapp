@@ -2,14 +2,8 @@ import { mkdir, opendir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, posix, resolve, win32 } from "node:path";
 
-export interface DirectoryEntry { name: string; path: string; hidden: boolean }
-export interface DirectoryListing {
-  path: string;
-  home: string;
-  crumbs: DirectoryEntry[];
-  entries: DirectoryEntry[];
-  truncated: boolean;
-}
+import type { DirectoryEntry, DirectoryListing } from "../shared/bridge-contract.ts";
+export type { DirectoryEntry, DirectoryListing } from "../shared/bridge-contract.ts";
 
 function fullyQualified(path: string): boolean {
   return process.platform === "win32"

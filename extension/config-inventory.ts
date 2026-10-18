@@ -1,13 +1,8 @@
 import { basename, dirname } from "node:path";
 import type { ResolvedPaths } from "@earendil-works/pi-coding-agent";
 
-export interface ResourceItem {
-  name: string;
-  path: string;
-  source: string;
-  scope: "user" | "project" | "temporary";
-  enabled: boolean;
-}
+import type { ResourceItem } from "../shared/bridge-contract.ts";
+export type { ResourceItem } from "../shared/bridge-contract.ts";
 
 interface ConfiguredPackage {
   source: string;

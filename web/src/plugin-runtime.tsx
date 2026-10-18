@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { WebSlotName, WebSlotProps } from "@chengzhiyi/pi-web-protocol";
-import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
+import type { WebPluginCatalogView } from "../../shared/bridge-contract.ts";
 import { WebPluginRuntime, type LoadedPlugin } from "./plugin-manager.ts";
 export type { LoadedPlugin } from "./plugin-manager.ts";
 

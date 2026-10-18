@@ -2,14 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
-/** Stable workspace registration for one canonical host directory. */
-export interface WorkspaceView {
-  id: string;
-  path: string;
-  title: string;
-  /** Computed for list responses; omitted by older hosts and persisted records. */
-  available?: boolean;
-}
+import type { WorkspaceView } from "../shared/bridge-contract.ts";
+export type { WorkspaceView } from "../shared/bridge-contract.ts";
 
 export class WorkspaceUnavailableError extends Error {
   constructor() { super("工作区目录不可用，请恢复目录或从列表移除后重新添加"); }

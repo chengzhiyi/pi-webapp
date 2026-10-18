@@ -3,8 +3,8 @@ import { readFile, rename, rm, stat, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export const customProviderApis = ["openai-completions", "openai-responses", "anthropic-messages"] as const;
-export type CustomProviderApi = typeof customProviderApis[number];
-export interface CustomProviderInput { id: string; name: string; baseUrl: string; api: CustomProviderApi; modelId: string }
+import type { CustomProviderApi, CustomProviderInput } from "../shared/bridge-contract.ts";
+export type { CustomProviderApi, CustomProviderInput } from "../shared/bridge-contract.ts";
 
 export function validCustomProviderInput(value: unknown): value is CustomProviderInput {
   if (!value || typeof value !== "object") return false;

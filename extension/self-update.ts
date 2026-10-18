@@ -9,7 +9,8 @@ import { npmCommand } from "../bin/npm-command.mjs";
 const execFileAsync = promisify(execFile);
 const releasePattern = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 
-export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; reason?: string }
+import type { UpdateStatus } from "../shared/bridge-contract.ts";
+export type { UpdateStatus } from "../shared/bridge-contract.ts";
 export interface PreparedUpdate { version: string; launcher: string }
 
 export function compareVersions(a: string, b: string): number {

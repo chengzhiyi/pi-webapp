@@ -3,16 +3,8 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-export interface ModelFields {
-  id: string;
-  name?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-  input?: Array<"text" | "image">;
-}
-export interface ModelRow extends ModelFields { source: "builtin" | "custom"; overridden: boolean }
-export interface ProviderModelsView { providerId: string; baseUrl?: string; models: ModelRow[] }
-export type ModelChange = { action: "save"; originalId?: string; model: ModelFields } | { action: "remove"; id: string } | { action: "base_url"; baseUrl: string | null };
+import type { ProviderModelFields as ModelFields, ProviderModelsView, ProviderModelChange as ModelChange } from "../shared/bridge-contract.ts";
+export type { ProviderModelFields as ModelFields, ProviderModelRow as ModelRow, ProviderModelsView, ProviderModelChange as ModelChange } from "../shared/bridge-contract.ts";
 
 function validBaseUrl(value: string): boolean {
   if (!value || value.length > 2048) return false;

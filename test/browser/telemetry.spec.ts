@@ -390,11 +390,35 @@ test("invalid protocol events are captured with build debug IDs and the app can 
   } finally { await test.step("close", () => f.bridge.close()); }
 });
 
+test("malformed message blocks are rejected before React and the stream reconnects", async ({ page }) => {
+  const f = await fixture(page);
+  try {
+    await open(page, f.bridge); await f.sdkReady;
+    const reconnected = page.waitForResponse(r => new URL(r.url()).pathname === "/api/events");
+    f.bridge.publish({ type: "snapshot", session: { ...snapshot, messages: [{ id: "broken", role: "assistant", timestamp: new Date().toISOString(), blocks: null }] } } as unknown as Parameters<Bridge["publish"]>[0]);
+    await expect.poll(() => f.browserEvents.length).toBe(1);
+    expect(f.browserEvents[0]?.contexts?.diagnostic?.stage).toBe("ndjson_parse");
+    expect(f.browserEvents.some(e => e.contexts?.diagnostic?.stage === "react")).toBe(false);
+    await reconnected;
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    await expect(page.getByRole("button", { name: /^(刷新页面|Refresh page)$/ })).toHaveCount(0);
+  } finally { await f.bridge.close(); }
+});
+
 test("React render failures show a refresh fallback and attach a component stack", async ({ page }) => {
   const f = await fixture(page);
   try {
     await open(page, f.bridge); await f.sdkReady;
-    f.bridge.publish({ type: "snapshot", session: { ...snapshot, messages: [{ id: "broken", role: "assistant", timestamp: new Date().toISOString(), blocks: null }] } } as unknown as Parameters<Bridge["publish"]>[0]);
+    // Inject an actual rendering failure, not malformed wire data (now rejected earlier).
+    await page.evaluate(() => {
+      Array.prototype.flatMap = new Proxy(Array.prototype.flatMap, {
+        apply(target, thisArg, args) {
+          if (Array.isArray(thisArg) && thisArg.some(item => item?.id === "synthetic-render-failure")) throw new Error("Synthetic render failure");
+          return Reflect.apply(target, thisArg, args);
+        },
+      });
+    });
+    f.bridge.publish({ type: "snapshot", session: { ...snapshot, messages: [{ id: "synthetic-render-failure", role: "assistant", timestamp: new Date().toISOString(), blocks: [{ kind: "text", text: "Valid wire message" }] }] } });
     await expect(page.getByRole("button", { name: /^(刷新页面|Refresh page)$/ })).toBeVisible();
     await expect.poll(() => f.browserEvents.some((e) => e.contexts?.diagnostic?.stage === "react")).toBe(true);
     expect(f.browserEvents.find((e) => e.contexts?.diagnostic?.stage === "react")?.contexts?.diagnostic?.componentStack).toBeTruthy();

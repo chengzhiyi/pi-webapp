@@ -1,99 +1,32 @@
 import { localize as t, useLocale } from "./ui/locale/preference.ts";
 import { useEffect, useState } from "react";
-import type { PluginEntry, WebInteraction } from "@chengzhiyi/pi-web-protocol";
-import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
+import type {
+  ViewMessage as WireViewMessage, SessionView as WireSessionView, WebPluginCatalogView,
+  WorkspaceListView, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
+  AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, LoginMethod,
+  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent,
+} from "../../shared/bridge-contract.ts";
+import { parseBridgeEvent } from "../../shared/bridge-events.ts";
+export type {
+  ViewBlock, ViewUsage, WorkspaceView, WorkspaceSessionView, WorkspaceListView,
+  DirectoryEntry, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
+  AttachmentReceipt, ConfigKind, ConfigScope, ResourceItem, ConfigView, UpdateStatus,
+  LoginMethod, ProviderView, ProviderModelFields, ProviderModelRow, ProviderModelsView,
+  ProviderModelChange, CustomProviderInput, LoginPrompt, LoginEvent, LoginView,
+} from "../../shared/bridge-contract.ts";
 import { accessToken } from "./access-token.ts";
 import { bridgeFetch, bridgeJson } from "./telemetry-fetch.ts";
 import { breadcrumb, reportError, setTelemetryState } from "./telemetry.ts";
 import type { ErrorCorrelation } from "../../shared/telemetry.ts";
 
-export interface ViewBlock {
-  kind: "text" | "thinking" | "image" | "toolCall";
-  text: string;
-  toolName?: string;
-  toolCallId?: string;
-}
-
-export interface ViewUsage {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  reasoning?: number;
-  totalTokens: number;
-  cost: number;
-}
-
-export interface ViewMessage {
-  id: string;
-  role: "user" | "assistant" | "tool" | "notice";
-  timestamp: string;
-  blocks: ViewBlock[];
-  isError?: boolean;
-  toolCallId?: string;
-  toolName?: string;
-  usage?: ViewUsage;
-  model?: string;
-  error?: string;
-  /** Browser-owned files used only by an optimistic submission echo. */
-  localFiles?: File[];
-}
-
-export interface SessionView {
-  schemaVersion: 1;
-  sessionId: string;
-  cwd: string;
-  name: string;
-  model: string | null;
-  thinkingLevel: string | null;
-  thinkingLevels: string[];
-  idle: boolean;
-  paused?: boolean;
-  contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
+/** Optimistic presentation state is deliberately not part of the wire DTO. */
+export interface ViewMessage extends WireViewMessage { localFiles?: File[] }
+export interface SessionView extends Omit<WireSessionView, "messages" | "streaming"> {
   messages: ViewMessage[];
-  pluginEntries: PluginEntry[];
-  interactions?: WebInteraction[];
   streaming?: ViewMessage | null;
 }
-
-export interface WorkspaceView { id: string; path: string; title: string; available?: boolean }
-export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
-export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
-export interface DirectoryEntry { name: string; path: string; hidden: boolean }
-export interface DirectoryListing { path: string; home: string; crumbs: DirectoryEntry[]; entries: DirectoryEntry[]; truncated: boolean }
-export type DirectoryPickerKind = "native" | "browse";
-
 export type ConnectionState = "missing-token" | "connecting" | "connected" | "disconnected";
 export type ModelsStatus = "loading" | "ready" | "error";
-export interface ModelOption { provider: string; id: string; name: string }
-export interface CommandOption { name: string; description?: string }
-export interface AttachmentReceipt { id: string; name: string; bytes: number }
-export type ConfigKind = "packages" | "extensions" | "skills";
-export type ConfigScope = "global" | "project";
-export interface ResourceItem { name: string; path: string; source: string; scope: "user" | "project" | "temporary"; enabled: boolean }
-export interface ConfigView {
-  projectTrusted: boolean;
-  global: Record<ConfigKind, string[]>;
-  project: Record<ConfigKind, string[]>;
-  installed: Record<ConfigKind, ResourceItem[]>;
-}
-export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; reason?: string }
-export type LoginMethod = "api_key" | "oauth";
-export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
-export interface ProviderModelFields { id: string; name?: string; contextWindow?: number; maxTokens?: number; input?: Array<"text" | "image"> }
-export interface ProviderModelRow extends ProviderModelFields { source: "builtin" | "custom"; overridden: boolean }
-export interface ProviderModelsView { providerId: string; baseUrl?: string; models: ProviderModelRow[] }
-export type ProviderModelChange = { action: "save"; originalId?: string; model: ProviderModelFields } | { action: "remove"; id: string } | { action: "base_url"; baseUrl: string | null };
-export interface CustomProviderInput { id: string; name: string; baseUrl: string; api: "openai-completions" | "openai-responses" | "anthropic-messages"; modelId: string }
-export type LoginPrompt =
-  | { type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
-  | { type: "select"; message: string; options: readonly { id: string; label: string; description?: string }[] };
-export type LoginEvent =
-  | { type: "info"; message: string; links?: readonly { url: string; label?: string }[] }
-  | { type: "auth_url"; url: string; instructions?: string }
-  | { type: "device_code"; userCode: string; verificationUri: string }
-  | { type: "progress"; message: string };
-export interface LoginView { id: string; providerId: string; method: LoginMethod; status: "running" | "waiting" | "done" | "error" | "cancelled"; prompt?: LoginPrompt; event?: LoginEvent; authorization?: Extract<LoginEvent, { type: "auth_url" | "device_code" }>; error?: string; errorId?: string }
 
 const token = accessToken();
 
@@ -164,10 +97,13 @@ export function usePiBridge() {
               const line = pending.slice(0, end);
               pending = pending.slice(end + 1);
               if (line) {
-                let event;
-                try { event = JSON.parse(line); } catch (cause) { reportError(cause, { ...correlation, stage: "ndjson_parse" }); throw cause; }
-                if (!event || typeof event !== "object" || typeof event.type !== "string") throw new Error("Invalid stream event");
-                if (!["snapshot", "stream", "workspaces", "error", "shutdown", "plugins_changed"].includes(event.type)) throw new Error("Unsupported stream event");
+                let event: BridgeEvent;
+                try { event = parseBridgeEvent(JSON.parse(line)); } catch (cause) {
+                  // JSON SyntaxError messages may contain conversation or credential fragments.
+                  const diagnostic = cause instanceof SyntaxError ? new Error("Invalid event JSON") : cause;
+                  reportError(diagnostic, { ...correlation, stage: "ndjson_parse" });
+                  throw diagnostic;
+                }
                 if (event.type === "shutdown") {
                   void reader.cancel().catch(() => {});
                   if (event.reconnect === true) throw new DOMException("Pi web service is restarting", "AbortError");
@@ -177,9 +113,7 @@ export function usePiBridge() {
                   setError(t("Pi 网页服务已关闭，请在 Pi 中重新输入 /web。", "The Pi web service stopped. Run /web again in Pi."));
                   return;
                 }
-                if (event.type === "snapshot" && event.session?.schemaVersion !== 1) throw new Error("Unsupported session schema");
-                if (event.type === "snapshot" && (!Array.isArray(event.session.messages) || typeof event.session.sessionId !== "string")) throw new Error("Invalid session snapshot");
-                if (event.type === "snapshot" && event.session?.schemaVersion === 1) {
+                if (event.type === "snapshot") {
                   setSession(event.session);
                   setTelemetryState({ sessionId: event.session.sessionId, idle: event.session.idle, model: event.session.model, thinkingLevel: event.session.thinkingLevel, messageCount: event.session.messages?.length ?? 0 });
                   if (event.session.idle || "streaming" in event.session) setStreaming(event.session.streaming ?? null);

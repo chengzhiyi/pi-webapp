@@ -3,7 +3,8 @@ import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 
-export type PickerKind = "native" | "browse";
+import type { DirectoryPickerKind as PickerKind } from "../shared/bridge-contract.ts";
+export type { DirectoryPickerKind as PickerKind } from "../shared/bridge-contract.ts";
 export type PickerRunner = (command: string, args: readonly string[], signal: AbortSignal) => Promise<{ stdout: string; stderr: string }>;
 
 export const runNativeCommand: PickerRunner = (command, args, signal) => new Promise((resolve, reject) => {

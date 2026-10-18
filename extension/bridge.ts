@@ -2,8 +2,8 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isAbsolute, join, relative } from "node:path";
-import type { SessionView, ViewMessage } from "./view.ts";
-import type { WorkspaceView } from "./workspaces.ts";
+import type { SessionView, BridgeEvent, ConfigView, ConfigChange, WorkspaceListView } from "../shared/bridge-contract.ts";
+export type { BridgeEvent, ConfigKind, ConfigScope, ConfigView, ConfigChange, WorkspaceListView, WorkspaceSessionView } from "../shared/bridge-contract.ts";
 import { createDirectory, listDirectory } from "./directory-picker.ts";
 import { listWorkspaceFiles, previewWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
 import { WorkspaceGitError } from "./git-command.ts";
@@ -12,7 +12,6 @@ import type { GitControlState } from "../shared/workspace-git.ts";
 import { workspaceGitRequest, workspaceGitRoutes } from "./workspace-git-request.ts";
 import { directoryPickerKind, pickNativeDirectory } from "./native-directory-picker.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, imageContent, saveAttachment, type UploadedAttachment } from "./attachments.ts";
-import type { ResourceItem } from "./config-inventory.ts";
 import { ProviderLoginController, type LoginMethod, type ProviderView } from "./provider-login.ts";
 import { validCustomProviderInput, type CustomProviderInput } from "./custom-provider.ts";
 import { validModelChange, type ModelChange, type ProviderModelsView } from "./provider-model-config.ts";
@@ -26,9 +25,6 @@ import { buildId } from "../shared/build-info.ts";
 import { TerminalRegistry } from "./terminals.ts";
 import { terminalRoute } from "./terminal-routes.ts";
 import { readAssetManifest } from "./web-assets.ts";
-
-export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
-export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 
 export interface BridgeHost {
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
@@ -64,24 +60,6 @@ export interface BridgeHost {
   removeWorkspace(id: string): Promise<void>;
   selectSession(workspaceId: string, id: string, path: string): Promise<void>;
 }
-
-export type ConfigKind = "packages" | "extensions" | "skills";
-export type ConfigScope = "global" | "project";
-export interface ConfigView {
-  projectTrusted: boolean;
-  global: Record<ConfigKind, string[]>;
-  project: Record<ConfigKind, string[]>;
-  installed: Record<ConfigKind, ResourceItem[]>;
-}
-export interface ConfigChange {
-  sessionId: string;
-  kind: ConfigKind;
-  scope: ConfigScope;
-  action: "add" | "remove";
-  value: string;
-}
-
-export type BridgeEvent = { type: "shutdown"; reconnect?: boolean } | { type: "plugins_changed" } | { type: "snapshot"; session: SessionView } | { type: "stream"; message: ViewMessage | null } | { type: "workspaces"; value: WorkspaceListView } | ({ type: "error"; message: string; errorCode?: string; errorReported?: boolean } & ErrorCorrelation);
 
 export interface Bridge {
   readonly protocolVersion: 7;

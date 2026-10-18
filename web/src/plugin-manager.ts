@@ -1,6 +1,6 @@
 import { isWebCommandContribution } from "@chengzhiyi/pi-web-protocol";
 import type { WebPluginDefinition, WebPluginLifecycleContext } from "@chengzhiyi/pi-web-protocol";
-import type { WebPluginCatalogView } from "../../extension/web-plugins.ts";
+import type { WebPluginCatalogView } from "../../shared/bridge-contract.ts";
 
 export interface LoadedPlugin { id: string; definition: WebPluginDefinition; instanceId?: string }
 export interface PluginRuntimeSnapshot { sessionId: string | null; generation: number; plugins: LoadedPlugin[]; errors: string[] }

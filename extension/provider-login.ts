@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
-import type { AuthEvent, AuthInteraction, AuthPrompt } from "@earendil-works/pi-ai";
+import type { AuthInteraction } from "@earendil-works/pi-ai";
 import type { DiagnosticFields, ErrorCorrelation } from "../shared/telemetry.ts";
 
-export type LoginMethod = "api_key" | "oauth";
+import type { LoginMethod, LoginView } from "../shared/bridge-contract.ts";
+export type { LoginMethod, LoginPrompt, LoginView, ProviderView } from "../shared/bridge-contract.ts";
 
 /** The web button already chooses browser sign-in, so skip Pi's redundant method picker. */
 export function preferBrowserLogin(providerId: string, method: LoginMethod, interaction: AuthInteraction): AuthInteraction {
@@ -16,20 +17,6 @@ export function preferBrowserLogin(providerId: string, method: LoginMethod, inte
       : interaction.prompt(prompt),
   };
 }
-export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
-export type LoginPrompt = AuthPrompt extends infer T ? T extends unknown ? Omit<T, "signal"> : never : never;
-export interface LoginView {
-  id: string;
-  providerId: string;
-  method: LoginMethod;
-  status: "running" | "waiting" | "done" | "error" | "cancelled";
-  prompt?: LoginPrompt;
-  event?: AuthEvent;
-  authorization?: Extract<AuthEvent, { type: "auth_url" | "device_code" }>;
-  error?: string;
-  errorId?: string;
-}
-
 interface Flow {
   view: LoginView;
   controller: AbortController;

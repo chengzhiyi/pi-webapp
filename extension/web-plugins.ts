@@ -4,8 +4,8 @@ import { dirname, isAbsolute, join, parse, resolve, sep, delimiter } from "node:
 import { DefaultPackageManager, getAgentDir, SettingsManager, type ResolvedResource } from "@earendil-works/pi-coding-agent";
 import { isPiWebManifest, type PiWebManifest } from "@chengzhiyi/pi-web-protocol";
 
-export interface WebPluginView { id: string; client: string; style?: string }
-export interface WebPluginCatalogView { plugins: WebPluginView[]; errors: string[] }
+import type { WebPluginCatalogView } from "../shared/bridge-contract.ts";
+export type { WebPluginView, WebPluginCatalogView } from "../shared/bridge-contract.ts";
 interface PluginRecord { id: string; root: string; manifest: PiWebManifest; clientPath: string; stylePath?: string; revision: string; clientBytes: Buffer; styleBytes?: Buffer }
 
 async function assetContents(clientPath: string, stylePath?: string) {
