@@ -48,8 +48,10 @@ test("switching running chats restores their own streams and keeps background wo
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(bridge.url);
     await expect(page.getByText("First workspace progress", { exact: true })).toBeVisible();
-    await page.getByRole("treeitem", { name: "Second workspace", exact: true }).click();
-    await page.getByRole("treeitem", { name: "Second chat", exact: true }).click();
+    await page.getByRole("textbox").fill("Unsent draft in A");
+    await page.getByRole("button", { name: "Second workspace", exact: true }).click();
+    await page.getByRole("button", { name: "Second chat", exact: true }).click();
+    await expect(page.getByRole("textbox")).toHaveText("");
     await expect(page.getByText("First workspace progress", { exact: true })).toHaveCount(0);
     expect(a.isIdle).toBe(false);
     await page.getByRole("textbox").fill("Work in B");
@@ -57,11 +59,13 @@ test("switching running chats restores their own streams and keeps background wo
     await bReply.ready;
     await expect(page.getByText("Second workspace progress", { exact: true })).toBeVisible();
 
-    await page.getByRole("treeitem", { name: "First chat", exact: true }).click();
+    await page.getByRole("textbox").fill("Unsent draft in B");
+    await page.getByRole("button", { name: "First chat", exact: true }).click();
+    await expect(page.getByRole("textbox")).toHaveText("Unsent draft in A");
     await expect(page.getByText("First workspace progress", { exact: true })).toBeVisible();
     await expect(page.getByText("Second workspace progress", { exact: true })).toHaveCount(0);
     expect(b.isIdle).toBe(false);
-    await expect(page.getByRole("treeitem", { name: "Second chat", exact: true }).locator('[data-state="ongoing"]')).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Second chat", exact: true }).locator('[data-state="ongoing"]')).toHaveCount(1);
     await page.reload();
     await expect(page.getByText("First workspace progress", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^(?:在 First workspace 新建会话|Create a session in First workspace)$/ }).click();
@@ -72,13 +76,14 @@ test("switching running chats restores their own streams and keeps background wo
     bReply.finish(); await b.waitForIdle();
     expect(sessions.snapshot().sessionId).toBe(emptyId);
     await expect(page.getByText("Second workspace progress", { exact: true })).toHaveCount(0);
-    await page.getByRole("treeitem", { name: "First chat", exact: true }).click();
+    await page.getByRole("button", { name: "First chat", exact: true }).click();
     await expect(page.getByText("First workspace progress", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^(?:暂停|Pause|停止|Stop)$/ }).click();
     await expect.poll(() => a.isIdle).toBe(true);
-    await page.getByRole("treeitem", { name: "Second workspace", exact: true }).click();
-    await expect(page.getByRole("treeitem", { name: "Second chat", exact: true }).locator('[data-state="done"]')).toHaveCount(1);
-    await page.getByRole("treeitem", { name: "Second chat", exact: true }).click();
+    await page.getByRole("button", { name: "Second workspace", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Second chat", exact: true }).locator('[data-state]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Second chat", exact: true })).toHaveAccessibleDescription(/空闲|Idle/);
+    await page.getByRole("button", { name: "Second chat", exact: true }).click();
     await expect(page.getByText("Second workspace progress", { exact: true })).toBeVisible();
     await expect(page.getByText("First workspace progress", { exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("background-sessions.png") });

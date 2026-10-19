@@ -146,7 +146,7 @@ test("unavailable workspaces disable session actions, recover and can be removed
   });
   try {
     await open(page, f.bridge); await f.sdkReady;
-    const missing = page.getByRole("treeitem", { name: /Deleted worktree/ });
+    const missing = page.getByRole("button", { name: /^Deleted worktree/, expanded: false });
     await expect(missing).toContainText(/不可用|Unavailable/);
     await expect(page.getByRole("button", { name: /(?:在 Deleted worktree 新建会话|Create a session in Deleted worktree)/ })).toBeDisabled();
     await expect(page.getByRole("button", { name: /(?:在 Healthy project 新建会话|Create a session in Healthy project)/ })).toBeEnabled();
@@ -157,7 +157,9 @@ test("unavailable workspaces disable session actions, recover and can be removed
     f.bridge.publish({ type: "workspaces", value });
     await expect(missing).toContainText(/不可用|Unavailable/);
     await missing.hover();
-    await page.getByRole("button", { name: /^(?:移除 Deleted worktree|Remove Deleted worktree)$/ }).click();
+    await page.getByRole("button", { name: /^(?:Deleted worktree 的工作区操作|Workspace actions for Deleted worktree)$/ }).click();
+    await page.getByRole("menuitem", { name: /从列表移除工作区|Remove workspace from list/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: /^(?:从列表移除|Remove from list)$/ }).click();
     await expect(missing).toHaveCount(0);
     expect(removed).toBe(true);
     expect(errors).toEqual([]);

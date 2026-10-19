@@ -6,13 +6,17 @@ const piLogoUrl = `data:image/svg+xml,${encodeURIComponent(piLogoSvg)}`
 /** The monochrome π mark shared by the sidebar and welcome screen. */
 export function PiLogo({ size = 24, className }: IconProps) {
   return (
-    <img
-      src={piLogoUrl}
-      width={size}
-      height={size}
+    <span
       className={className}
-      alt=""
       aria-hidden="true"
+      style={{
+        display: 'inline-block', flexShrink: 0, width: size, height: size,
+        backgroundColor: 'currentColor',
+        maskImage: `url("${piLogoUrl}")`, WebkitMaskImage: `url("${piLogoUrl}")`,
+        maskSize: 'contain', WebkitMaskSize: 'contain',
+        maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat',
+        maskPosition: 'center', WebkitMaskPosition: 'center',
+      }}
     />
   )
 }

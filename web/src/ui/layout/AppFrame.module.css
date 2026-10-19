@@ -22,6 +22,8 @@
 }
 
 .sidebarCol {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
@@ -29,10 +31,28 @@
 }
 
 .centerCol {
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.frame[data-sidebar-drawer] .sidebarCol {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  z-index: 31;
+  box-shadow: 8px 0 32px rgb(0 0 0 / 18%);
+}
+.drawerMask {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  background: rgb(0 0 0 / 35%);
+  cursor: pointer;
 }
 
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
@@ -81,6 +101,8 @@
  * where it is. The occupant draws its own left border.
  */
 .rightbarCol {
+  grid-column: 3;
+  grid-row: 1;
   position: relative;
   min-width: 0;
   overflow: visible;

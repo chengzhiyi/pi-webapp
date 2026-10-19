@@ -14,6 +14,7 @@ export interface SidebarRootComponentProps {
   collapsed: boolean;
   width: number;
   startSession: () => void;
+  sessionBusy?: boolean;
   toggleSidebar: () => void;
   selectPanel: (id: string) => void;
   usePanels: SelectHook<readonly SidebarPanelMetadata[]>;

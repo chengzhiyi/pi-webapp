@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "./ui/layout/AppFrame.tsx";
 import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "./ui/layout/columns.ts";
 import { SidebarRoot } from "./ui/sidebar/SidebarRoot.tsx";
@@ -28,6 +28,8 @@ export function PiApp() {
     "session.new": t("新会话", "New session"),
     "toggle.open": t("展开侧栏", "Expand sidebar"),
     "toggle.collapse": t("收起侧栏", "Collapse sidebar"),
+    "sidebar.label": t("对话管理", "Conversation navigation"),
+    "sidebar.close": t("关闭侧栏", "Close sidebar"),
     "panels.label": t("面板", "Panels"),
     "brand.localBuild": "pi-webapp",
   };
@@ -54,15 +56,28 @@ export function PiApp() {
     rightbarFullscreen: false,
     rightbarInstant: false,
   }));
+  const lastSidebarWidth = useRef(280);
+  const navigationLock = useRef(false);
+  const [navigationBusy, setNavigationBusy] = useState(false);
+  const closeSidebar = useCallback(() => setLayout(previous => ({ ...previous, narrowExpanded: false })), []);
+  const navigate = async (action: () => Promise<void>) => {
+    if (navigationLock.current) return;
+    navigationLock.current = true;
+    setNavigationBusy(true);
+    try { await action(); closeSidebar(); }
+    finally { navigationLock.current = false; setNavigationBusy(false); }
+  };
   const actions = useMemo(() => ({
+    closeSidebar,
     setViewportWidth(width: number) {
       setLayout((previous) => previous.viewportWidth === width ? previous : { ...previous, viewportWidth: width, narrowExpanded: (previous.viewportWidth < 1024) !== (width < 1024) ? false : previous.narrowExpanded });
     },
     setSidebar(width: number) {
-      setLayout((previous) => ({ ...previous, sidebar: Math.min(420, Math.max(264, Math.round(width))) }));
+      lastSidebarWidth.current = Math.min(420, Math.max(264, Math.round(width)));
+      setLayout((previous) => ({ ...previous, sidebar: lastSidebarWidth.current }));
     },
     setRightbar(width: number) { setLayout((previous) => ({ ...previous, rightbar: clampWidth(width, RIGHTBAR_MIN, previous.viewportWidth * RIGHTBAR_MAX_RATIO) })); },
-  }), []);
+  }), [closeSidebar]);
   const openPanel = (id: string) => {
     panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
     panel.controller.setExpanded(true);
@@ -94,7 +109,7 @@ export function PiApp() {
   const renderPluginSlot = (slot: WebSlotName, turn?: TurnReference) => <PluginSlot plugins={plugins} slot={slot} props={{ ...pluginProps, turn }} />;
   const toggleSidebar = () => setLayout((previous) => previous.viewportWidth < 1024
     ? { ...previous, narrowExpanded: !previous.narrowExpanded }
-    : { ...previous, sidebar: previous.sidebar === 0 ? 280 : 0 });
+    : { ...previous, sidebar: previous.sidebar === 0 ? lastSidebarWidth.current : 0 });
   const useStore = <T,>(select: (state: { layoutInfo: LayoutInfo }) => T): T => select({ layoutInfo: layout });
   const usePanelInfo = <T,>(select: (state: PanelInfo) => T): T => select({ activePanelId: null });
   const usePanels = <T,>(select: (value: readonly SidebarPanelMetadata[]) => T): T => select([]);
@@ -108,14 +123,16 @@ export function PiApp() {
       expandSidebar={owner.expandSidebar}
       session={bridge.session}
       workspaces={bridge.workspaces}
-      onAdd={bridge.addWorkspace}
+      navigationBusy={navigationBusy}
+      connected={bridge.connection === "connected" && bridge.session !== null}
+      onAdd={(path, create) => navigate(() => bridge.addWorkspace(path, create))}
       directoryPickerKind={bridge.directoryPickerKind}
       pickDirectory={bridge.pickDirectory}
       listDirectory={bridge.listDirectory}
       createDirectory={bridge.createDirectory}
-      onRemove={bridge.removeWorkspace}
-      onSelectSession={bridge.selectSession}
-      onNewSession={bridge.newSessionInWorkspace}
+      onRemove={(id) => navigate(() => bridge.removeWorkspace(id))}
+      onSelectSession={(workspaceId, id, path) => navigate(() => bridge.selectSession(workspaceId, id, path))}
+      onNewSession={(id) => navigate(() => bridge.newSessionInWorkspace(id))}
     />;
     return options?.fallback ?? null;
   };
@@ -123,7 +140,8 @@ export function PiApp() {
     if (key === "sidebar") return <SidebarRoot
       collapsed={owner.collapsed}
       width={owner.width}
-      startSession={() => { void bridge.newSession().catch(() => {}); }}
+      startSession={() => { void navigate(bridge.newSession).catch(() => {}); }}
+      sessionBusy={navigationBusy || bridge.connection !== "connected" || bridge.session === null}
       toggleSidebar={toggleSidebar}
       selectPanel={() => {}}
       usePanels={usePanels}

@@ -1,15 +1,41 @@
-.group { margin-bottom: 8px; }
-.workspaceLine { display: flex; align-items: center; min-width: 0; }
-.workspaceButton { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; text-align: left; }
-.workspaceButton.active { color: var(--dsw-alias-state-business-primary); }
+/* DSH reference: ui-workspace/src/client/rows/{Rows,WorkspaceBrowser}.
+   Keep its full-width neutral cells and icon-only hover actions; touch and
+   focus-within reveal the same controls without requiring a pointer hover. */
+.group + .group { margin-top: 4px; }
+.workspaceLine { position: relative; min-width: 0; border-radius: var(--dsw-radius-md); }
+.workspaceLine:hover, .workspaceLine:focus-within, .workspaceLine[data-menu-open] { background: var(--dsw-alias-interactive-bg-hover); }
+.workspaceButton { min-width: 0; width: 100%; border: 0; background: transparent; text-align: left; }
+.workspaceButton .workspaceTitle { flex: 1; }
 .folder { display: inline-flex; }
+.folderActive { color: var(--dsw-alias-state-business-primary); }
 .unavailable { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
-.chevron { display: none; align-items: center; transform: rotate(-90deg); }
+.chevron { display: none; align-items: center; color: var(--dsw-alias-label-caption); transform: rotate(-90deg); }
 .chevronOpen { transform: none; }
-.workspaceButton:hover .folder, .workspaceButton:focus-visible .folder { display: none; }
-.workspaceButton:hover .chevron, .workspaceButton:focus-visible .chevron { display: inline-flex; }
-.sessionButton { width: calc(100% - 14px); margin-left: 14px; border: 0; background: transparent; text-align: left; }
-.rowAction { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; opacity: 0; }
-.workspaceLine:hover .rowAction, .rowAction:focus-visible { opacity: 1; }
-.rowAction:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.error { color: var(--dsw-alias-state-danger-primary, #c93b3b); font-size: 12px; padding: 4px 8px; }
+.workspaceLine:hover .folder, .workspaceLine:focus-within .folder, .workspaceLine[data-menu-open] .folder { display: none; }
+.workspaceLine:hover .chevron, .workspaceLine:focus-within .chevron, .workspaceLine[data-menu-open] .chevron { display: inline-flex; }
+.rowActions { position: absolute; top: 0; right: 8px; height: 34px; display: flex; align-items: center; gap: 12px; opacity: 0; }
+.workspaceLine:hover .workspaceButton, .workspaceLine:focus-within .workspaceButton, .workspaceLine[data-menu-open] .workspaceButton { padding-right: 60px; }
+/* Visually quiet actions remain keyboard-reachable before focus-within reveals them. */
+.workspaceLine:hover .rowActions, .workspaceLine:focus-within .rowActions, .workspaceLine[data-menu-open] .rowActions { opacity: 1; }
+.rowAction { flex: none; width: 16px; height: 20px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--dsw-radius-xs); background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
+.rowAction:hover { color: var(--dsw-alias-label-primary); }
+.rowAction:disabled { cursor: default; opacity: 0.45; }
+.sessionButton { width: 100%; border: 0; background: transparent; text-align: left; box-sizing: border-box; }
+.sessionButton + .sessionButton { margin-top: 2px; }
+/* Selection deliberately uses the DSH neutral fill, not a colored rail or card. */
+.sessionButton[aria-current="page"] { background: var(--dsw-alias-interactive-bg-hover); }
+.sessionTime { flex: none; font-size: 10px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.workspaceButton:focus-visible, .sessionButton:focus-visible, .rowAction:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
+.error { color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; padding: 4px 8px; }
+.menu { position: fixed; z-index: 1100; width: 220px; box-sizing: border-box; padding: 4px; border: 0; --dsw-elevation-stroke-color: var(--dsw-alias-border-l1); box-shadow: var(--dsw-elevation-prominent); }
+.menuItem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 34px; box-sizing: border-box; padding: 6px 8px; border: 0; border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-state-error-primary); font: inherit; font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
+.menuItem:hover, .menuItem:focus-visible { background: var(--dsw-alias-interactive-bg-hover); outline: none; }
+.menuItem:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
+.menuHint { margin: 4px 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
+@media (hover: none), (pointer: coarse) {
+  .rowActions { height: 44px; right: 0; gap: 0; opacity: 1; }
+  .rowAction { width: 40px; height: 44px; border-radius: var(--dsw-radius-sm); }
+  .workspaceButton, .sessionButton { min-height: 44px; }
+  .workspaceButton, .workspaceLine:hover .workspaceButton, .workspaceLine:focus-within .workspaceButton { padding-right: 84px; }
+  .menuItem { min-height: 44px; }
+}

@@ -1,6 +1,6 @@
 .root {
   --piw-session-list-edge-inset: var(--piw-sidebar-inline-padding);
-  --piw-session-list-scrollbar-width: 8px;
+  --piw-session-list-scrollbar-width: 5px;
   --piw-session-list-scrollbar-offset: 2px;
   flex: 1;
   min-height: 0;
@@ -22,12 +22,18 @@
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 50%;
-  corner-shape: round;
+  border-radius: var(--dsw-radius-sm);
   padding: 0;
   background: transparent;
   cursor: pointer;
   color: var(--dsw-alias-label-secondary);
+}
+
+.iconButton:focus-visible,
+.searchButton:focus-visible,
+.clearButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
 }
 
 .iconButton:hover {
@@ -46,7 +52,7 @@
   padding-left: 4px;
   margin-bottom: 4px;
   box-sizing: border-box;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
 }
@@ -139,8 +145,7 @@
   padding: 0;
   box-sizing: border-box;
   border: none;
-  border-radius: 50%;
-  corner-shape: round;
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   cursor: text;
   color: var(--dsw-alias-label-secondary);
@@ -158,7 +163,7 @@
   margin-inline: -2px;
   padding: 0 4px 0 0;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   background: transparent;
   color: var(--dsw-alias-label-caption);
 }
@@ -171,8 +176,7 @@
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 50%;
-  corner-shape: round;
+  border-radius: var(--dsw-radius-sm);
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -225,8 +229,7 @@
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 50%;
-  corner-shape: round;
+  border-radius: var(--dsw-radius-sm);
   padding: 0;
   background: transparent;
   cursor: pointer;

@@ -122,16 +122,16 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(tree.getByRole("treeitem", { name: "new.txt", exact: true })).toBeVisible();
     if (width === 1440) {
       await rightbar.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();
-      await page.getByRole("treeitem", { name: "Second workspace", exact: true }).click();
-      await page.getByRole("treeitem", { name: "Second chat", exact: true }).click();
+      await page.getByRole("button", { name: "Second workspace", exact: true }).click();
+      await page.getByRole("button", { name: "Second chat", exact: true }).click();
       await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
       await rightbar.getByRole("button", { name: "Workspace files", exact: true }).click();
       await expect(tree.getByRole("treeitem", { name: "other.txt", exact: true })).toBeVisible();
       await expect(tree.getByRole("treeitem", { name: "main.ts", exact: true })).toHaveCount(0);
       await rightbar.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();
-      const firstWorkspace = page.getByRole("treeitem", { name: "First workspace", exact: true });
+      const firstWorkspace = page.getByRole("button", { name: "First workspace", exact: true });
       if (await firstWorkspace.getAttribute("aria-expanded") !== "true") await firstWorkspace.click();
-      await page.getByRole("treeitem", { name: "First chat", exact: true }).click();
+      await page.getByRole("button", { name: "First chat", exact: true }).click();
       await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
       await expect(tree.getByRole("treeitem", { name: "main.ts", exact: true })).toBeVisible();
       await rightbar.getByRole("button", { name: "Fullscreen", exact: true }).click();

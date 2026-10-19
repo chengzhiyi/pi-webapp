@@ -76,6 +76,7 @@ export function SidebarRoot({
   collapsed,
   width,
   startSession,
+  sessionBusy = false,
   toggleSidebar,
   selectPanel,
   usePanels,
@@ -170,6 +171,7 @@ export function SidebarRoot({
             type="button"
             className={clsx(css.brand, css.wide)}
             aria-label={t('session.new.label')}
+            disabled={sessionBusy}
             onClick={() => { startSession() }}
           >
             <span className={css.brandIdentity} aria-hidden="true">
@@ -191,6 +193,8 @@ export function SidebarRoot({
             type="button"
             className={clsx(css.iconButton, css.toggle)}
             aria-label={collapsed ? t('toggle.open') : t('toggle.collapse')}
+            aria-expanded={!collapsed}
+            data-sidebar-toggle
             onClick={() => { toggleSidebar() }}
           >
             {!wide && (
@@ -210,6 +214,7 @@ export function SidebarRoot({
           type="button"
           className={css.newSession}
           aria-label={t('session.new.label')}
+          disabled={sessionBusy}
           onClick={() => { startSession() }}
         >
           <IconNewChatOutline16 size={wide ? 14 : 18} />

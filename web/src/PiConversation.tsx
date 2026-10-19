@@ -129,27 +129,45 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
 interface PendingAttachment {
   key: string;
   file: File;
+  discard: (id: string) => Promise<void>;
   status: "uploading" | "ready" | "error";
   receipt?: AttachmentReceipt;
   error?: string;
 }
 
+interface ComposerDraft {
+  text: string;
+  attachments: PendingAttachment[];
+  error: string;
+}
+
 function PiInputBar({ hero, suspended = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; onSend: (text: string, attachments: string[], files: File[]) => Promise<void> }) {
   const locale = useLocale();
-  const [draft, setDraft] = useState("");
+  // Keep unsent text and uploads scoped to their session for this tab's lifetime.
+  // Setters capture the originating key, so late async replies cannot edit another chat.
+  const draftKey = session?.sessionId ?? "";
+  const [drafts, setDrafts] = useState<Record<string, ComposerDraft>>({});
+  const currentDraft = drafts[draftKey];
+  const draft = currentDraft?.text ?? "";
+  const attachments = currentDraft?.attachments ?? [];
+  const attachmentError = currentDraft?.error ?? "";
+  const updateDraft = (update: (value: ComposerDraft) => ComposerDraft) => {
+    setDrafts(current => ({ ...current, [draftKey]: update(current[draftKey] ?? { text: "", attachments: [], error: "" }) }));
+  };
+  const setDraft = (text: string) => updateDraft(value => ({ ...value, text }));
+  const setAttachments = (value: PendingAttachment[] | ((current: PendingAttachment[]) => PendingAttachment[])) => updateDraft(current => ({ ...current, attachments: typeof value === "function" ? value(current.attachments) : value }));
+  const setAttachmentError = (error: string) => updateDraft(value => ({ ...value, error }));
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
   const [working, setWorking] = useState(false);
   const [commandMenu, setCommandMenu] = useState<"button" | "slash" | null>(null);
   const [activeCommand, setActiveCommand] = useState(0);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [attachmentError, setAttachmentError] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadControllers = useRef(new Map<string, AbortController>());
   const removedKeys = useRef(new Set<string>());
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
   const form = useRef<HTMLFormElement>(null);
   const textarea = useRef<ComposerEditorHandle>(null);
   const currentSessionId = useRef(session?.sessionId);
@@ -182,15 +200,17 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   const query = commandMenu === "slash" ? draft.slice(1).toLowerCase() : "";
   const visibleCommands = commandMenu === null ? [] : filterComposerCommands(availableCommands, query, commandMenu === "slash");
 
-  useEffect(() => {
-    setDraft(""); setAttachments([]); setAttachmentError(""); setCommandMenu(null);
-    return () => {
-      for (const item of attachmentsRef.current) removedKeys.current.add(item.key);
-      for (const controller of uploadControllers.current.values()) controller.abort();
-      for (const item of attachmentsRef.current) if (item.receipt) void onDiscardAttachment(item.receipt.id).catch(() => {});
-      uploadControllers.current.clear();
-    };
-  }, [session?.sessionId]);
+  useEffect(() => { setCommandMenu(null); }, [session?.sessionId]);
+  useEffect(() => () => {
+    for (const entry of Object.values(draftsRef.current)) {
+      for (const item of entry.attachments) {
+        removedKeys.current.add(item.key);
+        if (item.receipt) void item.discard(item.receipt.id).catch(() => {});
+      }
+    }
+    for (const controller of uploadControllers.current.values()) controller.abort();
+    uploadControllers.current.clear();
+  }, []);
   useEffect(() => {
     if (commandMenu === null) return;
     const outside = (event: PointerEvent) => { if (event.target instanceof Node && !form.current?.contains(event.target)) setCommandMenu(null); };
@@ -234,12 +254,36 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
       setAttachmentError(message);
       setAttachments((current) => current.map((item) => item.key === key ? { ...item, status: "error", error: message } : item));
     }).finally(() => { if (uploadControllers.current.get(key) === controller) uploadControllers.current.delete(key); });
-  }, [onUpload, onDiscardAttachment]);
+  }, [onUpload, onDiscardAttachment, draftKey]);
+
+  const previousDraftKey = useRef(draftKey);
+  useEffect(() => {
+    const previous = previousDraftKey.current;
+    if (previous === draftKey) return;
+    previousDraftKey.current = draftKey;
+    // The bridge invalidates receipts on a session switch. Keep the original
+    // Files, cancel old uploads, and obtain fresh receipts only on return.
+    const outgoing = draftsRef.current[previous];
+    for (const item of outgoing?.attachments ?? []) {
+      removedKeys.current.add(item.key);
+      uploadControllers.current.get(item.key)?.abort();
+    }
+    const incoming = draftsRef.current[draftKey];
+    const restored = (incoming?.attachments ?? []).map(item => ({
+      key: randomUUID(), file: item.file, discard: onDiscardAttachment, status: "uploading" as const,
+    }));
+    setDrafts(current => ({
+      ...current,
+      ...(outgoing ? { [previous]: { ...outgoing, attachments: outgoing.attachments.map(item => ({ ...item, receipt: undefined, status: "error" as const })) } } : {}),
+      ...(incoming ? { [draftKey]: { ...incoming, attachments: restored, error: "" } } : {}),
+    }));
+    restored.forEach(item => uploadAttachment(item.key, item.file));
+  }, [draftKey]);
 
   const removeAttachment = (item: PendingAttachment) => {
     removedKeys.current.add(item.key);
     uploadControllers.current.get(item.key)?.abort();
-    if (item.receipt) void onDiscardAttachment(item.receipt.id).catch(() => {});
+    if (item.receipt) void item.discard(item.receipt.id).catch(() => {});
     if (item.status === "error" && !attachments.some((entry) => entry.key !== item.key && entry.status === "error")) setAttachmentError("");
     setAttachments((current) => current.filter((entry) => entry.key !== item.key));
   };
@@ -250,10 +294,10 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
     const accepted = files.slice(0, available).filter((file) => file.size > 0 && file.size <= 20 * 1024 * 1024);
     if (accepted.length !== files.length) setAttachmentError(t("最多添加 20 个文件，单个文件不得超过 20 MB 且不能为空", "Add up to 20 nonempty files, each no larger than 20 MB"));
     else setAttachmentError("");
-    const pending = accepted.map((file) => ({ key: randomUUID(), file, status: "uploading" as const }));
+    const pending = accepted.map((file) => ({ key: randomUUID(), file, discard: onDiscardAttachment, status: "uploading" as const }));
     setAttachments((current) => [...current, ...pending]);
     pending.forEach((item) => uploadAttachment(item.key, item.file));
-  }, [attachments.length, canAttach, uploadAttachment]);
+  }, [attachments.length, canAttach, uploadAttachment, onDiscardAttachment]);
 
   useEffect(() => {
     const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;

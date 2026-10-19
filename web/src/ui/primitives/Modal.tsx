@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useRef } from 'react'
+import { useDialogFocus } from './useDialogFocus.ts'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
@@ -38,14 +39,8 @@ type ModalProps = ModalBaseProps & (
 export function Modal({
   open, onClose, title, closeLabel, description, children, footer, className, contentClassName, headless = false,
 }: ModalProps) {
-  useEffect(() => {
-    if (!open) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [open, onClose])
+  const dialog = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialog, open, onClose)
 
   if (!open) return null
 
@@ -53,6 +48,8 @@ export function Modal({
     <div className={css.root} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div
+        ref={dialog}
+        tabIndex={-1}
         className={clsx(css.dialog, className)}
         role="dialog"
         aria-modal="true"

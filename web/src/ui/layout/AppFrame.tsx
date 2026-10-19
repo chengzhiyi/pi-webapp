@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ReactNode } from 'react'
 import type { LayoutInfo, PanelInfo, SelectHook, SlotRenderer } from '../contract.ts'
 import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { useDialogFocus } from '../primitives/useDialogFocus.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import css from './AppFrame.module.css'
 
@@ -25,7 +26,7 @@ import css from './AppFrame.module.css'
 export interface AppFrameProps {
   useStore: SelectHook<{ layoutInfo: LayoutInfo }>
   usePanelInfo: SelectHook<PanelInfo>
-  actions: { setViewportWidth(width: number): void; setSidebar(width: number): void; setRightbar(width: number): void }
+  actions: { setViewportWidth(width: number): void; setSidebar(width: number): void; setRightbar(width: number): void; closeSidebar(): void }
   renderSlot: SlotRenderer
   t: (name: string) => string
 }
@@ -164,7 +165,17 @@ export function AppFrame({
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
   const normal = computeColumns(viewport, !layoutInfo.rightbarShown && narrow ? 0 : sidebarPreference, rightbarPreference)
-  const cols = computeColumns(viewport, sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
+  const drawerOpen = narrow && !sidebarCollapsed
+  const drawerRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(drawerRef, drawerOpen, actions.closeSidebar)
+  useEffect(() => {
+    if (!drawerOpen) return
+    const siblings = frameRef.current?.querySelectorAll<HTMLElement>(`.${css.centerCol}, .${css.rightbarCol}`) ?? []
+    for (const node of siblings) node.setAttribute('inert', '')
+    return () => { for (const node of siblings) node.removeAttribute('inert') }
+  }, [drawerOpen])
+  const cols = computeColumns(viewport, narrow ? 0 : sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
+  const sidebarWidth = drawerOpen ? Math.min(sidebarPreference, Math.max(0, viewport - 48)) : cols.sidebar
   const colsRef = useRef(cols)
   colsRef.current = cols
   const rightbarWidth = useRef(normal.rightbar)
@@ -190,8 +201,8 @@ export function AppFrame({
   const productTitle = t('brand.localBuild')
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
-    width: cols.sidebar,
-  }), [renderSlot, sidebarCollapsed, cols.sidebar])
+    width: sidebarWidth,
+  }), [renderSlot, sidebarCollapsed, sidebarWidth])
   const main = useMemo(() => (
     <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
   ), [usePanelInfo, renderSlot])
@@ -206,13 +217,16 @@ export function AppFrame({
           `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
       }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-sidebar-drawer={drawerOpen || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
       data-rightbar-fullscreen={layoutInfo.rightbarFullscreen || undefined}
       data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
     >
       <DocumentTitle productTitle={productTitle} />
-      <div className={css.sidebarCol}>
+      {drawerOpen && <button type="button" className={css.drawerMask} tabIndex={-1} aria-label={t('sidebar.close')} onClick={actions.closeSidebar} />}
+      <div ref={drawerRef} className={css.sidebarCol} style={drawerOpen ? { width: sidebarWidth } : undefined}
+        role={drawerOpen ? 'dialog' : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t('sidebar.label') : undefined} tabIndex={drawerOpen ? -1 : undefined}>
         {sidebar}
       </div>
       <>
@@ -225,7 +239,7 @@ export function AppFrame({
         {overlays}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!sidebarCollapsed && !narrow && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
       )}
