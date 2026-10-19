@@ -10,9 +10,10 @@ interface Props {
   getUpdate: () => Promise<UpdateStatus>;
   getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
   update: () => Promise<{ version: string }>;
+  onBusyChange?: (busy: boolean) => void;
 }
 
-export function UpdateRow({ getUpdate, getRunningVersion, update }: Props) {
+export function UpdateRow({ getUpdate, getRunningVersion, update, onBusyChange }: Props) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
   const [status, setStatus] = useState<UpdateStatus | null>(null);
@@ -21,6 +22,7 @@ export function UpdateRow({ getUpdate, getRunningVersion, update }: Props) {
   const [targetVersion, setTargetVersion] = useState<string | null>(null);
   const [restartTimedOut, setRestartTimedOut] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => { onBusyChange?.(installing || Boolean(targetVersion)); }, [installing, targetVersion, onBusyChange]);
 
   const check = async () => {
     setChecking(true);

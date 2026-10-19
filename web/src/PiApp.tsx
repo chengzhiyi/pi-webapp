@@ -7,6 +7,7 @@ import { IconSettingsOutline14, IconSettingsOutline16 } from "./ui/primitives/ic
 import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
+import { PiUpdateShortcut } from "./PiUpdateShortcut.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
 import { MarkdownText } from "./ui/shared/primitives/markdown/MarkdownText.tsx";
 import { MarkdownDelegateProvider } from "./ui/shared/primitives/markdown/MarkdownDelegate.tsx";
@@ -100,6 +101,7 @@ export function PiApp() {
   const renderSidebarSlot = (key: string, owner: any, options?: { fallback?: React.ReactNode }) => {
     if (key === "sidebar.brand.mark") return <PiLogo size={24} />;
     if (key === "sidebar.brand.name") return <span>pi-webapp</span>;
+    if (key === "sidebar.footer.action") return <PiUpdateShortcut wide={owner.wide} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} update={bridge.update} />;
     if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row ${owner.wide ? "" : "pi-settings-trigger-rail"}`}><button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label={t("Pi 设置", "Pi Settings")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>{t("Pi 设置", "Pi Settings")}</span>}</button></div>;
     if (key === "sidebar.workspaces") return <PiWorkspaceBrowser
       wide={owner.wide}

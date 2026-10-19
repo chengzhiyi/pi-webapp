@@ -1,0 +1,4 @@
+.trigger { width: 100%; }
+.glyph { position: relative; display: inline-flex; flex: none; overflow: visible !important; }
+.dot { position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-label-primary); }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
