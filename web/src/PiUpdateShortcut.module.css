@@ -1,4 +1,7 @@
+.root { min-width: 0; }
 .trigger { width: 100%; }
+.trigger:disabled { cursor: wait; opacity: 0.6; }
+.error { margin: 4px 6px 8px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .glyph { position: relative; display: inline-flex; flex: none; overflow: visible !important; }
 .dot { position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-label-primary); }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

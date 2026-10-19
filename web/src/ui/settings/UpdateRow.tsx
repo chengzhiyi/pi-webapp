@@ -1,73 +1,12 @@
-import { useEffect, useState } from "react";
-import type { UpdateStatus } from "../../pi-bridge.ts";
+import { useAppUpdate, type AppUpdateActions } from "./useAppUpdate.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { Button } from "../primitives/Button.tsx";
-import { updateErrorMessage } from "./update-error.ts";
-import { reportError } from "../../telemetry.ts";
 import css from "./UpdateRow.module.css";
 
-interface Props {
-  getUpdate: () => Promise<UpdateStatus>;
-  getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
-  update: () => Promise<{ version: string }>;
-  onBusyChange?: (busy: boolean) => void;
-}
-
-export function UpdateRow({ getUpdate, getRunningVersion, update, onBusyChange }: Props) {
+export function UpdateRow(props: AppUpdateActions) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [installing, setInstalling] = useState(false);
-  const [targetVersion, setTargetVersion] = useState<string | null>(null);
-  const [restartTimedOut, setRestartTimedOut] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => { onBusyChange?.(installing || Boolean(targetVersion)); }, [installing, targetVersion, onBusyChange]);
-
-  const check = async () => {
-    setChecking(true);
-    setError("");
-    try { setStatus(await getUpdate()); }
-    catch (cause) { setStatus(null); setError(updateErrorMessage(cause, locale, "check")); }
-    finally { setChecking(false); }
-  };
-  useEffect(() => { void check(); }, []);
-
-  useEffect(() => {
-    if (!targetVersion) return;
-    let cancelled = false;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    // An independent deadline also ends a poll whose request never returns.
-    const timeout = setTimeout(() => {
-      cancelled = true;
-      controller.abort();
-      clearTimeout(timer);
-      setTargetVersion(null);
-      setRestartTimedOut(true);
-      setError(t("新版启动超时。请运行 pi-webapp status 查看状态，或重新启动 pi-webapp。", "The new version did not start in time. Check pi-webapp status or start pi-webapp again."));
-      reportError(new Error("Updated service did not become ready within 60 seconds"), { stage: "update_restart", code: "update_restart_timeout", route: "/api/update/version", timeoutMs: 60_000 });
-    }, 60_000);
-    const poll = async () => {
-      try {
-        const result = await getRunningVersion(controller.signal);
-        if (cancelled) return;
-        if (result.current === targetVersion) { clearTimeout(timeout); location.reload(); return; }
-      } catch { /* The old service is shutting down. */ }
-      if (cancelled) return;
-      timer = setTimeout(() => { void poll(); }, 1200);
-    };
-    timer = setTimeout(() => { void poll(); }, 1200);
-    return () => { cancelled = true; controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
-  }, [targetVersion]);
-
-  const install = async () => {
-    setInstalling(true);
-    setError("");
-    try { setTargetVersion((await update()).version); }
-    catch (cause) { setError(updateErrorMessage(cause, locale, "install")); }
-    finally { setInstalling(false); }
-  };
+  const { status, checking, installing, targetVersion, restartTimedOut, error, check, install } = useAppUpdate(props);
 
   const summary = status
     ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("npm 最新版本", "Latest on npm")} ${status.latest}` : ""}`
