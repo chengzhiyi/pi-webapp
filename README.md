@@ -2,6 +2,16 @@
 
 [简体中文](README.zh-CN.md)
 
+## Download pi desktop
+
+### [⬇ Download for macOS Apple Silicon (.dmg)](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.20-b5/pi-0.1.20-desktop.5-mac-arm64.dmg)
+
+**Test release · v0.1.20 / desktop build 5 · Apple M-series only**
+
+[Release notes and SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [All desktop releases](https://github.com/chengzhiyi/pi-webapp/releases) · [Use the Web/npm version instead](#install-and-open)
+
+> Open the DMG and drag **pi.app** into Applications. This test build is unsigned/unnotarized; do not globally disable macOS security. Windows/Linux/Intel Mac installers are not yet validated. Node and a tested, pinned Pi runtime are bundled; you do not need to install them separately.
+
 ![pi-webapp cover](assets/cover-webapp.png)
 
 **pi-webapp** opens the active Pi coding agent session in a local browser. Pi continues to run the agent, tools, and session storage; the browser provides a live interface for conversation and control.

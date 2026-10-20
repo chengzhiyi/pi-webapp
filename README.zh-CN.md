@@ -2,6 +2,16 @@
 
 [English](README.md)
 
+## 下载 pi 桌面版
+
+### [⬇ 下载 macOS Apple 芯片版（DMG）](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.20-b5/pi-0.1.20-desktop.5-mac-arm64.dmg)
+
+**测试版 · v0.1.20 / 桌面构建 5 · 仅支持 Apple M 系列芯片**
+
+[版本说明与 SHA-256 校验和](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [所有桌面版本](https://github.com/chengzhiyi/pi-webapp/releases) · [改用 Web/npm 方式](#安装与打开)
+
+> 打开 DMG，将 **pi.app** 拖入“应用程序”即可。此测试版未签名、未公证，请勿全局关闭 macOS 安全保护。Windows/Linux/Intel Mac 安装包尚未验收。安装包已内置 Node 与经过验证、锁定版本的 Pi，无需另行安装。
+
 ![pi-webapp 封面](assets/cover-webapp.png)
 
 **pi-webapp** 可以在本地浏览器中打开当前活跃的 Pi 编程 Agent 会话。Agent、工具和会话存储仍由 Pi 运行和管理；浏览器提供实时的对话与控制界面。

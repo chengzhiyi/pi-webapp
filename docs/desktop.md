@@ -253,6 +253,27 @@ may observe that author instead of its fixture author. Run tests with the normal
 system Git in PATH in an isolated test environment; do not change global Git
 configuration to make a fixture pass.
 
+## Why the bundled Pi may not be the latest upstream version
+
+The desktop bundles **Pi 0.87.1** because that is the host project's explicitly
+pinned and tested SDK/runtime pair, not because npm automatically chose its
+latest release. `package.json` and `desktop/runtime-manifest/package-lock.json`
+pin both `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai` together.
+The standalone Node runtime and native PTY are verified as part of that unit.
+The app version, desktop build number and bundled Pi version are separate.
+
+The public npm `latest` for both Pi packages was **1.3.0 when checked on
+2026-10-20**. Thus 0.87.1 is **not** the latest Pi; a validated pin should not be
+misrepresented as one or become an excuse never to maintain the dependency.
+Moving from the tested 0.x SDK to 1.x needs API/type compatibility review, paired
+lockfile updates, authentication/plugin/session regressions, native PTY checks,
+and packaged desktop/Web smoke tests before publishing a new installer.
+
+Do not replace the signed/packaged runtime in place or install `latest` on every
+startup. Upgrade it deliberately through a new tested desktop build, recording
+the exact Pi version in `desktop-release.json` and release notes. This preserves
+reproducibility and prevents silently changing a user's running tasks.
+
 ## Updating runtime dependencies
 
 When production dependencies or pinned Pi versions in the root manifest change:

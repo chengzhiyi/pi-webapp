@@ -12,11 +12,19 @@ export class WorkspaceGitError extends Error {
 export function git(cwd: string, args: string[], limit = 2 * 1024 * 1024, options: { write?: boolean; input?: string } = {}): Promise<string> {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
   return new Promise((resolveResult, reject) => {
+    let inputError: Error | undefined;
     const child = execFile("git", ["--no-pager", "--literal-pathspecs", "-c", "core.fsmonitor=false", ...args], {
       cwd, env: { ...env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_NO_REPLACE_OBJECTS: "1" },
       encoding: "utf8", timeout: options.write ? 30000 : 10000, maxBuffer: limit, windowsHide: true,
     }, (error, stdout, stderr) => {
-      if (!error) { resolveResult(stdout); return; }
+      if (!error) {
+        // A successful exit is not proof that a commit message reached Git in full.
+        if (inputError) {
+          reject(new WorkspaceGitError("Git 输入传输失败，操作结果未确认，请刷新检查仓库状态；不要自动重试", 503,
+            options.write ? "outcome_unknown" : "git_failed")); return;
+        }
+        resolveResult(stdout); return;
+      }
       if (options.write) {
         const reason = error.killed || (error as NodeJS.ErrnoException).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "outcome_unknown"
           : /index\.lock|cannot lock ref|could not lock/i.test(stderr) ? "index_locked"
@@ -30,6 +38,9 @@ export function git(cwd: string, args: string[], limit = 2 * 1024 * 1024, option
       else if (/not a git repository/.test(stderr)) reject(new WorkspaceGitError("当前目录不是 Git 仓库", 404));
       else reject(new WorkspaceGitError(error.killed ? "Git 读取超时，请重试" : "Git 读取失败，请检查仓库状态和目录权限", 503));
     });
+    // Git can reject a hook/config before reading stdin. Observe stream failures
+    // immediately, but let execFile's exit callback preserve the real Git failure.
+    child.stdin?.on("error", error => { inputError = error; });
     if (options.input !== undefined) child.stdin?.end(options.input);
   });
 }
