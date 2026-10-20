@@ -146,6 +146,9 @@ async function serve(pi, args) {
         instanceId, pid: process.pid, piPid: child.pid, uptimeMs: Math.round(performance.now() - startedAt), ...fields }));
     } catch { /* Diagnostics must not interrupt process supervision. */ }
   };
+  // Opt-in fixture diagnostics: fixed milestones only, never RPC content or URLs.
+  const startupStage = stage => { if (process.env.PI_WEBAPP_STARTUP_TRACE === "1") lifecycle("launcher_startup_stage", { stage }); };
+  let sawStdout = false;
   const devWatchers = [];
   let devReloadTimer;
   let devReloadCount = 0;
@@ -187,6 +190,7 @@ async function serve(pi, args) {
   process.on("SIGINT", () => shutdown("signal_sigint"));
   child.stdout?.on("data", (chunk) => {
     if (failed) return;
+    if (!sawStdout) { sawStdout = true; startupStage("first-rpc-output"); }
     buffer += chunk.toString("utf8");
     if (buffer.length > 8 * 1024 * 1024) { fail("Pi RPC 输出超出预期大小"); return; }
     for (let index; (index = buffer.indexOf("\n")) !== -1;) {
@@ -200,6 +204,7 @@ async function serve(pi, args) {
       }
       if (ready || opening) continue;
       if (record?.type === "response" && record.id === "list-commands") {
+        startupStage("command-list-response");
         if (record.success !== true || !Array.isArray(record.data?.commands)) {
           fail("无法读取 Pi 扩展命令列表");
           return;
@@ -212,6 +217,7 @@ async function serve(pi, args) {
         }
         devReloadCommand = record.data.commands.find((item) => item?.source === "extension"
           && item.sourceInfo?.path === extension && /^web-dev-reload(?::\d+)?$/.test(item.name))?.name;
+        startupStage("opening-web-command");
         child.stdin?.write(JSON.stringify({ id: "open-web", type: "prompt", message: `/${command.name}` }) + "\n");
         continue;
       }
@@ -220,6 +226,7 @@ async function serve(pi, args) {
         return;
       }
       if (record?.type !== "extension_ui_request" || record.method !== "notify" || typeof record.message !== "string" || !record.message.startsWith("pi-webapp: ")) continue;
+      startupStage("web-ready-notification");
       let url;
       try { url = new URL(record.message.slice("pi-webapp: ".length)); }
       catch { continue; }
@@ -252,6 +259,7 @@ async function serve(pi, args) {
     }
   });
   child.stdin?.on("error", (error) => fail(`无法向 Pi 发送启动命令：${error.message}`));
+  startupStage("waiting-command-list");
   child.stdin?.write(JSON.stringify({ id: "list-commands", type: "get_commands" }) + "\n");
   await new Promise((resolveExit) => {
     child.once("error", (error) => { fail(`无法启动 Pi：${error.message}`); resolveExit(); });

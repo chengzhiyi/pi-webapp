@@ -263,7 +263,11 @@ minutes, and bounds cleanup of its exact isolated Electron child. Failures retai
 only bounded, redacted tails of that fixture's launcher log and Electron stderr,
 plus allowlisted launcher metadata (never the URL, nonce, auth files or user
 sessions). Locale is seeded before navigation; the first UI must become usable
-before a real reload is tested, avoiding interruption of initial bootstrap. POSIX SDK and
+before a real reload is tested, avoiding interruption of initial bootstrap.
+The locale seed touches only the actual HTTP loopback root, not opaque/error
+pages; real loopback storage errors still fail the test. Smoke opts into
+`PI_WEBAPP_STARTUP_TRACE=1`: the launcher records fixed RPC startup milestones,
+never RPC payloads, command bodies, URLs or access/control tokens. POSIX SDK and
 shell/Git integration tests run on macOS/Linux. Windows runs portable SDK/launcher
 boundaries, desktop/release invariants, an interactive native cmd PTY test, and
 the actual installed-payload GUI smoke; Unix executable fixtures are not treated

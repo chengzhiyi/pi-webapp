@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { saveSmokeDiagnostics } from "./desktop-smoke-diagnostics.mjs";
+import { saveSmokeDiagnostics, seedSmokeLocale } from "./desktop-smoke-diagnostics.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const packaged = process.argv.includes("--packaged");
@@ -21,7 +21,7 @@ const executablePath = process.env.PI_WEB_DESKTOP_EXECUTABLE ?? (process.platfor
   : process.platform === "win32" ? join(root, `desktop-release/win-unpacked/${appName}.exe`)
   : join(root, `desktop-release/linux-unpacked/${appName}`));
 const env = { ...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: agentDir,
-  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0", ELECTRON_ENABLE_LOGGING: "1",
+  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0", ELECTRON_ENABLE_LOGGING: "1", PI_WEBAPP_STARTUP_TRACE: "1",
   // No npm/global Node/Pi paths: only system shells and utilities remain available.
   PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin" };
 delete env.NODE_OPTIONS;
@@ -50,7 +50,7 @@ try {
   electron.process().stderr?.on("data", chunk => { electronStderr = (electronStderr + chunk.toString()).slice(-131072); });
   // Seed before navigation rather than interrupting the first bootstrap with a reload.
   // Bilingual selectors also cover a window that was already loading at launch.
-  await electron.context().addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
+  await electron.context().addInitScript(seedSmokeLocale);
   await stage("app-icon-and-runtime");
   await bounded(electron.evaluate(({ app }) => {
     app.on("render-process-gone", (_event, _contents, details) => console.error("desktop-renderer-gone", JSON.stringify({ reason: details.reason, exitCode: details.exitCode })));
@@ -129,7 +129,7 @@ try {
   await stage("shared-browser-backend");
   browser = await chromium.launch({ headless: true, ...(process.env.PI_WEB_TEST_CHROME === "true" ? { channel: "chrome" } : {}) });
   const web = await browser.newPage();
-  await web.addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
+  await web.addInitScript(seedSmokeLocale);
   await web.goto(state.url);
   await expect(web.getByRole("button", { name: "Close Pi settings", exact: true })).toBeVisible();
   await web.getByRole("button", { name: "Close Pi settings", exact: true }).click();

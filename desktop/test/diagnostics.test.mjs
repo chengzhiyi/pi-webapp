@@ -3,7 +3,20 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { redactDiagnostic, saveSmokeDiagnostics } from "../../scripts/desktop-smoke-diagnostics.mjs";
+import { runInNewContext } from "node:vm";
+import { redactDiagnostic, saveSmokeDiagnostics, seedSmokeLocale } from "../../scripts/desktop-smoke-diagnostics.mjs";
+
+test("locale injection skips opaque/error/external documents but never hides storage failures on the real loopback UI", () => {
+  const code = `(${seedSmokeLocale.toString()})()`;
+  for (const href of ["about:blank", "chrome-error://chromewebdata/", "file:///tmp/page", "https://example.test/"]) {
+    const url = new URL(href);
+    assert.doesNotThrow(() => runInNewContext(code, { location: url, get localStorage() { throw new Error("opaque origin storage denied"); } }));
+  }
+  let stored;
+  runInNewContext(code, { location: new URL("http://127.0.0.1:4321/"), localStorage: { setItem(key, value) { stored = [key, value]; } } });
+  assert.deepEqual(stored, ["pi-web-locale", "en"]);
+  assert.throws(() => runInNewContext(code, { location: new URL("http://127.0.0.1:4321/"), localStorage: { setItem() { throw new Error("real UI storage broken"); } } }), /real UI storage broken/);
+});
 
 test("diagnostics redact environment secrets, multiline keys, URL credentials/fragments, query tokens and headers", () => {
   const secret = "fixture.$*[]secret-key";

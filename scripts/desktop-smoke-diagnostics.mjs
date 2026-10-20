@@ -1,6 +1,14 @@
 import { open, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+// Playwright also injects into opaque/error documents. Do not touch storage
+// outside the actual loopback UI; storage failures on that UI must still fail.
+export function seedSmokeLocale() {
+  if (location.protocol === "http:" && location.hostname === "127.0.0.1" && location.pathname === "/") {
+    localStorage.setItem("pi-web-locale", "en");
+  }
+}
+
 export function redactDiagnostic(text, env = {}, additionalSecrets = []) {
   const values = [...Object.entries(env).filter(([key]) => /key|token|secret|password|credential|auth|dsn/i.test(key)).map(([, value]) => value), ...additionalSecrets]
     .filter(value => typeof value === "string").flatMap(value => [value, ...value.split(/\r?\n/)])
