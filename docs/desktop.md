@@ -65,6 +65,12 @@ native runners for each target. `desktop.yml` remains a manual cross-platform
 packaging/artifact workflow. The separate `desktop-release.yml` below handles
 verified macOS arm64 prereleases, not every main push.
 
+The embedded runtime never automatically launches a second browser for its Web
+page: the shared browser opener honors `PI_WEBAPP_AUTO_OPEN=0` and desktop runtime
+identity. In particular, startup does not await a long-lived `xdg-open` browser
+before announcing backend readiness. The explicit native “在浏览器中打开” menu and
+confirmed connection-recovery actions remain available.
+
 The application embeds Node and Pi. Git, SSH, project compilers and other system
 tools are **not** bundled. Missing tools must be installed by the user. Model
 accounts/API credentials must still be configured in the existing settings UI.

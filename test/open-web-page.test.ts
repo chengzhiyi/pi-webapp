@@ -17,6 +17,14 @@ test("opens the local page with the host's default browser", async () => {
   ]);
 });
 
+test("desktop and explicit no-open never invoke a potentially blocking external browser", async () => {
+  const run = async () => { throw new Error("external browser must not be launched or awaited"); };
+  for (const platform of ["linux", "darwin", "win32"] as const) {
+    assert.equal(await openWebPage(url, platform, { DISPLAY: ":99", PI_WEBAPP_AUTO_OPEN: "0" }, run), false);
+    assert.equal(await openWebPage(url, platform, { DISPLAY: ":99", PI_WEBAPP_AUTO_OPEN: "1", PI_WEBAPP_RUNTIME: "desktop" }, run), false);
+  }
+});
+
 test("leaves remote and headless sessions to use the displayed URL", async () => {
   const run = async () => { throw new Error("browser command should not run"); };
   assert.equal(await openWebPage(url, "darwin", { SSH_CONNECTION: "remote" }, run), false);
