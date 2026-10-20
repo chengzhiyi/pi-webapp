@@ -259,7 +259,11 @@ the same service, and confirmed shutdown/process cleanup. It does **not** submit
 a paid model request, log in to a provider, or use the user's saved credentials.
 Screenshots/results are written to `artifacts/desktop/`. CI also persists a
 secret-free phase receipt before each major step, bounds installer smoke to six
-minutes, and bounds cleanup of its exact isolated Electron child. POSIX SDK and
+minutes, and bounds cleanup of its exact isolated Electron child. Failures retain
+only bounded, redacted tails of that fixture's launcher log and Electron stderr,
+plus allowlisted launcher metadata (never the URL, nonce, auth files or user
+sessions). Locale is seeded before navigation; the first UI must become usable
+before a real reload is tested, avoiding interruption of initial bootstrap. POSIX SDK and
 shell/Git integration tests run on macOS/Linux. Windows runs portable SDK/launcher
 boundaries, desktop/release invariants, an interactive native cmd PTY test, and
 the actual installed-payload GUI smoke; Unix executable fixtures are not treated

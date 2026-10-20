@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { saveSmokeDiagnostics } from "./desktop-smoke-diagnostics.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const packaged = process.argv.includes("--packaged");
@@ -20,7 +21,7 @@ const executablePath = process.env.PI_WEB_DESKTOP_EXECUTABLE ?? (process.platfor
   : process.platform === "win32" ? join(root, `desktop-release/win-unpacked/${appName}.exe`)
   : join(root, `desktop-release/linux-unpacked/${appName}`));
 const env = { ...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: agentDir,
-  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0",
+  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0", ELECTRON_ENABLE_LOGGING: "1",
   // No npm/global Node/Pi paths: only system shells and utilities remain available.
   PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin" };
 delete env.NODE_OPTIONS;
@@ -28,6 +29,8 @@ delete env.ELECTRON_RUN_AS_NODE;
 let electron;
 let browser;
 let state;
+let electronStderr = "";
+const closeSettingsName = /^(Close Pi settings|关闭 Pi 设置)$/;
 const errors = [];
 let phase;
 async function stage(name) {
@@ -44,7 +47,15 @@ try {
   await stage("launch-electron");
   electron = await _electron.launch({ ...(packaged ? { executablePath } : {}),
     args: [...(packaged ? [] : [join(root, "desktop")]), `--user-data-dir=${join(temporary, "electron")}`], env, timeout: 60000 });
+  electron.process().stderr?.on("data", chunk => { electronStderr = (electronStderr + chunk.toString()).slice(-131072); });
+  // Seed before navigation rather than interrupting the first bootstrap with a reload.
+  // Bilingual selectors also cover a window that was already loading at launch.
+  await electron.context().addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
   await stage("app-icon-and-runtime");
+  await bounded(electron.evaluate(({ app }) => {
+    app.on("render-process-gone", (_event, _contents, details) => console.error("desktop-renderer-gone", JSON.stringify({ reason: details.reason, exitCode: details.exitCode })));
+    app.on("child-process-gone", (_event, details) => console.error("desktop-child-gone", JSON.stringify({ type: details.type, reason: details.reason, exitCode: details.exitCode })));
+  }), 10000);
   const appIcon = await electron.evaluate(({ app, nativeImage }) => {
     const image = nativeImage.createFromPath(`${app.getAppPath()}/icons/icon.png`);
     return { empty: image.isEmpty(), size: image.getSize() };
@@ -54,12 +65,15 @@ try {
   const piVersion = JSON.parse(await readFile(join(runtimeRoot, "backend/node_modules/@earendil-works/pi-coding-agent/package.json"), "utf8")).version;
   const expectedPi = JSON.parse(await readFile(join(root, "package.json"), "utf8")).devDependencies["@earendil-works/pi-coding-agent"];
   assert.equal(piVersion, expectedPi, "actual installed/mounted payload must contain the pinned latest Pi");
-  await stage("first-window-and-settings");
+  await stage("first-window");
   const page = await electron.firstWindow({ timeout: 70000 });
   page.on("pageerror", error => errors.push(error.message));
-  await page.evaluate(() => { localStorage.setItem("pi-web-locale", "en"); });
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Close Pi settings", exact: true })).toBeVisible({ timeout: 30000 });
+  await stage("initial-ui-ready");
+  await expect(page.getByRole("button", { name: closeSettingsName })).toBeVisible({ timeout: 45000 });
+  // Still test a genuine reload, but only after first startup has become usable.
+  await stage("reload-ready-ui");
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.getByRole("button", { name: closeSettingsName })).toBeVisible({ timeout: 30000 });
   await stage("native-identity");
   const identity = await electron.evaluate(async ({ app, BrowserWindow, Menu, dialog }) => {
     let about;
@@ -78,7 +92,7 @@ try {
   assert.ok(identity.about.detail.includes(`桌面构建 ${release.buildNumber}`));
   assert.ok(identity.about.detail.includes("应用位置："));
   await page.screenshot({ path: join(artifacts, "desktop-model-setup.png") });
-  await page.getByRole("button", { name: "Close Pi settings", exact: true }).click();
+  await page.getByRole("button", { name: closeSettingsName }).click();
   state = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8"));
   assert.equal(state.runtimeKind, "desktop");
   const prefs = await electron.evaluate(({ BrowserWindow }) => {
@@ -88,9 +102,9 @@ try {
   assert.deepEqual(prefs, { nodeIntegration: false, contextIsolation: true, sandbox: true });
   assert.equal(await page.evaluate(() => typeof window.require), "undefined");
   await stage("interactive-pty");
-  await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
+  await page.getByRole("button", { name: /^(Open right sidebar|打开右侧边栏)$/ }).click();
   const rightbar = page.locator("[data-sidebar-right-session]");
-  await rightbar.getByRole("button", { name: "Open terminal", exact: true }).click();
+  await rightbar.getByRole("button", { name: /^(Open terminal|打开终端)$/ }).click();
   const terminal = page.locator("[data-workspace-terminal]:visible");
   await expect(terminal).toHaveAttribute("data-terminal-phase", "connected", { timeout: 15000 });
   // Split the marker so echoed input cannot satisfy the output assertion.
@@ -139,6 +153,10 @@ try {
   console.log("Desktop smoke passed: standalone runtime, sandbox, PTY, files, shared browser, update guard and shutdown.");
 } catch (error) {
   await writeFile(join(artifacts, "smoke-failure.json"), JSON.stringify({ phase, platform: process.platform, arch: process.arch, errorType: error.name }) + "\n");
+  await saveSmokeDiagnostics({ artifacts, agentDir, phase, error, stderr: electronStderr, env })
+    .catch(() => console.error("Could not save isolated smoke diagnostics"));
+  const failedPage = electron?.windows()[0];
+  if (failedPage) await bounded(failedPage.screenshot({ path: join(artifacts, "desktop-failure.png"), timeout: 4000 })).catch(() => {});
   throw error;
 } finally {
   await bounded(browser?.close()).catch(() => {});
