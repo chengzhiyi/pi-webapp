@@ -20,7 +20,13 @@ npm run desktop:start
 nodejs.org, verifies the archive against the official HTTPS SHA-256 manifest,
 and installs the pinned production dependencies from
 `desktop/runtime-manifest/package-lock.json`. It verifies the bundled Pi version
-and actually starts a PTY before declaring success. Internet is required while
+and actually starts an interactive PTY, answers terminal queries, and checks its
+output and clean exit before declaring success. Linux compiles only the pinned
+`node-pty` lifecycle with the bundled Node and archive headers (the package has
+no Linux prebuild); Windows stages its pinned ConPTY DLL/helper payload. No
+Electron-ABI addon or host build is reused. Linux builders need Python and a C++
+toolchain; end users do not need these to run the packaged PTY.
+Internet is required while
 building, not to install Node/Pi on the end user's machine. Model calls,
 authorization and package installation can still require internet.
 
@@ -251,7 +257,13 @@ without global Node/Pi. It tests renderer isolation, real PTY interaction,
 authentication, file listing, desktop update protection, a browser connected to
 the same service, and confirmed shutdown/process cleanup. It does **not** submit
 a paid model request, log in to a provider, or use the user's saved credentials.
-Screenshots/results are written to `artifacts/desktop/`.
+Screenshots/results are written to `artifacts/desktop/`. CI also persists a
+secret-free phase receipt before each major step, bounds installer smoke to six
+minutes, and bounds cleanup of its exact isolated Electron child. POSIX SDK and
+shell/Git integration tests run on macOS/Linux. Windows runs portable SDK/launcher
+boundaries, desktop/release invariants, an interactive native cmd PTY test, and
+the actual installed-payload GUI smoke; Unix executable fixtures are not treated
+as Windows tests. All four installer receipts remain mandatory for assembly.
 
 The legacy smoke uses a temporary HOME/agent directory and copies the old package
 without changing its launcher or extension JavaScript. It prepares node-pty's

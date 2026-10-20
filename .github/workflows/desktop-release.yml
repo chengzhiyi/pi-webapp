@@ -65,8 +65,15 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run desktop:prepare
-      - name: Test the exact paired Pi SDK before packaging
+      - name: Full SDK and POSIX integration suite
+        if: runner.os != 'Windows'
         run: npm test
+      - name: Windows portable SDK, launcher and runtime boundaries
+        if: runner.os == 'Windows'
+        run: node --import ./test/setup-env.mjs --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/bridge-contract.test.ts test/desktop-download-entry.test.ts test/windows-pty.test.ts
+      - name: Windows desktop and release invariants
+        if: runner.os == 'Windows'
+        run: npm run test:desktop
       - run: npm run desktop:package
       - run: npx playwright install --with-deps chromium
       - name: Mount the generated DMG read-only
@@ -100,9 +107,11 @@ jobs:
           "${files[0]}" --appimage-extract
           echo "PI_WEB_DESKTOP_EXECUTABLE=$RUNNER_TEMP/pi-appimage/squashfs-root/AppRun" >> "$GITHUB_ENV"
       - name: Smoke the actual installed/mounted installer payload
+        timeout-minutes: 6
         if: runner.os != 'Linux'
         run: npm run desktop:smoke -- --packaged
       - name: Smoke the AppImage payload in a virtual display
+        timeout-minutes: 6
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run desktop:smoke -- --packaged
       - name: Prepare per-target checksummed and smoke-gated assets

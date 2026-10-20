@@ -39,6 +39,12 @@ export class SessionTerminal {
     try { this.pty = (require("node-pty") as typeof import("node-pty")).spawn(shell, args, { name: "xterm-256color", cwd, cols, rows, env: { ...env, TERM: "xterm-256color", COLORTERM: "truecolor" } }); }
     catch (error) { this.screen.dispose(); throw error; }
     this.pid = this.pty.pid;
+    // Headless xterm must reply to device/cursor queries (notably ConPTY's
+    // startup handshake), just as the browser terminal would.
+    this.screen.onData(data => {
+      // An attached browser's xterm answers these itself; do not send duplicate replies.
+      if (!this.followers.size && !this.exit && !this.disposed) this.pty.write(data);
+    });
     this.pty.onData(data => {
       if (this.disposed) return;
       this.pty.pause();
