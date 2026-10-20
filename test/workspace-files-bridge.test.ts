@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { startBridge, type BridgeHost } from "../extension/bridge.ts";
-import type { SessionView } from "../extension/view.ts";
+import { startBridge, type BridgeHost } from "../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../src/host/server/sessions/view.ts";
 
 test("workspace file endpoints require the active session, token and same origin and never write files", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-files-api-"));

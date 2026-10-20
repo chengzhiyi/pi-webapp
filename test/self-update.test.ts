@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { SelfUpdater, compareVersions } from "../extension/self-update.ts";
+import { SelfUpdater, compareVersions } from "../src/host/server/updates/self-update.ts";
 
 test("update checks run npm without PATH in directories containing spaces and Chinese characters", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi npm 中文 & "));
@@ -12,7 +12,7 @@ test("update checks run npm without PATH in directories containing spaces and Ch
     const cli = join(root, "npm-cli.js");
     await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.0" }));
     await writeFile(cli, 'if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(["view", "pi-webapp", "dist-tags.latest", "--json", "--prefer-online"])) process.exit(2); console.log(JSON.stringify("0.2.0"));');
-    const moduleUrl = new URL("../extension/self-update.ts", import.meta.url).href;
+    const moduleUrl = new URL("../src/host/server/updates/self-update.ts", import.meta.url).href;
     const script = `const { SelfUpdater } = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(await new SelfUpdater({ packageRoot: process.argv[1], agentDir: process.argv[1] }).check()));`;
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "path"));
     const stdout = execFileSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script, root], {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { openWebPage } from "../extension/open-web-page.ts";
+import { openWebPage } from "../src/host/server/updates/open-web-page.ts";
 
 const url = "http://127.0.0.1:1234/#secret-token";
 

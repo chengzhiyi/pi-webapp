@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import piWeb from "../extension/index.ts";
+import piWeb from "../src/host/server/bootstrap/pi-host.ts";
 
 test("launcher mode opens the web bridge on Pi session start only once", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-web-auto-open-"));
@@ -50,7 +50,7 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
   const previousLegacy = globals[legacyKey];
   const legacyState = { bridge: { close() { throw new Error("Legacy bridge closed"); } } };
   globals[legacyKey] = legacyState;
-  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null; autoOpened: boolean }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
+  const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null; autoOpened: boolean }>)[Symbol.for(`pi-web.bridge-state:${new URL("../src/host/server/bootstrap/pi-host.ts", import.meta.url).href}`)];
   try {
     handlers.get("session_start")?.({}, context);
     handlers.get("session_start")?.({}, context);

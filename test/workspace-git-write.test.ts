@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { workspaceGitControl, workspaceGitWrite, withGitWorktreeLease } from "../extension/workspace-git-write.ts";
+import { workspaceGitControl, workspaceGitWrite, withGitWorktreeLease } from "../src/plugins/builtin/git/server/workspace-git-write.ts";
 
 async function repository(t: { after(fn: () => Promise<void>): void }) {
   const cwd = await mkdtemp(join(tmpdir(), "pi-git-write-")); t.after(() => rm(cwd, { recursive: true, force: true }));

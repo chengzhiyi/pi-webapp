@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { startBridge } from "../extension/bridge.ts";
+import { startBridge } from "../src/host/server/transport/bridge.ts";
 import { terminalHost } from "./helpers/terminal-host.ts";
 
 

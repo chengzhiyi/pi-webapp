@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
-import { startBridge, type BridgeHost } from "../extension/bridge.ts";
-import type { SessionView } from "../extension/view.ts";
-import { isContentOperation, safeFields } from "../shared/telemetry.ts";
+import { startBridge, type BridgeHost } from "../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../src/host/server/sessions/view.ts";
+import { isContentOperation, safeFields } from "../src/contracts/telemetry.ts";
 
 test("Git endpoints enforce authentication, origin, session and read-only paths, including mid-read switches", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-git-api-"));

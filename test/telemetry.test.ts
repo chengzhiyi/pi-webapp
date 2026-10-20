@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ErrorBudget, BreadcrumbBuffer, sanitizeError, sanitizeEvent, safeFields } from "../shared/telemetry.ts";
-import { DEFAULT_SENTRY_DSN, NodeTelemetry, readTelemetryConfig } from "../extension/telemetry.ts";
+import { ErrorBudget, BreadcrumbBuffer, sanitizeError, sanitizeEvent, safeFields } from "../src/contracts/telemetry.ts";
+import { DEFAULT_SENTRY_DSN, NodeTelemetry, readTelemetryConfig } from "../src/platform/telemetry/telemetry.ts";
 import { getClient, getCurrentScope, getGlobalScope, type Event } from "@sentry/core";
-import { ProviderLoginController } from "../extension/provider-login.ts";
-import { verifySentryNodeRelease } from "../extension/sentry-verification.ts";
-import { WorkspaceUnavailableError } from "../extension/workspaces.ts";
+import { ProviderLoginController } from "../src/host/server/models/provider-login.ts";
+import { verifySentryNodeRelease } from "../src/platform/telemetry/sentry-verification.ts";
+import { WorkspaceUnavailableError } from "../src/host/server/workspaces/workspaces.ts";
 
 test("unavailable workspace errors are not sent to Sentry while filesystem failures remain reportable", async () => {
   const events: Event[] = [];

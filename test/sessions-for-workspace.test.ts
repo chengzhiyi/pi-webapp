@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { sessionsForWorkspace } from "../extension/sessions-for-workspace.ts";
+import { sessionsForWorkspace } from "../src/host/server/sessions/sessions-for-workspace.ts";
 
 test("unavailable workspace directories have an actionable error and recover when restored", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-web-missing-workspace-"));

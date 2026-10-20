@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WebPluginCatalog } from "../extension/web-plugins.ts";
+import { WebPluginCatalog } from "../src/host/server/plugins/web-plugins.ts";
 
 test("discovers a local Web plugin and serves only declared assets", async () => {
   const base = await mkdtemp(join(tmpdir(), "pi-web-plugin-"));

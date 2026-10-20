@@ -1,5 +1,7 @@
 # pi-webapp 初版规格
 
+> 这是初版范围记录。当前源码归属与插件管理见 [architecture.md](architecture.md)；下述 `extension/` 等路径为历史结构。
+
 ## 目标
 
 把**正在运行的同一个 Pi TUI 会话**呈现在浏览器，并提供基础控制。Pi 仍负责模型、工具、会话和持久化；pi-webapp 只提供本机桥接与 Web 界面。此项目作为独立 Pi package 开发，后续可通过 npm 发布到 pi.dev/packages。

@@ -4,9 +4,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { startBridge } from "../extension/bridge.ts";
-import type { SessionView } from "../extension/view.ts";
-import { NodeTelemetry } from "../extension/telemetry.ts";
+import { startBridge } from "../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../src/host/server/sessions/view.ts";
+import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
 import type { Event } from "@sentry/core";
 
 const webRoot = fileURLToPath(new URL("../web/dist/", import.meta.url));

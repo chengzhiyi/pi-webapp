@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TerminalRegistry } from "../extension/terminals.ts";
+import { TerminalRegistry } from "../src/plugins/builtin/terminal/server/terminals.ts";
 
 async function until(check: () => boolean) {
   const deadline = Date.now() + 5000;

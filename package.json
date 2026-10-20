@@ -39,7 +39,7 @@
     "status": "node bin/pi-webapp.mjs status",
     "stop": "node bin/pi-webapp.mjs stop",
     "check": "tsc --noEmit && tsc -p web/tsconfig.json",
-    "test": "node --import ./test/setup-env.mjs --experimental-strip-types --test test/*.test.ts && npm run test:desktop",
+    "test": "node --import ./test/setup-env.mjs --experimental-strip-types --test --test-concurrency=4 test/*.test.ts && npm run test:desktop",
     "test:desktop": "node --test desktop/test/*.test.mjs",
     "desktop:icons": "node scripts/generate-desktop-icons.mjs",
     "desktop:sync-runtime": "node scripts/sync-desktop-runtime.mjs",

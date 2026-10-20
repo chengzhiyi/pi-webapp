@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HttpError } from "../web/src/http-error.ts";
+import { HttpError } from "../src/host/client/http-error.ts";
 import { updateErrorMessage } from "../web/src/ui/settings/update-error.ts";
 
 test("old bridge 404 explains that the service must restart", () => {

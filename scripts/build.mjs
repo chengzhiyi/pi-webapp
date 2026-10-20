@@ -38,7 +38,7 @@ if (side !== "node") {
 if (side !== "browser") {
   try {
     await esbuild({
-      entryPoints: [resolve(root, "extension/index.ts")], bundle: true, platform: "node", format: "esm", target: "node22", packages: "external", minify: true,
+      entryPoints: [resolve(root, "src/adapters/pi/extension.ts")], bundle: true, platform: "node", format: "esm", target: "node22", packages: "external", minify: true,
       outfile: resolve(root, "dist/extension.js"), sourcemap: "external",
       define: { __PI_WEB_RELEASE__: JSON.stringify(info.release), __PI_WEB_BUILD_ID__: JSON.stringify(info.buildId) },
       plugins: [{ name: "bundle-local-protocol", setup(builder) {

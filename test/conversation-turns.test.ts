@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conversationTurns, toolResults } from "../web/src/conversation-turns.ts";
-import { projectEntry, sessionTitle } from "../extension/view.ts";
-import type { ViewMessage } from "../web/src/pi-bridge.ts";
+import { conversationTurns, toolResults } from "../src/host/client/conversation-turns.ts";
+import { projectEntry, sessionTitle } from "../src/host/server/sessions/view.ts";
+import type { ViewMessage } from "../src/host/client/pi-bridge.ts";
 
 test("projects Pi calls, results, and reported assistant usage", () => {
   const assistant = projectEntry({ id: "a", type: "message", timestamp: "2026-01-01T00:00:00Z", parentId: null,

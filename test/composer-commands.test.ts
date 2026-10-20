@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildComposerCommands, resolveComposerCommand, filterComposerCommands } from '../web/src/composer-commands.ts';
+import { buildComposerCommands, resolveComposerCommand, filterComposerCommands } from '../src/host/client/composer-commands.ts';
 
 const plugins = [{ id: 'plan-plugin', definition: { id: 'plan-plugin', apiVersion: 1 as const, activate() {}, commands: [{
   id: 'plan', title: 'Plan mode', action: 'plan.command',

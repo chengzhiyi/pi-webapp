@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { WorkspaceSessions } from "../../extension/workspace-sessions.ts";
-import { startBridge, type Bridge, type BridgeHost } from "../../extension/bridge.ts";
+import { WorkspaceSessions } from "../../src/host/server/sessions/workspace-sessions.ts";
+import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
 import { controlledReply } from "../helpers/controlled-reply.ts";
 
 test("switching running chats restores their own streams and keeps background work alive", async ({ page }, testInfo) => {

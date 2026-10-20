@@ -4,9 +4,9 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
-import { WorkspaceSessions } from "../extension/workspace-sessions.ts";
-import { PAUSED_ENTRY } from "../extension/view.ts";
-import type { DiagnosticFields } from "../shared/telemetry.ts";
+import { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
+import { PAUSED_ENTRY } from "../src/host/server/sessions/view.ts";
+import type { DiagnosticFields } from "../src/contracts/telemetry.ts";
 
 test("real SDK tool failures are observed once and resumed tools use the new operation", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-tool-diagnostic-"));

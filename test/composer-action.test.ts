@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { selectComposerAction, executeComposerAction } from '../web/src/composer-action.ts';
+import { selectComposerAction, executeComposerAction } from '../src/host/client/composer-action.ts';
 
 const session = { sessionId: 'current', idle: true, pluginEntries: [] };
 const contribution = { kind: 'invoke' as const, label: '继续执行计划', action: 'plan.resubmit', input: { callId: 'interrupted' }, sendResultMessage: true };

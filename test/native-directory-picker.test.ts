@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { directoryPickerKind, pickNativeDirectory } from "../extension/native-directory-picker.ts";
+import { directoryPickerKind, pickNativeDirectory } from "../src/host/server/workspaces/native-directory-picker.ts";
 
 test("uses the native chooser for an attended local macOS launch", () => {
   assert.equal(directoryPickerKind("darwin", {}), "native");

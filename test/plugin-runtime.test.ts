@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { WebPluginRuntime } from "../web/src/plugin-manager.ts";
+import { WebPluginRuntime } from "../src/host/client/plugin-manager.ts";
 
 const catalog = { plugins: [{ id: "example", client: "/example.js", style: "/example.css" }], errors: [] };
 const definition = (activate: (context: any) => void = () => {}) => ({ id: "example", apiVersion: 1, activate });

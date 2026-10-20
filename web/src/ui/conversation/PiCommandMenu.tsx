@@ -1,5 +1,5 @@
 import { Fragment, useLayoutEffect, useRef } from "react";
-import type { ComposerCommand } from "../../composer-commands.ts";
+import type { ComposerCommand } from "../../../../src/host/client/composer-commands.ts";
 import { IconCompactOutlineRegular, IconDataOutlineRegular, IconNewChatOutlineRegular, IconPaperclipOutlineRegular } from "../shared/primitives/icons/index.tsx";
 import { useAnchoredMaxHeight } from "../primitives/useAnchoredMaxHeight.ts";
 import { MenuSurface } from "../shared/primitives/MenuSurface.tsx";

@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "include": ["extension/**/*.ts", "shared/**/*.ts", "test/**/*.ts"]
+  "include": ["src/adapters/**/*.ts", "src/host/server/**/*.ts", "src/platform/**/*.ts", "src/contracts/**/*.ts", "src/plugins/builtin/*/server/**/*.ts", "src/plugins/builtin/*/contract/**/*.ts", "test/**/*.ts"]
 }

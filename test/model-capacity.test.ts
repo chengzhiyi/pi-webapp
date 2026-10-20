@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatCapacity, parseCapacity } from "../shared/model-capacity.ts";
+import { formatCapacity, parseCapacity } from "../src/contracts/model-capacity.ts";
 
 test("model capacities use DSH's decimal K/M notation", () => {
   assert.equal(parseCapacity("256K"), 256000);

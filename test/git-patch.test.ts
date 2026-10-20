@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseGitPatch, previewGitPatch } from "../web/src/git-patch.ts";
+import { parseGitPatch, previewGitPatch } from "../src/plugins/builtin/git/client/git-patch.ts";
 
 test("unified diffs count old/new lines across hunks and keep header-looking source lines as changes", () => {
   const lines = parseGitPatch("--- a/file\n+++ b/file\n@@ -2,2 +4,2 @@\n same\n--- old\n+++ new\n\\ No newline at end of file\n@@ -20 +22 @@\n-last\n+next\n");

@@ -5,10 +5,10 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import piWeb from "../extension/index.ts";
-import type { Bridge } from "../extension/bridge.ts";
-import type { WorkspaceRegistry } from "../extension/workspaces.ts";
-import type { WorkspaceSessions } from "../extension/workspace-sessions.ts";
+import piWeb from "../src/host/server/bootstrap/pi-host.ts";
+import type { Bridge } from "../src/host/server/transport/bridge.ts";
+import type { WorkspaceRegistry } from "../src/host/server/workspaces/workspaces.ts";
+import type { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 import { controlledReply } from "./helpers/controlled-reply.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
@@ -79,7 +79,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   assert.deepEqual(openedPages, [pageUrl, pageUrl, pageUrl]);
   assert.deepEqual(notices, ["info", "info", "warning"]);
   const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
-  const shared = (globalThis as Record<symbol, { bridge: Bridge | null; workspaceSessions: unknown; selected: "tui" | "sdk" }>)[Symbol.for(`pi-web.bridge-state:${new URL("../extension/index.ts", import.meta.url).href}`)];
+  const shared = (globalThis as Record<symbol, { bridge: Bridge | null; workspaceSessions: unknown; selected: "tui" | "sdk" }>)[Symbol.for(`pi-web.bridge-state:${new URL("../src/host/server/bootstrap/pi-host.ts", import.meta.url).href}`)];
   try {
     const created = await fetch(`${url.origin}/api/new-session`, {
       method: "POST", headers, body: JSON.stringify({ sessionId: "old" }),

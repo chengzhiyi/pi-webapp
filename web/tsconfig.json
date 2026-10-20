@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../src/host/client/**/*.ts", "../src/host/client/**/*.tsx", "../src/plugins/builtin/*/client/**/*.ts", "../src/plugins/builtin/*/client/**/*.tsx"]
 }

@@ -32,7 +32,7 @@ export async function prepareSourceMaps(directory, repairMissing = false) {
       map.sources = map.sources.map(source => {
         if (typeof source !== "string" || /^[a-z]+:/i.test(source)) return source;
         const owned = relative(root, resolve(dirname(file), map.sourceRoot || "", source)).replace(/\\/g, "/");
-        if (!/^(?:web\/src|shared|extension)\//.test(owned)) return source;
+        if (!/^(?:web\/src|src|shared|extension)\//.test(owned)) return source;
         changed = true;
         return `app:///${owned}`;
       });
@@ -56,7 +56,7 @@ export async function buildInfo() {
       else { hash.update(relative(root, file)); hash.update(await readFile(file)); }
     }
   }
-  for (const folder of ["extension", "shared", "web/src", "scripts"]) await visit(resolve(root, folder));
+  for (const folder of ["src", "web/src", "scripts"]) await visit(resolve(root, folder));
   for (const name of ["package.json", "package-lock.json", "vite.config.ts"]) hash.update(await readFile(resolve(root, name)));
   const { version } = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
   const buildId = hash.digest("hex").slice(0, 20);

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { startBridge } from "../../extension/bridge.ts";
+import { startBridge } from "../../src/host/server/transport/bridge.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 
 for (const width of [1280, 768, 375]) for (const theme of ["light", "dark"]) test(`compact Git layout at ${width}px in ${theme}`, async ({ page }, testInfo) => {

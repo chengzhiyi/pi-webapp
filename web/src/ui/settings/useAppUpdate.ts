@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { UpdateStatus } from "../../pi-bridge.ts";
+import type { UpdateStatus } from "../../../../src/host/client/pi-bridge.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { updateErrorMessage } from "./update-error.ts";
-import { reportError } from "../../telemetry.ts";
+import { reportError } from "../../../../src/host/client/telemetry.ts";
 
 export interface AppUpdateActions {
   getUpdate: () => Promise<UpdateStatus>;

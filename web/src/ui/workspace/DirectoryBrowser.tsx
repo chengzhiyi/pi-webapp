@@ -42,7 +42,7 @@ import {
   IconCheckOutline16, IconChevronRightOutline14, IconEditOutline16, IconFolderClose16, IconFolderOpen16,
   IconPlusOutline16,
 } from '../primitives/icons/index.tsx'
-import type { DirectoryEntry, DirectoryListing } from '../../pi-bridge.ts'
+import type { DirectoryEntry, DirectoryListing } from '../../../../src/host/client/pi-bridge.ts'
 type Translate = (key: string, params?: Record<string, string>) => string
 import css from './DirectoryBrowser.module.css'
 

@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { createAssistantMessageEventStream, type AssistantMessage } from '@earendil-works/pi-ai';
-import { PAUSED_ENTRY, sessionPaused, projectSession } from '../extension/view.ts';
-import { WorkspaceSessions } from '../extension/workspace-sessions.ts';
-import { selectComposerAction, executeComposerAction } from '../web/src/composer-action.ts';
-import { conversationTurns } from '../web/src/conversation-turns.ts';
+import { PAUSED_ENTRY, sessionPaused, projectSession } from '../src/host/server/sessions/view.ts';
+import { WorkspaceSessions } from '../src/host/server/sessions/workspace-sessions.ts';
+import { selectComposerAction, executeComposerAction } from '../src/host/client/composer-action.ts';
+import { conversationTurns } from '../src/host/client/conversation-turns.ts';
 
 test('pause markers belong to the current branch and survive tool cancellation and reopening', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pi-pause-branch-'));

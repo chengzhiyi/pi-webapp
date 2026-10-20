@@ -1,5 +1,11 @@
 # Web 插件与聊天控制
 
+## 内置插件与管理
+
+当前目录与启停语义见 [architecture.md](architecture.md)。Git、文件、终端集中在 `src/plugins/builtin/<能力>/{server,client,contract}/`，通过宿主注册表接入。浏览器模块沿用协议 v1 的加载校验与生命周期，并声明独立版本的 `workbench` 入口/面板贡献；后端由各插件声明请求处理与资源清理。侧栏「插件」或设置中的「插件」提供全局开关。
+
+外部 Pi 扩展不等于可独立卸载的 Web 模块：现有外部协议未声明安全的运行时停用操作，管理页对此展示只读状态，包的安装/移除继续走「包与扩展」。不以隐藏前端入口代替运行时停用。
+
 ## 插件接入
 
 宿主通过 `@chengzhiyi/pi-web-protocol` v1 接入 Web 插件。插件包在
@@ -25,9 +31,7 @@ PI_WEBAPP_PLUGIN_DEV_ROOTS=../pi-extensions/packages/plan-mode npm run start
 后端重载串行执行，浏览器插件的模块、样式和清理函数按连接及会话管理，
 避免旧加载结果在切换会话后重新激活。浏览器断线保留后端待处理交互。
 
-面板、Markdown 和输入编辑器使用本地引入的 UI 组件；来源与改动说明见
-[组件说明](../web/src/ui/shared/README.md)，版权说明保留在
-[组件许可证](../web/src/ui/shared/LICENSE.txt)。
+面板、Markdown 和输入编辑器使用 `web/src/ui/` 的本地 UI 组件。插件管理的列表、详情导航和独立开关样式参照 DSH 的 `packages/client/ui-plugin-manager` 与 `ui-primitives/Switch`，接入本项目的桥接与语言/模态框实现，不引入 DSH 的运行时。
 
 ## 暂停与继续
 

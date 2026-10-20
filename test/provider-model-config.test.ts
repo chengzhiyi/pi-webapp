@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { getProviderModels, updateProviderModel } from "../extension/provider-model-config.ts";
+import { getProviderModels, updateProviderModel } from "../src/host/server/models/provider-model-config.ts";
 
 test("edits built-in models as overrides and preserves unrelated provider configuration", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-web-models-"));

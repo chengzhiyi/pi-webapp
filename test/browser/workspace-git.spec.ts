@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { startBridge, type Bridge, type BridgeHost } from "../../extension/bridge.ts";
-import { NodeTelemetry } from "../../extension/telemetry.ts";
-import type { SessionView } from "../../extension/view.ts";
+import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
+import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 for (const width of [1440, 1024, 768, 390, 320]) test(`Git panel reviews scoped changes and refreshes read-only diffs at ${width}px`, async ({ page }, testInfo) => {
   test.setTimeout(35000);

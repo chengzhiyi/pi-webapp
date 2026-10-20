@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const protocol = fileURLToPath(import.meta.resolve("@chengzhiyi/pi-web-protocol"));
 await build({
-  entryPoints: ["extension/index.ts"],
+  entryPoints: ["src/adapters/pi/extension.ts"],
   outfile: "dist/extension.js",
   bundle: true,
   platform: "node",

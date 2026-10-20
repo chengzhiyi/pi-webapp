@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addCustomProvider } from "../extension/custom-provider.ts";
+import { addCustomProvider } from "../src/host/server/models/custom-provider.ts";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 test("adds a compatible Pi provider without storing its API key or replacing existing providers", async () => {

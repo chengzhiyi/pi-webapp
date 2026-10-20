@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { workspaceGitStatus, workspaceGitDiff } from "../extension/workspace-git.ts";
+import { workspaceGitStatus, workspaceGitDiff } from "../src/plugins/builtin/git/server/workspace-git.ts";
 
 const execute = promisify(execFile);
 async function repository(t: { after(fn: () => Promise<void>): void }) {

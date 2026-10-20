@@ -3,9 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startBridge, type BridgeHost } from "../../extension/bridge.ts";
-import { NodeTelemetry } from "../../extension/telemetry.ts";
-import type { SessionView, ViewMessage } from "../../extension/view.ts";
+import { startBridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
+import type { SessionView, ViewMessage } from "../../src/host/server/sessions/view.ts";
 
 for (const width of [1440, 768, 320]) test(`streaming respects the reader's scroll position at ${width}px`, async ({ page }, testInfo) => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-scroll-browser-"));

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildResourceInventory } from "../extension/config-inventory.ts";
+import { buildResourceInventory } from "../src/host/server/plugins/config-inventory.ts";
 
 test("shows installed packages and auto-discovered Pi resources with their origins", () => {
   const inventory = buildResourceInventory(

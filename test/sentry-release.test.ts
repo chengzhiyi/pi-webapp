@@ -174,11 +174,11 @@ test("missing JS Debug ID markers block otherwise identical package artifacts", 
 });
 
 test("the live verifier requires the exact archived probe source file and line", () => {
-  const location = releaseProbeLocation({ sources: ["../extension/sentry-verification.ts"], sourcesContent: ['import stuff;\nconst error = new Error("Sentry Node release verification");'] }, "node");
-  assert.deepEqual(location, { filename: "extension/sentry-verification.ts", lineno: 2 });
+  const location = releaseProbeLocation({ sources: ["../src/platform/telemetry/sentry-verification.ts"], sourcesContent: ['import stuff;\nconst error = new Error("Sentry Node release verification");'] }, "node");
+  assert.deepEqual(location, { filename: "src/platform/telemetry/sentry-verification.ts", lineno: 2 });
   const event = resolvedEvent("node");
   assert.throws(() => verifyResolvedEvent(event, expected, "node", location));
-  event.exception.values[0]!.stacktrace.frames[0]!.filename = "app:///extension/sentry-verification.ts";
+  event.exception.values[0]!.stacktrace.frames[0]!.filename = "app:///src/platform/telemetry/sentry-verification.ts";
   event.exception.values[0]!.stacktrace.frames[0]!.lineno = 3;
   assert.throws(() => verifyResolvedEvent(event, expected, "node", location));
   event.exception.values[0]!.stacktrace.frames[0]!.lineno = 2;
@@ -194,13 +194,13 @@ test("browser maps normalize owned sources before upload without changing Debug 
   const directory = await mkdtemp(join(root, ".ci/source-map-test-"));
   try {
     await put(directory, "assets/app.js", code(browserId));
-    await put(directory, "assets/app.js.map", JSON.stringify({ version: 3, sources: ["../../../web/src/telemetry.ts", "../../../shared/telemetry.ts", "../../../node_modules/third-party/index.js"], sourcesContent: ['new Error("Sentry browser release verification")', "", ""], mappings: "AAAA", debug_id: browserId, debugId: browserId }));
+    await put(directory, "assets/app.js.map", JSON.stringify({ version: 3, sources: ["../../../src/host/client/telemetry.ts", "../../../src/contracts/telemetry.ts", "../../../node_modules/third-party/index.js"], sourcesContent: ['new Error("Sentry browser release verification")', "", ""], mappings: "AAAA", debug_id: browserId, debugId: browserId }));
     await prepareSourceMaps(directory, true);
     const normalized = JSON.parse(await readFile(join(directory, "assets/app.js.map"), "utf8"));
-    assert.equal(normalized.sources[0], "app:///web/src/telemetry.ts");
-    assert.equal(normalized.sources[1], "app:///shared/telemetry.ts");
+    assert.equal(normalized.sources[0], "app:///src/host/client/telemetry.ts");
+    assert.equal(normalized.sources[1], "app:///src/contracts/telemetry.ts");
     assert.equal(normalized.debug_id, browserId);
-    assert.deepEqual(releaseProbeLocation(normalized, "browser"), { filename: "web/src/telemetry.ts", lineno: 1 });
+    assert.deepEqual(releaseProbeLocation(normalized, "browser"), { filename: "src/host/client/telemetry.ts", lineno: 1 });
     await prepareSourceMaps(directory);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

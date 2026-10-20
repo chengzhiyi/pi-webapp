@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
-import { startBridge, type BridgeHost } from "../../extension/bridge.ts";
-import type { SessionView } from "../../extension/view.ts";
+import { startBridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 const snapshot: SessionView = { schemaVersion: 1, sessionId: "update-test", cwd: "/tmp", name: "Update test", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
 const host: BridgeHost = {

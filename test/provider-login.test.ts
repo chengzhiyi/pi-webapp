@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
-import { preferBrowserLogin, ProviderLoginController } from "../extension/provider-login.ts";
+import { preferBrowserLogin, ProviderLoginController } from "../src/host/server/models/provider-login.ts";
 
 test("OpenAI Codex browser sign-in skips the redundant method prompt", async () => {
   let prompted = false;

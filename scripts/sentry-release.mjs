@@ -47,7 +47,7 @@ export async function verifyPackageArtifacts(packageRoot, archiveRoot) {
 
 /** Validate symbolicated application frames; third-party dependency frames need no private maps. */
 export function releaseProbeLocation(map, side) {
-  const filename = side === "node" ? "extension/sentry-verification.ts" : "web/src/telemetry.ts";
+  const filename = side === "node" ? "src/platform/telemetry/sentry-verification.ts" : "src/host/client/telemetry.ts";
   const marker = `new Error("Sentry ${side === "node" ? "Node" : "browser"} release verification")`;
   const index = map.sources?.findIndex(source => source.replace(/\\/g, "/").endsWith(filename)) ?? -1;
   const source = map.sourcesContent?.[index];
@@ -72,7 +72,7 @@ export function verifyResolvedEvent(event, expected, side, probeLocation) {
       const original = raw[index];
       if (!ownBundle(original.filename ?? original.abs_path)) continue;
       const frame = frames[index];
-      if (!frame || !/(?:^|\/)(?:extension|shared|web\/src)\/.*\.tsx?$/.test(frame.filename ?? frame.abs_path ?? "") || !Number.isInteger(frame.lineno) || frame.lineno <= 0 || frame.data?.symbolicated === false) throw new Error(`${side}: application source frame was not resolved`);
+      if (!frame || !/(?:^|\/)(?:src|extension|shared|web\/src)\/.*\.tsx?$/.test(frame.filename ?? frame.abs_path ?? "") || !Number.isInteger(frame.lineno) || frame.lineno <= 0 || frame.data?.symbolicated === false) throw new Error(`${side}: application source frame was not resolved`);
       if (probeLocation && (frame.filename ?? frame.abs_path).endsWith(probeLocation.filename) && frame.lineno === probeLocation.lineno) probeResolved = true;
       resolved++;
     }

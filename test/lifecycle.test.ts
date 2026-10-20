@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import { LifecycleQueue, closeAgentSession } from "../extension/lifecycle.ts";
+import { LifecycleQueue, closeAgentSession } from "../src/host/server/sessions/lifecycle.ts";
 
 test("a stuck shutdown times out, invalidates once, and reports the failure", async () => {
   let emitted = 0; let disposed = 0;

@@ -1,0 +1,128 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { startBridge } from "../src/host/server/transport/bridge.ts";
+import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
+import { terminalHost } from "./helpers/terminal-host.ts";
+import { PluginPreferences } from "../src/host/server/plugins/preferences.ts";
+import { ServerPluginRegistry } from "../src/host/server/plugins/registry.ts";
+import { BUILTIN_IDS, type PluginManagementView } from "../src/contracts/plugins.ts";
+import { parseBridgeEvent } from "../src/contracts/bridge-events.ts";
+
+const webRoot = new URL("../web/dist", import.meta.url).pathname;
+
+test("plugin management persists real backend gates and validates auth, origin, session and revisions", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-plugin-management-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "plugins.json");
+  const { host } = terminalHost(directory);
+  let backgroundBusy = false;
+  host.busyGitWorkspaces = () => backgroundBusy ? [directory] : [];
+  host.plugins = () => ({ plugins: [{ id: "@example/external", client: "/plugins/example/client.js" }], errors: [] });
+  const telemetry = () => new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false });
+  const bridge = await startBridge(host, webRoot, telemetry(), { pluginSettingsFile: file });
+  t.after(() => bridge.close());
+  const url = new URL(bridge.url);
+  const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+  const get = () => fetch(url.origin + "/api/plugin-management", { headers }).then(response => response.json()) as Promise<PluginManagementView>;
+  const post = (body: object, extra: Record<string, string> = {}) => fetch(url.origin + "/api/plugin-management", { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify({ sessionId: "terminal-a", ...body }) });
+  let view = await get();
+  assert.equal(view.items.filter(item => item.kind === "builtin").length, 3);
+  assert.equal(view.items.find(item => item.id === "@example/external")?.managed, false);
+  const input = { id: BUILTIN_IDS.git, enabled: false, expected: view.revision };
+  assert.equal((await post(input, { Authorization: "Bearer wrong" })).status, 401);
+  assert.equal((await post(input, { Origin: "https://other.invalid" })).status, 403);
+  assert.equal((await post({ ...input, sessionId: "stale" })).status, 409);
+  assert.equal((await post({ ...input, enabled: "false" })).status, 400);
+  assert.equal((await post({ ...input, id: "@example/external" })).status, 400);
+  backgroundBusy = true;
+  assert.equal((await post(input)).status, 409);
+  backgroundBusy = false;
+  const changed = await post(input); assert.equal(changed.status, 200);
+  view = await changed.json();
+  assert.equal(view.items.find(item => item.id === BUILTIN_IDS.git)?.enabled, false);
+  assert.notEqual(view.revision, input.expected);
+  assert.equal((await post({ ...input, enabled: true })).status, 409);
+  const catalog = await fetch(url.origin + "/api/plugins", { headers }).then(response => response.json());
+  assert.ok(!catalog.plugins.some((item: { id: string }) => item.id === BUILTIN_IDS.git));
+  const blocked = await fetch(url.origin + "/api/workspace/git/status", { method: "POST", headers, body: JSON.stringify({ sessionId: "terminal-a" }) });
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).errorCode, "plugin_disabled");
+  const action = await fetch(url.origin + "/api/plugin-action", { method: "POST", headers, body: JSON.stringify({ sessionId: "terminal-a", pluginId: BUILTIN_IDS.git, action: "status", input: {} }) });
+  assert.equal(action.status, 403);
+  const filesAction = await fetch(url.origin + "/api/plugin-action", { method: "POST", headers, body: JSON.stringify({ sessionId: "terminal-a", pluginId: BUILTIN_IDS.files, action: "list", input: { path: "", sessionId: "cannot-override" } }) });
+  assert.equal(filesAction.status, 200);
+  assert.ok(Array.isArray((await filesAction.json()).value.entries));
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).disabled, [BUILTIN_IDS.git]);
+  const preferences = new PluginPreferences(file); await preferences.load(); assert.equal(preferences.enabled(BUILTIN_IDS.git), false);
+  assert.equal((await post({ id: BUILTIN_IDS.git, enabled: true, expected: view.revision })).status, 200);
+});
+
+test("disabled terminal releases PTYs, blocks direct API use and can be enabled again", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-plugin-terminal-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { host } = terminalHost(directory);
+  const bridge = await startBridge(host, webRoot, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(directory, "plugins.json") });
+  t.after(() => bridge.close());
+  const url = new URL(bridge.url);
+  const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+  const send = (route: string, input: object) => fetch(url.origin + route, { method: "POST", headers, body: JSON.stringify({ sessionId: "terminal-a", ...input }) });
+  const id = "2ad4618d-47b1-4ca6-ac96-a2ac14ec4a12";
+  assert.equal((await send("/api/terminal/create", { id, cols: 80, rows: 24 })).status, 201);
+  const inventory = () => fetch(url.origin + "/api/plugin-management", { headers }).then(response => response.json()) as Promise<PluginManagementView>;
+  let view = await inventory();
+  assert.equal((await send("/api/plugin-management", { id: BUILTIN_IDS.terminal, enabled: false, expected: view.revision })).status, 200);
+  assert.equal((await send("/api/terminal/input", { id, data: "echo not-run\n" })).status, 403);
+  view = await inventory();
+  assert.equal((await send("/api/plugin-management", { id: BUILTIN_IDS.terminal, enabled: true, expected: view.revision })).status, 200);
+  // Re-enabling does not resurrect the old terminal ID or process.
+  assert.equal((await send("/api/terminal/input", { id, data: "echo not-run\n" })).status, 400);
+  assert.equal((await send("/api/terminal/create", { id, cols: 80, rows: 24 })).status, 201);
+});
+
+test("malformed durable preferences fail closed and failed writes do not flip effective state", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-plugin-preferences-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "plugins.json");
+  await writeFile(file, '{"version":1,"disabled":[42]}');
+  await assert.rejects(new PluginPreferences(file).load());
+  const preferences = new PluginPreferences(join(directory, "parent-file", "plugins.json"));
+  await writeFile(join(directory, "parent-file"), "not a directory");
+  const revision = preferences.revision();
+  await assert.rejects(preferences.set(BUILTIN_IDS.files, false, revision, () => {}));
+  assert.equal(preferences.revision(), revision);
+  assert.equal(preferences.enabled(BUILTIN_IDS.files), true);
+});
+
+test("in-flight plugin work blocks disable and plugin state events validate IDs", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-plugin-registry-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  const registry = new ServerPluginRegistry([{ metadata: { id: "test", name: "Test", description: "", kind: "builtin", version: "1" }, routes: ["/test"], handle: () => waiting }], new PluginPreferences(join(directory, "plugins.json")));
+  const { host } = terminalHost(directory);
+  const running = registry.dispatch({ path: "/test", body: { sessionId: "terminal-a" }, res: {} as import("node:http").ServerResponse, snapshot: host.snapshot, busyWorkspaces: () => [], json() {} });
+  await assert.rejects(registry.toggle("test", false, registry.preferences.revision(), () => {}));
+  release(); await running;
+  await registry.toggle("test", false, registry.preferences.revision(), () => {});
+  assert.equal(registry.preferences.enabled("test"), false);
+  assert.deepEqual(parseBridgeEvent({ type: "plugin_state", disabled: [BUILTIN_IDS.git] }), { type: "plugin_state", disabled: [BUILTIN_IDS.git] });
+  assert.throws(() => parseBridgeEvent({ type: "plugin_state", disabled: [42] }));
+});
+
+test("separate service preferences reject stale disk state and never overwrite another writer", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-plugin-disk-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "plugins.json");
+  const first = new PluginPreferences(file), second = new PluginPreferences(file);
+  await first.load(); await second.load();
+  const original = second.revision();
+  await first.set(BUILTIN_IDS.git, false, first.revision(), () => {});
+  await assert.rejects(second.set(BUILTIN_IDS.files, false, original, () => {}), /其他服务修改/);
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).disabled, [BUILTIN_IDS.git]);
+  await writeFile(file + ".lock", "another writer");
+  await assert.rejects(first.set(BUILTIN_IDS.git, true, first.revision(), () => {}), /锁定/);
+  assert.equal(await readFile(file + ".lock", "utf8"), "another writer");
+});

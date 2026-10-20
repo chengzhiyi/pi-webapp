@@ -4,8 +4,8 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startBridge } from "../../extension/bridge.ts";
-import { NodeTelemetry } from "../../extension/telemetry.ts";
+import { startBridge } from "../../src/host/server/transport/bridge.ts";
+import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 
 for (const width of [1440, 1024, 768, 390, 320]) test(`interactive terminal lifecycle at ${width}px`, async ({ page }, testInfo) => {

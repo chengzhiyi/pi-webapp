@@ -1,4 +1,4 @@
-import { HttpError } from "../../http-error.ts";
+import { HttpError } from "../../../../src/host/client/http-error.ts";
 
 export function updateErrorMessage(cause: unknown, locale: "zh" | "en", action: "check" | "install"): string {
   if (cause instanceof HttpError && cause.status === 404) {

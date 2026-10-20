@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { workspaceGitHistory, workspaceGitCommit, workspaceGitCommitDiff } from "../extension/workspace-git-history.ts";
+import { workspaceGitHistory, workspaceGitCommit, workspaceGitCommitDiff } from "../src/plugins/builtin/git/server/workspace-git-history.ts";
 
 async function repository(t: { after(fn: () => Promise<void>): void }) {
   const cwd = await mkdtemp(join(tmpdir(), "pi-history-")); t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -42,7 +42,10 @@ test("commit details use the selected merge parent and root commits compare agai
   await writeFile(join(cwd, "file.txt"), "original\n"); await git("add", "."); await git("commit", "-m", "subject\n\nDetailed message <script>\nSecond paragraph");
   const root = await git("rev-parse", "HEAD");
   const detail = await workspaceGitCommit(cwd, root);
-  assert.equal(detail.author, "History Test"); assert.match(detail.message, /Detailed message <script>/);
+  // Harnesses may supply commit identity; verify the projection against the actual object.
+  assert.equal(detail.author, await git("show", "-s", "--format=%an", root));
+  assert.equal(detail.committer, await git("show", "-s", "--format=%cn", root));
+  assert.match(detail.message, /Detailed message <script>/);
   assert.deepEqual(detail.parents, []); assert.equal(detail.files[0]?.status, "A"); assert.equal(detail.files[0]?.additions, 1);
   const added = await workspaceGitCommitDiff(cwd, root, "file.txt");
   assert.equal(added.kind, "text"); assert.equal(added.parentHash, null); if (added.kind === "text") assert.match(added.patch, /\+original/);

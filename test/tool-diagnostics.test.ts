@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ToolDiagnostics, classifyToolFailure } from "../extension/tool-diagnostics.ts";
-import type { DiagnosticFields } from "../shared/telemetry.ts";
+import { ToolDiagnostics, classifyToolFailure } from "../src/platform/telemetry/tool-diagnostics.ts";
+import type { DiagnosticFields } from "../src/contracts/telemetry.ts";
 
 const result = (text: string, details?: Record<string, unknown>) => ({ content: [{ type: "text", text }], ...(details ? { details } : {}) });
 

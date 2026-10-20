@@ -1,0 +1,22 @@
+import React from "react";
+import { createRoot } from "react-dom/client";
+import "../../../web/src/ui/theme/base.css";
+import "../../../web/src/ui/theme/design-platform.css";
+import "../../../web/src/ui/theme/gradient-shadow-text.css";
+import "../../../web/src/ui/theme/scrollbar.css";
+import "../../../web/src/ui/theme/corner-shape.css";
+import "../../../web/src/ui/shared/base.css";
+import "../../../web/src/ui/shared/design-platform.css";
+import "../../../web/src/ui/shared/gradient-shadow-text.css";
+import "../../../web/src/ui/shared/focus.css";
+import "../../../web/src/ui/shared/shiki.css";
+import { TelemetryBoundary } from "./TelemetryBoundary.tsx";
+import { PiApp } from "./PiApp.tsx";
+import { installThemePreference } from "../../../web/src/ui/theme/preference.ts";
+import { installLocalePreference } from "../../../web/src/ui/locale/preference.ts";
+
+installThemePreference();
+installLocalePreference();
+const root = document.getElementById("root");
+if (!root) throw new Error("Missing #root");
+createRoot(root).render(<TelemetryBoundary><PiApp /></TelemetryBoundary>);

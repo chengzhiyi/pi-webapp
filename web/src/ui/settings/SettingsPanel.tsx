@@ -14,6 +14,7 @@ function navIcon(id: string) {
   if (id === "general") return <IconSettingsOutline16 className={css.navIcon} size={16} />;
   if (id === "models") return <IconDataOutline16 className={css.navIcon} size={16} />;
   if (id === "packages") return <IconArchiveOutline20 className={css.navIcon} size={16} />;
+  if (id === "plugins") return <IconPersonalizationOutline16 className={css.navIcon} size={16} />;
   if (id === "extensions") return <IconPersonalizationOutline16 className={css.navIcon} size={16} />;
   return <IconSkillOutline16 className={css.navIcon} size={16} />;
 }

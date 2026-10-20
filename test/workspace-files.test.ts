@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { listWorkspaceFiles, previewWorkspaceFile } from "../extension/workspace-files.ts";
+import { listWorkspaceFiles, previewWorkspaceFile } from "../src/plugins/builtin/files/server/workspace-files.ts";
 
 test("workspace tree includes dotfiles and files, sorts directories first and lists only one level", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-files-"));

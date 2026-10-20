@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ViewBlock, ViewMessage, ViewUsage } from "../../pi-bridge.ts";
+import type { ViewBlock, ViewMessage, ViewUsage } from "../../../../src/host/client/pi-bridge.ts";
 import { DisclosureRow } from "../primitives/DisclosureRow.tsx";
 import { TerminalBlock } from "../primitives/TerminalBlock.tsx";
 import { IconChevronDownOutline14, IconCodeOutline16, IconCopyOutline16, IconDatabaseOutline16 } from "../primitives/icons/index.tsx";

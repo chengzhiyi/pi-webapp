@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
-import type { BridgeEvent, SessionView, ViewMessage, LoginEvent, LoginPrompt } from "../shared/bridge-contract.ts";
-import { SESSION_SCHEMA_VERSION } from "../shared/bridge-contract.ts";
-import { parseBridgeEvent } from "../shared/bridge-events.ts";
+import type { BridgeEvent, SessionView, ViewMessage, LoginEvent, LoginPrompt } from "../src/contracts/bridge-contract.ts";
+import { SESSION_SCHEMA_VERSION } from "../src/contracts/bridge-contract.ts";
+import { parseBridgeEvent } from "../src/contracts/bridge-events.ts";
 
 const message: ViewMessage = {
   id: "assistant-1", role: "assistant", timestamp: "2026-10-18T00:00:00Z",

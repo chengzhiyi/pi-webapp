@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WorkspaceRegistry } from "../extension/workspaces.ts";
+import { WorkspaceRegistry } from "../src/host/server/workspaces/workspaces.ts";
 
 test("workspace records use canonical directory identity and survive reload", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-web-workspaces-"));

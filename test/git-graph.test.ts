@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutGitGraph } from "../web/src/git-graph.ts";
+import { layoutGitGraph } from "../src/plugins/builtin/git/client/git-graph.ts";
 
 test("Git graph draws each merge parent and rejoins shared ancestors without duplicate lanes", () => {
   const graph = layoutGitGraph([

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reconcileGitSelection } from "../web/src/git-file-selection.ts";
-import type { GitFileChange } from "../shared/workspace-git.ts";
+import { reconcileGitSelection } from "../src/plugins/builtin/git/client/git-file-selection.ts";
+import type { GitFileChange } from "../src/plugins/builtin/git/contract/workspace-git.ts";
 const file = (values: Partial<GitFileChange> = {}): GitFileChange => ({ path: "file.txt", index: ".", worktree: "M", untracked: false, conflict: false, submodule: false, ...values });
 test("file preview preserves explicit staged/working selection without auto-selecting a file", () => {
   const entries = [file({ index: "M" })];

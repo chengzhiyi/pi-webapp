@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { startBridge } from "../../extension/bridge.ts";
+import { startBridge } from "../../src/host/server/transport/bridge.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 
 for (const width of [1440, 768, 390, 320]) test(`inline Git diff keeps files, selection and writes coherent at ${width}px`, async ({ page }, testInfo) => {

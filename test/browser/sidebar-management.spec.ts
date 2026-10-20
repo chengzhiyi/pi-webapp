@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
-import { startBridge, type Bridge, type BridgeHost } from "../../extension/bridge.ts";
-import type { SessionView } from "../../extension/view.ts";
+import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 async function fixture(page: Page, showcase = false) {
   let bridge: Bridge;

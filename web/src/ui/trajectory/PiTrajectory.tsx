@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ViewMessage, ViewUsage } from "../../pi-bridge.ts";
-import { conversationTurns } from "../../conversation-turns.ts";
-import { PiMarkdown } from "../../PiMarkdown.tsx";
+import type { ViewMessage, ViewUsage } from "../../../../src/host/client/pi-bridge.ts";
+import { conversationTurns } from "../../../../src/host/client/conversation-turns.ts";
+import { PiMarkdown } from "../../../../src/host/client/PiMarkdown.tsx";
 import { IconCloseOutline16, IconDatabaseOutline16, IconSearchOutline16 } from "../primitives/icons/index.tsx";
 import viewsCss from "./views.module.css";
 import tableCss from "./TrajectoryTable.module.css";

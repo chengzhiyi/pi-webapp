@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { randomUUID } from "../web/src/random-uuid.ts";
+import { randomUUID } from "../src/host/client/random-uuid.ts";
 
 function replaceCrypto(t: TestContext, value: Partial<Crypto>): void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto")!;

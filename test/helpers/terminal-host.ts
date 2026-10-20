@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
-import type { BridgeHost } from "../../extension/bridge.ts";
-import type { SessionView } from "../../extension/view.ts";
+import type { BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 export function terminalHost(cwd = tmpdir()) {
   let session: SessionView = { schemaVersion: 1, sessionId: "terminal-a", cwd, name: "Terminal A", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };

@@ -7,7 +7,7 @@ import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createAgentSession, createEventBus, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import { invokeWebAction } from "@chengzhiyi/pi-web-protocol";
-import { WorkspaceSessions } from "../extension/workspace-sessions.ts";
+import { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 
 const launcher = fileURLToPath(new URL("../bin/pi-webapp.mjs", import.meta.url));
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));

@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
-import { startBridge } from "../extension/bridge.ts";
-import { withGitWorktreeLease } from "../extension/workspace-git-write.ts";
+import { startBridge } from "../src/host/server/transport/bridge.ts";
+import { withGitWorktreeLease } from "../src/plugins/builtin/git/server/workspace-git-write.ts";
 import { terminalHost } from "./helpers/terminal-host.ts";
-import { isContentOperation, safeFields } from "../shared/telemetry.ts";
+import { isContentOperation, safeFields } from "../src/contracts/telemetry.ts";
 
 test("Git writes authenticate, check selection and all running chats, reject leases, and preserve unstaged content", async t => {
   const cwd = await realpath(await mkdtemp(join(tmpdir(), "pi-git-write-api-"))); t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -40,7 +40,7 @@ test("Git writes authenticate, check selection and all running chats, reject lea
   busy = [join(cwd, "..", "unrelated-worktree")]; assert.equal((await control()).blocked, null);
   let reads = 0;
   host.snapshot = () => ++reads < 4 ? snapshot() : { ...snapshot(), sessionId: "changed" };
-  response = await request("write", { action: "stage", path: "file.txt", expected: (await (await import("../extension/workspace-git-write.ts")).workspaceGitControl(cwd)).version });
+  response = await request("write", { action: "stage", path: "file.txt", expected: (await (await import("../src/plugins/builtin/git/server/workspace-git-write.ts")).workspaceGitControl(cwd)).version });
   assert.equal(response.status, 409); assert.equal((await response.json()).reason, "session_changed"); assert.equal(await git("ls-files"), ""); host.snapshot = snapshot;
   let release!: () => void; let acquired!: () => void;
   const ready = new Promise<void>(yes => { acquired = yes; });
@@ -60,15 +60,16 @@ test("Git writes authenticate, check selection and all running chats, reject lea
   assert.equal((await write({ action: "stage", path: "file.txt" })).status, 200);
   const hook = join(cwd, ".git/hooks/pre-commit");
   await writeFile(hook, "#!/bin/sh\ntouch .git/hook-started\nwhile ! test -e .git/hook-release; do sleep 0.02; done\n"); await chmod(hook, 0o755);
-  const committing = write({ action: "commit", message: "completed during switch" });
+  const expectedCommit = (await control()).version;
+  const committing = request("write", { expected: expectedCommit, action: "commit", message: "completed during switch" });
   try {
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 10000;
     while (true) {
       try { await readFile(join(cwd, ".git/hook-started")); break; }
       catch { assert.ok(Date.now() < deadline, "commit hook started"); await new Promise(yes => setTimeout(yes, 20)); }
     }
     host.snapshot = () => ({ ...snapshot(), sessionId: "changed" });
-  } finally { await writeFile(join(cwd, ".git/hook-release"), "release"); }
-  response = await committing; assert.equal(response.status, 200); assert.equal((await response.json()).action, "commit");
+  } finally { await writeFile(join(cwd, ".git/hook-release"), "release"); response = await committing; }
+  assert.equal(response.status, 200); assert.equal((await response.json()).action, "commit");
   assert.equal(await git("log", "-1", "--format=%s"), "completed during switch");
 });

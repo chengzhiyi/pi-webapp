@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { startBridge } from "../extension/bridge.ts";
-import { fileLeafName } from "../extension/attachments.ts";
+import { startBridge } from "../src/host/server/transport/bridge.ts";
+import { fileLeafName } from "../src/host/server/attachments/attachments.ts";
 
 const webRoot = fileURLToPath(new URL("../web/dist/", import.meta.url));
 

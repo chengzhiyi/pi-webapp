@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { WorkspaceSessions } from "../extension/workspace-sessions.ts";
+import { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 
 test("SDK switching retains runtimes, reload emits shutdown, and dispose closes every session once", async () => {

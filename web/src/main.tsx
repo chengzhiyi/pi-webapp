@@ -1,4 +1,4 @@
-import { installBrowserTelemetry, reportError } from "./telemetry.ts";
+import { installBrowserTelemetry, reportError } from "../../src/host/client/telemetry.ts";
 
 installBrowserTelemetry();
-void import("./app.tsx").catch((cause) => reportError(cause, { stage: "startup" }));
+void import("../../src/host/client/app.tsx").catch((cause) => reportError(cause, { stage: "startup" }));

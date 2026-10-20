@@ -1,10 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
-import { startBridge, type Bridge, type BridgeHost } from "../../extension/bridge.ts";
-import { DEFAULT_SENTRY_DSN, NodeTelemetry } from "../../extension/telemetry.ts";
+import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
+import { DEFAULT_SENTRY_DSN, NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import type { Event } from "@sentry/core";
-import type { SessionView } from "../../extension/view.ts";
+import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 const snapshot: SessionView = { schemaVersion: 1, sessionId: "private-session", cwd: "/private/workspace", name: "Test session", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
 const root = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -316,7 +316,7 @@ test("release probes require a verification environment and explicit URL flag", 
     await page.goto(url.href); await production.sdkReady;
     await expect(page.getByRole("textbox")).toBeEnabled();
     expect(production.browserEvents).toEqual([]);
-  } finally { await production.bridge.close(); }
+  } finally { await page.goto("about:blank"); await production.bridge.close(); }
   const verification = await fixture(page, true, {}, "sentry-verification");
   try {
     const url = new URL(verification.bridge.url); url.searchParams.set("sentry_release_probe", "1");
