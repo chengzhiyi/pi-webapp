@@ -55,6 +55,14 @@ Chats run independently: switching workspaces or chats, or creating a new chat, 
 
 On startup, the app discovers workspaces from Pi's saved sessions, so conversations from other directories appear in the sidebar. Workspace records and attachments stay under Pi's existing `pi-web/` data directory. Removing a workspace from the sidebar does not delete its files or sessions; you can add it again manually.
 
+## Optional desktop application
+
+The same UI can run in the **pi** Electron desktop application while the browser and `/web` entry points remain available. Desktop packages include Node/Pi, reuse compatible running services, and let you open the same service in a browser or choose whether to keep background tasks running on exit.
+
+From source: `npm ci` → `npm run desktop:prepare` → `npm run desktop:start`. Run `npm run desktop:package` to create a host-native installer under `desktop-release/`. Local QA targets macOS arm64; Windows/Linux configurations need verification on their respective systems. Initial packages are unsigned and do not auto-update. Installers include a desktop build number; check **pi → 关于 pi** for the running build and executable location. Quit the old desktop before replacing it; an external compatible Web backend need not be stopped. Finish tasks and stop an owned runtime before replacing that runtime.
+
+See [desktop build, testing and release boundaries](docs/desktop.md).
+
 ## Develop locally
 
 ```bash

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Pi Webapp</title>
+  <desc>An ivory pi monogram and mint terminal prompt on a deep teal rounded tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="160" y1="96" x2="832" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#244B50"/>
+      <stop offset="0.55" stop-color="#143137"/>
+      <stop offset="1" stop-color="#0B202A"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="220" y1="80" x2="740" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#96D8CB" stop-opacity="0.38"/>
+      <stop offset="0.5" stop-color="#96D8CB" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#96D8CB" stop-opacity="0.14"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="320" y1="382" x2="704" y2="748" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFEF5"/>
+      <stop offset="1" stop-color="#DDEEE4"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="210" fill="url(#tile)"/>
+  <rect x="68" y="68" width="888" height="888" rx="206" stroke="url(#rim)" stroke-width="8"/>
+  <!-- A tiny prompt establishes the coding context without competing with pi. -->
+  <path d="M282 244L324 280L282 316M356 316H402" stroke="#87E7CB" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Custom paths, not a font: identical rendering on every platform. -->
+  <path d="M276 416C304 391 331 386 374 386H748" stroke="url(#ink)" stroke-width="76" stroke-linecap="round"/>
+  <path d="M394 404V538C394 627 376 680 338 728M628 406V638C628 700 653 728 702 728C722 728 737 723 750 712" stroke="url(#ink)" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

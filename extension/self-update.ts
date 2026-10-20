@@ -42,14 +42,16 @@ export class SelfUpdater {
   private readonly packageRoot: string;
   private readonly launcherNonce: string | undefined;
   private readonly runNpm: (args: string[]) => Promise<string>;
+  private readonly desktopManaged: boolean;
   private preparing = false;
   private restartPending = false;
 
-  constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string> }) {
+  constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string>; desktopManaged?: boolean }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
     this.runNpm = options.runNpm ?? npm;
+    this.desktopManaged = options.desktopManaged ?? process.env.PI_WEBAPP_RUNTIME === "desktop";
   }
 
   private async current(): Promise<string> {
@@ -62,6 +64,8 @@ export class SelfUpdater {
 
   async check(): Promise<UpdateStatus> {
     const current = await this.current();
+    if (this.desktopManaged) return { current, latest: null, available: false, canRestart: false,
+      reason: "当前由桌面应用管理，请安装新版桌面应用进行升级；不会通过 npm 修改随包运行环境。" };
     const sourceCheckout = existsSync(join(this.packageRoot, ".git"));
     const status: UpdateStatus = { current, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
@@ -80,6 +84,7 @@ export class SelfUpdater {
   }
 
   async prepare(): Promise<PreparedUpdate> {
+    if (this.desktopManaged) throw new Error("桌面应用的运行环境不能通过网页升级，请安装新版桌面应用");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     if (existsSync(join(this.packageRoot, ".git"))) throw new Error("源码目录不能通过网页升级");
     if (this.restartPending) throw new Error("升级已完成，正在重启");
@@ -114,6 +119,7 @@ export class SelfUpdater {
   }
 
   async requestRestart(prepared: PreparedUpdate): Promise<void> {
+    if (this.desktopManaged) throw new Error("桌面应用的运行环境不能通过网页重启升级");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     try {
       await writeFile(join(this.agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: this.launcherNonce, launcher: prepared.launcher }), { mode: 0o600 });

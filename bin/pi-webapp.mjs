@@ -11,6 +11,9 @@ import { openWebPage } from "./open-web-page.mjs";
 import { npmCommand } from "./npm-command.mjs";
 
 const minimum = [0, 87, 1];
+const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
+const runtimeKind = process.env.PI_WEBAPP_RUNTIME === "desktop" ? "desktop" : "npm";
+const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind };
 const launcher = fileURLToPath(import.meta.url);
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));
 const agentDir = resolve((process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")).replace(/^~(?=$|[\\/])/, homedir()));
@@ -109,7 +112,7 @@ async function serve(pi, args) {
   try {
     lock = await open(statePath, "wx", 0o600);
     claimed = true;
-    await lock.writeFile(JSON.stringify({ pid: process.pid, nonce, cwd: process.cwd(), starting: true }));
+    await lock.writeFile(JSON.stringify({ pid: process.pid, nonce, cwd: process.cwd(), starting: true, ...runtimeInfo }));
   } catch (error) {
     if (claimed) await unlink(statePath).catch(() => {});
     notifyParent({ type: "error", message: error?.code === "EEXIST" ? "pi-webapp 已在启动或运行" : String(error) });
@@ -117,7 +120,8 @@ async function serve(pi, args) {
   } finally { await lock?.close().catch(() => {}); }
 
   const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
-  const child = spawn(pi, ["--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
+  const piPrefix = process.env.PI_WEBAPP_PI_CLI ? [resolve(process.env.PI_WEBAPP_PI_CLI)] : [];
+  const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
     cwd: process.cwd(), env: { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
@@ -173,7 +177,7 @@ async function serve(pi, args) {
     try {
       const request = JSON.parse(await readFile(restartPath, "utf8"));
       const prepared = JSON.parse(await readFile(updatePath, "utf8"));
-      if (request.nonce === nonce && request.launcher === prepared.launcher && existsSync(request.launcher)) {
+      if (runtimeKind !== "desktop" && request.nonce === nonce && request.launcher === prepared.launcher && existsSync(request.launcher)) {
         restartRequest = request;
         shutdown("restart_request");
       }
@@ -222,7 +226,7 @@ async function serve(pi, args) {
       if (url.hostname !== "127.0.0.1" || !url.hash) continue;
       runningUrl = url.href;
       opening = true;
-      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href })
+      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href, ...runtimeInfo })
         .then(() => {
           if (closed || failed) return;
           ready = true;
@@ -331,7 +335,7 @@ async function start(args) {
   if (!nodeVersion || !compatible(nodeVersion, [22, 19, 0])) throw new Error("需要 Node.js 22.19 或更新版本。");
   if (!existsSync(extension)) throw new Error("找不到构建后的扩展。请先运行 npm run build。");
   if (args.some((arg) => ["--mode", "--print", "-p"].includes(arg))) throw new Error("后台启动不支持覆盖 Pi 的运行模式");
-  const pi = probe("pi") ?? installPi();
+  const pi = process.env.PI_WEBAPP_PI_CLI ? process.execPath : probe("pi") ?? installPi();
   await mkdir(dirname(statePath), { recursive: true });
   const logFd = openSync(logPath, "a", 0o600);
   let worker;

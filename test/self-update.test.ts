@@ -25,6 +25,23 @@ test("update checks run npm without PATH in directories containing spaces and Ch
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("desktop-managed runtime never invokes npm or writes an update request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-web-desktop-update-"));
+  try {
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.19" }));
+    const updater = new SelfUpdater({ agentDir: root, packageRoot: root, launcherNonce: "owned-desktop",
+      desktopManaged: true, runNpm: async () => { throw new Error("npm must not run"); } });
+    const status = await updater.check();
+    assert.equal(status.canRestart, false);
+    assert.equal(status.available, false);
+    assert.match(status.reason ?? "", /桌面应用管理/);
+    await assert.rejects(updater.prepare(), /桌面应用/);
+    await assert.rejects(updater.requestRestart({ version: "0.2.0", launcher: "other" }), /桌面应用/);
+    await assert.rejects(readFile(join(root, "pi-web", "update.json")), { code: "ENOENT" });
+    await assert.rejects(readFile(join(root, "pi-web", "launcher.restart")), { code: "ENOENT" });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("compares npm release versions numerically", () => {
   assert.ok(compareVersions("0.10.0", "0.9.9") > 0);
   assert.equal(compareVersions("0.9.9", "0.9.9"), 0);
