@@ -4,7 +4,7 @@ import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { hash, verifyRelease } from "./desktop-release.mjs";
+import { hash, verifyBundle } from "./desktop-release.mjs";
 
 function runGh(args) { return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 4 * 1024 * 1024 }); }
 function optionalJson(run, path) {
@@ -37,11 +37,11 @@ async function verifyRemoteFiles(run, repository, tag, directory, names) {
 }
 
 export async function publishRelease({ root, directory, sourceCommit, repository, run = runGh }) {
-  const manifest = await verifyRelease({ root, directory, sourceCommit, repository });
+  const manifest = await verifyBundle({ root, directory, sourceCommit, repository });
   await ensureTag({ run, repository, tag: manifest.tag, commit: sourceCommit });
   const releasePath = `repos/${repository}/releases/tags/${encodeURIComponent(manifest.tag)}`;
   let release = optionalJson(run, releasePath);
-  const names = [manifest.filename, "SHA256SUMS", "desktop-release.json"];
+  const names = [...manifest.assets.map(asset => asset.name), "SHA256SUMS", "desktop-release.json"];
   if (release && !release.draft) {
     assert.equal(release.prerelease, true, "refusing to alter a stable release");
     await verifyRemoteFiles(run, repository, manifest.tag, directory, names);
@@ -49,7 +49,7 @@ export async function publishRelease({ root, directory, sourceCommit, repository
   }
   if (!release) {
     run(["release", "create", manifest.tag, "--repo", repository, "--verify-tag", "--draft", "--prerelease",
-      "--title", `pi ${manifest.version} · desktop ${manifest.build} (macOS arm64 test)`, "--notes-file", join(directory, "release-notes.md")]);
+      "--title", `pi ${manifest.version} · desktop ${manifest.build} (macOS / Windows / Linux test)`, "--notes-file", join(directory, "release-notes.md")]);
   }
   // Draft uploads are replaceable on a retry; published releases are never clobbered.
   run(["release", "upload", manifest.tag, "--repo", repository, "--clobber", ...names.map(name => join(directory, name))]);

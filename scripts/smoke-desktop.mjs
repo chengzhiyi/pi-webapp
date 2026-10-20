@@ -15,9 +15,10 @@ await mkdir(artifacts, { recursive: true });
 const agentDir = join(temporary, "agent");
 const home = join(temporary, "home");
 await mkdir(home);
-const executablePath = process.platform === "darwin" ? join(root, `desktop-release/${process.arch === "arm64" ? "mac-arm64" : "mac"}/${appName}.app/Contents/MacOS/${appName}`)
+const installerPayload = Boolean(process.env.PI_WEB_DESKTOP_EXECUTABLE);
+const executablePath = process.env.PI_WEB_DESKTOP_EXECUTABLE ?? (process.platform === "darwin" ? join(root, `desktop-release/${process.arch === "arm64" ? "mac-arm64" : "mac"}/${appName}.app/Contents/MacOS/${appName}`)
   : process.platform === "win32" ? join(root, `desktop-release/win-unpacked/${appName}.exe`)
-  : join(root, `desktop-release/linux-unpacked/${appName}`);
+  : join(root, `desktop-release/linux-unpacked/${appName}`));
 const env = { ...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: agentDir,
   PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0",
   // No npm/global Node/Pi paths: only system shells and utilities remain available.
@@ -36,6 +37,10 @@ try {
     return { empty: image.isEmpty(), size: image.getSize() };
   });
   assert.deepEqual(appIcon, { empty: false, size: { width: 1024, height: 1024 } });
+  const runtimeRoot = packaged ? join(await electron.evaluate(() => process.resourcesPath), "runtime") : join(root, ".desktop/runtime");
+  const piVersion = JSON.parse(await readFile(join(runtimeRoot, "backend/node_modules/@earendil-works/pi-coding-agent/package.json"), "utf8")).version;
+  const expectedPi = JSON.parse(await readFile(join(root, "package.json"), "utf8")).devDependencies["@earendil-works/pi-coding-agent"];
+  assert.equal(piVersion, expectedPi, "actual installed/mounted payload must contain the pinned latest Pi");
   const page = await electron.firstWindow({ timeout: 70000 });
   page.on("pageerror", error => errors.push(error.message));
   await page.evaluate(() => { localStorage.setItem("pi-web-locale", "en"); });
@@ -106,7 +111,8 @@ try {
   await assert.rejects(readFile(join(agentDir, "pi-web", "launcher.json")), { code: "ENOENT" });
   assert.throws(() => process.kill(state.piPid, 0));
   await writeFile(join(artifacts, "smoke-result.json"), JSON.stringify({ packaged, platform: process.platform, arch: process.arch,
-    version: state.version, appName, desktopBuild: release.buildNumber, checks: ["native-name-menu-title-pi", "about-build-and-executable-location", "custom-app-icon-loads", "standalone-runtime-without-system-node-pi", "sandboxed-renderer", "native-pty", "workspace-files",
+    version: state.version, appName, piVersion, desktopBuild: release.buildNumber, installerPayload,
+    checks: [...(installerPayload ? ["installer-payload-launch"] : []), "native-name-menu-title-pi", "about-build-and-executable-location", "custom-app-icon-loads", "standalone-runtime-without-system-node-pi", "sandboxed-renderer", "native-pty", "workspace-files",
       "authenticated-backend", "desktop-update-protection", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
   console.log("Desktop smoke passed: standalone runtime, sandbox, PTY, files, shared browser, update guard and shutdown.");
 } finally {
