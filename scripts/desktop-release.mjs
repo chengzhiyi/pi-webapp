@@ -8,7 +8,7 @@ export const releaseTargets = [
   { id: "mac-arm64", platform: "darwin", arch: "arm64", os: "mac", ext: "dmg", label: "macOS · Apple Silicon" },
   { id: "mac-x64", platform: "darwin", arch: "x64", os: "mac", ext: "dmg", label: "macOS · Intel" },
   { id: "win-x64", platform: "win32", arch: "x64", os: "win", ext: "exe", label: "Windows · x64" },
-  { id: "linux-x64", platform: "linux", arch: "x64", os: "linux", ext: "AppImage", label: "Linux · x64" },
+  { id: "linux-x64", platform: "linux", arch: "x64", artifactArch: "x86_64", os: "linux", ext: "AppImage", label: "Linux · x64" },
 ];
 const smokeGates = ["native-name-menu-title-pi", "custom-app-icon-loads", "native-pty", "shared-browser-backend", "confirmed-stop-reaps-pi", "installer-payload-launch"];
 export const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -24,7 +24,8 @@ export function releaseIdentity(pkg, release, target = releaseTargets[0]) {
   assert.ok(Number.isSafeInteger(release.buildNumber) && release.buildNumber > 0);
   target = targetFor(target.platform, target.arch);
   return { version: pkg.version, build: release.buildNumber, tag: `desktop-v${pkg.version}-b${release.buildNumber}`,
-    filename: `pi-${pkg.version}-desktop.${release.buildNumber}-${target.os}-${target.arch}.${target.ext}` };
+    // electron-builder uses the Linux deployment spelling for AppImage's arch macro.
+    filename: `pi-${pkg.version}-desktop.${release.buildNumber}-${target.os}-${target.artifactArch ?? target.arch}.${target.ext}` };
 }
 async function identity(root, target) { return releaseIdentity(await json(root, "package.json"), await json(root, "desktop/release.json"), target); }
 export function validateSource(commit, repository, ref) {

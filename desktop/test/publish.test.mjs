@@ -67,9 +67,13 @@ function githubMock(directory, manifest, { published = false, draft = false, cor
 }
 
 test("release identity covers four explicit targets and rejects unsafe/mismatching tags", () => {
+  // Real electron-builder output uses x86_64 only in the Linux asset filename;
+  // runtime/runner architecture and target ID remain x64.
+  const suffixes = { "mac-arm64": "mac-arm64.dmg", "mac-x64": "mac-x64.dmg", "win-x64": "win-x64.exe", "linux-x64": "linux-x86_64.AppImage" };
+  assert.equal(releaseTargets.find(target => target.id === "linux-x64").arch, "x64");
   for (const target of releaseTargets) {
     const spec = releaseIdentity({ version: "0.1.21" }, { productName: "pi", buildNumber: 6 }, target);
-    assert.equal(spec.tag, "desktop-v0.1.21-b6"); assert.ok(spec.filename.endsWith(`-${target.os}-${target.arch}.${target.ext}`));
+    assert.equal(spec.tag, "desktop-v0.1.21-b6"); assert.equal(spec.filename, `pi-0.1.21-desktop.6-${suffixes[target.id]}`);
     validateRef("refs/tags/" + spec.tag, spec); assert.throws(() => validateRef("refs/tags/desktop-v0.1.20-b5", spec));
   }
   for (const version of ["latest", "0.1.21;echo secret", "0.1.21-beta"]) assert.throws(() => releaseIdentity({ version }, { productName: "pi", buildNumber: 6 }));

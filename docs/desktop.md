@@ -56,7 +56,9 @@ e.g. `pi-0.1.20-desktop.5-mac-arm64.dmg`. “pi → 关于 pi” shows the build
 and executable location, so different desktop rebuilds are distinguishable even
 when their shared backend stays at the same npm version. `desktop/release.json`
 is the single source for the desktop name/build; increment its build number for
-each delivered rebuild. The CFBundleVersion / Windows file version also changes.
+each delivered rebuild. The CFBundleVersion / Windows file version also changes. AppImage filenames use
+electron-builder's Linux deployment spelling `x86_64`; the runner/runtime
+architecture and release target ID remain `x64` / `linux-x64`.
 
 Cross-platform/architecture flags are
 intentionally rejected by the wrapper: using the current machine's Node/native
