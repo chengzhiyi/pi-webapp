@@ -22,7 +22,6 @@ for (const width of [1440, 768, 390]) test(`plugin manager applies durable switc
     const collapse = page.getByRole("button", { name: "Collapse right sidebar", exact: true });
     if (width < 767 && await collapse.isVisible()) await collapse.click();
     const button = page.getByRole("button", { name: "Plugin manager", exact: true });
-    if (!await button.isVisible()) await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
     await button.click();
     await expect(page.getByRole("heading", { name: "Plugins", exact: true })).toBeVisible();
   };

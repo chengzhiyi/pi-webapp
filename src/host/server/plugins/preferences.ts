@@ -34,7 +34,8 @@ export class PluginPreferences {
       if (enabled) next.delete(id); else next.add(id);
       await mkdir(dirname(this.file), { recursive: true });
       try { lock = await open(lockFile, "wx", 0o600); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new PluginManagementError("插件配置已被其他服务锁定，请稍后刷新重试"); throw error; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new PluginManagementError("插件配置锁定文件仍存在，刷新不会解除。请先停止使用此配置的全部 Pi 服务，再删除 pi-web/plugins.json.lock 后重启；不要删除活跃服务的锁"); throw error; }
+      await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }) + "\n");
       const durable = new PluginPreferences(this.file);
       await durable.load();
       if (durable.revision() !== expected) throw new PluginManagementError("插件配置已由其他服务修改，请重启当前服务后重试");

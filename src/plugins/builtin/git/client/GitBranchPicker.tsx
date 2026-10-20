@@ -36,7 +36,7 @@ export function GitBranchPicker({ branch, control, disabled, model, open, onOpen
     if (await onWrite(action, input)) onOpenChange(false);
   };
   return <div ref={anchor} className={css.branchPicker}>
-    <button type="button" className={css.branchTrigger} aria-label={t("管理分支", "Manage branches")} aria-haspopup="dialog" aria-expanded={open} title={branch ?? t("分离 HEAD", "Detached HEAD")} onClick={() => onOpenChange(!open)}>
+    <button type="button" className={css.branchTrigger} disabled={!control} aria-label={t("管理分支", "Manage branches")} aria-haspopup="dialog" aria-expanded={open} title={branch ?? t("分离 HEAD", "Detached HEAD")} onClick={() => onOpenChange(!open)}>
       <IconBranchOutlineRegular /><span>{branch ?? t("分离 HEAD", "Detached HEAD")}</span><IconChevronDownOutlineRegular />
     </button>
     {open && <MenuSurface ref={dialog} className={css.branchPopover} compact role="dialog" aria-modal="true" aria-label={t("管理分支", "Manage branches")}>

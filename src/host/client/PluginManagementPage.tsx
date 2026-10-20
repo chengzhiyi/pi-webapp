@@ -27,16 +27,25 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, onBack
   const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState<ManagedPlugin | null>(null);
   const locked = useRef(false);
+  const pendingRead = useRef(false);
+  const observedGeneration = useRef(generation);
   const alive = useRef(true);
-  const refresh = async () => {
-    if (locked.current) return;
-    locked.current = true; setLoading(true); setError("");
+  const refresh = async (explicit = true) => {
+    if (locked.current) { pendingRead.current = true; return; }
+    locked.current = true; setLoading(true); if (explicit) setError("");
     try { const next = await getPluginManagement(); if (alive.current) setView(next); }
     catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : t("无法读取插件", "Could not load plugins")); }
-    finally { locked.current = false; if (alive.current) setLoading(false); }
+    finally {
+      locked.current = false; if (alive.current) setLoading(false);
+      if (pendingRead.current && alive.current) { pendingRead.current = false; void refresh(false); }
+    }
   };
   useEffect(() => { alive.current = true; void refresh(); return () => { alive.current = false; }; }, []);
-  useEffect(() => { if (view) void refresh(); }, [generation]);
+  useEffect(() => {
+    if (observedGeneration.current === generation) return;
+    observedGeneration.current = generation;
+    void refresh(false);
+  }, [generation]);
   const change = async (plugin: ManagedPlugin) => {
     if (!view || locked.current) return;
     locked.current = true; setBusy(plugin.id); setError(""); setNotice(""); setConfirm(null);
@@ -44,7 +53,10 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, onBack
       const next = await togglePlugin({ id: plugin.id, enabled: !plugin.enabled, expected: view.revision });
       if (alive.current) { setView(next); setNotice(t("插件配置已保存并生效", "Plugin settings saved and applied")); }
     } catch (cause) { if (alive.current) setError((cause instanceof Error ? cause.message : t("保存失败", "Could not save")) + t("。请刷新确认状态；操作不会自动重试。", ". Refresh to verify the state; this operation is not retried automatically.")); }
-    finally { locked.current = false; if (alive.current) setBusy(null); }
+    finally {
+      locked.current = false; if (alive.current) setBusy(null);
+      if (pendingRead.current && alive.current) { pendingRead.current = false; void refresh(false); }
+    }
   };
   const requestChange = (plugin: ManagedPlugin) => {
     if (plugin.id === BUILTIN_IDS.terminal && plugin.enabled) setConfirm(plugin);

@@ -27,6 +27,11 @@ for (const width of [1440, 768, 390, 320]) test(`inline Git diff keeps files, se
   const preview = panel.getByRole("region", { name: "Diff preview", exact: true });
   const diff = preview.getByRole("region", { name: "File diff", exact: true });
   const file = (name: string) => files.getByRole("button", { name, exact: true });
+  const writeFileAction = async (name: string) => {
+    const acknowledged = page.waitForResponse(response => response.url().endsWith("/api/workspace/git/write") && response.request().method() === "POST");
+    await files.getByRole("button", { name, exact: true }).click();
+    expect((await acknowledged).ok()).toBe(true);
+  };
   let release: (() => void) | undefined;
   try {
     await page.goto(bridge.url); await page.getByRole("button", { name: "Open right sidebar", exact: true }).click(); await panel.getByRole("button", { name: "Git changes", exact: true }).click();
@@ -68,11 +73,11 @@ for (const width of [1440, 768, 390, 320]) test(`inline Git diff keeps files, se
     await file("retry.txt, Untracked").click(); await expect(preview.getByText("Could not read this diff. Try again.", { exact: false })).toBeVisible();
     await expect(files).toBeVisible(); await preview.getByRole("button", { name: "Retry", exact: true }).click(); await expect(diff).toContainText("+retry.txt content");
     await file("fast.txt, Untracked").click(); await expect(diff).toContainText("+fast.txt content");
-    await files.getByRole("button", { name: "Stage fast.txt", exact: true }).click();
+    await writeFileAction("Stage fast.txt");
     await expect(preview.getByText("Staged", { exact: true })).toBeVisible(); await expect(file("fast.txt, Added")).toHaveAttribute("aria-pressed", "true");
     await expect(diff).toContainText("+fast.txt content");
-    await files.getByRole("button", { name: "Unstage fast.txt", exact: true }).click(); await expect(preview.getByText("Untracked", { exact: true })).toBeVisible();
-    await files.getByRole("button", { name: "Stage fast.txt", exact: true }).click();
+    await writeFileAction("Unstage fast.txt"); await expect(preview.getByText("Untracked", { exact: true })).toBeVisible();
+    await writeFileAction("Stage fast.txt");
     await expect(preview.getByText("Staged", { exact: true })).toBeVisible();
     await panel.getByRole("textbox", { name: "Commit message", exact: true }).fill("Commit previewed file");
     const commit = panel.getByRole("button", { name: "Commit", exact: true }); await expect(commit).toBeEnabled(); await commit.click();

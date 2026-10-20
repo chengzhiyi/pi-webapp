@@ -123,6 +123,6 @@ test("separate service preferences reject stale disk state and never overwrite a
   await assert.rejects(second.set(BUILTIN_IDS.files, false, original, () => {}), /其他服务修改/);
   assert.deepEqual(JSON.parse(await readFile(file, "utf8")).disabled, [BUILTIN_IDS.git]);
   await writeFile(file + ".lock", "another writer");
-  await assert.rejects(first.set(BUILTIN_IDS.git, true, first.revision(), () => {}), /锁定/);
+  await assert.rejects(first.set(BUILTIN_IDS.git, true, first.revision(), () => {}), error => error instanceof Error && /锁定/.test(error.message) && /停止.*全部 Pi 服务/.test(error.message) && /刷新不会解除/.test(error.message));
   assert.equal(await readFile(file + ".lock", "utf8"), "another writer");
 });
