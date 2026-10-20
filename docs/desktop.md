@@ -46,7 +46,7 @@ npm run desktop:package -- --dir    # unpacked application for QA
 
 Output is in `desktop-release/`. The macOS bundle is **pi.app**, the native menu
 and window name are **pi**, and installer names include a desktop build number,
-e.g. `pi-0.1.19-desktop.4-mac-arm64.dmg`. “pi → 关于 pi” shows the build number
+e.g. `pi-0.1.20-desktop.5-mac-arm64.dmg`. “pi → 关于 pi” shows the build number
 and executable location, so different desktop rebuilds are distinguishable even
 when their shared backend stays at the same npm version. `desktop/release.json`
 is the single source for the desktop name/build; increment its build number for
@@ -55,8 +55,9 @@ each delivered rebuild. The CFBundleVersion / Windows file version also changes.
 Cross-platform/architecture flags are
 intentionally rejected by the wrapper: using the current machine's Node/native
 modules in another platform's installer would create a broken application. Use
-native runners for each target. A manual GitHub Actions workflow is provided;
-it never publishes a release automatically.
+native runners for each target. `desktop.yml` remains a manual cross-platform
+packaging/artifact workflow. The separate `desktop-release.yml` below handles
+verified macOS arm64 prereleases, not every main push.
 
 The application embeds Node and Pi. Git, SSH, project compilers and other system
 tools are **not** bundled. Missing tools must be installed by the user. Model
@@ -73,8 +74,9 @@ These are two separate release responsibilities:
 - **Safe updates** verify an update's publisher/integrity and replace a compatible
   application/runtime without destroying user data.
 
-This first implementation creates **unsigned local/test installers**, with no
-certificate discovery, notarization, public release, or automatic desktop updater.
+The installers remain **unsigned/unnotarized test builds**, with no certificate
+discovery or automatic desktop updater. A GitHub prerelease is a download channel,
+not a claim of formal signed-distribution readiness.
 macOS Gatekeeper / Windows SmartScreen may warn or block an unsigned download.
 Do not disable OS security globally to use it. Public distribution needs a
 separately configured, authorized signing/notarization workflow; local successful
@@ -82,7 +84,8 @@ packaging is not proof of public-distribution readiness.
 
 For now, install a newer desktop package to upgrade; if replacing a running
 desktop-owned runtime, first finish tasks and stop that owned service. A desktop
-attached to an external Web service can simply close without stopping the service. Desktop-managed backends reject the Web/npm update and restart paths,
+attached to an external Web service can simply close without stopping the service.
+Desktop-managed backends reject the Web/npm update and restart paths,
 so the UI cannot overwrite the bundled runtime. A desktop window attached to an
 existing npm-managed backend preserves that backend's original update behavior.
 
@@ -95,7 +98,7 @@ existing npm-managed backend preserves that backend's original update behavior.
    If pi.app already exists, confirm Replace. The formerly named Pi Webapp.app
    is a separate Finder item and is not silently deleted or overwritten.
 3. Explicitly open `/Applications/pi.app`, not the old Dock shortcut, an older
-   mounted disk image, or Pi Webapp.app. Verify **pi → 关于 pi → 桌面构建 4**.
+   mounted disk image, or Pi Webapp.app. Verify the expected build in **pi → 关于 pi**.
 4. Remove the old pinned Dock shortcut and pin the new pi.app. Once verified,
    the old Pi Webapp.app may be removed manually; do not delete `~/.pi`.
 
@@ -105,6 +108,53 @@ preferences or allow a second independent desktop instance. Explicit
 `--user-data-dir` overrides are respected for testing. Pi configuration and
 sessions still live in their existing directory. The shared Web document/CLI
 keeps its existing name; this rename is for the native desktop application.
+
+## GitHub desktop prereleases
+
+Download builds from **[GitHub Releases](https://github.com/chengzhiyi/pi-webapp/releases)**,
+not the npm package, source ZIP or an expired Actions artifact. The current
+release channel only offers tested macOS Apple Silicon DMGs; Windows/Linux and
+Intel macOS need their own acceptance before becoming release targets.
+
+`.github/workflows/desktop-release.yml` supports:
+
+- **Tag push**: `desktop-v<backend-version>-b<desktop-build>`, such as
+  `desktop-v0.1.20-b5`. The tag must match package.json and desktop/release.json
+  at that exact source commit; mismatches fail before installation/build.
+- **Manual build only** (default): `gh workflow run desktop-release.yml --ref main`.
+  This produces checksummed Actions artifacts without a public release.
+- **Explicit manual publication**: add `-f publish=true`. The workflow pins the
+  dispatch commit, derives the tag from it, and only creates a missing tag at
+  that same commit. Existing tags pointing elsewhere are never moved.
+
+For repeatable publication, commit the intended version/build and push a tag
+pointing to that verified source SHA; do not silently follow a moving main while
+its independent npm pipeline may write another version. Increment the desktop
+build number for each delivered rebuild. Tag creation/release is an intentional
+publication action, not part of an ordinary main commit.
+
+The build job uses standard `macos-15` arm64, pinned npm lockfiles, standalone
+Node/Pi preparation, icon/config tests and the **packaged** desktop/browser/PTY
+smoke. Sentry reporting and signing discovery are disabled. It produces:
+
+- `pi-<version>-desktop.<build>-mac-arm64.dmg`
+- `SHA256SUMS` (DMG SHA-256)
+- `desktop-release.json` (source SHA, backend/build/runtime versions, unsigned
+  status, platform/architecture, file size/checksum and smoke checks)
+- `release-notes.md` (used as the Release body, not a separate download asset)
+
+A separate Ubuntu job has scoped `contents: write` and no npm installation/app
+execution. It revalidates the source-bound files, creates a **draft prerelease**,
+uploads only the three intended assets, downloads them to verify their bytes,
+and only then publishes the prerelease with `latest=false`. Signing is not
+claimed. An interrupted upload leaves a draft; retrying the same source/tag may
+repair a draft. A published release is never clobbered: a retry only succeeds
+when downloaded assets are byte-identical. A conflicting source/tag or different
+published bytes fails rather than replacing a public download.
+
+The packing wrapper deliberately retains `--publish never`: explicit CI Release
+upload owns publication. The manual cross-platform package workflow remains
+artifact-only. npm/Web publishing is unchanged and independent.
 
 ## Application icon
 

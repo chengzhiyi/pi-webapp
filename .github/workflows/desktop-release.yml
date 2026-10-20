@@ -1,0 +1,100 @@
+name: Desktop prerelease
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the verified macOS arm64 TEST installer to GitHub Releases"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pi-desktop-prerelease
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Standard Apple Silicon runner; do not silently package Intel binaries as arm64.
+    runs-on: macos-15
+    timeout-minutes: 30
+    outputs:
+      commit: ${{ steps.assets.outputs.commit }}
+      tag: ${{ steps.assets.outputs.tag }}
+    env:
+      PI_WEB_SENTRY_ENABLED: "false"
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Require native Apple Silicon
+        run: node -e "if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('Expected native macOS arm64 runner')"
+      - name: Validate release tag and immutable source before building
+        run: |
+          export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          node scripts/desktop-release.mjs --check-source
+      - name: Install exactly the committed dependencies
+        run: npm ci
+      - run: npm run check
+      - run: npm run test:desktop
+      - run: npm run desktop:prepare
+      - run: npm run desktop:package
+      - run: npx playwright install chromium
+      - name: Verify the packaged app, shared browser and cleanup
+        run: npm run desktop:smoke -- --packaged
+      - name: Prepare checksummed assets and verify version, build, source and smoke gates
+        id: assets
+        run: |
+          export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          node scripts/desktop-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-desktop-macos-arm64
+          path: .desktop/release-assets/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-smoke-evidence
+          path: artifacts/desktop/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'push' || inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only this job can create tags/releases; no npm install or app code execution here.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-desktop-macos-arm64
+          path: .desktop/release-assets
+      - name: Verify downloads before making the draft publicly visible
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: node scripts/publish-desktop-release.mjs
