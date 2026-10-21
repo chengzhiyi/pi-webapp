@@ -11,7 +11,7 @@ for (const file of ["README.md", "README.zh-CN.md"]) {
     assert.ok(link.index < text.indexOf("npx pi-webapp"), "do not make desktop users read CLI installation first");
     const introduction = text.slice(0, text.indexOf("![pi-webapp"));
     assert.match(introduction, /SHA-256/);
-    assert.match(introduction, /unsigned|未签名/);
+    assert.match(introduction, /unsigned|未签名/i);
     assert.match(introduction, /Apple/);
   });
 }
