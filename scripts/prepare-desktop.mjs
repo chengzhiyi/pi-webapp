@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { prepareNativePty } from "./desktop-native.mjs";
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -69,7 +70,8 @@ const pathKey = Object.keys(env).find(key => key.toLowerCase() === "path") ?? "P
 env[pathKey] = `${dirname(node)}${delimiter}${env[pathKey] ?? ""}`;
 delete env.NODE_OPTIONS;
 delete env.ELECTRON_RUN_AS_NODE;
-// Fixed lockfile; prebuilt N-API modules are verified below, not rebuilt against Electron.
+// Install the fixed lock without arbitrary lifecycle scripts. Enable only the
+// pinned PTY preparation below, targeting the bundled Node rather than Electron.
 await exec(node, [npmCli, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
   cwd: backend, env, timeout: 240000, maxBuffer: 8 * 1024 * 1024,
 });
@@ -81,18 +83,12 @@ manifest.name = pkg.name;
 manifest.version = pkg.version;
 manifest.type = "module";
 await writeFile(join(backend, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
-if (platform === "darwin") {
-  await chmod(join(backend, "node_modules", "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper"), 0o755);
-}
-// Fail the build, not the user's first launch, on a missing/broken native PTY.
-const ptyCheck = `const pty = require('node-pty'); const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh';
-const args = process.platform === 'win32' ? ['/c', 'echo PI_DESKTOP_PTY_OK'] : ['-c', 'printf PI_DESKTOP_PTY_OK'];
-const terminal = pty.spawn(shell, args, { cols: 80, rows: 24 }); let text = '';
-terminal.onData(data => text += data); terminal.onExit(() => { if (!text.includes('PI_DESKTOP_PTY_OK')) process.exitCode = 1; });`;
-await exec(node, ["-e", ptyCheck], { cwd: backend, env, timeout: 15000 });
+const ptyPreparation = await prepareNativePty({ platform, arch, node, nodeRoot, nodeVersion, npmCli, backend, env, run: exec });
+// Fail before packaging when the actual runtime cannot interact with and exit a PTY.
+await exec(node, [join(root, "desktop/check-pty.cjs")], { cwd: backend, env, timeout: 20000 });
 const piCli = join(backend, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
 const piVersion = (await exec(node, [piCli, "--version"], { cwd: backend, env, timeout: 30000 })).stdout.trim();
 if (piVersion !== pkg.devDependencies["@earendil-works/pi-coding-agent"]) throw new Error("Bundled Pi version mismatch");
-await writeFile(join(runtime, "build-info.json"), JSON.stringify({ version: pkg.version, nodeVersion, piVersion, platform, arch,
+await writeFile(join(runtime, "build-info.json"), JSON.stringify({ version: pkg.version, nodeVersion, piVersion, platform, arch, ptyPreparation,
   nodeArchiveSha256: expected }, null, 2) + "\n");
 console.log(`Desktop runtime ready: ${runtime}`);

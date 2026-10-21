@@ -20,7 +20,13 @@ npm run desktop:start
 nodejs.org, verifies the archive against the official HTTPS SHA-256 manifest,
 and installs the pinned production dependencies from
 `desktop/runtime-manifest/package-lock.json`. It verifies the bundled Pi version
-and actually starts a PTY before declaring success. Internet is required while
+and actually starts an interactive PTY, answers terminal queries, and checks its
+output and clean exit before declaring success. Linux compiles only the pinned
+`node-pty` lifecycle with the bundled Node and archive headers (the package has
+no Linux prebuild); Windows stages its pinned ConPTY DLL/helper payload. No
+Electron-ABI addon or host build is reused. Linux builders need Python and a C++
+toolchain; end users do not need these to run the packaged PTY.
+Internet is required while
 building, not to install Node/Pi on the end user's machine. Model calls,
 authorization and package installation can still require internet.
 
@@ -50,7 +56,9 @@ e.g. `pi-0.1.20-desktop.5-mac-arm64.dmg`. “pi → 关于 pi” shows the build
 and executable location, so different desktop rebuilds are distinguishable even
 when their shared backend stays at the same npm version. `desktop/release.json`
 is the single source for the desktop name/build; increment its build number for
-each delivered rebuild. The CFBundleVersion / Windows file version also changes.
+each delivered rebuild. The CFBundleVersion / Windows file version also changes. AppImage filenames use
+electron-builder's Linux deployment spelling `x86_64`; the runner/runtime
+architecture and release target ID remain `x64` / `linux-x64`.
 
 Cross-platform/architecture flags are
 intentionally rejected by the wrapper: using the current machine's Node/native
@@ -58,6 +66,12 @@ modules in another platform's installer would create a broken application. Use
 native runners for each target. `desktop.yml` remains a manual cross-platform
 packaging/artifact workflow. The separate `desktop-release.yml` below handles
 verified macOS arm64 prereleases, not every main push.
+
+The embedded runtime never automatically launches a second browser for its Web
+page: the shared browser opener honors `PI_WEBAPP_AUTO_OPEN=0` and desktop runtime
+identity. In particular, startup does not await a long-lived `xdg-open` browser
+before announcing backend readiness. The explicit native “在浏览器中打开” menu and
+confirmed connection-recovery actions remain available.
 
 The application embeds Node and Pi. Git, SSH, project compilers and other system
 tools are **not** bundled. Missing tools must be installed by the user. Model
@@ -133,24 +147,38 @@ its independent npm pipeline may write another version. Increment the desktop
 build number for each delivered rebuild. Tag creation/release is an intentional
 publication action, not part of an ordinary main commit.
 
-The build job uses standard `macos-15` arm64, pinned npm lockfiles, standalone
-Node/Pi preparation, icon/config tests and the **packaged** desktop/browser/PTY
-smoke. Sentry reporting and signing discovery are disabled. It produces:
+The candidate build-6 pipeline adds four **native** targets:
 
-- `pi-<version>-desktop.<build>-mac-arm64.dmg`
-- `SHA256SUMS` (DMG SHA-256)
-- `desktop-release.json` (source SHA, backend/build/runtime versions, unsigned
-  status, platform/architecture, file size/checksum and smoke checks)
-- `release-notes.md` (used as the Release body, not a separate download asset)
+| Target | Runner | Installer payload tested |
+| --- | --- | --- |
+| macOS arm64 | macos-15 | Read-only mounted DMG / pi.app |
+| macOS x64 | macos-15-intel | Read-only mounted DMG / pi.app |
+| Windows x64 | windows-2022 | NSIS silently installed pi.exe on disposable CI runner |
+| Linux x64 | ubuntu-22.04 | Extracted AppImage AppRun under Xvfb, without requiring FUSE |
 
-A separate Ubuntu job has scoped `contents: write` and no npm installation/app
-execution. It revalidates the source-bound files, creates a **draft prerelease**,
-uploads only the three intended assets, downloads them to verify their bytes,
-and only then publishes the prerelease with `latest=false`. Signing is not
-claimed. An interrupted upload leaves a draft; retrying the same source/tag may
-repair a draft. A published release is never clobbered: a retry only succeeds
-when downloaded assets are byte-identical. A conflicting source/tag or different
-published bytes fails rather than replacing a public download.
+Each uses locked dependencies, standalone Node/Pi, full unit tests and actual
+installer-payload desktop/browser/PTY smoke. The smoke reads the installed Pi
+package and requires the same pinned version. Signing discovery and Sentry are
+disabled. ARM Windows/Linux and other targets are not implicitly supported.
+
+A read-only aggregation job requires **all four** verified receipts from the
+same source/version/build/Pi pair. It collects four installers, SHA256SUMS,
+`desktop-release.json` (schema 2, per-target runtime and smoke evidence), and
+release-notes.md. A missing/failed target prevents the complete release; matrix
+entries alone are not an acceptance claim. Build-only runs also exercise this
+aggregation, but never create a public Release.
+
+Only the final Ubuntu publish job gets `contents: write`, with no npm installation
+or app execution. It checks the bundle, creates a **draft prerelease**, uploads
+four installers plus checksums and metadata, downloads all six assets to verify
+their bytes, then publishes with `latest=false`. An interrupted upload stays a
+draft; retries may repair it. Published assets are never clobbered: a retry only
+succeeds if every downloaded file is byte-identical. Conflicting source/tag or
+bytes fail rather than replacing a public download.
+
+The original public build 5 remains macOS-arm64-only with Pi 0.87.1. Do not
+advertise candidate target support or point users to candidate installer links
+until native jobs pass and that new build has actually been published.
 
 The packing wrapper deliberately retains `--publish never`: explicit CI Release
 upload owns publication. The manual cross-platform package workflow remains
@@ -237,7 +265,21 @@ without global Node/Pi. It tests renderer isolation, real PTY interaction,
 authentication, file listing, desktop update protection, a browser connected to
 the same service, and confirmed shutdown/process cleanup. It does **not** submit
 a paid model request, log in to a provider, or use the user's saved credentials.
-Screenshots/results are written to `artifacts/desktop/`.
+Screenshots/results are written to `artifacts/desktop/`. CI also persists a
+secret-free phase receipt before each major step, bounds installer smoke to six
+minutes, and bounds cleanup of its exact isolated Electron child. Failures retain
+only bounded, redacted tails of that fixture's launcher log and Electron stderr,
+plus allowlisted launcher metadata (never the URL, nonce, auth files or user
+sessions). Locale is seeded before navigation; the first UI must become usable
+before a real reload is tested, avoiding interruption of initial bootstrap.
+The locale seed touches only the actual HTTP loopback root, not opaque/error
+pages; real loopback storage errors still fail the test. Smoke opts into
+`PI_WEBAPP_STARTUP_TRACE=1`: the launcher records fixed RPC startup milestones,
+never RPC payloads, command bodies, URLs or access/control tokens. POSIX SDK and
+shell/Git integration tests run on macOS/Linux. Windows runs portable SDK/launcher
+boundaries, desktop/release invariants, an interactive native cmd PTY test, and
+the actual installed-payload GUI smoke; Unix executable fixtures are not treated
+as Windows tests. All four installer receipts remain mandatory for assembly.
 
 The legacy smoke uses a temporary HOME/agent directory and copies the old package
 without changing its launcher or extension JavaScript. It prepares node-pty's
@@ -255,16 +297,17 @@ configuration to make a fixture pass.
 
 ## Why the bundled Pi may not be the latest upstream version
 
-The desktop bundles **Pi 0.87.1** because that is the host project's explicitly
-pinned and tested SDK/runtime pair, not because npm automatically chose its
-latest release. `package.json` and `desktop/runtime-manifest/package-lock.json`
+The build-6 candidate pins **Pi 1.3.0**, the upstream latest checked on
+2026-10-20. The previously published build 5 bundles **Pi 0.87.1**. A source
+upgrade does not mutate that old download or a running external Web service. `package.json` and `desktop/runtime-manifest/package-lock.json`
 pin both `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai` together.
 The standalone Node runtime and native PTY are verified as part of that unit.
 The app version, desktop build number and bundled Pi version are separate.
 
 The public npm `latest` for both Pi packages was **1.3.0 when checked on
-2026-10-20**. Thus 0.87.1 is **not** the latest Pi; a validated pin should not be
-misrepresented as one or become an excuse never to maintain the dependency.
+2026-10-20**. Thus the older build's 0.87.1 is **not** the latest Pi. The candidate upgrade
+has passed typechecks and existing tests; native package gates still decide
+whether it may be offered as a new public download.
 Moving from the tested 0.x SDK to 1.x needs API/type compatibility review, paired
 lockfile updates, authentication/plugin/session regressions, native PTY checks,
 and packaged desktop/Web smoke tests before publishing a new installer.
