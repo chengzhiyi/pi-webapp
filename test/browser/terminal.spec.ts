@@ -126,7 +126,7 @@ test("failed shell startup is reviewable and service shutdown reaps the live ter
     await page.getByRole("button", { name: "Open terminal", exact: true }).click();
     const terminal = page.locator("[data-workspace-terminal]:visible");
     await expect(terminal).toHaveAttribute("data-terminal-phase", "failed");
-    await expect(terminal.getByRole("status")).toContainText("Terminal unavailable");
+    await expect(terminal.getByRole("status")).toContainText("the workspace directory is missing or inaccessible");
     bridge.publish({ type: "snapshot", session: switchSession("terminal-a", cwd) });
     await terminal.getByRole("button", { name: "New terminal", exact: true }).click();
     await expect(terminal).toHaveAttribute("data-terminal-phase", "connected");

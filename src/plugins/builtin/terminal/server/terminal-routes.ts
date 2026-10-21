@@ -1,6 +1,6 @@
 import type { ServerResponse } from "node:http";
 import type { SessionView } from "../../../../host/server/sessions/view.ts";
-import { TerminalRegistry } from "./terminals.ts";
+import { TerminalLaunchError, TerminalRegistry } from "./terminals.ts";
 import { validTerminalSize } from "../contract/terminal.ts";
 
 /** Called only after the bridge has checked bearer auth, origin, JSON and sessionId. */
@@ -35,5 +35,11 @@ export async function terminalRoute(path: string, body: { sessionId: string } & 
     else if (action === "resize") terminal.resize(body.cols as number, body.rows as number);
     else { reply(404, { error: "未知终端操作" }); return; }
     reply(200, { accepted: true });
-  } catch { if (!res.headersSent) reply(400, { error: action === "create" ? "终端启动失败，请检查默认 shell、工作区目录或终端数量上限" : "终端不可用或不属于此会话，请重新打开终端" }); else res.end(); }
+  } catch (error) {
+    if (!res.headersSent) reply(400, {
+      error: error instanceof TerminalLaunchError ? error.message : action === "create" ? "本机终端组件启动失败，请重新安装或修复应用的终端依赖" : "终端不可用或不属于此会话，请重新打开终端",
+      reason: error instanceof TerminalLaunchError ? error.reason : action === "create" ? "terminal_runtime_unavailable" : undefined,
+    });
+    else res.end();
+  }
 }

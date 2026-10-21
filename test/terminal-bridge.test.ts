@@ -34,7 +34,9 @@ test("all terminal routes enforce auth, origin, active session and terminal owne
     assert.equal((await request("create", { rows: 301 })).status, 400);
     const cwd = host.snapshot().cwd;
     switchSession("terminal-a", "/no/such/pi-terminal-workspace");
-    assert.equal((await request("create")).status, 400);
+    const missingWorkspace = await request("create");
+    assert.equal(missingWorkspace.status, 400);
+    assert.equal((await missingWorkspace.json()).reason, "terminal_workspace_unavailable");
     switchSession("terminal-a", cwd);
     assert.equal((await request("create")).status, 201);
     assert.equal((await request("create")).status, 201);
