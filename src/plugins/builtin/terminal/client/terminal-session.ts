@@ -5,7 +5,7 @@ import { bridgeFetch, bridgeJson } from "../../../../host/client/telemetry-fetch
 import { HttpError } from "../../../../host/client/http-error.ts";
 import type { TerminalFrame } from "../contract/terminal.ts";
 
-export interface TerminalState { phase: "starting" | "connected" | "disconnected" | "failed" | "exited"; exitCode?: number }
+export interface TerminalState { phase: "starting" | "connected" | "disconnected" | "failed" | "exited"; exitCode?: number; reason?: string }
 
 /** xterm creates its renderer and scrollbar styles synchronously during open(). */
 function openTerminal(terminal: Terminal, container: HTMLElement) {
@@ -123,7 +123,7 @@ export class TerminalSession {
     } catch (error) {
       if (this.disposed) return;
       const fatal = error instanceof HttpError && error.status !== 409 && error.status < 500;
-      this.patch({ phase: fatal ? "failed" : "disconnected" });
+      this.patch({ phase: fatal ? "failed" : "disconnected", reason: error instanceof HttpError ? error.reason : undefined });
       if (!fatal) this.retry = setTimeout(() => { void this.connect(); }, 1500);
     } finally { if (this.lifetime === lifetime) this.lifetime = undefined; }
   }

@@ -5,6 +5,12 @@ import type { IPty } from "node-pty";
 import type { Terminal as HeadlessTerminal } from "@xterm/headless";
 import type { SerializeAddon as Serializer } from "@xterm/addon-serialize";
 import type { TerminalFrame } from "../contract/terminal.ts";
+import { spawnTerminal } from "./pty.ts";
+
+export class TerminalLaunchError extends Error {
+  readonly reason: string;
+  constructor(reason: string, message: string, cause?: unknown) { super(message, { cause }); this.reason = reason; }
+}
 
 // Native/CJS dependencies must resolve beside the installed extension, including its bundled build.
 const require = createRequire(import.meta.url);
@@ -36,8 +42,8 @@ export class SessionTerminal {
     this.screen.loadAddon(this.serializer);
     // Never copy the web access/restart token into an interactive process.
     const env = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => value !== undefined && !/^PI_WEBAPP_RESTART_/.test(key))) as Record<string, string>;
-    try { this.pty = (require("node-pty") as typeof import("node-pty")).spawn(shell, args, { name: "xterm-256color", cwd, cols, rows, env: { ...env, TERM: "xterm-256color", COLORTERM: "truecolor" } }); }
-    catch (error) { this.screen.dispose(); throw error; }
+    try { this.pty = spawnTerminal(shell, args, { name: "xterm-256color", cwd, cols, rows, env: { ...env, TERM: "xterm-256color", COLORTERM: "truecolor" } }); }
+    catch (error) { this.screen.dispose(); throw new TerminalLaunchError("terminal_runtime_unavailable", "本机终端组件启动失败，请重新安装或修复应用的 node-pty 依赖", error); }
     this.pid = this.pty.pid;
     this.pty.onData(data => {
       if (this.disposed) return;
@@ -115,10 +121,12 @@ export class TerminalRegistry {
   create(id: string, sessionId: string, cwd: string, cols: number, rows: number) {
     if (this.stopped) throw new Error("终端服务已停止");
     if (this.terminals.has(id)) return this.get(id, sessionId);
-    if (this.terminals.size >= 32 || [...this.terminals.values()].filter(item => item.sessionId === sessionId).length >= 8) throw new Error("终端数量已达上限，请关闭不用的终端");
+    if (this.terminals.size >= 32 || [...this.terminals.values()].filter(item => item.sessionId === sessionId).length >= 8) throw new TerminalLaunchError("terminal_limit", "终端数量已达上限，请关闭不用的终端");
     const shell = this.options.shell ?? (process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : process.env.SHELL || "/bin/sh");
-    accessSync(shell, constants.X_OK);
-    if (!statSync(cwd).isDirectory()) throw new Error("工作区目录不可用");
+    try { accessSync(shell, constants.X_OK); if (!statSync(shell).isFile()) throw new Error("Not a shell file"); }
+    catch (error) { throw new TerminalLaunchError("terminal_shell_unavailable", "默认 shell 不存在或不可执行，请修正 SHELL（Windows 为 COMSPEC）后重启应用", error); }
+    try { if (!statSync(cwd).isDirectory()) throw new Error("Not a directory"); accessSync(cwd, constants.R_OK | constants.X_OK); }
+    catch (error) { throw new TerminalLaunchError("terminal_workspace_unavailable", "工作区目录不存在或不可访问，请切换到有效工作区后新建终端", error); }
     const args = this.options.shellArgs ?? (process.platform === "win32" ? [] : ["-i"]);
     const terminal = new SessionTerminal(sessionId, cwd, cols, rows, shell, args, () => { void this.remove(id, sessionId); }, this.options.graceMs ?? 5 * 60_000);
     this.terminals.set(id, terminal);

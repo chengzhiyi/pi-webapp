@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TerminalRegistry } from "../src/plugins/builtin/terminal/server/terminals.ts";
+import { TerminalLaunchError, TerminalRegistry } from "../src/plugins/builtin/terminal/server/terminals.ts";
 
 async function until(check: () => boolean) {
   const deadline = Date.now() + 5000;
@@ -54,7 +54,7 @@ test("closing and service shutdown reap running shells; launch failures leave no
   assert.throws(() => process.kill(second.pid, 0));
   assert.throws(() => registry.create("third", "a", tmpdir(), 80, 24));
   const bad = new TerminalRegistry({ shell: "/no/such/shell" });
-  assert.throws(() => bad.create("bad", "a", tmpdir(), 80, 24));
+  assert.throws(() => bad.create("bad", "a", tmpdir(), 80, 24), (error: unknown) => error instanceof TerminalLaunchError && error.reason === "terminal_shell_unavailable");
   assert.throws(() => bad.get("bad", "a"));
   await bad.close();
 });
@@ -73,7 +73,7 @@ test("abandoned connections expire; attached shells remain alive and terminal li
   const limited = new TerminalRegistry({ shell: "/bin/bash", shellArgs: ["--noprofile", "--norc", "-i"] });
   try {
     for (let i = 0; i < 8; i++) limited.create(String(i), "a", tmpdir(), 80, 24);
-    assert.throws(() => limited.create("overflow", "a", tmpdir(), 80, 24), /上限/);
+    assert.throws(() => limited.create("overflow", "a", tmpdir(), 80, 24), (error: unknown) => error instanceof TerminalLaunchError && error.reason === "terminal_limit");
   } finally { await limited.close(); }
 });
 
