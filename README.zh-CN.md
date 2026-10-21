@@ -4,13 +4,20 @@
 
 ## 下载 pi 桌面版
 
-### [⬇ 下载 macOS Apple 芯片版（DMG）](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.20-b5/pi-0.1.20-desktop.5-mac-arm64.dmg)
+**⬇ 测试版 · v0.1.21 / 桌面构建 6 · 内置 Pi 1.3.0**
 
-**测试版 · v0.1.20 / 桌面构建 5 · 仅支持 Apple M 系列芯片**
+| 你的电脑 | 下载安装包 |
+| --- | --- |
+| macOS · Apple 芯片（M 系列，arm64） | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-mac-arm64.dmg) |
+| macOS · Intel 芯片（x64） | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-mac-x64.dmg) |
+| Windows · x64 | [下载 EXE 安装程序](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-win-x64.exe) |
+| Linux · x64 | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-linux-x86_64.AppImage) |
 
-[版本说明与 SHA-256 校验和](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [所有桌面版本](https://github.com/chengzhiyi/pi-webapp/releases) · [改用 Web/npm 方式](#安装与打开)
+[版本说明](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.21-b6) · [SHA-256 校验和](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/SHA256SUMS) · [运行时与源码元数据](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/desktop-release.json) · [旧构建 5（保留回退）](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [改用 Web/npm 方式](#安装与打开)
 
-> 打开 DMG，将 **pi.app** 拖入“应用程序”即可。此测试版未签名、未公证，请勿全局关闭 macOS 安全保护。Windows/Linux/Intel Mac 安装包尚未验收。安装包已内置 Node 与经过验证、锁定版本的 Pi，无需另行安装。
+> **安装：** macOS 打开 DMG，将 **pi.app** 拖入“应用程序”；Windows 运行 EXE 安装程序；Linux 为 AppImage 添加可执行权限后运行，缺少 FUSE 时可加 `--appimage-extract-and-run`。已内置 Node 和锁定版本的 Pi **1.3.0**，无需另装；首次使用在设置中配置模型账户。替换前先退出旧桌面。复用外部 Web 后台时，其 Pi 仍保持原版本，不会自动停止或升级。
+>
+> **未签名测试版：** macOS 未公证，Windows 可能提示未知发布者；仅在确认来源可信后按单个应用的系统提示处理，不要全局关闭系统安全保护。四种实际安装包均通过原生运行冒烟，但不代表已测试所有 Linux 发行版或真实模型账户登录。不含 Windows ARM/Linux ARM；本构建尚无桌面自动更新。
 
 ![pi-webapp 封面](assets/cover-webapp.png)
 

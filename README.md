@@ -4,13 +4,20 @@
 
 ## Download pi desktop
 
-### [⬇ Download for macOS Apple Silicon (.dmg)](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.20-b5/pi-0.1.20-desktop.5-mac-arm64.dmg)
+**⬇ Test release · v0.1.21 / desktop build 6 · bundled Pi 1.3.0**
 
-**Test release · v0.1.20 / desktop build 5 · Apple M-series only**
+| Your computer | Download |
+| --- | --- |
+| macOS · Apple Silicon (M-series, arm64) | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-mac-arm64.dmg) |
+| macOS · Intel (x64) | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-mac-x64.dmg) |
+| Windows · x64 | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-win-x64.exe) |
+| Linux · x64 | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/pi-0.1.21-desktop.6-linux-x86_64.AppImage) |
 
-[Release notes and SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [All desktop releases](https://github.com/chengzhiyi/pi-webapp/releases) · [Use the Web/npm version instead](#install-and-open)
+[Release notes](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.21-b6) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/SHA256SUMS) · [Runtime/source metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.21-b6/desktop-release.json) · [Previous build 5](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.20-b5) · [Use Web/npm instead](#install-and-open)
 
-> Open the DMG and drag **pi.app** into Applications. This test build is unsigned/unnotarized; do not globally disable macOS security. Windows/Linux/Intel Mac installers are not yet validated. Node and a tested, pinned Pi runtime are bundled; you do not need to install them separately.
+> **Install:** macOS: open the DMG and drag **pi.app** into Applications. Windows: run the EXE installer. Linux: make the AppImage executable, then run it; use `--appimage-extract-and-run` if FUSE is unavailable. Node and pinned Pi **1.3.0** are bundled; no separate installation is required. Configure your model account in Settings. Quit the old desktop before replacing it; a reused external Web service keeps its own Pi version and is never automatically stopped or upgraded.
+>
+> **Unsigned test build:** macOS is not notarized; Windows may show an unknown-publisher warning. Only proceed if you trust the source; never globally disable system security. Installer-payload smoke tests passed on all four targets, not every Linux distribution or real model-provider login. Windows ARM/Linux ARM are not included. Desktop automatic updates are not provided in this build.
 
 ![pi-webapp cover](assets/cover-webapp.png)
 
