@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import type { PluginManagementView, PluginToggle } from "../../contracts/plugins.ts";
-import { PluginManagementPage } from "./PluginManagementPage.tsx";
 import type { ConfigKind, ConfigScope, ConfigView, CustomProviderInput, LoginMethod, LoginView, ProviderModelChange, ProviderModelsView, ProviderView, UpdateStatus } from "./pi-bridge.ts";
 import { PiProviderSettings } from "./PiProviderSettings.tsx";
 import { AppearanceRow } from "../../../web/src/ui/settings/AppearanceRow.tsx";
@@ -13,9 +11,6 @@ import "./pi-settings.css";
 
 interface Props {
   onBack: () => void;
-  getPluginManagement(): Promise<PluginManagementView>;
-  togglePlugin(input: PluginToggle): Promise<PluginManagementView>;
-  pluginGeneration?: number;
   setupMode?: boolean;
   getConfig: () => Promise<ConfigView>;
   updateConfig: (kind: ConfigKind, scope: ConfigScope, action: "add" | "remove", value: string) => Promise<ConfigView>;
@@ -35,7 +30,7 @@ interface Props {
   refreshModels: () => Promise<void>;
 }
 
-type SectionId = "general" | "models" | "plugins" | ConfigKind;
+type SectionId = "general" | "models" | ConfigKind;
 
 export function PiSettings(props: Props) {
   const locale = useLocale();
@@ -44,7 +39,7 @@ export function PiSettings(props: Props) {
     { kind: "packages", title: t("包与扩展", "Packages & extensions"), hint: t("包可以包含扩展和技能；本地扩展也可以单独加载。", "Packages can contain extensions and skills; local extensions can also be loaded separately."), placeholder: t("npm 包名、Git 地址或本地目录", "npm package, Git URL, or local directory") },
     { kind: "skills", title: t("技能", "Skills"), hint: t("Pi 已发现和加载的技能。", "Skills discovered and loaded by Pi."), placeholder: t("SKILL.md 文件或目录路径", "SKILL.md file or directory path") },
   ];
-  const sections = [{ id: "general", label: t("通用设置", "General") }, { id: "models", label: t("模型", "Models") }, { id: "plugins", label: t("插件", "Plugins") }, ...resources.map(({ kind, title }) => ({ id: kind, label: kind === "packages" ? t("包与扩展", "Packages") : title }))];
+  const sections = [{ id: "general", label: t("通用设置", "General") }, { id: "models", label: t("模型", "Models") }, ...resources.map(({ kind, title }) => ({ id: kind, label: kind === "packages" ? t("包与扩展", "Packages") : title }))];
   const { onBack, getConfig, updateConfig } = props;
   const [config, setConfig] = useState<ConfigView | null>(null);
   const [drafts, setDrafts] = useState<Record<ConfigKind, string>>({ packages: "", extensions: "", skills: "" });
@@ -95,7 +90,6 @@ export function PiSettings(props: Props) {
   };
   return <SettingsPanel title={t("Pi 设置", "Pi Settings")} sections={sections} activeId={active} onSelect={(id) => { setActive(id as SectionId); setError(""); }} onClose={onBack}>
     {active === "general" && <div className="pi-settings-content"><h2>{t("通用设置", "General")}</h2><p className="pi-settings-intro">{t("调整网页的显示方式。", "Choose how the web interface appears.")}</p><div className="pi-settings-general"><LanguageRow /><AppearanceRow /><UpdateRow getUpdate={props.getUpdate} getRunningVersion={props.getRunningVersion} update={props.update} /></div></div>}
-    {active === "plugins" && <PluginManagementPage getPluginManagement={props.getPluginManagement} togglePlugin={props.togglePlugin} generation={props.pluginGeneration} />}
     {active === "models" && <PiProviderSettings setupMode={props.setupMode} onReturnToConversation={onBack} getProviders={props.getProviders} getProviderModels={props.getProviderModels} updateProviderModel={props.updateProviderModel} logoutProvider={props.logoutProvider} addCustomProvider={props.addCustomProvider} startLogin={props.startProviderLogin} getLogin={props.getProviderLogin} getActiveLogin={props.getActiveProviderLogin} respondLogin={props.respondProviderLogin} cancelLogin={props.cancelProviderLogin} refreshModels={props.refreshModels} />}
     {section && <div className="pi-settings-content" key={section.kind}>
       <h2>{section.title}</h2><p className="pi-settings-intro">{section.hint} {t("添加或移除后会重新加载 Pi 资源。", "Pi resources reload after you add or remove one.")}</p>

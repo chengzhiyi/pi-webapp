@@ -21,7 +21,7 @@ test("plugin switches synchronize management pages without reloading either brow
   try {
     for (const p of [page, other]) {
       await p.goto(bridge.url);
-      await p.getByRole("button", { name: "Plugin manager", exact: true }).click();
+      await p.getByRole("button", { name: "Plugins", exact: true }).click();
       await expect(p.getByRole("switch", { name: "Enable Git", exact: true })).toBeChecked();
     }
     await other.evaluate(() => { (window as typeof window & { retainedMarker?: string }).retainedMarker = "same-document"; });
@@ -38,7 +38,7 @@ test("a lost toggle response is never replayed and refresh recovers durable stat
   let mutations = 0;
   try {
     await page.goto(bridge.url);
-    await page.getByRole("button", { name: "Plugin manager", exact: true }).click();
+    await page.getByRole("button", { name: "Plugins", exact: true }).click();
     const toggle = page.getByRole("switch", { name: "Enable Git", exact: true });
     await expect(toggle).toBeChecked();
     await page.route("**/api/plugin-management", async route => {
@@ -68,7 +68,7 @@ for (const phase of ["initial", "refresh"]) test(`a plugin invalidation during a
     await page.goto(bridge.url);
     await expect(page.getByRole("textbox", { name: "Send a message to the current Pi session" })).toBeEnabled();
     if (phase === "refresh") {
-      await page.getByRole("button", { name: "Plugin manager", exact: true }).click();
+      await page.getByRole("button", { name: "Plugins", exact: true }).click();
       await expect(page.getByRole("switch", { name: "Enable Git", exact: true })).toBeChecked();
     }
     await page.route("**/api/plugin-management", async route => {
@@ -78,11 +78,11 @@ for (const phase of ["initial", "refresh"]) test(`a plugin invalidation during a
       intercepted(); await gate;
       await route.fulfill({ response: old });
     });
-    if (phase === "initial") await page.getByRole("button", { name: "Plugin manager", exact: true }).click();
+    if (phase === "initial") await page.getByRole("button", { name: "Plugins", exact: true }).click();
     else await page.getByRole("button", { name: "Refresh plugins", exact: true }).click();
     await reading;
     await other.goto(bridge.url);
-    await other.getByRole("button", { name: "Plugin manager", exact: true }).click();
+    await other.getByRole("button", { name: "Plugins", exact: true }).click();
     await expect(other.getByRole("switch", { name: "Enable Git", exact: true })).toBeChecked();
     const invalidated = page.waitForResponse(async response => response.url().endsWith("/api/plugins") && !(await response.json()).plugins.some((plugin: { id: string }) => plugin.id === "@pi-webapp/git"));
     await other.getByRole("switch", { name: "Enable Git", exact: true }).click();
