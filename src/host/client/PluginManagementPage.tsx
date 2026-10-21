@@ -10,11 +10,10 @@ import css from "./PluginManagementPage.module.css";
 interface Props {
   getPluginManagement(): Promise<PluginManagementView>;
   togglePlugin(input: PluginToggle): Promise<PluginManagementView>;
-  onBack?(): void;
   generation?: number;
 }
 /** DSH-inspired package rows and detail navigation; switches only reflect acknowledged host state. */
-export function PluginManagementPage({ getPluginManagement, togglePlugin, onBack, generation = 0 }: Props) {
+export function PluginManagementPage({ getPluginManagement, togglePlugin, generation = 0 }: Props) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
   const localized = (value: string | { zh: string; en: string }) => typeof value === "string" ? value : value[locale];
@@ -68,7 +67,7 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, onBack
   const shown = view?.items.filter(plugin => `${localized(plugin.name)} ${localized(plugin.description)} ${plugin.id}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [];
   return <section className={css.page} data-plugin-panel aria-busy={loading || busy !== null}>
     <header className={css.pageHead}>
-      <div><div className={css.breadcrumb}>{selectedPlugin ? <button type="button" onClick={() => setSelected(null)}>{t("‹ 插件", "‹ Plugins")}</button> : onBack ? <button type="button" onClick={onBack}>{t("‹ 返回对话", "‹ Back to conversation")}</button> : null}</div>
+      <div>{selectedPlugin && <div className={css.breadcrumb}><button type="button" onClick={() => setSelected(null)}>{t("‹ 插件", "‹ Plugins")}</button></div>}
         <h1>{selectedPlugin ? localized(selectedPlugin.name) : t("插件", "Plugins")}</h1>
         <p>{t("管理此服务的可选能力，按需启用。", "Manage optional capabilities on this service.")}</p></div>
       <button type="button" className={css.refresh} disabled={loading || busy !== null} onClick={() => void refresh()} aria-label={t("刷新插件", "Refresh plugins")}>{loading ? "…" : "↻"}</button>

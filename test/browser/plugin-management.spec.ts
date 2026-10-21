@@ -13,6 +13,7 @@ for (const width of [1440, 768, 390]) test(`plugin manager applies durable switc
   const directory = await mkdtemp(join(tmpdir(), "pi-plugin-browser-"));
   await writeFile(join(directory, "example.ts"), "export const example = true;\n");
   const { host } = terminalHost(directory);
+  host.workspaces = async () => ({ items: [{ id: "workspace-a", title: "Preview workspace", path: directory }], activeId: "workspace-a", sessions: [{ id: "terminal-a", workspaceId: "workspace-a", path: null, name: "Terminal A", modified: new Date().toISOString() }] });
   const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist", import.meta.url)), new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(directory, "plugins.json") });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -21,13 +22,20 @@ for (const width of [1440, 768, 390]) test(`plugin manager applies durable switc
   const showManager = async () => {
     const collapse = page.getByRole("button", { name: "Collapse right sidebar", exact: true });
     if (width < 767 && await collapse.isVisible()) await collapse.click();
-    const button = page.getByRole("button", { name: "Plugin manager", exact: true });
+    const button = page.getByRole("button", { name: "Plugins", exact: true });
     await button.click();
     await expect(page.getByRole("heading", { name: "Plugins", exact: true })).toBeVisible();
+    await expect(button).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("button", { name: "‹ Back to conversation", exact: true })).toHaveCount(0);
   };
   try {
     await page.goto(bridge.url);
     await page.getByRole("textbox", { name: "Send a message to the current Pi session" }).fill("Keep this draft while managing plugins");
+    const newSessionRow = await page.getByRole("button", { name: "New session", exact: true }).last().boundingBox();
+    const pluginRow = await page.getByRole("button", { name: "Plugins", exact: true }).boundingBox();
+    const workspaceRow = await page.getByRole("button", { name: "Add workspace", exact: true }).boundingBox();
+    expect(pluginRow!.y).toBeGreaterThanOrEqual(newSessionRow!.y + newSessionRow!.height);
+    expect(pluginRow!.y + pluginRow!.height).toBeLessThanOrEqual(workspaceRow!.y);
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
     const sidebar = page.locator("[data-sidebar-right-session]");
     await sidebar.getByRole("button", { name: "Workspace files", exact: true }).click();
@@ -36,11 +44,15 @@ for (const width of [1440, 768, 390]) test(`plugin manager applies durable switc
     await expect(page.getByRole("switch", { name: "Enable Workspace files", exact: true })).toBeChecked();
     await page.getByRole("button", { name: "Workspace files", exact: true }).click();
     await expect(page.getByText(BUILTIN_IDS.files, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "‹ Back to conversation", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "‹ Plugins", exact: true }).click();
     await page.getByRole("switch", { name: "Enable Workspace files", exact: true }).click();
     await expect(page.getByRole("switch", { name: "Enable Workspace files", exact: true })).not.toBeChecked();
     await page.screenshot({ path: testInfo.outputPath(`plugins-${width}.png`) });
-    await page.getByRole("button", { name: "‹ Back to conversation", exact: true }).click();
+    const expand = page.getByRole("button", { name: "Expand sidebar", exact: true });
+    if (await expand.isVisible()) await expand.click();
+    await page.getByRole("button", { name: "Terminal A", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Plugins", exact: true })).not.toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("textbox", { name: "Send a message to the current Pi session" })).toContainText("Keep this draft while managing plugins");
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
     await expect(sidebar.getByRole("button", { name: "Workspace files", exact: true })).toHaveCount(0);
@@ -70,6 +82,14 @@ for (const width of [1440, 768, 390]) test(`plugin manager applies durable switc
     await expect(page.getByRole("heading", { name: "Plugins", exact: true })).toBeVisible();
     const dimensions = await page.locator("[data-plugin-panel]").evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width + 1);
+    await page.getByRole("button", { name: "Pi Settings", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Pi Settings", exact: true });
+    await expect(settings.getByRole("button", { name: "Plugins", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Close Pi settings", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Plugins", exact: true })).toBeVisible();
+    if (await expand.isVisible()) await expand.click();
+    await page.getByRole("button", { name: "New session", exact: true }).last().click();
+    await expect(page.getByRole("heading", { name: "Plugins", exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally { try { if (!page.isClosed()) await page.goto("about:blank"); } finally { await bridge.close(); await rm(directory, { recursive: true, force: true }); } }
 });
