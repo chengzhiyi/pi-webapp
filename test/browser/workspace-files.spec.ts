@@ -148,7 +148,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
       await expect(rightbar.locator("[data-dockkit-pane]")).toHaveCount(1);
       await expect(tree).toHaveCount(1);
       await rightbar.getByRole("button", { name: "Split", exact: true }).click();
-      await expect(rightbar.getByRole("heading", { name: "Workspace tools", exact: true })).toBeVisible();
+      await expect(rightbar.getByRole("group", { name: "Workspace tools", exact: true })).toBeVisible();
       await secondPane.getByRole("button", { name: "Close", exact: true }).click();
       await expect(rightbar.locator("[data-dockkit-empty]")).toHaveCount(0);
       await expect(tree).toHaveCount(1);
@@ -162,7 +162,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
       await close.first().click();
     }
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
-    await expect(rightbar.getByRole("heading", { name: "Workspace tools", exact: true })).toBeVisible();
+    await expect(rightbar.getByRole("group", { name: "Workspace tools", exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   } finally { await bridge.close(); await rm(cwd, { recursive: true, force: true }); }
 });
