@@ -49,6 +49,28 @@ test("exit and authentication-failure dialogs never stop the service or open unv
   assert.throws(() => new DesktopConnectionError("unsafe", "", "https://example.com"));
 });
 
+test("recovery can check desktop updates without stopping/replacing the incompatible backend", async () => {
+  let checks = 0; let attempts = 0;
+  const state = { pid: 42 };
+  const result = await connectBackend({ connect: async () => { if (++attempts === 1) throw incompatible(); return state; }, stop: noStop }, {
+    showMessageBox: async options => {
+      assert.deepEqual(options.buttons, ["重新检查", "在浏览器继续使用", "检查桌面更新", "退出"]);
+      assert.ok(!JSON.stringify(options).includes(address));
+      return { response: 2 };
+    }, openExternal: noStop, checkDesktopUpdates: async () => checks++,
+  });
+  assert.equal(checks, 1); assert.equal(attempts, 2); assert.equal(result, state);
+});
+
+test("startup update install does not retry the backend or force app.exit before native relaunch", async () => {
+  let installing = false; let attempts = 0;
+  const result = await connectBackend({ connect: async () => { attempts++; throw incompatible(); }, stop: noStop }, {
+    showMessageBox: async options => ({ response: options.buttons.indexOf("检查桌面更新") }), openExternal: noStop,
+    checkDesktopUpdates: async () => { installing = true; }, isInstalling: () => installing,
+  });
+  assert.equal(result, null); assert.equal(attempts, 1);
+});
+
 test("unexpected startup failures are not silently treated as compatible or retried", async () => {
   const error = new Error("unexpected startup failure");
   await assert.rejects(connectBackend({ connect: async () => { throw error; }, stop: noStop }, { showMessageBox: noStop, openExternal: noStop }), value => value === error);

@@ -146,7 +146,8 @@ export class DesktopBackend {
     const browserUrl = typeof current === "string" ? url.href : undefined;
     if (typeof current !== "string") throw new DesktopConnectionError("health-failed", "无法确认已有服务版本；未停止或修改该服务。");
     if (current !== this.version || (state.version !== undefined && state.version !== current)) {
-      throw new DesktopConnectionError("version-incompatible", "已有服务与桌面包的应用版本不兼容。可在浏览器继续使用原服务，或待任务结束后从原入口切换服务；桌面不会自动停止或升级它。", browserUrl);
+      const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : "未知";
+      throw new DesktopConnectionError("version-incompatible", `尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, browserUrl);
     }
     if (state.bridgeVersion === 1 && state.version === current) return state;
     if (state.bridgeVersion === 1) {

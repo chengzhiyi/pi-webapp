@@ -84,7 +84,7 @@ test("health check sends token only in the authorization header", async t => {
 
 test("old/unknown versions and unhealthy services are not replaced", async t => {
   const backend = await fixture(t);
-  for (const [badState, pattern] of [[{ ...state, version: "0.0.1" }, /版本不兼容/], [{ ...state, bridgeVersion: 99 }, /启动器协议/]]) {
+  for (const [badState, pattern] of [[{ ...state, version: "0.0.1" }, /尚未验证此版本组合/], [{ ...state, bridgeVersion: 99 }, /启动器协议/]]) {
     await save(backend, badState);
     await assert.rejects(backend.connect(), pattern);
     assert.deepEqual(JSON.parse(await readFile(backend.statePath, "utf8")), JSON.parse(JSON.stringify(badState)));

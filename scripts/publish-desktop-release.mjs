@@ -41,7 +41,7 @@ export async function publishRelease({ root, directory, sourceCommit, repository
   await ensureTag({ run, repository, tag: manifest.tag, commit: sourceCommit });
   const releasePath = `repos/${repository}/releases/tags/${encodeURIComponent(manifest.tag)}`;
   let release = optionalJson(run, releasePath);
-  const names = [manifest.filename, "SHA256SUMS", "desktop-release.json"];
+  const names = [manifest.filename, manifest.updateAsset.name, "SHA256SUMS", "desktop-release.json"];
   if (release && !release.draft) {
     assert.equal(release.prerelease, true, "refusing to alter a stable release");
     await verifyRemoteFiles(run, repository, manifest.tag, directory, names);

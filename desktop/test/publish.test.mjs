@@ -9,7 +9,7 @@ import { ensureTag, publishRelease } from "../../scripts/publish-desktop-release
 
 const sourceCommit = "a".repeat(40);
 const repository = "owner/project";
-const checks = ["native-name-menu-title-pi", "custom-app-icon-loads", "native-pty", "shared-browser-backend", "confirmed-stop-reaps-pi"];
+const checks = ["native-name-menu-title-pi", "custom-app-icon-loads", "native-desktop-update-menu", "native-desktop-update-download", "native-pty", "shared-browser-backend", "confirmed-stop-reaps-pi"];
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "pi-release-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -21,6 +21,7 @@ async function fixture(t) {
   await put("artifacts/desktop/smoke-result.json", { packaged: true, platform: "darwin", arch: "arm64", version: "0.1.20", desktopBuild: 5, appName: "pi", errors: [], checks });
   const filename = "pi-0.1.20-desktop.5-mac-arm64.dmg";
   await writeFile(join(root, "desktop-release", filename), "installer fixture bytes");
+  await writeFile(join(root, "desktop-release", filename.replace(/\.dmg$/, ".zip")), "update ZIP fixture bytes");
   const options = { root, output: join(root, "assets"), sourceCommit, repository, platform: "darwin", arch: "arm64" };
   return { root, put, filename, options };
 }
@@ -30,7 +31,7 @@ function githubMock(directory, manifest, { published = false, draft = false, cor
   const calls = [];
   let release = published || draft ? { draft: !published, prerelease: true, html_url: "https://github.com/owner/project/releases/tag/" + manifest.tag, assets: [] } : null;
   const files = new Map();
-  const names = [manifest.filename, "SHA256SUMS", "desktop-release.json"];
+  const names = [manifest.filename, manifest.updateAsset.name, "SHA256SUMS", "desktop-release.json"];
   if (published) for (const name of names) files.set(name, readFileSync(join(directory, name)));
   const run = args => {
     calls.push(args);
@@ -89,10 +90,11 @@ test("failed, wrong-version or incomplete smoke evidence cannot be released", as
 });
 
 test("altered installer, extra files, wrong source, filename traversal and absent smoke gate block upload", async t => {
-  for (const change of ["installer", "extra", "source", "filename", "smoke"]) {
+  for (const change of ["installer", "zip", "extra", "source", "filename", "smoke"]) {
     const f = await fixture(t);
     const manifest = await prepareRelease(f.options);
     if (change === "installer") await writeFile(join(f.options.output, f.filename), "altered");
+    if (change === "zip") await writeFile(join(f.options.output, manifest.updateAsset.name), "altered ZIP");
     if (change === "extra") await writeFile(join(f.options.output, "unexpected.exe"), "extra");
     if (change === "source") manifest.sourceCommit = "c".repeat(40);
     if (change === "filename") manifest.asset.name = "../outside.dmg";

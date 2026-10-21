@@ -21,6 +21,8 @@ test("desktop rebuilds have a visible unique installer name and valid platform b
   assert.match(config.buildVersion, /^\d+\.\d+\.\d+$/);
   assert.equal(config.artifactName, `pi-\${version}-desktop.${release.buildNumber}-\${os}-\${arch}.\${ext}`);
   assert.ok(config.files.includes("release.json"), "the About dialog must use the same identity as the installer");
+  for (const file of ["updater.mjs", "update-release.mjs", "update-native.mjs"]) assert.ok(config.files.includes(file));
+  assert.deepEqual(config.mac.target, ["dmg", "zip"]);
 });
 
 test("desktop rename preserves the pre-existing Electron profile while allowing isolated profiles", async () => {

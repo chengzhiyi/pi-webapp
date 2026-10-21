@@ -74,17 +74,70 @@ These are two separate release responsibilities:
 - **Safe updates** verify an update's publisher/integrity and replace a compatible
   application/runtime without destroying user data.
 
-The installers remain **unsigned/unnotarized test builds**, with no certificate
-discovery or automatic desktop updater. A GitHub prerelease is a download channel,
-not a claim of formal signed-distribution readiness.
+The default CI installers remain **unsigned/unnotarized test builds**. Certificate
+discovery is disabled in the default workflow. A GitHub prerelease is a download
+channel, not a claim of formal signed-distribution readiness.
 macOS Gatekeeper / Windows SmartScreen may warn or block an unsigned download.
 Do not disable OS security globally to use it. Public distribution needs a
 separately configured, authorized signing/notarization workflow; local successful
 packaging is not proof of public-distribution readiness.
 
-For now, install a newer desktop package to upgrade; if replacing a running
-desktop-owned runtime, first finish tasks and stop that owned service. A desktop
-attached to an external Web service can simply close without stopping the service.
+Use **pi → 检查桌面更新…** (also available in the connection-recovery dialog).
+The native app checks the latest 100 official GitHub Releases, including the
+explicitly labeled test prereleases; npm's `latest` does not drive desktop updates.
+Checks also run once after a successful desktop connection (set
+`PI_WEBAPP_DESKTOP_UPDATE_CHECK=manual` to use menu-only checks, as smoke QA does).
+Nothing is downloaded
+or installed without consent. Versions compare backend version, then desktop build.
+Older versions/builds and drafts are never selected.
+
+- Downloads are streamed into private temporary directories, limited to 2 GiB and
+  15 minutes, and verified against the release's exact byte count and SHA-256.
+  Only the fixed publisher's HTTPS GitHub URLs and GitHub release-asset redirects
+  are accepted; no backend/renderer-supplied update URL or privileged IPC is used.
+  Download progress appears on the main window's OS progress indicator. Use
+  **pi → 取消桌面更新下载** to abort; partial downloads are removed.
+- **Unsigned current app or release / old manifest without a ZIP:** download and
+  verify the DMG, reveal it in Finder, and install manually. A checksum over HTTPS
+  is not a code signature; unsigned packages are never silently executed or
+  automatically installed. Checked DMGs remain in the temporary directory for
+  the manual handoff (the OS may eventually clean them).
+- **Publisher-signed current app and target ZIP:** after SHA-256 verification,
+  a separate **安装并重启** confirmation and backend safety check are required
+  **before** handing anything to Squirrel.Mac. Its native updater then verifies
+  the target against the installed app's signing identity and stages replacement.
+  Squirrel may apply a staged update on normal exit too, so deferring installation
+  keeps only the ZIP, not a native-pending update. The backend is checked again
+  before installation/normal exit once native staging has completed.
+  A random-token loopback feed serves only the already
+  checked ZIP, closes after staging, and is never exposed to the shared Web page.
+  Failed staging leaves the original app untouched. Atomic replacement/relaunch
+  and install-failure recovery are delegated to Squirrel.Mac, not a shell script
+  that rewrites `.app`. A native staging failure/timeout requires restarting the
+  desktop before another native attempt; download/check failures may be retried.
+- **Live bundled runtime (owned or attached) or unknown/starting backend:** install
+  is deferred. Finish **all** browser/desktop tasks and terminal operations, then
+  stop the bundled service from its original entry point (`pi-webapp stop`). Keep
+  the desktop open and choose the update menu again to install the staged update.
+  The updater itself never stops a service, guesses whether a terminal is idle,
+  or writes launcher/update/restart metadata. Live authenticated external npm
+  backends remain running and are rechecked for replacement before installation.
+  If the backend changed versions, reopening may still require browser recovery:
+  desktop updates do not imply arbitrary cross-version protocol compatibility.
+
+The old desktop without this updater still needs a one-time manual installation.
+This feature does not modify an already installed app merely by editing source.
+Current unsigned test releases exercise the manual-download branch; actual native
+replacement needs signed old/new applications and a separate signed release QA.
+Use an authorized Developer ID signing setup with `desktop:package` to produce
+signed DMG/ZIP pairs (the wrapper disables discovery, so the release operator must
+explicitly select their configured identity with `CSC_NAME`); do not enable certificate discovery or publish merely to
+try this feature. Release preparation checks the actual app's deep/strict code
+signature and TeamIdentifier, rather than trusting an environment flag. The
+manifest does not claim notarization; public signing/notarization remains a
+separately authorized release responsibility. Windows/Linux/Intel macOS automatic
+installation is not implemented; their native menu opens official Releases.
+
 Desktop-managed backends reject the Web/npm update and restart paths,
 so the UI cannot overwrite the bundled runtime. A desktop window attached to an
 existing npm-managed backend preserves that backend's original update behavior.
@@ -137,15 +190,16 @@ The build job uses standard `macos-15` arm64, pinned npm lockfiles, standalone
 Node/Pi preparation, icon/config tests and the **packaged** desktop/browser/PTY
 smoke. Sentry reporting and signing discovery are disabled. It produces:
 
-- `pi-<version>-desktop.<build>-mac-arm64.dmg`
-- `SHA256SUMS` (DMG SHA-256)
-- `desktop-release.json` (source SHA, backend/build/runtime versions, unsigned
-  status, platform/architecture, file size/checksum and smoke checks)
+- `pi-<version>-desktop.<build>-mac-arm64.dmg` (manual installation)
+- `pi-<version>-desktop.<build>-mac-arm64.zip` (native updater archive)
+- `SHA256SUMS` (DMG and ZIP SHA-256)
+- `desktop-release.json` (source SHA, backend/build/runtime versions, actual signing
+  status, platform/architecture, DMG/ZIP sizes/checksums and smoke checks)
 - `release-notes.md` (used as the Release body, not a separate download asset)
 
 A separate Ubuntu job has scoped `contents: write` and no npm installation/app
 execution. It revalidates the source-bound files, creates a **draft prerelease**,
-uploads only the three intended assets, downloads them to verify their bytes,
+uploads only the four intended assets, downloads them to verify their bytes,
 and only then publishes the prerelease with `latest=false`. Signing is not
 claimed. An interrupted upload leaves a draft; retrying the same source/tag may
 repair a draft. A published release is never clobbered: a retry only succeeds
@@ -274,5 +328,8 @@ macOS arm64 is the local implementation/QA target. Windows/Linux installer
 configuration is provided but must be tested on their own runners before promising
 support. Custom icons are configured for all platforms; the icon replacement
 has only been verified in a packaged macOS arm64 app.
-Formal signing, automatic desktop updates, tray integration, completion
-notifications and cross-platform end-to-end QA are not included in this delivery.
+Formal signing/notarization, actual signed old-to-new installation acceptance,
+tray integration, completion notifications and cross-platform end-to-end QA are
+not claimed by the unsigned build. The desktop updater's feed, hash verification,
+consent, task protection and native-stage success/failure paths have regression
+tests; these do not substitute for signed installer acceptance on macOS.
