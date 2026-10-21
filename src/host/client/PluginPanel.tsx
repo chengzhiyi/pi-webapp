@@ -85,16 +85,21 @@ export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
         const paneId = findTabPane(state, tab.id).id;
         const visible = state.expanded && getPane(state, paneId).activeTabId === tab.id;
         if (tab.kind === "guide") return <div className={filesCss.guide}>
-          <h2 className={filesCss.guideHeading}>{localize("工作区工具", "Workspace tools")}</h2>
-          {plugins.map(plugin => {
-            const entry = plugin.definition.workbench?.entry;
-            if (!entry) return null;
-            const Icon = entry.icon;
-            return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || !cwd} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
-              <Icon size={28} /><span className={filesCss.guideCopy}><span>{text(entry.label)}</span><span className={filesCss.guideDescription}>{text(entry.description)}</span></span>
-            </button>;
-          })}
-          {!plugins.some(plugin => plugin.definition.workbench) && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
+          <div className={filesCss.guideGrid} role="group" aria-label={localize("工作区工具", "Workspace tools")}>
+            {plugins.map(plugin => {
+              const entry = plugin.definition.workbench?.entry;
+              if (!entry) return null;
+              const Icon = entry.icon;
+              return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || !cwd} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
+                <span className={filesCss.guideIcon} aria-hidden="true"><Icon size={24} /></span>
+                <span className={filesCss.guideCopy}>
+                  <span className={filesCss.guideLabel}>{text(entry.label)}</span>
+                  <span className={filesCss.guideDescription}>{text(entry.description)}</span>
+                </span>
+              </button>;
+            })}
+            {!plugins.some(plugin => plugin.definition.workbench) && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
+          </div>
         </div>;
         const registered = panels.find(item => item.contribution.kind === tab.kind);
         if (registered && props.session) {
