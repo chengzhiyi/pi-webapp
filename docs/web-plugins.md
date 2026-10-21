@@ -2,7 +2,7 @@
 
 ## 内置插件与管理
 
-当前目录与启停语义见 [architecture.md](architecture.md)。Git、文件、终端集中在 `src/plugins/builtin/<能力>/{server,client,contract}/`，通过宿主注册表接入。浏览器模块沿用协议 v1 的加载校验与生命周期，并声明独立版本的 `workbench` 入口/面板贡献；后端由各插件声明请求处理与资源清理。侧栏「插件」或设置中的「插件」提供全局开关。
+当前目录与启停语义见 [architecture.md](architecture.md)。Git、文件、终端集中在 `src/plugins/builtin/<能力>/{server,client,contract}/`，通过宿主注册表接入。浏览器模块沿用协议 v1 的加载校验与生命周期，并声明独立版本的 `workbench` 入口/面板贡献；后端由各插件声明请求处理与资源清理。侧栏「新会话」下方的「插件」提供全局开关，设置中不重复提供插件入口。面向用户的操作说明见[新用户指南](zh/configuration.md)（英文见 [English guide](en/configuration.md)）；本站尚未公开部署。
 
 外部 Pi 扩展不等于可独立卸载的 Web 模块：现有外部协议未声明安全的运行时停用操作，管理页对此展示只读状态，包的安装/移除继续走「包与扩展」。不以隐藏前端入口代替运行时停用。
 
