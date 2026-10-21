@@ -112,7 +112,7 @@ test("codesign gates both macOS architectures but never executes for Windows or 
     const manifest = await prepareRelease({ ...options, inspectSignature: async path => {
       assert.equal(target.platform, "darwin"); inspected = path; return { type: "ad-hoc", verified: true };
     } });
-    if (target.platform === "darwin") assert.ok(inspected.endsWith(`${target.arch === "arm64" ? "mac-arm64" : "mac"}/pi.app`));
+    if (target.platform === "darwin") assert.ok(inspected.endsWith(join(target.arch === "arm64" ? "mac-arm64" : "mac", "pi.app")));
     else { assert.equal(inspected, undefined); assert.equal(manifest.signing, undefined); }
     await verifyRelease({ root: f.root, directory: options.output, sourceCommit, repository, ...target });
   }

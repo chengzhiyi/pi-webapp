@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { verifyMacArchives } from "../../scripts/verify-desktop-archives.mjs";
 
@@ -18,8 +18,8 @@ test("the actual DMG and ZIP are read-only verified, never launched or re-signed
   assert.deepEqual(calls[1].args.slice(0, 2), ["-x", "-k"]);
   assert.equal(calls[2].args[0], "detach");
   assert.equal(inspected.length, 2);
-  assert.ok(inspected[0].endsWith("/dmg/pi.app"));
-  assert.ok(inspected[1].endsWith("/zip/pi.app"));
+  assert.ok(inspected[0].endsWith(join("dmg", "pi.app")));
+  assert.ok(inspected[1].endsWith(join("zip", "pi.app")));
   await assert.rejects(access(dirname(dirname(inspected[0]))), { code: "ENOENT" });
 });
 
@@ -39,7 +39,7 @@ test("invalid archive signatures and extraction failures fail packaging and stil
         if (failure === "extract" && file.endsWith("ditto")) throw new Error("extraction failed");
       },
       inspectSignature: async path => {
-        if (path.includes(`/${failure}/`)) throw new Error("invalid signature");
+        if (path.endsWith(join(failure, "pi.app"))) throw new Error("invalid signature");
         return failure === "mismatch" ? { type: "developer-id", verified: true } : signing;
       } }));
     assert.equal(calls.at(-1).args[0], "detach");
