@@ -88,13 +88,24 @@ These are two separate release responsibilities:
 - **Safe updates** verify an update's publisher/integrity and replace a compatible
   application/runtime without destroying user data.
 
-The installers remain **unsigned/unnotarized test builds**, with no certificate
-discovery or automatic desktop updater. A GitHub prerelease is a download channel,
-not a claim of formal signed-distribution readiness.
-macOS Gatekeeper / Windows SmartScreen may warn or block an unsigned download.
-Do not disable OS security globally to use it. Public distribution needs a
-separately configured, authorized signing/notarization workflow; local successful
-packaging is not proof of public-distribution readiness.
+Starting with desktop build 7, default macOS packages use **complete ad-hoc
+signatures, without publisher identity or notarization**, for opt-in small-group
+testing. No certificate is needed: `mac.identity` defaults to `-`; an authorized
+operator may explicitly select `CSC_NAME` for Developer ID signing. Certificate
+discovery stays disabled. Windows/Linux's unsigned release paths are unchanged.
+
+Electron-builder signs nested code before creating the DMG. Packaging verifies
+the app and the read-only mounted DMG; release preparation requires deep/strict
+verification and a complete resource seal on both macOS architectures. macOS
+receipts record `signing: { type: "ad-hoc" | "developer-id", verified: true }`;
+`unsigned: true` means **no publisher identity**, including valid ad-hoc signatures.
+
+**Ad-hoc is not Developer ID.** Gatekeeper can still block the download. Follow
+the [tester installation and trust instructions](desktop-testing.md): verify the
+checksum and signature, stop on verification failure, and only use a conscious,
+manual, app-scoped trust exception for a known test build. Never disable OS
+security globally. Public distribution needs authorized signing/notarization;
+local packaging success is not proof of downloaded first-launch acceptance.
 
 For now, install a newer desktop package to upgrade; if replacing a running
 desktop-owned runtime, first finish tasks and stop that owned service. A desktop
@@ -158,8 +169,9 @@ The candidate build-6 pipeline adds four **native** targets:
 
 Each uses locked dependencies, standalone Node/Pi, full unit tests and actual
 installer-payload desktop/browser/PTY smoke. The smoke reads the installed Pi
-package and requires the same pinned version. Signing discovery and Sentry are
-disabled. ARM Windows/Linux and other targets are not implicitly supported.
+package and requires the same pinned version. Certificate discovery and Sentry
+are disabled; macOS ad-hoc signing and strict integrity checks are required from
+build 7. ARM Windows/Linux and other targets are not implicitly supported.
 
 A read-only aggregation job requires **all four** verified receipts from the
 same source/version/build/Pi pair. It collects four installers, SHA256SUMS,

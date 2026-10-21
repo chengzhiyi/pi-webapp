@@ -16,7 +16,8 @@ async function fixture(t) {
   const pkg = { version: "0.1.21", devDependencies: { "@earendil-works/pi-coding-agent": "1.3.0" } };
   const release = { productName: "pi", buildNumber: 6 };
   await put("package.json", pkg); await put("desktop/release.json", release);
-  const options = { root, output: join(root, "assets"), sourceCommit, repository, platform: "darwin", arch: "arm64" };
+  const options = { root, output: join(root, "assets"), sourceCommit, repository, platform: "darwin", arch: "arm64",
+    inspectSignature: async () => ({ type: "ad-hoc", verified: true }) };
   const prepareTarget = async (target, output = options.output) => {
     const spec = releaseIdentity(pkg, release, target);
     await put(".desktop/runtime/build-info.json", { version: pkg.version, platform: target.platform, arch: target.arch,
@@ -84,8 +85,37 @@ test("per-target receipts require actual native installer payload smoke and exac
   await assert.rejects(prepareRelease({ ...f.options, platform: "win32", arch: "arm64" }));
   await assert.rejects(prepareRelease({ ...f.options, platform: "freebsd" }));
   const manifest = await prepareRelease(f.options);
+  assert.deepEqual(manifest.signing, { type: "ad-hoc", verified: true });
+  assert.equal(manifest.unsigned, true);
+  const notes = await readFile(join(f.options.output, "release-notes.md"), "utf8");
+  assert.match(notes, /Ad-hoc signed \/ no publisher identity \/ unnotarized/);
+  assert.match(notes, /codesign --verify --deep --strict/);
+  assert.match(notes, /校验失败请停止/);
+  assert.match(notes, /xattr -dr com.apple.quarantine/);
   assert.deepEqual(await verifyRelease({ root: f.root, directory: f.options.output, sourceCommit, repository }), manifest);
   await assert.rejects(prepareRelease(f.options), /start empty/);
+});
+
+test("signature failures stop macOS receipts; explicit publisher signing remains distinct", async t => {
+  const broken = await fixture(t);
+  await assert.rejects(prepareRelease({ ...broken.options, inspectSignature: async () => { throw new Error("broken seal"); } }), /broken seal/);
+  const signed = await fixture(t);
+  const manifest = await prepareRelease({ ...signed.options, inspectSignature: async () => ({ type: "developer-id", verified: true }) });
+  assert.equal(manifest.unsigned, false);
+  assert.deepEqual(await verifyRelease({ root: signed.root, directory: signed.options.output, sourceCommit, repository }), manifest);
+});
+
+test("codesign gates both macOS architectures but never executes for Windows or Linux", async t => {
+  for (const target of releaseTargets) {
+    const f = await fixture(t); let inspected;
+    const options = await f.prepareTarget(target);
+    const manifest = await prepareRelease({ ...options, inspectSignature: async path => {
+      assert.equal(target.platform, "darwin"); inspected = path; return { type: "ad-hoc", verified: true };
+    } });
+    if (target.platform === "darwin") assert.ok(inspected.endsWith(`${target.arch === "arm64" ? "mac-arm64" : "mac"}/pi.app`));
+    else { assert.equal(inspected, undefined); assert.equal(manifest.signing, undefined); }
+    await verifyRelease({ root: f.root, directory: options.output, sourceCommit, repository, ...target });
+  }
 });
 
 test("failed, wrong-version, unpacked-only or incomplete smoke evidence cannot be released", async t => {
@@ -103,7 +133,7 @@ test("all four verified target artifacts assemble into one checksum-bound public
 });
 
 test("missing platforms, altered bytes, extra files, wrong source and filename traversal block publication before GitHub", async t => {
-  for (const change of ["installer", "extra", "source", "filename", "smoke", "missing-platform", "wrong-pi"]) {
+  for (const change of ["installer", "extra", "source", "filename", "smoke", "missing-platform", "wrong-pi", "signature", "publisher"]) {
     const f = await fixture(t); const manifest = await f.bundle();
     if (change === "installer") await writeFile(join(f.options.output, f.filename), "altered");
     if (change === "extra") await writeFile(join(f.options.output, "unexpected.exe"), "extra");
@@ -112,6 +142,8 @@ test("missing platforms, altered bytes, extra files, wrong source and filename t
     if (change === "smoke") manifest.targets[0].smokeChecks = [];
     if (change === "missing-platform") manifest.targets.pop();
     if (change === "wrong-pi") manifest.targets[2].runtime.piVersion = "0.87.1";
+    if (change === "signature") delete manifest.targets[0].signing;
+    if (change === "publisher") manifest.targets[1].unsigned = false;
     if (!["installer", "extra"].includes(change)) await writeFile(join(f.options.output, "desktop-release.json"), JSON.stringify(manifest));
     let calls = 0;
     await assert.rejects(publishRelease({ root: f.root, directory: f.options.output, sourceCommit, repository, run: () => { calls++; throw new Error("must not reach GitHub"); } }));

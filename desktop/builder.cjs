@@ -15,7 +15,9 @@ module.exports = {
   npmRebuild: false, // Native modules live beside the standalone Node runtime, not in Electron.
   nodeGypRebuild: false,
   artifactName: `pi-\${version}-desktop.${release.buildNumber}-\${os}-\${arch}.\${ext}`,
-  mac: { icon: "desktop/icons/icon.icns", category: "public.app-category.developer-tools", target: ["dmg"], hardenedRuntime: true },
+  // Fully seal opt-in test builds without discovering or requiring a certificate.
+  mac: { icon: "desktop/icons/icon.icns", category: "public.app-category.developer-tools", target: ["dmg"],
+    identity: process.env.CSC_NAME || "-", hardenedRuntime: true, strictVerify: true },
   win: { icon: "desktop/icons/icon.ico", target: ["nsis"] },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
   linux: { icon: "desktop/icons/icon.png", target: ["AppImage"], category: "Development" },

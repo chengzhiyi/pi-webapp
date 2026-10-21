@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { inspectMacAppSignature, validateSigningManifest } from "./desktop-signing.mjs";
 
 export const releaseTargets = [
   { id: "mac-arm64", platform: "darwin", arch: "arm64", os: "mac", ext: "dmg", label: "macOS · Apple Silicon" },
@@ -41,7 +42,21 @@ function gates(checks) {
   for (const check of smokeGates) assert.ok(checks.includes(check), `missing smoke gate: ${check}`);
 }
 const checksumText = assets => assets.map(asset => `${asset.sha256}  ${asset.name}\n`).join("");
-function targetNotes(manifest) { return `${manifest.target}: ${manifest.filename}\nSource: ${manifest.sourceCommit}\nUnsigned test build; Pi ${manifest.runtime.piVersion}.\n`; }
+function macInstallNotes() {
+  return `macOS 测试包默认使用完整 ad-hoc 临时签名（无需证书），没有发布者身份、未公证。` +
+    `先核对官方来源与 SHA256SUMS，安装后运行 ` +
+    '`codesign --verify --deep --strict --verbose=2 "/Applications/pi.app"`。' +
+    `校验失败请停止，不要自行重签掩盖问题。校验通过且明确愿意信任此测试版后，` +
+    `可尝试“系统设置 → 隐私与安全性 → 仍要打开”；若仍受下载隔离阻止，` +
+    '可手动运行 `xattr -dr com.apple.quarantine "/Applications/pi.app"`，仅移除此应用的下载隔离。' +
+    `此操作跳过该应用的隔离检查，不代表 Apple 安全认证；不要全局关闭系统安全保护。\n`;
+}
+function targetNotes(manifest) {
+  const signing = manifest.platform === "darwin"
+    ? (manifest.unsigned ? "Ad-hoc signed / no publisher identity / unnotarized" : "Publisher-signed / not notarized") : "Unsigned";
+  return `${manifest.target}: ${manifest.filename}\nSource: ${manifest.sourceCommit}\n${signing} test build; Pi ${manifest.runtime.piVersion}.\n` +
+    (manifest.platform === "darwin" ? macInstallNotes() : "");
+}
 async function filesExactly(directory, names) {
   assert.deepEqual((await readdir(directory)).sort(), [...names].sort(), "unexpected or missing release files");
   for (const name of names) assert.equal((await lstat(join(directory, name))).isFile(), true, "release files must not be symlinks");
@@ -53,7 +68,8 @@ async function checkAsset(directory, asset) {
   return bytes;
 }
 
-export async function prepareRelease({ root, output, sourceCommit, repository, ref, platform = process.platform, arch = process.arch }) {
+export async function prepareRelease({ root, output, sourceCommit, repository, ref, platform = process.platform, arch = process.arch,
+  inspectSignature = inspectMacAppSignature }) {
   validateSource(sourceCommit, repository, ref);
   const target = targetFor(platform, arch);
   const spec = await identity(root, target); validateRef(ref, spec);
@@ -67,8 +83,12 @@ export async function prepareRelease({ root, output, sourceCommit, repository, r
   const source = join(root, "desktop-release", spec.filename);
   assert.equal((await lstat(source)).isFile(), true);
   const bytes = await readFile(source); assert.ok(bytes.length > 0);
+  // Only macOS has codesign. Keep Windows/Linux's existing unsigned release path.
+  const signing = platform === "darwin" ? await inspectSignature(join(root, "desktop-release", arch === "arm64" ? "mac-arm64" : "mac", "pi.app")) : undefined;
+  const unsigned = signing ? signing.type === "ad-hoc" : true;
+  if (platform === "darwin") validateSigningManifest(signing, unsigned);
   const manifest = { schemaVersion: 1, ...spec, productName: "pi", platform, arch, target: target.id, sourceCommit, repository,
-    unsigned: true, notarized: false, prerelease: true,
+    ...(signing ? { signing } : {}), unsigned, notarized: false, prerelease: true,
     runtime: { nodeVersion: runtime.nodeVersion, piVersion: runtime.piVersion, nodeArchiveSha256: runtime.nodeArchiveSha256 },
     smokeChecks: smoke.checks, asset: { name: spec.filename, bytes: bytes.length, sha256: hash(bytes) } };
   await mkdir(output, { recursive: true }); assert.deepEqual(await readdir(output), [], "release output must start empty");
@@ -83,7 +103,9 @@ async function checkTarget(root, manifest, target, sourceCommit, repository) {
   const spec = await identity(root, target);
   for (const [key, value] of Object.entries(spec)) assert.equal(manifest[key], value, `mismatched ${key}`);
   for (const [key, value] of Object.entries({ schemaVersion: 1, productName: "pi", target: target.id, platform: target.platform,
-    arch: target.arch, sourceCommit, repository, unsigned: true, notarized: false, prerelease: true })) assert.equal(manifest[key], value, `mismatched ${key}`);
+    arch: target.arch, sourceCommit, repository, notarized: false, prerelease: true })) assert.equal(manifest[key], value, `mismatched ${key}`);
+  if (target.platform === "darwin") validateSigningManifest(manifest.signing, manifest.unsigned);
+  else { assert.equal(manifest.unsigned, true); assert.equal(manifest.signing, undefined); }
   assert.equal(manifest.asset.name, spec.filename); gates(manifest.smokeChecks);
   assert.equal(manifest.runtime.piVersion, (await json(root, "package.json")).devDependencies["@earendil-works/pi-coding-agent"]);
   assert.match(manifest.runtime.nodeArchiveSha256, /^[a-f0-9]{64}$/);
@@ -109,7 +131,8 @@ export function releaseNotes(manifest) {
     `\nDownload the installer for your CPU. Compare **SHA256SUMS**; **desktop-release.json** records source SHA, runtime and per-platform smoke checks.\n\n` +
     `macOS: open the DMG and drag **pi.app** into Applications. Windows: run the EXE installer. Linux: \`chmod +x pi-*.AppImage\`, then run it; \`--appimage-extract-and-run\` is an alternative when FUSE is unavailable.\n\n` +
     `在“pi → 关于 pi”确认桌面构建 **${manifest.build}**。旧 Pi Webapp.app 不会因改名自动覆盖，请退出旧桌面并更新快捷方式。不要删除 ~/.pi。\n\n` +
-    `本测试版未签名、macOS未公证；系统可能阻止打开。仅在确认来源可信后按系统的单应用安全提示处理，不要全局关闭安全保护。正式签名发行及桌面自动更新尚未提供。\n\n` +
+    macInstallNotes() + `Windows/Linux 仍为未签名测试包。正式签名发行及桌面自动更新尚未提供。\n` +
+    `[macOS 测试安装说明](https://github.com/${manifest.repository}/blob/${manifest.sourceCommit}/docs/desktop-testing.md)。\n\n` +
     `Node/Pi are bundled. Model credentials, Git/SSH and project toolchains are not. Existing compatible Web services may be reused; they are never automatically stopped or upgraded. A shared external service retains its own Pi version.\n\n` +
     `Windows ARM, Linux ARM and other architectures are not included. Native installer-payload launch, PTY, auth, shared browser and shutdown were smoke-tested on the four listed targets; real provider login/model billing and every desktop distribution were not tested.\n\n` +
     `Source: https://github.com/${manifest.repository}/commit/${manifest.sourceCommit}\n`;
