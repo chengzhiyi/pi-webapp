@@ -22,7 +22,8 @@ async function fixture(t) {
   const filename = "pi-0.1.20-desktop.5-mac-arm64.dmg";
   await writeFile(join(root, "desktop-release", filename), "installer fixture bytes");
   await writeFile(join(root, "desktop-release", filename.replace(/\.dmg$/, ".zip")), "update ZIP fixture bytes");
-  const options = { root, output: join(root, "assets"), sourceCommit, repository, platform: "darwin", arch: "arm64" };
+  const options = { root, output: join(root, "assets"), sourceCommit, repository, platform: "darwin", arch: "arm64",
+    inspectSignature: async () => ({ type: "ad-hoc", verified: true }) };
   return { root, put, filename, options };
 }
 const missing = () => Object.assign(new Error("not found"), { stderr: "HTTP 404" });
@@ -76,8 +77,24 @@ test("only a packaged native arm64 smoke produces checksummed source-bound relea
   const manifest = await prepareRelease(f.options);
   assert.equal(manifest.prerelease, true);
   assert.equal(manifest.unsigned, true);
+  assert.deepEqual(manifest.signing, { type: "ad-hoc", verified: true });
+  const notes = await readFile(join(f.options.output, "release-notes.md"), "utf8");
+  assert.match(notes, /Ad-hoc signed \/ no publisher identity \/ unnotarized/);
+  assert.match(notes, /codesign --verify --deep --strict/);
+  assert.match(notes, /校验失败请停止/);
+  assert.match(notes, /xattr -dr com.apple.quarantine/);
   assert.deepEqual(await verifyRelease({ root: f.root, directory: f.options.output, sourceCommit, repository }), manifest);
   await assert.rejects(prepareRelease(f.options), /start empty/);
+});
+
+test("signature failures prevent release preparation; verified Developer ID is labeled separately", async t => {
+  const broken = await fixture(t);
+  await assert.rejects(prepareRelease({ ...broken.options, inspectSignature: async () => { throw new Error("broken resource seal"); } }), /broken resource seal/);
+  const signed = await fixture(t);
+  const manifest = await prepareRelease({ ...signed.options, inspectSignature: async () => ({ type: "developer-id", verified: true }) });
+  assert.equal(manifest.unsigned, false);
+  assert.equal(manifest.signing.type, "developer-id");
+  assert.deepEqual(await verifyRelease({ root: signed.root, directory: signed.options.output, sourceCommit, repository }), manifest);
 });
 
 test("failed, wrong-version or incomplete smoke evidence cannot be released", async t => {
@@ -90,7 +107,7 @@ test("failed, wrong-version or incomplete smoke evidence cannot be released", as
 });
 
 test("altered installer, extra files, wrong source, filename traversal and absent smoke gate block upload", async t => {
-  for (const change of ["installer", "zip", "extra", "source", "filename", "smoke"]) {
+  for (const change of ["installer", "zip", "extra", "source", "filename", "smoke", "signature", "publisher"]) {
     const f = await fixture(t);
     const manifest = await prepareRelease(f.options);
     if (change === "installer") await writeFile(join(f.options.output, f.filename), "altered");
@@ -99,7 +116,9 @@ test("altered installer, extra files, wrong source, filename traversal and absen
     if (change === "source") manifest.sourceCommit = "c".repeat(40);
     if (change === "filename") manifest.asset.name = "../outside.dmg";
     if (change === "smoke") manifest.smokeChecks = [];
-    if (["source", "filename", "smoke"].includes(change)) await writeFile(join(f.options.output, "desktop-release.json"), JSON.stringify(manifest));
+    if (change === "signature") delete manifest.signing;
+    if (change === "publisher") manifest.unsigned = false;
+    if (["source", "filename", "smoke", "signature", "publisher"].includes(change)) await writeFile(join(f.options.output, "desktop-release.json"), JSON.stringify(manifest));
     let calls = 0;
     await assert.rejects(publishRelease({ root: f.root, directory: f.options.output, sourceCommit, repository, run: () => { calls++; throw new Error("must not reach GitHub"); } }));
     assert.equal(calls, 0, "local validation must fail before any GitHub operation");

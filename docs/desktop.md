@@ -74,13 +74,21 @@ These are two separate release responsibilities:
 - **Safe updates** verify an update's publisher/integrity and replace a compatible
   application/runtime without destroying user data.
 
-The default CI installers remain **unsigned/unnotarized test builds**. Certificate
-discovery is disabled in the default workflow. A GitHub prerelease is a download
-channel, not a claim of formal signed-distribution readiness.
-macOS Gatekeeper / Windows SmartScreen may warn or block an unsigned download.
-Do not disable OS security globally to use it. Public distribution needs a
-separately configured, authorized signing/notarization workflow; local successful
-packaging is not proof of public-distribution readiness.
+Starting with desktop build 7, default macOS packages use **complete ad-hoc
+signatures, without publisher identity or notarization**, for opt-in small-group
+testing. No certificate is needed: `mac.identity` defaults to `-`. Electron-builder
+signs nested code before creating DMG/ZIP; both packaging and release preparation
+reject failed deep/strict verification or a missing resource seal. Certificate
+discovery stays disabled. Windows/Linux defaults are unchanged.
+
+**Ad-hoc is not Developer ID.** Gatekeeper can still block the download; a GitHub
+prerelease and a valid resource seal do not prove publisher identity or safety.
+Follow the [tester installation and trust instructions](desktop-testing.md),
+including checksum verification, stopping on signature failure, and a manual,
+app-scoped trust exception only for a known, trusted test build. Do not disable
+OS security globally. Public distribution needs a separately configured,
+authorized signing/notarization workflow; local packaging/smoke success is not
+proof of downloaded first-launch acceptance.
 
 Use **pi → 检查桌面更新…** (also available in the connection-recovery dialog).
 The native app checks the latest 100 official GitHub Releases, including the
@@ -134,7 +142,10 @@ signed DMG/ZIP pairs (the wrapper disables discovery, so the release operator mu
 explicitly select their configured identity with `CSC_NAME`); do not enable certificate discovery or publish merely to
 try this feature. Release preparation checks the actual app's deep/strict code
 signature and TeamIdentifier, rather than trusting an environment flag. The
-manifest does not claim notarization; public signing/notarization remains a
+manifest records `signing: { type: "ad-hoc" | "developer-id", verified: true }`.
+Its compatibility field `unsigned: true` means **no publisher identity**, and
+remains true for ad-hoc packages so they never enable native auto-installation.
+The manifest does not claim notarization; public signing/notarization remains a
 separately authorized release responsibility. Windows/Linux/Intel macOS automatic
 installation is not implemented; their native menu opens official Releases.
 
@@ -188,7 +199,8 @@ publication action, not part of an ordinary main commit.
 
 The build job uses standard `macos-15` arm64, pinned npm lockfiles, standalone
 Node/Pi preparation, icon/config tests and the **packaged** desktop/browser/PTY
-smoke. Sentry reporting and signing discovery are disabled. It produces:
+smoke. Sentry reporting and certificate discovery are disabled; macOS ad-hoc
+signing and strict integrity checks are required. It produces:
 
 - `pi-<version>-desktop.<build>-mac-arm64.dmg` (manual installation)
 - `pi-<version>-desktop.<build>-mac-arm64.zip` (native updater archive)
@@ -200,8 +212,8 @@ smoke. Sentry reporting and signing discovery are disabled. It produces:
 A separate Ubuntu job has scoped `contents: write` and no npm installation/app
 execution. It revalidates the source-bound files, creates a **draft prerelease**,
 uploads only the four intended assets, downloads them to verify their bytes,
-and only then publishes the prerelease with `latest=false`. Signing is not
-claimed. An interrupted upload leaves a draft; retrying the same source/tag may
+and only then publishes the prerelease with `latest=false`. Ad-hoc integrity is
+recorded, but publisher identity and notarization are not claimed. An interrupted upload leaves a draft; retrying the same source/tag may
 repair a draft. A published release is never clobbered: a retry only succeeds
 when downloaded assets are byte-identical. A conflicting source/tag or different
 published bytes fails rather than replacing a public download.
@@ -330,6 +342,6 @@ support. Custom icons are configured for all platforms; the icon replacement
 has only been verified in a packaged macOS arm64 app.
 Formal signing/notarization, actual signed old-to-new installation acceptance,
 tray integration, completion notifications and cross-platform end-to-end QA are
-not claimed by the unsigned build. The desktop updater's feed, hash verification,
+not claimed by the ad-hoc test build. The desktop updater's feed, hash verification,
 consent, task protection and native-stage success/failure paths have regression
 tests; these do not substitute for signed installer acceptance on macOS.

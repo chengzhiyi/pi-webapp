@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { hasPublisherSignature } from "../desktop/update-native.mjs";
+import { inspectMacAppSignature, validateSigningManifest } from "./desktop-signing.mjs";
 
 export function releaseIdentity(pkg, release) {
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/, "release needs a stable backend version");
@@ -27,14 +27,21 @@ const requiredSmokeChecks = ["native-name-menu-title-pi", "custom-app-icon-loads
 
 export function releaseNotes(manifest) {
   return `# pi ${manifest.version} · desktop build ${manifest.build}\n\n` +
-    `**${manifest.unsigned ? "Unsigned / unnotarized" : "Publisher-signed / not notarized"} TEST release — macOS Apple Silicon (arm64) only.**\n\n` +
+    `**${manifest.unsigned ? "Ad-hoc signed / no publisher identity / unnotarized" : "Publisher-signed / not notarized"} TEST release — macOS Apple Silicon (arm64) only.**\n\n` +
     `Download **${manifest.asset.name}** below. SHA-256 is in **SHA256SUMS**; ` +
     `**desktop-release.json** records the exact source, runtime and smoke checks.\n\n` +
     `下载下方 DMG，拖入“应用程序”，打开 **pi.app**。在“pi → 关于 pi”确认桌面构建 **${manifest.build}**。` +
     `旧 Pi Webapp.app 是不同文件，不会因改名自动覆盖；请退出旧桌面并更新 Dock 快捷方式。不要删除 ~/.pi。\n\n` +
-    (manifest.unsigned ? `本测试版未签名、未公证。桌面可下载校验 DMG，但不会自动安装未签名包。`
+    (manifest.unsigned ? `本测试版使用完整 ad-hoc 临时签名（无需证书），没有发布者身份、未公证，仅供自愿参与的小范围测试。桌面可下载校验 DMG，但不会自动安装此类包。`
       : `本测试版具有发布者签名，但未声明公证。已签名桌面可通过 ZIP 进行同发布者系统校验及确认后安装。`) +
-    `macOS 可能阻止打开；不要全局关闭系统安全保护。自动安装仍需已签名的当前应用。\n\n` +
+    `macOS 仍可能阻止打开；不要全局关闭系统安全保护。自动安装仍需已签名的当前应用。\n\n` +
+    `首次安装：先核对官方来源与 SHA256SUMS，安装后运行 ` +
+    '`codesign --verify --deep --strict --verbose=2 "/Applications/pi.app"`。' +
+    `校验失败请停止，不要自行重签掩盖问题。校验通过且明确愿意信任此测试版后，` +
+    `可尝试“系统设置 → 隐私与安全性 → 仍要打开”；若仍受下载隔离阻止，` +
+    '可手动运行 `xattr -dr com.apple.quarantine "/Applications/pi.app"`，仅移除此应用的下载隔离。' +
+    `此操作跳过该应用的隔离检查，不代表 Apple 安全认证。` +
+    `[测试安装与限制](https://github.com/${manifest.repository}/blob/${manifest.sourceCommit}/docs/desktop-testing.md)。\n\n` +
     `Node/Pi are bundled; model credentials, Git/SSH and project toolchains are not. ` +
     `A compatible existing Web backend is reused without stopping it. Backend versions must match; ` +
     `an incompatible service is never automatically stopped or upgraded.\n\n` +
@@ -48,7 +55,8 @@ async function identity(root) {
     JSON.parse(await readFile(join(root, "desktop/release.json"), "utf8")));
 }
 
-export async function prepareRelease({ root, output, sourceCommit, repository, ref, platform = process.platform, arch = process.arch }) {
+export async function prepareRelease({ root, output, sourceCommit, repository, ref, platform = process.platform, arch = process.arch,
+  inspectSignature = inspectMacAppSignature }) {
   validateSource(sourceCommit, repository, ref);
   assert.equal(platform, "darwin", "only validated macOS arm64 may be released");
   assert.equal(arch, "arm64", "do not release an x64 binary as arm64");
@@ -73,9 +81,11 @@ export async function prepareRelease({ root, output, sourceCommit, repository, r
   assert.equal((await lstat(source)).isFile(), true);
   const bytes = await readFile(source);
   assert.ok(bytes.length > 0);
+  const signing = await inspectSignature(join(root, "desktop-release/mac-arm64/pi.app"));
+  const unsigned = signing.type === "ad-hoc";
+  validateSigningManifest(signing, unsigned);
   const manifest = { schemaVersion: 1, ...spec, productName: "pi", platform: "darwin", arch: "arm64",
-    sourceCommit, repository,
-    unsigned: !await hasPublisherSignature(join(root, "desktop-release/mac-arm64/pi.app")),
+    sourceCommit, repository, signing, unsigned,
     notarized: false, prerelease: true,
     runtime: { nodeVersion: runtime.nodeVersion, piVersion: runtime.piVersion, nodeArchiveSha256: runtime.nodeArchiveSha256 },
     smokeChecks: smoke.checks, asset: { name: spec.filename, bytes: bytes.length, sha256: hash(bytes) } };
@@ -106,6 +116,7 @@ export async function verifyRelease({ root, directory, sourceCommit, repository 
   assert.equal(manifest.platform, "darwin");
   assert.equal(manifest.arch, "arm64");
   assert.equal(typeof manifest.unsigned, "boolean");
+  validateSigningManifest(manifest.signing, manifest.unsigned);
   assert.equal(manifest.notarized, false);
   assert.equal(manifest.prerelease, true);
   assert.equal(manifest.asset.name, spec.filename);

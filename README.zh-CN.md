@@ -58,11 +58,11 @@ pi
 
 ## 桌面端（可选）
 
-**[下载 pi 桌面测试版](https://github.com/chengzhiyi/pi-webapp/releases)** — 目前仅发布已验收的 macOS Apple 芯片（arm64）版本。在 `desktop-v...` 预发布版本中下载 DMG，核对 `SHA256SUMS` 后安装 **pi.app**，在“pi → 关于 pi”查看构建号。测试版未签名、未公证，请勿全局关闭系统安全保护；Windows/Linux 暂不提供已验收的发行包。
+**[下载 pi 桌面测试版](https://github.com/chengzhiyi/pi-webapp/releases)** — 目前仅发布已验收的 macOS Apple 芯片（arm64）版本。在 `desktop-v...` 预发布版本中下载 DMG，核对 `SHA256SUMS` 后安装 **pi.app**，在“pi → 关于 pi”查看构建号。桌面构建 7 起使用完整 ad-hoc 临时签名，但没有发布者身份、未公证，macOS 仍可能拦截；请按[小范围测试安装说明](docs/desktop-testing.md)操作，不要全局关闭系统安全保护。旧测试包不会自动修复；Windows/Linux 暂不提供已验收的发行包。
 
 同一套界面也可在名为 **pi** 的 Electron 桌面程序中使用，现有浏览器与 `/web` 方式保持不变。桌面包自带 Node/Pi，支持独立窗口、已有服务复用、在浏览器打开同一服务，以及退出时选择保留或停止后台任务。
 
-源码构建：`npm ci` → `npm run desktop:prepare` → `npm run desktop:start`。运行 `npm run desktop:package` 生成当前系统/架构的安装包，输出到 `desktop-release/`。当前本地验证目标为 macOS arm64；Windows/Linux 打包配置需在对应系统验证。首版安装包未签名，尚无桌面自动更新。安装包文件名包含桌面构建号；“pi → 关于 pi”显示实际运行的构建号和应用位置。替换前先退出旧桌面，外部兼容 Web 后台无需停止；若替换桌面自有运行时，请先结束任务并停止该自有后台。
+源码构建：`npm ci` → `npm run desktop:prepare` → `npm run desktop:start`。运行 `npm run desktop:package` 生成当前系统/架构的安装包，输出到 `desktop-release/`。当前本地验证目标为 macOS arm64；Windows/Linux 打包配置需在对应系统验证。无发布者签名的测试包仅支持校验下载后手动安装，不会自动安装更新。安装包文件名包含桌面构建号；“pi → 关于 pi”显示实际运行的构建号和应用位置。替换前先退出旧桌面，外部兼容 Web 后台无需停止；若替换桌面自有运行时，请先结束任务并停止该自有后台。
 
 详细说明见 [桌面端构建、测试与发布边界](docs/desktop.md)。
 
