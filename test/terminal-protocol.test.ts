@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { TerminalRegistry } from "../extension/terminals.ts";
+import { TerminalRegistry } from "../src/plugins/builtin/terminal/server/terminals.ts";
 
 async function query(attachedBrowser: boolean) {
   const cwd = await mkdtemp(join(tmpdir(), "pi-terminal-query-"));

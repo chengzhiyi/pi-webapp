@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
-const command = fileURLToPath(new URL("../extension/git-command.ts", import.meta.url));
+const command = fileURLToPath(new URL("../src/plugins/builtin/git/server/git-command.ts", import.meta.url));
 // A separate process turns an unhandled stdin error into a deterministic test
 // failure without crashing the test runner. The shim never modifies a real repo.
 async function probe(t: { after(fn: () => Promise<void>): void }, exitCode: number | null) {
