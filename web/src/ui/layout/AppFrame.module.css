@@ -79,6 +79,24 @@
   transition: none;
 }
 
+/* The rubber-band hint does not intercept the captured pointer. Dragging back
+   below the threshold cancels the pending action without needing to release. */
+.snapHint {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l3);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+  font-size: 13px;
+}
+
 /* Fullscreen covers the frame while its underlying columns enter or exit. */
 .frame[data-rightbar-fullscreen],
 .frame[data-rightbar-fullscreen] .handle,

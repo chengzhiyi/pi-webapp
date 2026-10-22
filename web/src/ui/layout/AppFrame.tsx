@@ -10,14 +10,14 @@
  * The right column is a track, not a box: its occupant draws its panel anchored
  * to the frame's right edge at the resolved normal width, and the
  * track only decides whether the centre makes room for it. The occupant reports
- * shown/track/fullscreen through `ctx.layout`; fullscreen keeps the reported
- * track but hides the outer resize handle. Everything arrives through the framework
+ * shown/track/fullscreen through `ctx.layout`; desktop fullscreen collapses
+ * navigation to its rail, fills the remaining track, and hides the handle. Everything arrives through the framework
  * shares — zero cordis or framework imports, zero self-made hooks.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LayoutInfo, PanelInfo, SelectHook, SlotRenderer } from '../contract.ts'
-import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, rightbarDragAction, rightbarElasticWidth, CENTER_MIN, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { useDialogFocus } from '../primitives/useDialogFocus.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import css from './AppFrame.module.css'
@@ -26,7 +26,7 @@ import css from './AppFrame.module.css'
 export interface AppFrameProps {
   useStore: SelectHook<{ layoutInfo: LayoutInfo }>
   usePanelInfo: SelectHook<PanelInfo>
-  actions: { setViewportWidth(width: number): void; setSidebar(width: number): void; setRightbar(width: number): void; closeSidebar(): void }
+  actions: { setViewportWidth(width: number): void; setSidebar(width: number): void; setRightbar(width: number): void; closeSidebar(): void; focusRightbar(): void; collapseRightbar(): void }
   renderSlot: SlotRenderer
   t: (name: string) => string
 }
@@ -55,7 +55,7 @@ function RightbarColumn(props: { children?: ReactNode }) {
  * One drag handle: pointer capture, rAF-throttled dx reports against the drag-start origin.
  * `side` keys the hover-reveal CSS to the owning column.
  */
-function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart: () => void; onDrag: (dx: number) => void; onEnd: () => void }) {
+function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart: () => void; onDrag: (dx: number) => void; onEnd: (dx: number, cancelled: boolean) => void }) {
   const [dragging, setDragging] = useState(false)
   const origin = useRef(0)
   const latest = useRef(0)
@@ -64,14 +64,14 @@ function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart
   const callbacks = useRef({ onStart: props.onStart, onDrag: props.onDrag, onEnd: props.onEnd })
   callbacks.current = { onStart: props.onStart, onDrag: props.onDrag, onEnd: props.onEnd }
 
-  const endDrag = useCallback(() => {
+  const endDrag = useCallback((cancelled = true) => {
     const active = capture.current
     if (active === null) return
     capture.current = null
     if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null }
     if (active.element.hasPointerCapture(active.id)) active.element.releasePointerCapture(active.id)
     setDragging(false)
-    callbacks.current.onEnd()
+    callbacks.current.onEnd(latest.current - origin.current, cancelled)
   }, [])
   useEffect(() => endDrag, [endDrag])
 
@@ -95,8 +95,9 @@ function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart
   }, [])
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (capture.current?.id !== e.pointerId) return
+    latest.current = e.clientX
     callbacks.current.onDrag(e.clientX - origin.current)
-    endDrag()
+    endDrag(false)
   }, [endDrag])
   const onPointerCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (capture.current?.id === e.pointerId) endDrag()
@@ -157,7 +158,10 @@ export function AppFrame({
   }, [actions])
 
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
-  const sidebarCollapsed = narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0
+  // Desktop fullscreen keeps the navigation rail; its previous open width is
+  // only visually collapsed and returns when fullscreen ends.
+  const dockFullscreen = layoutInfo.rightbarFullscreen && viewport >= 767
+  const sidebarCollapsed = dockFullscreen || (narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0)
   const sidebarPreference = sidebarCollapsed
     ? 0
     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
@@ -175,6 +179,14 @@ export function AppFrame({
     return () => { for (const node of siblings) node.removeAttribute('inert') }
   }, [drawerOpen])
   const cols = computeColumns(viewport, narrow ? 0 : sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
+  const [elasticWidth, setElasticWidth] = useState<number | null>(null)
+  const [elasticSide, setElasticSide] = useState<'focus' | 'collapse' | null>(null)
+  const focusWidth = viewport - cols.sidebar
+  const visualWidth = dockFullscreen ? viewport - SIDEBAR_COLLAPSED
+    : layoutInfo.rightbarFocus ? focusWidth : elasticWidth ?? normal.rightbar
+  const trackWidth = dockFullscreen && layoutInfo.rightbarTrack ? visualWidth
+    : layoutInfo.rightbarFocus && layoutInfo.rightbarTrack ? focusWidth
+    : elasticWidth !== null && layoutInfo.rightbarTrack ? elasticWidth : cols.rightbar
   const sidebarWidth = drawerOpen ? Math.min(sidebarPreference, Math.max(0, viewport - 48)) : cols.sidebar
   const colsRef = useRef(cols)
   colsRef.current = cols
@@ -194,10 +206,39 @@ export function AppFrame({
   const onSidebarDrag = useCallback((dx: number) => {
     actions.setSidebar(sidebarBase.current + dx)
   }, [actions])
-  const onRightbarStart = useCallback(() => { rightbarBase.current = rightbarWidth.current; setDragging(true) }, [])
+  const rightbarMax = Math.min(viewport * RIGHTBAR_MAX_RATIO, viewport - cols.sidebar - CENTER_MIN)
+  const snapMax = useRef(rightbarMax)
+  const triggered = useRef(false)
+  const onRightbarStart = useCallback(() => {
+    rightbarBase.current = rightbarWidth.current
+    snapMax.current = rightbarMax
+    triggered.current = false
+    setElasticWidth(null)
+    setElasticSide(null)
+    setDragging(true)
+  }, [rightbarMax])
   const onRightbarDrag = useCallback((dx: number) => {
-    actions.setRightbar(rightbarBase.current - dx)
+    if (triggered.current) return
+    const requested = rightbarBase.current - dx
+    const action = rightbarDragAction(requested, snapMax.current)
+    if (action) {
+      triggered.current = true
+      setElasticWidth(null)
+      setElasticSide(null)
+      setDragging(false)
+      if (action === 'focus') actions.focusRightbar()
+      else actions.collapseRightbar()
+      return
+    }
+    actions.setRightbar(requested)
+    setElasticWidth(rightbarElasticWidth(requested, snapMax.current))
+    setElasticSide(requested > snapMax.current ? 'focus' : requested < RIGHTBAR_MIN ? 'collapse' : null)
   }, [actions])
+  const onRightbarEnd = useCallback(() => {
+    setElasticWidth(null)
+    setElasticSide(null)
+    setDragging(false)
+  }, [])
   const productTitle = t('brand.localBuild')
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
@@ -214,14 +255,16 @@ export function AppFrame({
       className={css.frame}
       style={{
         gridTemplateColumns:
-          `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
+          `${cols.sidebar}px minmax(0, 1fr) ${trackWidth}px`,
       }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-sidebar-drawer={drawerOpen || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
       data-rightbar-fullscreen={layoutInfo.rightbarFullscreen || undefined}
+      data-rightbar-focus={layoutInfo.rightbarFocus || undefined}
       data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
+      data-rightbar-elastic={elasticSide ?? undefined}
     >
       <DocumentTitle productTitle={productTitle} />
       {drawerOpen && <button type="button" className={css.drawerMask} tabIndex={-1} aria-label={t('sidebar.close')} onClick={actions.closeSidebar} />}
@@ -232,7 +275,7 @@ export function AppFrame({
       <>
         <CenterColumn>{main}</CenterColumn>
         <RightbarColumn>
-          {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
+          {renderSlot('rightbar', { width: visualWidth, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
         </RightbarColumn>
       </>
       <div className={css.overlayLayer} data-shell-overlay>
@@ -240,9 +283,12 @@ export function AppFrame({
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!sidebarCollapsed && !narrow && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
-        <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
+      {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && !layoutInfo.rightbarFocus && normal.rightbar > 0 && (
+        <DragHandle side="rightbar" left={viewport - visualWidth} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onRightbarEnd} />
       )}
+      {elasticSide && <div className={css.snapHint} role="status" style={{ left: viewport - visualWidth }}>
+        {t(elasticSide === 'focus' ? 'rightbar.drag.focus' : 'rightbar.drag.collapse')}
+      </div>}
     </div>
   )
 }

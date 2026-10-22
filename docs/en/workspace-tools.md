@@ -1,6 +1,6 @@
 # Files, terminal & Git
 
-Open the right sidebar using the permanent control in the conversation's upper-right corner. On its start page choose **Workspace files**, **Open terminal**, or **Git changes**. Tools support tabs, resizing, split panes, and fullscreen. **Plugins**, below New session in the main sidebar, globally controls bundled capabilities; there is **no duplicate plugin switch in Settings**.
+Open the right sidebar using the permanent control in the conversation's upper-right corner. On its start page choose **Workspace files**, **Open terminal**, or **Git changes**. Tools support tabs, resizing, split panes, and fullscreen. On desktop, the panel's Fullscreen button keeps the navigation sidebar as a collapsed icon rail; exiting restores its previous expanded or collapsed state. On desktop, drag the workspace panel's left divider past its maximum width to the left and keep dragging through the resistance threshold to enter workspace focus mode automatically (the navigation sidebar stays visible, the conversation is hidden but not destroyed; Exit focus mode restores it). Drag past its minimum width to the right and through the resistance threshold to collapse the panel automatically; reopen it from the conversation's upper-right control. The divider has rubber-band resistance beyond each width limit; dragging back before the threshold cancels the action without releasing. **Plugins**, below New session in the main sidebar, globally controls bundled capabilities; there is **no duplicate plugin switch in Settings**.
 
 ## Workspace files
 

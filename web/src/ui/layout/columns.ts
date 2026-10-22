@@ -26,6 +26,24 @@ export const RIGHTBAR_MIN = 300
 export const RIGHTBAR_MAX_RATIO = 0.7
 /** First-open right panel preference as a fraction of the frame. */
 export const RIGHTBAR_DEFAULT_RATIO = 0.45
+/** Extra pointer travel beyond a resize limit before a drag becomes an action. */
+export const RIGHTBAR_SNAP_DISTANCE = 72
+/** Rubber-band travel at a resize boundary, before the action fires. */
+export const RIGHTBAR_ELASTIC_MAX = 24
+
+/** Determine a release action from the *unclamped* width requested by the pointer. */
+export function rightbarDragAction(requested: number, max: number): 'focus' | 'collapse' | null {
+  if (requested >= max + RIGHTBAR_SNAP_DISTANCE) return 'focus'
+  if (requested <= RIGHTBAR_MIN - RIGHTBAR_SNAP_DISTANCE) return 'collapse'
+  return null
+}
+
+/** Ease the visible divider beyond the limit while the pointer keeps moving. */
+export function rightbarElasticWidth(requested: number, max: number): number | null {
+  if (requested > max) return max + Math.min(RIGHTBAR_ELASTIC_MAX, (requested - max) / 3)
+  if (requested < RIGHTBAR_MIN) return RIGHTBAR_MIN - Math.min(RIGHTBAR_ELASTIC_MAX, (RIGHTBAR_MIN - requested) / 3)
+  return null
+}
 
 /**
  * Clamp a panel width into its contract range.

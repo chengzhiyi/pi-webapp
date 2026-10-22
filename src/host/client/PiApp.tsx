@@ -34,6 +34,8 @@ export function PiApp() {
     "sidebar.label": t("对话管理", "Conversation navigation"),
     "sidebar.close": t("关闭侧栏", "Close sidebar"),
     "panels.label": t("面板", "Panels"),
+    "rightbar.drag.focus": t("继续拖动以专注工作区", "Keep dragging to focus workspace"),
+    "rightbar.drag.collapse": t("继续拖动以收起工作区面板", "Keep dragging to collapse workspace panel"),
     "brand.localBuild": "pi-webapp",
   };
   const bridge = usePiBridge();
@@ -58,6 +60,7 @@ export function PiApp() {
     rightbarShown: false,
     rightbarTrack: false,
     rightbarFullscreen: false,
+    rightbarFocus: false,
     rightbarInstant: false,
   }));
   const lastSidebarWidth = useRef(280);
@@ -81,7 +84,9 @@ export function PiApp() {
       setLayout((previous) => ({ ...previous, sidebar: lastSidebarWidth.current }));
     },
     setRightbar(width: number) { setLayout((previous) => ({ ...previous, rightbar: clampWidth(width, RIGHTBAR_MIN, previous.viewportWidth * RIGHTBAR_MAX_RATIO) })); },
-  }), [closeSidebar]);
+    focusRightbar() { setLayout(previous => ({ ...previous, rightbarFocus: true })); },
+    collapseRightbar() { setLayout(previous => ({ ...previous, rightbarFocus: false })); panel.controller.setExpanded(false); },
+  }), [closeSidebar, panel.controller]);
   const openPanel = (id: string) => {
     panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
     panel.controller.setExpanded(true);
@@ -96,8 +101,9 @@ export function PiApp() {
   }, [bridge.session?.cwd, bridge.disabledPlugins, panel.openContent]);
   useEffect(() => {
     const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
-    setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen }));
+    setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && panel.shown && !pluginsOpen && !fullscreen }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
+  useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
   const renderMarkdown = useCallback((text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
   const pluginProps = {
     session: bridge.session,
@@ -155,7 +161,7 @@ export function PiApp() {
       renderSlot={renderSidebarSlot}
     />;
     if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
-    if (key === "rightbar" && !pluginsOpen && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} plugins={plugins} props={pluginProps} />;
+    if (key === "rightbar" && !pluginsOpen && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} />;
     return null;
   };
   return <><AppFrame

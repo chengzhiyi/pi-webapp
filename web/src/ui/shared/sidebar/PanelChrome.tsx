@@ -24,9 +24,9 @@ function ExitFullscreenGlyph(): ReactNode {
 }
 
 /** The panel's two controls, placed by the kit at the top-right pane's strip end. */
-export function PanelChrome({ sessionId, fullscreen, actions, t, shortcuts, toggleFullscreen }: { sessionId: string; fullscreen: boolean; actions: { toggleExpanded(sessionId: string): void }; t: (key: string) => string; shortcuts: { id: string; aria: string; keys: readonly string[] }[]; toggleFullscreen(): void }): ReactNode {
+export function PanelChrome({ sessionId, fullscreen, focus = false, actions, t, shortcuts, toggleFullscreen }: { sessionId: string; fullscreen: boolean; focus?: boolean; actions: { toggleExpanded(sessionId: string): void }; t: (key: string) => string; shortcuts: { id: string; aria: string; keys: readonly string[] }[]; toggleFullscreen(): void }): ReactNode {
   const next: DockMode = fullscreen ? 'push' : 'fullscreen'
-  const modeLabel = fullscreen ? t('chrome.exitFullscreen') : t('chrome.toFullscreen')
+  const modeLabel = focus ? t('chrome.exitFocus') : fullscreen ? t('chrome.exitFullscreen') : t('chrome.toFullscreen')
   const mode = shortcuts.find(entry => entry.id === 'pane.fullscreen.toggle')
   const toggle = shortcuts.find(entry => entry.id === 'sidebar.right.toggle')
   return (

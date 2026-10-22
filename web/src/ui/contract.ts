@@ -8,6 +8,8 @@ export interface LayoutInfo {
   rightbarShown: boolean;
   rightbarTrack: boolean;
   rightbarFullscreen: boolean;
+  /** Drag-to-focus hides the conversation but leaves the navigation sidebar visible. */
+  rightbarFocus: boolean;
   rightbarInstant: boolean;
 }
 
