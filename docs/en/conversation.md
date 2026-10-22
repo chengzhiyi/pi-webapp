@@ -12,10 +12,10 @@ Plan mode is provided by a plugin, not an inherent mode of every chat. It handle
 
 ## Append prompts while Pi is running
 
-- **Steer** or **Ctrl/Cmd+Enter** guides the current task at its next input boundary; it does not force-cancel the current request or tool.
+- **Steer** (the lightweight arrow beside Send; hover/focus for its label) or **Ctrl/Cmd+Enter** guides the current task at its next input boundary; it does not force-cancel the current request or tool.
 - **Queue** or **Enter** waits until the current task, tools, and steering messages finish. **Shift+Enter** inserts a newline. Pause stays independent.
 - Attach files from the add menu, drop, or paste. Failed sends retain the draft and attachments. Slash commands are not accepted as appended prompts because Pi dispatches extension commands immediately.
-- SDK chats show a read-only native pending list, separate from conversation history. Switching chats, refreshing, and reconnecting restore it. Pausing retains pending prompts for Continue. Terminal sessions opened through `/web` expose only pending status, not a detailed list.
+- The running composer's primary circle shows Pause when empty and Queue when a draft/attachment is present; an independent lightweight Pause remains beside Send. SDK chats show a read-only native pending dock, separate from conversation history. A single item previews directly; multiple items collapse into a count bar that you can expand with pointer or keyboard. Switching chats, refreshing, and reconnecting restore it. Pausing retains pending prompts for Continue. Terminal sessions opened through `/web` expose only pending status, not a detailed list.
 - Complete pending interactions/approvals first. Queues are runtime-only: stopping/restarting the service loses unconsumed prompts. Editing, withdrawing, and reordering queued prompts are not supported.
 
 ## Attachments

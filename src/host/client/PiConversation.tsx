@@ -27,6 +27,7 @@ import { DropOverlay } from "../../../web/src/ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../contracts/user-message.ts";
 import type { PromptDelivery } from "../../contracts/bridge-contract.ts";
 import { PiPromptQueue } from "./PiPromptQueue.tsx";
+import { PiPromptControls } from "./PiPromptControls.tsx";
 import { localize as t, useLocale } from "../../../web/src/ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
 import { useConversationScroll } from "./use-conversation-scroll.ts";
@@ -421,17 +422,15 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
           </div>
           <div className={inputCss.trailing}>
             {noModels ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button> : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />}
-            {running && <div className="pi-prompt-actions" role="group" aria-label={t("追加提示词", "Append prompt")}>
-              <button type="button" disabled={!canSend} onClick={() => { void submit("steer"); }} title={t("在下一个可接收输入的边界引导当前任务（Ctrl/Cmd+Enter）", "Guide the current task at the next input boundary (Ctrl/Cmd+Enter)")}>{t("引导", "Steer")}</button>
-              <button type="submit" disabled={!canSend} title={t("当前任务完成后处理（Enter）", "Process after the current task finishes (Enter)")}>{t("排队", "Queue")}</button>
-            </div>}
             {running
-              ? <button className={inputCss.primary} type="button" aria-label={primaryAction?.label ?? t("暂停执行", "Pause")} title={primaryAction?.title} disabled={!canStop} onClick={() => { void stop(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor" /></svg>}</button>
+              ? <PiPromptControls hasDraft={draft.trim().length > 0 || attachments.length > 0} canSend={canSend} canStop={canStop}
+                  pauseLabel={primaryAction?.label ?? t("暂停执行", "Pause")} pauseTitle={primaryAction?.title} pauseIcon={PrimaryIcon ? <PrimaryIcon size={16} /> : undefined}
+                  onSubmit={delivery => { void submit(delivery); }} onStop={() => { void stop(); }} />
               : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
               : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
           </div>
         </div>
-        {running && <div className="pi-prompt-hint">{draft.trimStart().startsWith("/") ? t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands") : t("Enter 排队 · Ctrl/Cmd+Enter 引导 · Shift+Enter 换行", "Enter to queue · Ctrl/Cmd+Enter to steer · Shift+Enter for a newline")}</div>}
+        {running && draft.trimStart().startsWith("/") && <div className="pi-prompt-hint">{t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands")}</div>}
       </form>
       {attachmentError && <div className="pi-error" role="alert">{attachmentError}</div>}
     </div>

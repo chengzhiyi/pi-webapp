@@ -8,7 +8,7 @@ import { WorkspaceSessions } from "../../src/host/server/sessions/workspace-sess
 import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
 import { controlledReply } from "../helpers/controlled-reply.ts";
 
-for (const width of [1440, 390]) test(`running composer steers, queues and restores drafts at ${width}px`, async ({ page }, testInfo) => {
+for (const width of [1440, 390, 320]) test(`running composer steers, queues and restores drafts at ${width}px`, async ({ page }, testInfo) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "pi-delivery-browser-")));
   const savedAgent = process.env.PI_CODING_AGENT_DIR;
   const savedPlugins = process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS;
@@ -47,14 +47,21 @@ for (const width of [1440, 390]) test(`running composer steers, queues and resto
     };
     bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
     await page.setViewportSize({ width, height: 900 });
+    if (width === 390) await page.addInitScript(() => localStorage.setItem("pi-web-theme", "dark"));
     await page.goto(bridge.url);
     const editor = page.getByRole("textbox");
     const queue = page.getByRole("region", { name: /待处理提示词|Pending prompts/ });
     const queueButton = page.getByRole("button", { name: /^(排队|Queue)$/ });
     const steerButton = page.getByRole("button", { name: /^(引导|Steer)$/ });
     const pause = page.getByRole("button", { name: /^(暂停执行|Pause)$/ });
-    await expect(queueButton).toBeDisabled();
+    await expect(pause).toBeEnabled();
+    await expect(queueButton).toHaveCount(0, { timeout: 3000 });
+    await expect(steerButton).toHaveCount(0);
     await editor.fill("Follow-up one");
+    await expect(queueButton).toBeEnabled();
+    await expect(pause).toBeEnabled();
+    await expect(queueButton).toHaveCSS("width", "34px");
+    await expect(pause).toHaveCSS("width", "28px");
     await queueButton.click();
     await expect(editor).toHaveText("Follow-up one");
     await expect(page.getByRole("alert")).toContainText("Fixture send failed");
@@ -63,11 +70,19 @@ for (const width of [1440, 390]) test(`running composer steers, queues and resto
     await editor.press("Enter");
     await expect(editor).toHaveText("");
     await expect(queue).toContainText("Follow-up one");
+    await expect(queue.getByRole("button")).toHaveCount(0, { timeout: 3000 });
+    await expect(queue.getByRole("listitem")).toHaveCount(1);
     await expect(page.locator('[data-message-role="user"]')).toHaveCount(1);
     await expect(pause).toBeEnabled();
     await editor.fill("Guide the current task");
     await editor.press("Control+Enter");
     await expect(queue).toContainText("Guide the current task");
+    const toggle = queue.getByRole("button");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(queue.getByRole("listitem")).toHaveCount(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(queue.getByRole("listitem")).toHaveCount(2);
     await editor.fill("Another guide");
     await steerButton.click();
     await expect(queue).toContainText("Another guide");
@@ -90,8 +105,20 @@ for (const width of [1440, 390]) test(`running composer steers, queues and resto
     await expect(queue).toContainText("Follow-up one");
     await expect(queue).toContainText("hint.txt");
     await expect(pause).toBeEnabled();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(queue.getByRole("listitem")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`prompt-queue-collapsed-${width}.png`) });
+    await toggle.focus();
+    await toggle.press("Enter");
+    await expect(queue.getByRole("listitem")).toHaveCount(4);
+    await editor.fill("Add tests before finishing");
+    await expect(queueButton).toBeEnabled();
+    await expect(pause).toBeEnabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`prompt-queue-${width}.png`) });
+    await steerButton.hover();
+    await expect(page.getByRole("tooltip")).toContainText(/引导|Steer/);
+    await editor.fill("");
     // Finish without network, then let the native queue drain.
     draining = true;
     reply.finish(); await session.waitForIdle();
