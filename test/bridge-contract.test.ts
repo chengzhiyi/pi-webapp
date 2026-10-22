@@ -47,6 +47,7 @@ test("optional fields and opaque plugin payloads survive without changing the wi
   const event = { type: "snapshot", session: {
     ...session, model: "provider/model", thinkingLevel: "medium", thinkingLevels: ["medium"], idle: false, paused: false,
     contextUsage: { tokens: null, contextWindow: 1000, percent: null }, streaming: message,
+    promptQueue: { steering: ["guide"], followUp: ["later"] }, hasPendingPrompts: true,
     pluginEntries: [{ id: "entry", pluginId: "plugin", kind: "plan", timestamp: "now", data: { revision: 2 }, afterMessageId: "assistant-1" }],
     interactions: [{ requestId: "request", sessionId: session.sessionId, pluginId: "plugin", kind: "approval", data: ["opaque"] }],
     futureField: { supportedLater: true },
@@ -69,6 +70,7 @@ test("validates nested snapshot fields before they reach browser state", () => {
   const invalid: Record<string, unknown>[] = [
     { sessionId: 1 }, { cwd: null }, { name: [] }, { model: {} }, { thinkingLevel: 0 },
     { thinkingLevels: [false] }, { idle: "true" }, { paused: "false" }, { messages: null },
+    { promptQueue: {} }, { promptQueue: { steering: [1], followUp: [] } }, { hasPendingPrompts: "yes" },
     { messages: [{ ...message, role: "invalid" }] }, { messages: [{ ...message, blocks: [{ kind: "text" }] }] },
     { messages: [{ ...message, blocks: [{ kind: "invalid", text: "" }] }] },
     { messages: [{ ...message, usage: { ...message.usage, cost: Infinity } }] },

@@ -21,6 +21,8 @@ import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { isExpectedError, isContentOperation, opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { VERSION } from "@earendil-works/pi-coding-agent";
 import { buildId } from "../../../contracts/build-info.ts";
+import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
+import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
 
@@ -47,7 +49,7 @@ export interface BridgeHost {
   setThinkingLevel(sessionId: string, level: string): Promise<void>;
   config(): ConfigView | Promise<ConfigView>;
   updateConfig(change: ConfigChange): Promise<ConfigView>;
-  send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation): void | Promise<void>;
+  send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): void | Promise<void>;
   abort(sessionId: string): void | Promise<void>;
   resume?(sessionId: string, correlation?: ErrorCorrelation): void | Promise<void>;
   newSession(sessionId: string): Promise<void>;
@@ -508,6 +510,10 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             }
             json(res, 200, await host.updateConfig(change as ConfigChange)); return;
           } else if (path === "/api/message") {
+            const delivery = "delivery" in body ? body.delivery : undefined;
+            if (delivery !== undefined && delivery !== "steer" && delivery !== "followUp") {
+              json(res, 400, { error: "追加方式无效" }); return;
+            }
             const ids = "attachments" in body ? body.attachments : [];
             if (!Array.isArray(ids) || ids.length > MAX_ATTACHMENTS || ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length) {
               json(res, 400, { error: "附件无效或过多" }); return;
@@ -520,13 +526,17 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               json(res, 400, { error: "消息无效或过长" });
               return;
             }
+            const session = host.snapshot();
+            if (body.sessionId !== session.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            try { assertPromptDelivery(session, body.text, delivery); }
+            catch (cause) { json(res, 409, { error: (cause as Error).message }); return; }
             const files = selected as UploadedAttachment[];
             const text = [body.text.trim(), ...files.map((file) => `附件 ${JSON.stringify(file.name)}：${file.path}`)].filter(Boolean).join("\n\n");
             const images = await Promise.all(files.filter((file) => ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.mediaType)).map(imageContent));
             correlation.operationId ??= randomUUID();
             res.setHeader("X-Operation-ID", correlation.operationId);
             telemetry.breadcrumb("send", { ...correlation, attachmentCount: files.length });
-            await pluginRegistry.coordinateStart(host.snapshot().cwd, async () => host.send(body.sessionId as string, text, images, correlation));
+            await pluginRegistry.coordinateStart(session.cwd, async () => host.send(body.sessionId as string, text, images, correlation, delivery));
             for (const id of ids) attachments.delete(id);
           } else if (path === "/api/compact") {
             if (!host.compact) throw new Error("当前会话不支持压缩");

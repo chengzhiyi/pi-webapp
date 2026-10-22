@@ -10,6 +10,14 @@ Continue is an internal host action without a new user message. The model starts
 
 Plan mode is provided by a plugin, not an inherent mode of every chat. It handles questions, approvals, revisions, and previews. A plan requiring renewed approval must be approved again: **historical approval does not authorize new execution**. Resolve pending interactions rather than bypassing them through Continue.
 
+## Append prompts while Pi is running
+
+- **Steer** or **Ctrl/Cmd+Enter** guides the current task at its next input boundary; it does not force-cancel the current request or tool.
+- **Queue** or **Enter** waits until the current task, tools, and steering messages finish. **Shift+Enter** inserts a newline. Pause stays independent.
+- Attach files from the add menu, drop, or paste. Failed sends retain the draft and attachments. Slash commands are not accepted as appended prompts because Pi dispatches extension commands immediately.
+- SDK chats show a read-only native pending list, separate from conversation history. Switching chats, refreshing, and reconnecting restore it. Pausing retains pending prompts for Continue. Terminal sessions opened through `/web` expose only pending status, not a detailed list.
+- Complete pending interactions/approvals first. Queues are runtime-only: stopping/restarting the service loses unconsumed prompts. Editing, withdrawing, and reordering queued prompts are not supported.
+
 ## Attachments
 
 - Select, drop, or paste up to **20 files**, each no larger than **20 MB**.

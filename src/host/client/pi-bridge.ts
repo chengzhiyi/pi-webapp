@@ -4,7 +4,7 @@ import type {
   ViewMessage as WireViewMessage, SessionView as WireSessionView, WebPluginCatalogView,
   WorkspaceListView, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
   AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, LoginMethod,
-  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent,
+  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery,
 } from "../../contracts/bridge-contract.ts";
 import { parseBridgeEvent } from "../../contracts/bridge-events.ts";
 export type {
@@ -245,10 +245,10 @@ export function usePiBridge() {
       if (!session || connection !== "connected") return;
       await post("/api/attachment/remove", { sessionId: session.sessionId, id });
     },
-    async send(text: string, attachments: string[] = []) {
+    async send(text: string, attachments: string[] = [], delivery?: PromptDelivery) {
       if (!session || connection !== "connected") return;
       setError("");
-      try { await post("/api/message", { sessionId: session.sessionId, text, attachments }); }
+      try { await post("/api/message", { sessionId: session.sessionId, text, attachments, delivery }); }
       catch (cause) { setError(cause instanceof Error ? cause.message : t("发送失败", "Send failed")); throw cause; }
     },
     async loadMessageImage(messageId: string, index: number): Promise<Blob> {

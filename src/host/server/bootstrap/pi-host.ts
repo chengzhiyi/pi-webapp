@@ -20,6 +20,7 @@ import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
 import { resumeMessage } from "../sessions/execution-control.ts";
+import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
 import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
@@ -36,7 +37,7 @@ interface SharedState {
   current: ExtensionContext | null;
   commandContext: ExtensionCommandContext | null;
   pi: ExtensionAPI | null;
-  replacementContext: ExtensionCommandContext & { sendUserMessage(content: string | Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>, options?: { expandPromptTemplates?: boolean }): Promise<void> } | null;
+  replacementContext: ExtensionCommandContext & { sendUserMessage(content: string | Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>, options?: { expandPromptTemplates?: boolean; deliverAs?: "steer" | "followUp" }): Promise<void> } | null;
   replacementSessionId: string | null;
   lastStreamAt: number;
   tuiStreaming: ViewMessage | null;
@@ -112,7 +113,7 @@ async function currentProviderRuntime(): Promise<ModelRuntime> {
 function snapshot() {
   if (shared.selected === "sdk") return shared.workspaceSessions?.snapshot() ?? (() => { throw new Error("没有活动会话"); })();
   if (shared.current === null) throw new Error("没有活动会话");
-  return { ...projectSession(shared.current, shared.current.sessionManager.getSessionName(), activeCatalog()?.ids() ?? []), streaming: shared.tuiStreaming, interactions: shared.interactions?.pending(shared.current.sessionManager.getSessionId()) ?? [] };
+  return { ...projectSession(shared.current, shared.current.sessionManager.getSessionName(), activeCatalog()?.ids() ?? []), streaming: shared.tuiStreaming, hasPendingPrompts: shared.current.hasPendingMessages?.() ?? false, interactions: shared.interactions?.pending(shared.current.sessionManager.getSessionId()) ?? [] };
 }
 
 function activeSession(sessionId: string) {
@@ -388,14 +389,14 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
         // Replace an older bridge so new authenticated endpoints are available.
         if (shared.bridge && (shared.bridge.protocolVersion !== 7 || shared.bridge.buildId !== buildId || typeof shared.bridge.reportError !== "function")) {
           const previous = shared.bridge;
-          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 1) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
+          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 2) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
           shared.bridge = null;
           await previous.close();
           await shared.telemetry.close();
           shared.telemetry = new NodeTelemetry();
         }
         if (shared.bridge === null) {
-          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 1) ? shared.workspaceSessions : null;
+          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 2) ? shared.workspaceSessions : null;
           const retained = legacy?.session && legacy.path ? { path: legacy.path, sessionManager: legacy.session.sessionManager } : null;
           if (legacy) { await legacy.dispose(); shared.workspaceSessions = null; }
           shared.workspaceSessions ??= new WorkspaceSessions((event) => {
@@ -615,24 +616,27 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             },
             config: configView,
             updateConfig: changeConfig,
-            async send(sessionId, text, images = [], correlation) {
+            async send(sessionId, text, images = [], correlation, delivery) {
               activeSession(sessionId);
               if (shared.selected === "sdk") {
-                await shared.workspaceSessions!.send(text, images, correlation);
+                await shared.workspaceSessions!.send(text, images, correlation, delivery);
                 return;
               }
               const active = sameSession(sessionId);
-              if (!active.isIdle()) throw new Error("Pi 正在运行，请等待当前回复结束");
-              shared.operation = correlation;
+              assertPromptDelivery(snapshot(), text, delivery);
+              const starting = active.isIdle();
+              if (starting) shared.operation = correlation;
               try {
                 shared.bridge?.breadcrumb?.("send", { ...correlation, piVersion: VERSION });
                 if (shared.replacementContext !== null && shared.replacementSessionId === sessionId) {
-                  await shared.replacementContext.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true });
+                  await shared.replacementContext.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true, deliverAs: delivery });
+                  publishSnapshot(active);
                   return;
                 }
                 if (shared.pi === null) throw new Error("Pi 会话不可用");
-                shared.pi.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true });
-              } catch (cause) { shared.operation = undefined; throw cause; }
+                shared.pi.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true, deliverAs: delivery });
+                publishSnapshot(active);
+              } catch (cause) { if (starting) shared.operation = undefined; throw cause; }
             },
             async abort(sessionId) {
               activeSession(sessionId);

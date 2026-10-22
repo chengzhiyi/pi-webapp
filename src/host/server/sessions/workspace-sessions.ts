@@ -7,6 +7,8 @@ import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
 import { requireWorkspaceDirectory } from "../workspaces/workspaces.ts";
 import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
 import { resumeMessage } from "./execution-control.ts";
+import { assertPromptDelivery } from "./prompt-delivery.ts";
+import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
 import { pluginRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
 import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
@@ -39,7 +41,7 @@ export interface WorkspaceTelemetry {
 /** Independent SDK runtimes; selection only controls the foreground view. */
 export class WorkspaceSessions {
   readonly telemetryVersion = 2;
-  readonly runtimeVersion = 1;
+  readonly runtimeVersion = 2;
   private active: WorkspaceRuntime | null = null;
   private readonly runtimes = new Map<string, WorkspaceRuntime>();
   private readonly selectedByWorkspace = new Map<string, WorkspaceRuntime>();
@@ -175,7 +177,7 @@ export class WorkspaceSessions {
             publish({ type: "stream", message: runtime.streaming });
           }
         }
-        if (["message_end", "agent_start", "agent_settled", "session_info_changed", "entry_appended"].includes(event.type)) {
+        if (["message_end", "agent_start", "agent_settled", "session_info_changed", "entry_appended", "queue_update"].includes(event.type)) {
           if ((event.type === "message_end" && event.message.role === "assistant") || event.type === "agent_settled") {
             runtime.streaming = null;
             publish({ type: "stream", message: null });
@@ -223,6 +225,7 @@ export class WorkspaceSessions {
       model: session.model ? `${session.model.provider}/${session.model.id}` : null,
       thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle,
       paused: sessionPaused(session.sessionManager.getBranch()),
+      promptQueue: { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] },
       contextUsage: session.getContextUsage() ?? null, messages,
       streaming: runtime.streaming,
       interactions: runtime.interactions.pending(session.sessionManager.getSessionId()),
@@ -248,20 +251,21 @@ export class WorkspaceSessions {
     this.active.interactions.resolve(sessionId, pluginId, requestId, value);
   }
 
-  async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = [], correlation?: ErrorCorrelation): Promise<void> {
-    if (this.disposed || !this.session || this.active?.closing || !this.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+  async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = [], correlation?: ErrorCorrelation, delivery?: PromptDelivery): Promise<void> {
+    if (this.disposed || !this.session || this.active?.closing) throw new Error("Pi 会话不可用");
+    assertPromptDelivery(this.snapshot(), text, delivery);
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
     const active = this.session;
     const runtime = this.active!;
-    runtime.operation = correlation;
+    const starting = active.isIdle;
+    if (starting) { runtime.operation = correlation; runtime.agentErrorReported = false; }
     this.telemetry.breadcrumb("send", { ...correlation, piVersion: VERSION });
-    runtime.agentErrorReported = false;
     let accepted = false;
     let resolve!: () => void;
     let reject!: (reason: unknown) => void;
     const preflight = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
-    void active.prompt(text, { images, preflightResult: (ok) => {
+    void active.prompt(text, { images, streamingBehavior: delivery, preflightResult: (ok) => {
       if (ok) { accepted = true; resolve(); }
     } }).then(() => { if (!accepted) resolve(); }).catch((cause: unknown) => {
       if (!accepted) reject(cause);
@@ -270,7 +274,7 @@ export class WorkspaceSessions {
         this.publishFor(runtime, { type: "error", message: cause instanceof Error ? cause.message : "Pi 请求失败", errorCode: "unexpected_error", errorId, ...correlation });
       }
     });
-    try { await preflight; } catch (cause) { runtime.operation = undefined; throw cause; }
+    try { await preflight; } catch (cause) { if (starting) runtime.operation = undefined; throw cause; }
   }
 
   async stop(): Promise<void> {

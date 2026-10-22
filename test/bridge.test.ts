@@ -41,6 +41,37 @@ const capabilities = {
   async updateConfig() { return this.config(); },
 };
 
+test('message delivery validates modes, auth, session identity and pending approval gates', async () => {
+  let idle = false, reviewing = false;
+  const deliveries: unknown[] = [];
+  const bridge = await startBridge({ ...capabilities,
+    snapshot: () => ({ ...fixture(), idle, interactions: reviewing ? [{ requestId: 'review', sessionId: 'session-a', pluginId: 'plan', kind: 'review', data: {} }] : [] }),
+    send(_id, _text, _images, _correlation, delivery) { deliveries.push(delivery); }, abort() {}, async newSession() {},
+  }, webRoot);
+  try {
+    const url = new URL(bridge.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, 'Content-Type': 'application/json', Origin: url.origin };
+    const request = (body: object, selectedHeaders = headers) => fetch(`${url.origin}/api/message`, { method: 'POST', headers: selectedHeaders, body: JSON.stringify({ sessionId: 'session-a', text: 'More instructions', ...body }) });
+    assert.equal((await request({ delivery: 'steer' }, { ...headers, Authorization: 'Bearer invalid' })).status, 401);
+    assert.equal((await request({ delivery: 'followUp' }, { ...headers, Origin: 'https://example.com' })).status, 403);
+    assert.equal((await request({ sessionId: 'session-b', delivery: 'followUp' })).status, 409);
+    for (const delivery of ['immediate', '', null, {}, 1]) assert.equal((await request({ delivery })).status, 400);
+    assert.equal((await request({})).status, 409);
+    assert.equal((await request({ delivery: 'steer', text: '/new' })).status, 409);
+    reviewing = true;
+    for (const delivery of ['steer', 'followUp']) assert.equal((await request({ delivery })).status, 409);
+    idle = true;
+    assert.equal((await request({})).status, 409);
+    reviewing = false;
+    assert.equal((await request({ delivery: 'followUp' })).status, 202, 'explicit delivery survives a run settling just before submit');
+    idle = false;
+    assert.equal((await request({ delivery: 'steer' })).status, 202);
+    assert.deepEqual(deliveries, ['followUp', 'steer']);
+    idle = true;
+    assert.equal((await request({})).status, 202, 'ordinary idle sends stay compatible');
+  } finally { await bridge.close(); }
+});
+
 test('abort awaits the host and reports asynchronous cancellation errors', async () => {
   let fail = true;
   let settled = false;

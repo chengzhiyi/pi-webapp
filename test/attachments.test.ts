@@ -19,13 +19,17 @@ test("uploads a file, sends its saved path, and rejects stale or foreign receipt
   const root = await mkdtemp(join(tmpdir(), "pi-web-upload-"));
   const originalDir = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = root;
-  const sent: Array<{ text: string; images: unknown[] }> = [];
+  const sent: Array<{ text: string; images: unknown[]; delivery?: string }> = [];
+  let idle = true, rejectSend = false;
   const bridge = await startBridge({
-    snapshot: () => ({ schemaVersion: 1, sessionId: "session-a", cwd: root, name: "test", model: null, thinkingLevel: null, thinkingLevels: [], idle: true, contextUsage: null, messages: [], pluginEntries: [] }),
+    snapshot: () => ({ schemaVersion: 1, sessionId: "session-a", cwd: root, name: "test", model: null, thinkingLevel: null, thinkingLevels: [], idle, contextUsage: null, messages: [], pluginEntries: [] }),
     models: () => [], async setModel() {}, async setThinkingLevel() {},
     config: () => ({ projectTrusted: true, global: { packages: [], extensions: [], skills: [] }, project: { packages: [], extensions: [], skills: [] }, installed: { packages: [], extensions: [], skills: [] } }),
     async updateConfig() { return this.config(); },
-    send(_sessionId, text, images) { sent.push({ text, images: images ?? [] }); },
+    send(_sessionId, text, images, _correlation, delivery) {
+      if (rejectSend) throw new Error("Fixture rejected send");
+      sent.push({ text, images: images ?? [], delivery });
+    },
     abort() {}, async newSession() {}, workspaces: async () => ({ items: [], activeId: null, sessions: [] }),
     async addWorkspace() {}, async selectWorkspace() {}, async newSessionInWorkspace() {}, async removeWorkspace() {}, async selectSession() {},
   }, webRoot);
@@ -45,9 +49,9 @@ test("uploads a file, sends its saved path, and rejects stale or foreign receipt
     const chinese = await upload("session-a", "微信图片.png", "valid filename");
     assert.equal(chinese.status, 201);
     assert.equal((await chinese.json() as { name: string }).name, "微信图片.png");
-    const send = (ids: string[]) => fetch(`${url.origin}/api/message`, {
+    const send = (ids: string[], delivery?: string) => fetch(`${url.origin}/api/message`, {
       method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: "session-a", text: "Read this", attachments: ids }),
+      body: JSON.stringify({ sessionId: "session-a", text: "Read this", attachments: ids, delivery }),
     });
     assert.equal((await send(["unknown"])).status, 400);
     const disposable = await upload("session-a", "remove.txt", "discard me");
@@ -71,7 +75,13 @@ test("uploads a file, sends its saved path, and rejects stale or foreign receipt
     });
     assert.equal(imageResponse.status, 201);
     const imageReceipt = await imageResponse.json() as { id: string };
-    assert.equal((await send([imageReceipt.id])).status, 202);
+    idle = false;
+    assert.equal((await send([imageReceipt.id])).status, 409, "busy sends need an explicit delivery policy");
+    rejectSend = true;
+    assert.equal((await send([imageReceipt.id], "steer")).status, 400);
+    rejectSend = false;
+    assert.equal((await send([imageReceipt.id], "steer")).status, 202, "rejected sends do not consume attachment receipts");
+    assert.equal(sent[1]!.delivery, "steer");
     assert.deepEqual(sent[1]!.images, [{ type: "image", data: png.toString("base64"), mimeType: "image/png" }]);
   } finally {
     await bridge.close();

@@ -32,6 +32,8 @@ function session(value: unknown): value is SessionView {
     && strings(value, ["sessionId", "cwd", "name"])
     && nullable(string)(value.model) && nullable(string)(value.thinkingLevel)
     && array(string)(value.thinkingLevels) && boolean(value.idle) && optional(value, "paused", boolean)
+    && optional(value, "hasPendingPrompts", boolean)
+    && optional(value, "promptQueue", queue => record(queue) && array(string)(queue.steering) && array(string)(queue.followUp))
     && nullable(usage => record(usage) && nullable(number)(usage.tokens)
       && number(usage.contextWindow) && nullable(number)(usage.percent))(value.contextUsage)
     && array(message)(value.messages)

@@ -18,6 +18,8 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   process.env.PI_CODING_AGENT_DIR = join(temporary, "agent");
   const handlers = new Map<string, (event: any, ctx: any) => void>();
   const delivered: string[] = [];
+  const deliveryOptions: unknown[] = [];
+  let busy = false;
   const openedPages: string[] = [];
   const notices: Array<"info" | "warning" | "error" | undefined> = [];
   let failToOpen = false;
@@ -33,7 +35,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
       getSessionName: () => undefined,
       getBranch: () => [],
     },
-    isIdle: () => true,
+    isIdle: () => !busy,
     getContextUsage: () => undefined,
     ui: {
       notify(message: string, type?: "info" | "warning" | "error") {
@@ -45,7 +47,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   });
   const fresh = {
     ...context("new"),
-    async sendUserMessage(text: string) { delivered.push(text); },
+    async sendUserMessage(text: string, options?: unknown) { delivered.push(text); deliveryOptions.push(options); },
   } as unknown as ExtensionCommandContext;
   const initial = {
     ...context("old"),
@@ -92,6 +94,18 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     });
     assert.equal(sent.status, 202);
     assert.deepEqual(delivered, ["hello"]);
+    busy = true;
+    for (const delivery of ["steer", "followUp"]) {
+      const appended = await fetch(`${url.origin}/api/message`, {
+        method: "POST", headers, body: JSON.stringify({ sessionId: "new", text: delivery, delivery }),
+      });
+      assert.equal(appended.status, 202);
+    }
+    assert.deepEqual(delivered, ["hello", "steer", "followUp"]);
+    assert.deepEqual(deliveryOptions.slice(1), [
+      { expandPromptTemplates: true, deliverAs: "steer" }, { expandPromptTemplates: true, deliverAs: "followUp" },
+    ], "the replacement TUI context receives native delivery modes, not the stale Pi API");
+    busy = false;
     // A deleted workspace must not turn unrelated list refreshes into Sentry errors.
     const registry = (shared as unknown as { workspaces: WorkspaceRegistry }).workspaces;
     const stalePath = join(temporary, "removed-worktree");

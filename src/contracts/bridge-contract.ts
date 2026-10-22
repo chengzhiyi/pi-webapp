@@ -31,6 +31,10 @@ export interface ViewMessage {
   model?: string;
   error?: string;
 }
+/** Runtime delivery policy, not an interruption or a new concurrent run. */
+export type PromptDelivery = "steer" | "followUp";
+export interface PromptQueue { steering: string[]; followUp: string[] }
+
 export interface SessionView {
   schemaVersion: typeof SESSION_SCHEMA_VERSION;
   sessionId: string;
@@ -41,6 +45,10 @@ export interface SessionView {
   thinkingLevels: string[];
   idle: boolean;
   paused?: boolean;
+  /** Native SDK queue; pending prompts are not yet transcript messages. */
+  promptQueue?: PromptQueue;
+  /** TUI contexts expose only whether a native queue is pending. */
+  hasPendingPrompts?: boolean;
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
   messages: ViewMessage[];
   pluginEntries: PluginEntry[];
