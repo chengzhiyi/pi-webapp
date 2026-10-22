@@ -6,7 +6,9 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-![pi-webapp — 对话与编程工作台](assets/cover-webapp.png)
+[![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
+
+*一边跟进对话，一边查看消息中链接的源码。截图来自真实界面，使用英文演示数据，并非真实模型执行记录。*
 
 ```bash
 npx pi-webapp
@@ -20,6 +22,17 @@ npx pi-webapp
 - **多个项目，任务不中断。** 各聊天独立运行；切换工作区或新开对话，不会打断原来正在执行的任务。
 - **不只看到答案，也能看懂过程。** 流式回复、可展开的推理和工具调用、Token 用量及执行轨迹，让进度更容易掌握。
 - **增强 Pi，而不是另起一套。** 继续使用 Pi 的会话存储、模型选择、技能与扩展生态，新增的是可视化工作台，而非替代 Agent 引擎。
+
+## 看图了解工作流
+
+**对话 → 查看源码 → 审查改动 → 运行验证。** 上方工作台把对话和代码放在一起；同一个工具面板，还能让你从差异审查直接进入终端验证。
+
+| 提交前，看清每一处改动 | 不离开对话，直接运行验证 |
+| --- | --- |
+| [![Git 面板：已暂存的测试，以及包邮门槛修复的红绿差异](assets/readme/git-review.png)](assets/readme/git-review.png) | [![内置终端：实际运行演示项目测试，2 项通过、0 项失败](assets/readme/terminal.png)](assets/readme/terminal.png) |
+| 对照差异审查，按需暂存要提交的文件。 | 在项目目录执行命令，保留当前对话上下文。 |
+
+*点击图片可查看原图。截图使用隔离的演示仓库，终端实际运行了两项回归测试；不使用提供方凭据或私有项目数据。[图片生成与维护说明](assets/readme/README.md)。*
 
 ## 核心功能
 
@@ -95,13 +108,9 @@ pi
 
 **一套 Agent 引擎，多种使用入口，插件化工作台。** Pi 负责模型执行、工具与会话持久化；pi-webapp 负责界面、会话编排与工作区工具。
 
-```mermaid
-flowchart TB
-  Browser["浏览器 · React 工作台"] --> Host["本地 Node 宿主 · HTTP + NDJSON"]
-  Desktop["Electron 桌面端 · 同一套 Web UI"] --> Host
-  Host --> Pi["Pi 扩展 / SDK · 模型、工具、会话"]
-  Host --> Plugins["插件注册表 · 文件 / 终端 / Git / Web 插件"]
-```
+[![架构图：浏览器与 Electron 复用 React 工作台，经本地 Node 宿主连接 Pi 引擎与工作区插件](assets/readme/architecture-zh.svg)](assets/readme/architecture-zh.svg)
+
+*共享的是界面；会话编排、Agent 执行与工作区能力，仍然各司其职。*
 
 | 设计 | 带来的价值 |
 | --- | --- |

@@ -22,6 +22,7 @@
   },
   "files": [
     "assets/cover-webapp.png",
+    "assets/readme",
     "bin",
     "dist",
     "web/dist",

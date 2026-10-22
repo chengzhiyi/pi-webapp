@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="668" viewBox="0 0 1120 668" role="img" aria-labelledby="title desc">
+  <title id="title">One workbench, multiple entry points</title>
+  <desc id="desc">The browser and Electron desktop share a React workbench. Both connect to a local Node host with HTTP actions and NDJSON events. The host orchestrates sessions, integrates Pi through an extension or SDK, and dispatches workspace plugin capabilities.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="#5368ed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1120" height="668" rx="16" fill="#f8fafc"/>
+  <g font-family="Arial, sans-serif" fill="#162033">
+    <text x="32" y="56" font-size="32" font-weight="700">One workbench. Multiple entry points.</text>
+    <text x="32" y="92" font-size="21" fill="#526078">A visual layer on Pi, not another agent engine.</text>
+    <g fill="none" stroke="#5368ed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M288 224 V256 H560 V286" marker-end="url(#arrow)"/>
+      <path d="M832 224 V256 H560"/>
+      <path d="M560 408 V440 H288 V470" marker-end="url(#arrow)"/>
+      <path d="M560 440 H832 V470" marker-end="url(#arrow)"/>
+    </g>
+    <g stroke="#dce2ee" stroke-width="2" fill="#ffffff">
+      <rect x="32" y="128" width="512" height="96" rx="16"/>
+      <rect x="576" y="128" width="512" height="96" rx="16"/>
+      <rect x="32" y="472" width="512" height="128" rx="16"/>
+      <rect x="576" y="472" width="512" height="128" rx="16"/>
+    </g>
+    <text x="64" y="168" font-size="25" font-weight="700">Browser</text>
+    <text x="64" y="202" font-size="21" fill="#526078">React workbench · npx or /web</text>
+    <text x="608" y="168" font-size="25" font-weight="700">Electron desktop</text>
+    <text x="608" y="202" font-size="21" fill="#526078">Same Web UI · bundled Node / Pi</text>
+    <rect x="224" y="288" width="672" height="120" rx="16" fill="#eef1ff" stroke="#5368ed" stroke-width="2"/>
+    <text x="560" y="326" font-size="27" font-weight="700" text-anchor="middle" fill="#3549c6">Local Node host</text>
+    <text x="560" y="360" font-size="21" text-anchor="middle">HTTP actions · NDJSON events · typed contracts</text>
+    <text x="560" y="390" font-size="20" text-anchor="middle" fill="#526078">Session lifecycle + plugin registry</text>
+    <text x="64" y="514" font-size="25" font-weight="700">Pi agent engine</text>
+    <text x="64" y="548" font-size="21" fill="#526078">Models · tools · session storage</text>
+    <text x="64" y="578" font-size="20" fill="#526078">Native extension / SDK integration</text>
+    <text x="608" y="514" font-size="25" font-weight="700">Workspace capabilities</text>
+    <text x="608" y="548" font-size="21" fill="#526078">Files · Terminal · Git · Web plugins</text>
+    <text x="608" y="578" font-size="20" fill="#526078">Scoped actions, panels, and resource cleanup</text>
+    <text x="560" y="642" font-size="20" text-anchor="middle" fill="#526078">Clear boundaries between UI, orchestration, and agent execution.</text>
+  </g>
+</svg>

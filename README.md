@@ -6,7 +6,9 @@ Bring conversations, project files, terminals, and Git into one interface—with
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-![pi-webapp — conversation and coding workspace](assets/cover-webapp.png)
+[![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
+
+*Follow the conversation and inspect the linked source file in the same workspace. Real UI, seeded demo data—not a live model transcript.*
 
 ```bash
 npx pi-webapp
@@ -20,6 +22,17 @@ npx pi-webapp
 - **Work across projects without interrupting tasks.** Chats run independently; switching projects or starting another conversation leaves existing work running in the background.
 - **See what the agent is doing.** Streaming replies, expandable reasoning and tool calls, token usage, and execution traces make progress easier to follow.
 - **Build on Pi, not around it.** Keep Pi's session storage, model choices, skills, and extension ecosystem. The interface adds a workbench, not a replacement agent engine.
+
+## See the workflow
+
+**Discuss → inspect → review → verify.** The workbench above keeps your conversation and source side by side; the same tool panel takes you from reviewing a change to running its tests.
+
+| Review before committing | Verify in a real terminal |
+| --- | --- |
+| [![Git panel showing staged tests and the highlighted free-shipping boundary fix](assets/readme/git-review.png)](assets/readme/git-review.png) | [![Integrated terminal running the demo project's tests with two passes and zero failures](assets/readme/terminal.png)](assets/readme/terminal.png) |
+| Inspect the diff and stage only what you intend to commit. | Run project commands without losing the conversation. |
+
+*Click any image for full size. Screenshots use an isolated demo repository. The terminal really runs its two regression tests; no provider credentials or private project data are used. [How these images are made](assets/readme/README.md).*
 
 ## Core features
 
@@ -95,13 +108,9 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 
 **One agent engine, multiple interfaces, and a plugin-oriented workbench.** Pi handles model execution, tools, and session persistence; pi-webapp handles presentation, session orchestration, and workspace tools.
 
-```mermaid
-flowchart TB
-  Browser["Browser · React workbench"] --> Host["Local Node host · HTTP + NDJSON"]
-  Desktop["Electron desktop · same Web UI"] --> Host
-  Host --> Pi["Pi extension / SDK · models, tools, sessions"]
-  Host --> Plugins["Plugin registry · Files / Terminal / Git / Web plugins"]
-```
+[![Architecture: browser and Electron share a React workbench connected to a local Node host, which integrates the Pi agent engine and workspace plugins](assets/readme/architecture-en.svg)](assets/readme/architecture-en.svg)
+
+*The UI is shared; session orchestration, agent execution, and workspace capabilities keep distinct responsibilities.*
 
 | Design choice | Why it matters |
 | --- | --- |

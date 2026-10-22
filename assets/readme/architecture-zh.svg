@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="668" viewBox="0 0 1120 668" role="img" aria-labelledby="title desc">
+  <title id="title">一套工作台，多种使用入口</title>
+  <desc id="desc">浏览器与 Electron 桌面端复用 React 工作台，通过 HTTP 动作和 NDJSON 事件连接本地 Node 宿主。宿主管理会话生命周期，通过扩展或 SDK 对接 Pi，并分发工作区插件能力。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="#5368ed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1120" height="668" rx="16" fill="#f8fafc"/>
+  <g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" fill="#162033">
+    <text x="32" y="56" font-size="32" font-weight="700">一套工作台，多种使用入口。</text>
+    <text x="32" y="92" font-size="21" fill="#526078">增强 Pi 的可视化体验，而不是再造一套 Agent 引擎。</text>
+    <g fill="none" stroke="#5368ed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M288 224 V256 H560 V286" marker-end="url(#arrow)"/>
+      <path d="M832 224 V256 H560"/>
+      <path d="M560 408 V440 H288 V470" marker-end="url(#arrow)"/>
+      <path d="M560 440 H832 V470" marker-end="url(#arrow)"/>
+    </g>
+    <g stroke="#dce2ee" stroke-width="2" fill="#ffffff">
+      <rect x="32" y="128" width="512" height="96" rx="16"/>
+      <rect x="576" y="128" width="512" height="96" rx="16"/>
+      <rect x="32" y="472" width="512" height="128" rx="16"/>
+      <rect x="576" y="472" width="512" height="128" rx="16"/>
+    </g>
+    <text x="64" y="168" font-size="25" font-weight="700">浏览器</text>
+    <text x="64" y="202" font-size="21" fill="#526078">React 工作台 · npx 或 /web 打开</text>
+    <text x="608" y="168" font-size="25" font-weight="700">Electron 桌面端</text>
+    <text x="608" y="202" font-size="21" fill="#526078">复用 Web UI · 自带 Node / Pi</text>
+    <rect x="224" y="288" width="672" height="120" rx="16" fill="#eef1ff" stroke="#5368ed" stroke-width="2"/>
+    <text x="560" y="326" font-size="27" font-weight="700" text-anchor="middle" fill="#3549c6">本地 Node 宿主</text>
+    <text x="560" y="360" font-size="21" text-anchor="middle">HTTP 动作 · NDJSON 事件 · 类型化契约</text>
+    <text x="560" y="390" font-size="20" text-anchor="middle" fill="#526078">会话生命周期管理 + 插件注册表</text>
+    <text x="64" y="514" font-size="25" font-weight="700">Pi Agent 引擎</text>
+    <text x="64" y="548" font-size="21" fill="#526078">模型执行 · 工具调用 · 会话存储</text>
+    <text x="64" y="578" font-size="20" fill="#526078">原生扩展 / SDK 接入</text>
+    <text x="608" y="514" font-size="25" font-weight="700">工作区能力</text>
+    <text x="608" y="548" font-size="21" fill="#526078">文件 · 终端 · Git · Web 插件</text>
+    <text x="608" y="578" font-size="20" fill="#526078">动作分发、面板贡献与资源清理</text>
+    <text x="560" y="642" font-size="20" text-anchor="middle" fill="#526078">界面、宿主编排与 Agent 执行，各有清晰的职责边界。</text>
+  </g>
+</svg>
