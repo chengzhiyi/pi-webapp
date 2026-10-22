@@ -65,8 +65,8 @@ export function usePluginPanel(sessionId: string | undefined, disabledPlugins: r
   return { controller, snapshot, panelId, resources, owners, expand, openContent, shown: snapshot.state.expanded && Object.keys(snapshot.state.tabs).length > 0 };
 }
 
-export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
-  panel: ReturnType<typeof usePluginPanel>; width: number; narrow: boolean;
+export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins, props, cwd }: {
+  panel: ReturnType<typeof usePluginPanel>; width: number; narrow: boolean; focus: boolean; onExitFocus: () => void;
   plugins: readonly LoadedPlugin[]; props: PluginHostProps; cwd?: string;
 }) {
   const { controller, snapshot, openContent: open } = panel;
@@ -76,9 +76,10 @@ export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
   const t = (key: string) => dictionary[key] ?? key;
   const text = (value: string | { zh: string; en: string }) => typeof value === "string" ? value : value[props.locale];
   const panels = plugins.flatMap(plugin => (plugin.definition.workbench?.panels ?? []).map(contribution => ({ plugin, contribution })));
-  const collapse = () => { controller.setExpanded(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus()); };
-  return <div className={css.panel} style={{ width: fullscreen ? "100vw" : width, "--dsh-sidebar-width": fullscreen ? "100vw" : `${width}px` } as CSSProperties}
-    data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
+  const collapse = () => { onExitFocus(); controller.setExpanded(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus()); };
+  const panelWidth = narrow ? "100vw" : width;
+  return <div className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
+    data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : focus ? "focus" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
     <div className={css.panelBody}><DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
       intents={controller} labels={dockLabels(t)} active keepMounted={() => true}
       renderTab={tab => {
@@ -125,7 +126,7 @@ export function PluginPanel({ panel, width, narrow, plugins, props, cwd }: {
         if (registered) return <span className={filesCss.title}>{registered.contribution.title?.(tab.contentId, tab.title) ?? tab.title}</span>;
         return <PluginSlot plugins={plugins} slot="rightbar.title" props={{ ...props, panelId: tab.contentId }} />;
       }}
-      chrome={<PanelChrome sessionId={props.session?.sessionId ?? ""} fullscreen={fullscreen} shortcuts={[]} t={t} actions={{ toggleExpanded: collapse }} toggleFullscreen={() => narrow ? collapse() : controller.setMode(fullscreen ? "push" : "fullscreen")} />} />
+      chrome={<PanelChrome sessionId={props.session?.sessionId ?? ""} fullscreen={fullscreen || focus} focus={focus} shortcuts={[]} t={t} actions={{ toggleExpanded: collapse }} toggleFullscreen={() => focus ? onExitFocus() : narrow ? collapse() : controller.setMode(fullscreen ? "push" : "fullscreen")} />} />
     </div>
   </div>;
 }
