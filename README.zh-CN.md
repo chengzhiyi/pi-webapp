@@ -1,108 +1,145 @@
 # pi-webapp
 
-[English](README.md)
+### 让 Pi 编程 Agent，拥有一个看得见、用得顺的工作台。
 
-![pi-webapp 封面](assets/cover-webapp.png)
+把 AI 对话、项目文件、终端和 Git 放在同一个界面中，不必放弃 Pi 的工具、技能和终端工作流。在浏览器里直接使用，打开独立桌面窗口，或从已有 Pi 会话一键进入。
 
-**pi-webapp** 可以在本地浏览器中打开当前活跃的 Pi 编程 Agent 会话。Agent、工具和会话存储仍由 Pi 运行和管理；浏览器提供实时的对话与控制界面。
+[English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-## 安装与打开
-
-需要 Node.js 22.19 或更新版本。推荐直接运行：
+![pi-webapp — 对话与编程工作台](assets/cover-webapp.png)
 
 ```bash
 npx pi-webapp
 ```
 
-该命令会在后台启动 Pi，并在本地图形桌面用默认浏览器打开网页，终端可继续使用。若未找到 Pi，会自动通过 npm 安装官方 `@earendil-works/pi-coding-agent`。已有 Pi 需要 0.87.1 或更新版本；启动器不会自动覆盖旧版本。再次运行启动命令会重新打开已有服务。远程或无图形界面时只显示地址；设置 `PI_WEBAPP_AUTO_OPEN=0` 可关闭自动打开。
+**Web 一条命令启动，桌面端自带运行时，底层仍是你熟悉的 Pi。**
 
-网页的「设置 → 通用设置 → 应用更新」会检查 npm 上的 `pi-webapp` 新版本。通过 npm 包的后台启动器运行时，点击「升级并重启」会先将新版安装并校验到 Pi 数据目录的 `pi-web/releases/`，然后重启服务，网页会在原地址重新加载。请先等待当前回复结束。若新版无法启动，启动器会恢复旧版服务。`npx` 和全局命令启动均可使用；后续启动会自动选用已安装的新版。此操作不会改动 npm 全局安装。源码目录运行和已有 Pi 终端中的 `/web` 页面可以查看版本，但不能从网页重启。若服务未恢复，可运行 `pi-webapp status` 并查看 `~/.pi/agent/pi-web/launcher.log`。
+## 为什么选择 pi-webapp？
 
-可用 `npx pi-webapp status` 查看地址，用 `npx pi-webapp stop` 停止后台服务。全局安装后可直接运行 `pi-webapp status` 和 `pi-webapp stop`。
+- **少切窗口，多关注代码。** 一边跟进 Agent，一边查看文件、运行命令、审查差异，让对话与项目上下文留在一起。
+- **多个项目，任务不中断。** 各聊天独立运行；切换工作区或新开对话，不会打断原来正在执行的任务。
+- **不只看到答案，也能看懂过程。** 流式回复、可展开的推理和工具调用、Token 用量及执行轨迹，让进度更容易掌握。
+- **增强 Pi，而不是另起一套。** 继续使用 Pi 的会话存储、模型选择、技能与扩展生态，新增的是可视化工作台，而非替代 Agent 引擎。
 
-也可以将启动器安装为全局命令：
+## 核心功能
+
+| 能力 | 你可以做什么 |
+| --- | --- |
+| **实时 Agent 对话** | 发送消息与图片/文件附件，暂停与继续任务，切换模型及思考级别；在上下文中阅读 Markdown、代码、推理和工具结果。 |
+| **多项目与多会话** | 发现已有 Pi 会话、添加工作区，在独立运行的聊天之间切换；回来时继续查看输出和待处理的插件交互。 |
+| **对话旁的文件预览** | 浏览工作区，点击聊天中的文件路径，在只读标签页查看高亮代码、Markdown 与图片。 |
+| **真正的交互式终端** | 在工作区启动 shell，交互输入、Ctrl+C；切换聊天或面板时保留进程与输出。 |
+| **Git 审查与操作** | 查看改动和内联差异、逐文件暂存/取消暂存、提交暂存区、创建/切换本地分支，并用分支关系图浏览提交历史。 |
+| **灵活的工作台布局** | 调宽、分栏、展开工具面板，或进入工作区专注模式，同时保留导航入口。各聊天保留自己的工具标签，直到网页刷新。 |
+| **模型、技能与插件** | 配置提供方和模型，管理 Pi 软件包/扩展/技能，启停内置文件、终端与 Git；兼容的 Web 插件还可贡献自己的界面。 |
+| **浏览器与桌面入口** | 用后台启动器打开 Web，从 Pi 终端输入 `/web`，或运行自带 Node/Pi 的 Electron 桌面应用。 |
+
+> 聊天独立运行，但同一工作树中的文件和 Git 改动是共享的。切换聊天不会停止任务；停止服务会结束其后台任务。终端与 Agent 工具使用你的系统权限，不是沙箱环境。
+
+## 快速开始
+
+### Web：一条命令启动
+
+需要 **Node.js 22.19+** 和 npm。在项目目录运行：
 
 ```bash
-npm install -g pi-webapp
-pi-webapp
+npx pi-webapp
 ```
 
-如果希望在已有 Pi 终端中使用，仍可按原方式安装扩展：
+启动器会在后台启动 Pi，并在本地图形桌面打开默认浏览器。未安装 Pi 时，会自动安装官方 `@earendil-works/pi-coding-agent`；已有 Pi 需要 **0.87.1+**，旧版本不会被自动覆盖。再次执行命令会重新打开已有服务。无图形界面时显示本地地址；设置 `PI_WEBAPP_AUTO_OPEN=0` 可关闭自动打开。
+
+1. 进入「**设置 → 模型**」，配置提供方并选择有权使用的模型。
+2. 选择或添加工作区，开始一次对话。
+3. 打开对话右上角的工具面板，在 Agent 旁边使用「**文件**」「**终端**」或「**Git 改动**」。
+
+模型访问权限需自行配置；本地界面不等于离线推理。请勿分享带访问令牌的本地 URL，也不要把服务直接暴露到公网。
+
+```bash
+npx pi-webapp status   # 查看运行中的服务地址
+npx pi-webapp stop     # 完成当前任务后停止服务
+```
+
+习惯全局命令？先运行 `npm install -g pi-webapp`，再运行 `pi-webapp`。
+
+**升级：** 通过 npm 后台启动器运行时，可在「设置 → 通用设置 → 应用更新」中「升级并重启」；新版启动失败会回退。请先结束活跃任务。源码运行和 Pi 终端 `/web` 页面仅显示版本信息，不能从网页重启。详见[更新指南](docs/zh/updates.md)。
+
+### 已经在终端使用 Pi？
 
 ```bash
 pi install npm:pi-webapp
 pi
 ```
 
-在 Pi 中输入 `/web`，即可在默认浏览器中打开界面。对于远程或无图形界面的环境，Pi 也会输出本地访问地址。该地址包含一个随机令牌，仅在当前 Pi 进程运行期间有效。再次输入 `/web` 可以重新打开界面。
+在 Pi 中输入 **`/web`** 即可。浏览器与该终端会话保持同步，Agent、工具和会话存储继续由 Pi 管理；退出该 Pi 进程会结束其服务。
 
-## 功能
+## 桌面端下载
 
-- 查看当前对话，包括 Markdown 内容、流式输出、可展开的推理过程与工具调用、Token 用量，以及逐轮执行轨迹。
-- 发送消息、暂停与继续运行、启动新的 Pi 会话，以及切换当前模型或思考级别。运行时右下角显示暂停；暂停后清空输入框即可继续，刷新或重新打开会话后仍可恢复。继续通过内部控制动作恢复原任务，不新增用户消息；模型会基于已有进度发起新请求，计划模式仍需重新审批。
-- 浏览工作区和已保存的会话。环境支持时可通过系统目录选择器添加工作区；通过 SSH 使用时，也可使用内置目录浏览器。
-- 通过对话右上角的常驻入口打开右侧工具栏，在「工作区文件」中逐层浏览当前会话的目录，点击文件打开只读预览。对话中的工作区相对路径及工作区内绝对路径链接也会直接打开右侧预览，外部网址仍在新窗口打开。支持带行号和高亮的代码、Markdown 预览与源码切换，以及 PNG/JPEG/GIF/WebP 图片与放大查看。面板可收起、调宽、分栏或全屏，并继续承载插件内容；切换聊天会保留各自的标签和目录展开状态（刷新网页后重置）。文件树和预览提供手动刷新，每层最多显示 1000 项，文本预览上限 512 KB / 10000 行、图片上限 8 MB；HTML/SVG 显示源码，其他二进制文件显示不支持提示。文件读取限制在当前会话工作区内，包括符号链接的真实目标。
-- 在右侧「开始」页选择「打开终端」，以当前会话的工作区为初始目录启动默认 shell。支持真实交互输入、持续输出、Ctrl+C、尺寸调整、分栏和全屏。切换标签、折叠侧栏和切换聊天保留进程、环境变量与终端画面；短暂断线会自动重连，未确认的输入不会重放。关闭标签或停止服务会回收进程；浏览器关闭或连接持续丢失后，后台最多保留 5 分钟。刷新网页会重置标签，不支持跨服务重启恢复进程。每会话最多 8 个终端、服务最多 32 个，保留 2000 行滚动历史。终端使用 Pi 所在用户的系统权限，工作区是初始目录，不是 shell 沙箱。
-- 在右侧「开始」页选择「Git 改动」，查看当前分支、提交、基于本地记录的上游领先/落后数量，以及已暂存、未暂存、未跟踪和冲突文件。点击文件直接在 Git 面板内预览只读差异，保留文件列表且不增加标签页。列表与差异独立滚动，窄面板上下排列，宽度达到 720 px 时左右并排。选中文件高亮并随 Git 标签保留，暂存状态变化时跟随对应范围，文件不再有改动时收起预览；也可手动关闭恢复完整列表。差异隐藏原始 Git 头信息，显示新旧行号与增删行数，可用上一处／下一处按钮逐个跳转连续改动块并查看当前位置；文件权限变化、末尾无换行等信息保留为简洁提示。读取范围限制在当前会话目录内，包括仓库子目录；支持独立工作树和尚无提交的仓库。可见的 Git 标签会在 Agent 状态变化、页面重新聚焦时刷新，并每 5 秒检查一次；隐藏后停止轮询。需要在 Pi 所在机器安装 Git。最多显示 1000 个文件，差异上限 512 KB / 10000 行；二进制文件、子模块和未解决冲突显示提示。改动属于共享工作树，不代表全部由当前聊天产生；工作区与历史文件的差异视图保持只读。
-- 在「Git 改动 → 改动」中，用文件右侧的 **+ / −** 逐文件暂存或取消暂存；底部固定提交栏仅提交暂存区内容（支持 Ctrl/Cmd+Enter）；点击顶部分支名称，可搜索和切换本地分支，选择「新建分支」才展开创建表单。文件列表独立滚动，仓库完整信息通过短名称的悬停提示查看。草稿随各聊天的 Git 标签保留。提交和切换分支要求仓库根目录工作区，切换还要求整个工作树干净（包括未跟踪文件）。写操作要求共用工作树的已知聊天均为空闲，并校验状态快照，遵守 Git hooks 与签名配置。冲突、未完成的 Git 操作、锁及其他工作树占用的分支会阻止相应操作。失败或结果不明时保留草稿，不自动重试。同一工作树的改动由多个聊天共享。不执行 fetch/push、强制切换、stash 或丢弃改动。
-- 在「Git 改动 → 历史」中浏览提交及其分支、合并关系图，显示 HEAD、本地分支、远端跟踪分支和标签。历史每次加载 50 条；引用变化时重新加载首页，避免分页混入不同版本的历史。点击提交查看完整说明、作者与提交者、时间、父提交及改动文件，再点击文件在当前提交详情内预览只读差异，保留文件列表，不再新建差异标签。合并提交可选择比较的父提交，根提交与空目录比较。关系图展示整个仓库的提交元数据，提交文件和差异仍限制在当前会话目录内。历史选中项与已加载页随各聊天的 Git 标签保留，网页刷新后重置。远端标签仅使用本地记录，不发起拉取。
-- 通过选择、拖放或粘贴附加文件，最多 20 个，每个不超过 20 MB。图片会显示预览，并作为 Pi 图片内容发送。
-- 从侧栏「新会话」下方的「插件」入口管理内置 Git、文件和终端。支持列表/详情、搜索、真实启停和全局持久化；所有聊天空闲后才可切换。停用会关闭相关标签并阻止后端请求，停用终端需确认并结束此服务的全部终端。外部 Pi Web 插件展示运行时归属，仍通过「包与扩展」管理，不提供只隐藏 UI 的假开关。
-- 在设置面板中管理外观、Pi 软件包、扩展、技能和模型。模型页可添加模型、编辑显示名称、上下文窗口、最大输出 token 数和输入类型，或恢复内置模型的默认参数；配置写入 Pi 的 `models.json`。网页登录会自动打开提供方授权页；当回调无法到达 Pi 时，仍可手动粘贴授权码。已保存的提供方认证可在这里移除。凭据保留在 Pi 本地的 `auth.json`，不会返回给浏览器。
+**最新桌面测试版：[pi 0.1.24 · build 8](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.24-b8)。** 请按系统与芯片选择安装包：
 
-如果通过 Pi 终端手动输入 `/web`，该终端会话会与浏览器保持同步。使用启动器时，Pi 在后台运行。在其他工作区打开的会话使用 Pi SDK，并加载该工作区的技能和项目上下文；已启用的 Web 插件 Pi 入口会显式加载，其他普通 Pi 扩展仍与主会话隔离。
+| 平台 | 下载 |
+| --- | --- |
+| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) |
+| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) |
+| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) |
+| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage) |
 
-每个聊天独立运行：切换工作区、切换聊天或新建聊天时，原任务会继续在后台执行。切回后会恢复正在输出的内容、历史记录和待处理的插件交互。“停止”只影响当前选中的聊天。会话实例会保留到 Pi 服务停止；停止或重启服务会结束后台任务。
+[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/desktop-release.json)
 
-启动时会从 Pi 已保存的会话中发现工作区，因此先前在其他目录使用 Pi 的会话也会出现在侧边栏。工作区记录和附件继续存放在 Pi 现有的 `pi-web/` 数据目录下。从侧边栏移除工作区不会删除其文件或会话；移除后如需再次显示，可以手动添加。
+桌面应用名为 **pi**，自带 Node 和 Pi，无需另装运行时。支持复用兼容的 Web 服务、在浏览器中打开同一服务，以及退出时选择是否保留后台任务。模型凭据、Git/SSH 配置和项目工具链仍需自行准备。
 
-## 桌面端（可选）
+- **安装：** macOS 从 DMG 将 **pi.app** 拖入“应用程序”；Windows 运行 EXE；Linux 为 AppImage 添加执行权限后运行，不支持 FUSE 时可参考该版本发布说明中的替代方式。
+- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 8**。替换前先退出旧桌面，不要删除 `~/.pi`。
+- **测试版边界：** 当前为自愿参与的预发布测试包，不是具有发布者签名的稳定发行版。macOS 使用 ad-hoc 临时签名、未经过 Apple 公证，可能被 Gatekeeper 拦截；请按 [macOS 测试安装说明](docs/desktop-testing.md)核验，失败就停止。Windows/Linux 安装包未签名。不要全局关闭系统安全保护。桌面更新需手动安装；暂不包含 Windows ARM 和 Linux ARM。
 
-**[下载 pi 桌面测试版](https://github.com/chengzhiyi/pi-webapp/releases)** — 目前仅发布已验收的 macOS Apple 芯片（arm64）版本。在 `desktop-v...` 预发布版本中下载 DMG，核对 `SHA256SUMS` 后安装 **pi.app**，在“pi → 关于 pi”查看构建号。桌面构建 7 起使用完整 ad-hoc 临时签名，但没有发布者身份、未公证，macOS 仍可能拦截；请按[小范围测试安装说明](docs/desktop-testing.md)操作，不要全局关闭系统安全保护。旧测试包不会自动修复；Windows/Linux 暂不提供已验收的发行包。
+## 技术架构亮点
 
-同一套界面也可在名为 **pi** 的 Electron 桌面程序中使用，现有浏览器与 `/web` 方式保持不变。桌面包自带 Node/Pi，支持独立窗口、已有服务复用、在浏览器打开同一服务，以及退出时选择保留或停止后台任务。
+**一套 Agent 引擎，多种使用入口，插件化工作台。** Pi 负责模型执行、工具与会话持久化；pi-webapp 负责界面、会话编排与工作区工具。
 
-源码构建：`npm ci` → `npm run desktop:prepare` → `npm run desktop:start`。运行 `npm run desktop:package` 生成当前系统/架构的安装包，输出到 `desktop-release/`。当前本地验证目标为 macOS arm64；Windows/Linux 打包配置需在对应系统验证。无发布者签名的测试包仅支持校验下载后手动安装，不会自动安装更新。安装包文件名包含桌面构建号；“pi → 关于 pi”显示实际运行的构建号和应用位置。替换前先退出旧桌面，外部兼容 Web 后台无需停止；若替换桌面自有运行时，请先结束任务并停止该自有后台。
-
-详细说明见 [桌面端构建、测试与发布边界](docs/desktop.md)。
-
-## 本地开发
-
-```bash
-npm install
-npm run check
-npm run test
-npm run build
-npm run start
-npm run status
-npm run stop
+```mermaid
+flowchart TB
+  Browser["浏览器 · React 工作台"] --> Host["本地 Node 宿主 · HTTP + NDJSON"]
+  Desktop["Electron 桌面端 · 同一套 Web UI"] --> Host
+  Host --> Pi["Pi 扩展 / SDK · 模型、工具、会话"]
+  Host --> Plugins["插件注册表 · 文件 / 终端 / Git / Web 插件"]
 ```
 
-`npm run start` 会构建项目、在后台启动 Pi 并打开 Web 界面。修改扩展后，运行 `npm run stop`，再运行 `npm run start`；如果使用 `pi -e .` 开发，则在 Pi 中依次输入 `/reload` 和 `/web`。仅刷新旧的浏览器页面不会替换正在运行的连接桥接代码。
+| 设计 | 带来的价值 |
+| --- | --- |
+| **薄 Pi 适配层，独立宿主职责** | Agent 接入保持轻量，服务编排、浏览器 UI 与工作区能力各有归属，避免所有逻辑挤进单一扩展入口。 |
+| **类型化、可校验的跨端契约** | 浏览器只依赖传输 DTO，不直接耦合 Node/Pi 运行时对象；HTTP 动作与 NDJSON 事件明确划分命令和实时状态更新。 |
+| **能力插件化，而非页面堆叠** | Git、文件和终端分别拥有 server/client/contracts 与清理逻辑，由注册表分发请求；标签、停靠、专注模式和会话身份交给宿主工作台。 |
+| **面向生命周期的会话管理** | 离开聊天仍保留后台进度与待处理交互；切换聊天保留工具资源，关闭标签则释放对应资源。 |
+| **宿主边界上的操作保护** | 本地传输校验令牌与请求来源；文件预览限制工作区及符号链接范围；Git 写入拒绝过期状态，并协调同工作树的已知聊天。这些检查不等于操作系统沙箱。 |
+| **多入口复用同一套界面** | React + TypeScript 构建工作台，Vite/esbuild 完成打包，Electron 提供桌面外壳，无需另维护一套桌面对话 UI。 |
 
-与同级 `pi-extensions` 联调时，先在该目录运行 `pnpm install && pnpm build`，再运行 `pnpm dev`；在本项目设置 `PI_WEBAPP_PLUGIN_DEV_ROOTS=../pi-extensions/packages/plan-mode` 后执行 `npm run start`。浏览器资源变化后页面会刷新，Pi 入口变化后会等待代理空闲并重载扩展。完整步骤见 `pi-extensions/README.md`。
+源码导航：`src/adapters/pi/` → Pi 入口 · `src/host/` → 前后端宿主 · `src/plugins/builtin/` → 工作区能力 · `src/contracts/` → 跨端契约 · `web/src/ui/` → 共享 UI · `desktop/` → Electron 外壳。
 
-源码按职责组织：`src/adapters/pi/` 为薄 Pi 入口，`src/host/` 为前后端宿主，`src/plugins/builtin/` 分别集中 Git、文件和终端的 server/client/contract，`src/contracts/` 保存宿主跨端契约，`web/src/ui/` 保留共享 UI。详见[目录与插件管理说明](docs/architecture.md)。npm 软件包仅包含打包并压缩后的 JavaScript 扩展、构建后的 Web 资源、封面图片，以及英文和中文 README；不会发布 TypeScript 源码或 source map。代码压缩会增加阅读发布版本代码的难度，但不会对 JavaScript 加密。
+深入了解：[架构与职责划分](docs/architecture.md) · [Web 插件接入与生命周期](docs/web-plugins.md)。
 
-## 错误采集
+## 使用指南与开发
 
-前后端 Sentry 错误采集默认开启，使用内置公共 DSN，无需额外配置。在启动 Pi 的环境中设置 `PI_WEB_SENTRY_DSN` 可覆盖默认项目，使用 `PI_WEB_SENTRY_ENABLED=false` 关闭。默认只采集脱敏堆栈、操作轨迹和状态摘要，不采集对话、源码正文、附件内容或凭据，不启用界面录制。默认上报地址、独立前后端 DSN 和私有 sourcemap 上传步骤见 [Sentry 配置说明](docs/sentry.md)。
+- **新用户：** [首次对话](docs/zh/getting-started.md) · [会话管理](docs/zh/sessions.md) · [工作区工具](docs/zh/workspace-tools.md)
+- **配置与排错：** [模型、软件包与技能](docs/zh/configuration.md) · [版本更新](docs/zh/updates.md) · [常见问题](docs/zh/troubleshooting.md)
+- **参与开发：** [架构说明](docs/architecture.md) · [Web 插件](docs/web-plugins.md) · [桌面构建](docs/desktop.md)
 
-## 发布
+指南随源码演进，可能与你安装的版本不同；桌面端支持范围以上方已核实的下载链接及对应版本发布说明为准。
 
-CI 会先从 npm 解析 `@chengzhiyi/pi-web-protocol` 的已发布版本，再运行 `npm ci`。
-首次发布协议前，校验任务会将固定提交的 `pi-extensions` 检出到被忽略的 `.ci/`
-目录，构建协议并使用本地包，完整执行检查、测试与构建；Actions 摘要会说明
-宿主发布仍在等待协议初始化。正式发布始终要求准确的 npm 依赖，并将清单和
-锁文件变化同步回仓库。协议发布后可以在 Actions 手动运行工作流；协议发布
-不会主动触发这个仓库。
+### 本地开发
 
-`npm publish` 会运行检查、测试和生产构建。`pi-package` 关键词使发布到 npm 的软件包有资格进入 [Pi 软件包目录](https://pi.dev/packages)；目录更新可能晚于 npm。
+```bash
+npm ci
+npm run check
+npm test
+npm run build
+npm run start
+```
 
-GitHub Actions 会在针对 `main` 的拉取请求中运行 `check`、`test` 和 `build`。代码推送到 `main` 后会再次运行这些检查，根据源码版本和 npm `latest` 版本确定下一个补丁版本，先将更新后的 `package.json` 和 `package-lock.json` 提交回 `main`，再发布到 npm。版本同步提交使用工作流的 `GITHUB_TOKEN`，不会再次触发工作流。如需开始新的次版本或主版本，请在拉取请求中同步提高两个包文件的版本。每次发布也会将包内 `pi.image` 的地址更新为该版本。仓库必须允许工作流推送到 `main`，发布才能继续。
+`npm run start` 会构建并启动后台服务。修改扩展代码后，运行 `npm run stop` 再运行 `npm run start`；仅刷新网页不会替换桥接代码。使用 `pi -e .` 开发时，重新构建后在 Pi 中输入 `/reload`，再输入 `/web`。
 
-首次自动发布前，请在 npm 的 `pi-webapp` 包设置中配置 Trusted Publishing：GitHub 所有者为 `chengzhiyi`，仓库为 `pi-webapp`，工作流文件名为 `ci.yml`，不设置环境，并允许直接执行 `npm publish`。工作流通过 GitHub OIDC 认证，无需 npm token。`package.json` 中的仓库地址应与 GitHub 仓库保持一致。
+桌面开发：`npm run desktop:prepare` → `npm run desktop:start`；`npm run desktop:package` 在 `desktop-release/` 生成当前系统的安装包。可信本地插件联调可参考[插件说明](docs/web-plugins.md)中的 `PI_WEBAPP_PLUGIN_DEV_ROOTS`。
 
-## 许可证
+---
 
-MIT。详见 `LICENSE` 文件。
+**让下一次 Pi 任务，从一个可视化工作台开始：** 运行 `npx pi-webapp`，或[体验桌面测试版](#桌面端下载)。如果它让你的工作更顺手，欢迎 [Star 项目](https://github.com/chengzhiyi/pi-webapp)帮助更多人发现，也欢迎[提交反馈与可复现的问题](https://github.com/chengzhiyi/pi-webapp/issues)，一起完善工作流。
+
+基于 MIT 许可证开源。详见 [LICENSE](LICENSE)。

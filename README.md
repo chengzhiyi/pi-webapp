@@ -1,110 +1,145 @@
 # pi-webapp
 
-[简体中文](README.zh-CN.md)
+### Your Pi coding agent. A visual workspace to build with it.
 
-![pi-webapp cover](assets/cover-webapp.png)
+Bring conversations, project files, terminals, and Git into one interface—without giving up Pi's tools, skills, or terminal workflow. Run it in your browser, open a dedicated desktop window, or connect directly from an existing Pi session.
 
-**pi-webapp** opens the active Pi coding agent session in a local browser. Pi continues to run the agent, tools, and session storage; the browser provides a live interface for conversation and control.
+[简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-## Install and open
-
-Requires Node.js 22.19 or later. To open the web interface directly:
+![pi-webapp — conversation and coding workspace](assets/cover-webapp.png)
 
 ```bash
 npx pi-webapp
 ```
 
-This starts Pi in the background and opens the default browser on a local graphical desktop, leaving the terminal free. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` package with npm. An existing Pi installation must be version 0.87.1 or later. The launcher does not replace an older installation automatically. Running the launcher again reopens the existing server. Remote or headless sessions print the address instead; set `PI_WEBAPP_AUTO_OPEN=0` to disable automatic opening.
+**One command for the Web. A bundled runtime for desktop. The same Pi underneath.**
 
-In Settings → General → App updates, the web page checks npm for a newer `pi-webapp` release. When started by the background launcher from an npm package, **Update and restart** installs the verified release under Pi's `pi-web/releases/` data directory, restarts the server, and reloads the same browser address. Wait for any active reply to finish first. If the new version cannot start, the launcher restores the previous service. This works for both `npx` and global-command launches; later launches select the managed release automatically. It does not change the npm global installation. Source checkouts and `/web` pages opened from an existing Pi terminal show version information but cannot restart from the web page. If the service does not return, run `pi-webapp status` and check `~/.pi/agent/pi-web/launcher.log`.
+## Why pi-webapp?
 
-Use `npx pi-webapp status` to show the address and `npx pi-webapp stop` to stop the background service. After a global install, use `pi-webapp status` and `pi-webapp stop`.
+- **Keep your coding context together.** Follow the agent, inspect a file, run a command, and review a diff without leaving the workspace.
+- **Work across projects without interrupting tasks.** Chats run independently; switching projects or starting another conversation leaves existing work running in the background.
+- **See what the agent is doing.** Streaming replies, expandable reasoning and tool calls, token usage, and execution traces make progress easier to follow.
+- **Build on Pi, not around it.** Keep Pi's session storage, model choices, skills, and extension ecosystem. The interface adds a workbench, not a replacement agent engine.
 
-You can also install the launcher globally:
+## Core features
+
+| Capability | What you can do |
+| --- | --- |
+| **Live agent conversations** | Send messages and image/file attachments; pause and continue tasks; switch models and thinking levels. Render Markdown, code, reasoning, and tool results in context. |
+| **Multi-project sessions** | Discover saved Pi sessions, add workspaces, and switch between independently running chats. Return to ongoing output and pending plugin interactions. |
+| **Files beside the conversation** | Browse the workspace, follow file links from chat, and preview highlighted code, Markdown, and images in read-only tabs. |
+| **Real integrated terminals** | Run interactive shells in the workspace, use Ctrl+C, and keep processes and output when switching chats or panels. |
+| **Git review and workflow** | Review changes and inline diffs, stage/unstage files, commit the staged index, create/switch local branches, and explore commit history with a branch graph. |
+| **A flexible workbench** | Resize, split, or expand tool panels; use workspace focus mode while keeping navigation within reach. Each chat retains its own tool tabs until the page reloads. |
+| **Models, skills, and plugins** | Configure providers and models, manage Pi packages/extensions/skills, and toggle bundled Files, Terminal, and Git capabilities. Supported Web plugins can add their own UI. |
+| **Browser and desktop entry points** | Use the background launcher, open `/web` from Pi's terminal, or launch the Electron desktop app with bundled Node/Pi. |
+
+> Chats run independently, but files and Git changes in the same worktree are shared. Switching chats does not stop work; stopping the service ends its background tasks. Terminals and agent tools run with your system permissions, not in a sandbox.
+
+## Get started
+
+### Web: run one command
+
+Requires **Node.js 22.19+** and npm. Run in your project directory:
 
 ```bash
-npm install -g pi-webapp
-pi-webapp
+npx pi-webapp
 ```
 
-To use the extension inside an existing Pi terminal, the original workflow remains available:
+The launcher starts Pi in the background and opens your browser on a local graphical desktop. If Pi is missing, it installs the official `@earendil-works/pi-coding-agent` package. An existing Pi installation must be **0.87.1+**; older installations are not replaced automatically. Running the command again reopens the existing service. Headless sessions print the local address instead; `PI_WEBAPP_AUTO_OPEN=0` disables automatic opening.
+
+1. Open **Settings → Models** to configure a provider and choose a model you have access to.
+2. Select or add a workspace, then start a conversation.
+3. Open the conversation's upper-right tool panel to explore **Files**, **Terminal**, or **Git changes** alongside the agent.
+
+Model access is required separately; a local interface does not mean offline inference. Keep token-bearing local URLs private and do not expose the service directly to the public internet.
+
+```bash
+npx pi-webapp status   # Show the running service address
+npx pi-webapp stop     # Stop the service after active work finishes
+```
+
+Prefer a global command? Run `npm install -g pi-webapp`, then `pi-webapp`.
+
+**Updates:** npm-launcher installations support **Settings → General → App updates → Update and restart**, with rollback if the new service fails to start. Finish active work first. Source checkouts and terminal `/web` sessions show version information but cannot restart from the page. See the [update guide](docs/en/updates.md).
+
+### Already using Pi in a terminal?
 
 ```bash
 pi install npm:pi-webapp
 pi
 ```
 
-In Pi, enter `/web` to open the interface in your default browser. Pi also prints the local URL for remote or headless environments. The URL contains a random token valid only for the current Pi process. Enter `/web` again to reopen it.
+Enter **`/web`** inside Pi. The browser stays synchronized with that terminal session; Pi continues to own the agent, tools, and session storage. Exiting that Pi process ends its service.
 
-## Features
+## Desktop downloads
 
-- View the current conversation with Markdown, streaming output, expandable reasoning and tool calls, token usage, and a turn-by-turn trace.
-- Send messages, pause and continue a run, start a new Pi session, and change the current model or thinking level. The bottom-right control pauses an active run; an empty composer offers Continue after pausing, including after refreshing or reopening the session. Continue uses an internal control action without adding a user message; the model makes a new request based on existing progress, and plan mode still requires fresh approval.
-- Browse workspaces and saved sessions. Add a workspace with the native directory picker when available, or use the built-in directory browser over SSH.
-- Open the right sidebar from the permanent control in the conversation’s upper-right corner. Choose **Workspace files** to browse the current session’s directory tree and open read-only file tabs. Workspace-relative and in-workspace absolute file links in the conversation also open these previews; external URLs still open in a new tab. Previews support highlighted code with line numbers, Markdown with preview/source modes, and PNG/JPEG/GIF/WebP images with a lightbox. The sidebar supports resizing, split panes, fullscreen, and plugin content. Switching chats retains their tabs and expanded directories until the page reloads. Manually reload listings or previews as needed. Listings show up to 1,000 entries per directory; text previews allow up to 512 KB / 10,000 lines, and images up to 8 MB. HTML/SVG remain source text; unsupported binary files show a notice. Reads, including resolved symlink targets, stay within the current session’s workspace.
-- Choose **Open terminal** on the right sidebar’s start page to launch the default shell in the current session’s workspace. Supports interactive input, streaming output, Ctrl+C, resizing, split panes, and fullscreen. Tab changes, sidebar collapse, and chat switches retain the process, environment, and screen. Short disconnects reconnect automatically without replaying uncertain input. Closing a tab or stopping the service reaps its process; disconnected browsers have a five-minute retention window. Page reloads reset tabs, and processes do not survive service restarts. Limits: 8 terminals per session, 32 per service, and 2,000 scrollback rows. Shells run with the Pi user’s system permissions; the workspace is their initial directory, not a shell sandbox.
-- Choose **Git changes** on the right sidebar’s start page to review the current branch, commit, locally recorded upstream divergence, and staged, unstaged, untracked, or conflicted files. Click a file to preview its read-only unified diff inside the Git panel, keeping the file list visible and the tab count unchanged. Lists and diffs scroll independently; narrow panes stack them and panes at least 720 px wide place them side by side. The selected file is highlighted and retained with its Git tab, follows staging changes, and clears when the file is no longer changed. Close the preview to restore the full list. Diffs hide raw Git headers, show old/new line numbers and addition/deletion counts, and offer previous/next navigation between contiguous change blocks with a position counter. File-mode changes and missing final newlines retain compact notices. Reads stay within the session’s directory, including when it is a repository subdirectory; linked worktrees and repositories without commits are supported. Visible Git tabs refresh after agent state changes, on focus, and every five seconds; hidden tabs stop polling. Requires Git on the machine running Pi. Lists show up to 1,000 files and diffs up to 512 KB / 10,000 lines. Binary files, submodules and unresolved conflicts show notices. Changes belong to the shared working tree, not exclusively to one chat; working-file and historical diffs remain read-only.
-- In **Git changes → Changes**, use each file’s **+ / −** button to stage or unstage it, use the fixed bottom composer to commit only the staged index (Ctrl/Cmd+Enter is supported), and click the branch name to search/switch local branches or open **New branch**. The file list scrolls independently; full repository metadata is available on the short repository name’s tooltip. Drafts stay with each chat’s Git tab. Commits and branch switches require a root workspace; switching also requires a clean working tree, including untracked files. Writes require all known chats using the worktree to be idle, reject stale snapshots, and honor Git hooks/signing. Conflicts, active Git operations, locks and occupied worktree branches block incompatible writes. Failed or unconfirmed operations retain drafts and never retry automatically. Changes are shared by chats using the same worktree. No fetch/push, forced switch, stash or discard is performed.
-- In **Git changes → History**, browse commits alongside their branch/merge graph, with HEAD, local branch, remote-tracking branch and tag labels. Load history 50 commits at a time; a ref change resets pagination to prevent mixed histories. Open commit details for the full message, author/committer, timestamps, parents and changed files, then preview a read-only file diff alongside the same commit file list without opening another tab. Merge details let you select the parent to compare against; root commits compare against an empty tree. The graph shows repository-wide metadata while commit files and diffs stay within the session directory. Graph selection and loaded history remain with each chat’s Git tab until the page reloads. Remote labels use local refs without fetching.
-- Attach up to 20 files of 20 MB each by selecting, dropping, or pasting them. Images show previews and are also sent as Pi image content.
-- Open Plugins directly below New session in the sidebar to inspect and switch the bundled Git, Files and Terminal capabilities. Switches are global, persist locally, and require every chat to be idle. Disabling closes related tabs and blocks backend requests; Terminal asks for confirmation before ending all service-owned terminals. External Pi Web runtimes remain managed through Packages & extensions rather than a misleading UI-only switch.
-- Manage appearance, Pi packages, extensions, skills, and models from the settings panel. The Models page can add models, edit display names, context windows, output limits, and input types, and restore built-in defaults; changes are saved to Pi's `models.json`. Browser sign-in opens the provider's authorization page automatically; manual code entry remains available when a callback cannot reach Pi. Stored provider credentials can also be removed there. Credentials stay in Pi's local `auth.json` and are never returned to the browser.
+**Latest desktop test release: [pi 0.1.24 · build 8](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.24-b8).** Download the installer for your operating system and CPU:
 
-If you enter `/web` manually in a Pi terminal, that terminal session stays synchronized with the browser. With the launcher, Pi runs in the background. Sessions opened in other workspaces use the Pi SDK and load that workspace's skills and project context. They load enabled Web plugin Pi entries explicitly while keeping other Pi extensions isolated from the parent bridge.
+| Platform | Download |
+| --- | --- |
+| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) |
+| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) |
+| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) |
+| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage) |
 
-Chats run independently: switching workspaces or chats, or creating a new chat, leaves existing tasks running in the background. Returning to a chat restores its running output, history, and pending plugin interactions. Stop affects only the selected chat. Sessions remain in memory until the Pi service stops; stopping or restarting the service ends background tasks.
+[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/desktop-release.json)
 
-On startup, the app discovers workspaces from Pi's saved sessions, so conversations from other directories appear in the sidebar. Workspace records and attachments stay under Pi's existing `pi-web/` data directory. Removing a workspace from the sidebar does not delete its files or sessions; you can add it again manually.
+The **pi** desktop app bundles Node and Pi—no separate runtime installation needed. It can reuse a compatible Web service, open the same service in your browser, and let you choose whether background tasks continue after closing the app. Bring your own model credentials, Git/SSH setup, and project toolchains.
 
-## Optional desktop application
+- **Install:** macOS: drag **pi.app** from the DMG into Applications. Windows: run the EXE installer. Linux: make the AppImage executable and run it; see the release notes for the FUSE alternative.
+- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 8** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
+- **Test-release limits:** these are opt-in prereleases, not publisher-signed stable distributions. macOS uses ad-hoc signatures without Apple notarization and may be blocked by Gatekeeper; follow the [macOS test installation guide](docs/desktop-testing.md) and stop if verification fails. Windows/Linux packages are unsigned. Never disable system security globally. Desktop updates require manual installation; Windows ARM and Linux ARM are not included.
 
-**[Download pi desktop test releases](https://github.com/chengzhiyi/pi-webapp/releases)** — macOS Apple Silicon (arm64) only for now. Download the DMG from a `desktop-v...` prerelease; compare `SHA256SUMS`, install **pi.app**, and check the build in **pi → 关于 pi**. From desktop build 7, macOS packages are fully ad-hoc signed but have no publisher identity or notarization; Gatekeeper may still block them. Follow the [small-group test installation guide](docs/desktop-testing.md), never disable macOS security globally. Old downloads are not retroactively fixed. Windows/Linux are not yet validated release downloads.
+## Architecture highlights
 
-The same UI can run in the **pi** Electron desktop application while the browser and `/web` entry points remain available. Desktop packages include Node/Pi, reuse compatible running services, and let you open the same service in a browser or choose whether to keep background tasks running on exit.
+**One agent engine, multiple interfaces, and a plugin-oriented workbench.** Pi handles model execution, tools, and session persistence; pi-webapp handles presentation, session orchestration, and workspace tools.
 
-From source: `npm ci` → `npm run desktop:prepare` → `npm run desktop:start`. Run `npm run desktop:package` to create a host-native installer under `desktop-release/`. Local QA targets macOS arm64; Windows/Linux configurations need verification on their respective systems. Test packages without a publisher signature support checked downloads and manual installation only, not automatic installation. Installers include a desktop build number; check **pi → 关于 pi** for the running build and executable location. Quit the old desktop before replacing it; an external compatible Web backend need not be stopped. Finish tasks and stop an owned runtime before replacing that runtime.
-
-See [desktop build, testing and release boundaries](docs/desktop.md).
-
-## Develop locally
-
-```bash
-npm install
-npm run check
-npm run test
-npm run build
-npm run start
-npm run status
-npm run stop
+```mermaid
+flowchart TB
+  Browser["Browser · React workbench"] --> Host["Local Node host · HTTP + NDJSON"]
+  Desktop["Electron desktop · same Web UI"] --> Host
+  Host --> Pi["Pi extension / SDK · models, tools, sessions"]
+  Host --> Plugins["Plugin registry · Files / Terminal / Git / Web plugins"]
 ```
 
-`npm run start` builds the project, starts Pi in the background, and opens the web interface. After editing the extension, run `npm run stop` followed by `npm run start`. If you develop with `pi -e .`, enter `/reload` and `/web` in Pi after rebuilding. Refreshing an old browser page alone does not replace the running bridge.
+| Design choice | Why it matters |
+| --- | --- |
+| **Thin Pi adapter, separate host** | Agent integration stays small; server orchestration, browser UI, and workspace capabilities have explicit ownership instead of growing inside one extension entry point. |
+| **Typed, validated cross-boundary contracts** | Browser code uses wire DTOs rather than Node/Pi runtime objects. HTTP actions and NDJSON events keep commands and live state updates explicit. |
+| **Plugin-owned capabilities** | Built-in Git, Files, and Terminal each own their server/client/contracts and cleanup. A registry dispatches requests; the host workbench manages tabs, docking, focus, and session identity. |
+| **Lifecycle-aware sessions** | Background sessions retain progress and pending interactions when you navigate away. Switching a chat preserves tool resources; closing a tab disposes its resource. |
+| **Guardrails at the host boundary** | Loopback transport uses token/origin checks; file previews enforce workspace and symlink boundaries. Git writes reject stale state and coordinate known chats sharing the worktree. These checks are not an OS sandbox. |
+| **One UI across entry points** | React + TypeScript power the workbench, Vite/esbuild bundle the app, and Electron provides the desktop shell without a separate conversation UI. |
 
-For local Web plugin development with the sibling `pi-extensions` workspace, follow its `README.md`. Set `PI_WEBAPP_PLUGIN_DEV_ROOTS=../pi-extensions/packages/plan-mode` when starting this app; browser asset changes refresh automatically and Pi entry changes trigger a safe reload when the agent is idle.
+Source layout: `src/adapters/pi/` → Pi entry · `src/host/` → server/browser host · `src/plugins/builtin/` → workspace capabilities · `src/contracts/` → cross-boundary contracts · `web/src/ui/` → shared UI · `desktop/` → Electron shell.
 
-Source ownership is split across `src/adapters/pi/` (the thin Pi entry), `src/host/` (server and browser host), `src/plugins/builtin/` (Git, Files and Terminal, each with server/client/contracts), `src/contracts/`, and shared UI in `web/src/ui/`. See [architecture and plugin management](docs/architecture.md). The npm package contains only the bundled, minified JavaScript extension, built web assets, cover image, and the English and Chinese READMEs. No TypeScript source or source maps are published. Minification makes the shipped code harder to read; it does not encrypt JavaScript.
+Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin integration notes](docs/web-plugins.md) for lifecycle and extension details.
 
-## Error collection
+## Guides & development
 
-Frontend and extension Sentry error reporting is enabled by default with the built-in public DSN. Set `PI_WEB_SENTRY_DSN` in the Pi process environment to use another project, or `PI_WEB_SENTRY_ENABLED=false` to disable reporting. Collection is limited to sanitized stacks, semantic breadcrumbs and state summaries; conversations, source contents, attachments, credentials and session recordings are excluded. See [Sentry configuration](docs/sentry.md) for the default destination, separate destinations, limits and private source-map uploads.
+- **New users:** [First conversation](docs/en/getting-started.md) · [Sessions](docs/en/sessions.md) · [Workspace tools](docs/en/workspace-tools.md)
+- **Configuration:** [Models, packages, and skills](docs/en/configuration.md) · [Updates](docs/en/updates.md) · [Troubleshooting](docs/en/troubleshooting.md)
+- **Contributors:** [Architecture](docs/architecture.md) · [Web plugins](docs/web-plugins.md) · [Desktop builds](docs/desktop.md)
 
-## Publish
+The guides follow the source tree; installed versions may differ. For desktop availability, use the verified release links above and their release notes.
 
-CI resolves the published `@chengzhiyi/pi-web-protocol` version before `npm ci`.
-Until the first protocol publication, verification builds a pinned `pi-extensions`
-commit in an ignored `.ci/` checkout and uses that local package. Checks, tests,
-and builds still run; the Actions summary explains why host publication is waiting.
-Release builds always require the published npm dependency. Once it exists, the
-next workflow uses its exact version and the release commit records the lockfile.
-Use Actions' manual run after initializing npm; protocol releases do not trigger
-this repository automatically.
+### Develop locally
 
-`npm publish` runs the checks, tests, and production build. The `pi-package` keyword makes the published npm package eligible for the [Pi package catalog](https://pi.dev/packages); catalog updates may lag behind npm.
+```bash
+npm ci
+npm run check
+npm test
+npm run build
+npm run start
+```
 
-GitHub Actions runs `check`, `test`, and `build` on pull requests to `main`. A push to `main` repeats those checks, chooses the next patch version from the source version and npm `latest`, then commits the updated `package.json` and `package-lock.json` to `main` before publishing. The release commit uses the workflow's `GITHUB_TOKEN` and does not start another workflow run. To start a new minor or major series, raise the version in both package files in the pull request. Each release also updates the package's `pi.image` URL to its own version. The repository must allow the workflow to push to `main` for publishing to proceed.
+`npm run start` builds and launches the background service. After changing extension code, run `npm run stop` and `npm run start`; reloading the browser alone does not replace the bridge. With `pi -e .`, rebuild and enter `/reload`, then `/web` in Pi.
 
-Before the first automated release, configure npm Trusted Publishing for the `pi-webapp` package: GitHub owner `chengzhiyi`, repository `pi-webapp`, workflow filename `ci.yml`, no environment, and allow direct `npm publish`. This workflow uses GitHub's OIDC identity and does not need an npm token. Keep the package's repository URL in `package.json` aligned with the GitHub repository.
+For desktop development: `npm run desktop:prepare` → `npm run desktop:start`. `npm run desktop:package` creates a host-native installer in `desktop-release/`. For trusted local plugin development, see `PI_WEBAPP_PLUGIN_DEV_ROOTS` in the [plugin notes](docs/web-plugins.md).
 
-## License
+---
 
-MIT. See the `LICENSE` file.
+**Give your next Pi task a visual workspace:** run `npx pi-webapp` or [try the desktop test build](#desktop-downloads). If it helps your workflow, a [GitHub star](https://github.com/chengzhiyi/pi-webapp) helps others discover it; [feedback and reproducible issues](https://github.com/chengzhiyi/pi-webapp/issues) help shape what comes next.
+
+MIT licensed. See [LICENSE](LICENSE).
