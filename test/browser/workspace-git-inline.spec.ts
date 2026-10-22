@@ -50,8 +50,11 @@ for (const width of [1440, 768, 390, 320]) test(`inline Git diff keeps files, se
     }
     if (width === 1440) {
       await panel.getByRole("button", { name: "Fullscreen", exact: true }).click();
-      const listWide = await files.boundingBox(); const previewWide = await preview.boundingBox();
-      expect(previewWide!.x).toBeGreaterThanOrEqual(listWide!.x + listWide!.width - 1);
+      // Focus mode resizes the panel; wait for ResizeObserver and layout to settle.
+      await expect.poll(async () => {
+        const listWide = await files.boundingBox(); const previewWide = await preview.boundingBox();
+        return Boolean(listWide && previewWide && previewWide.x >= listWide.x + listWide.width - 1);
+      }).toBe(true);
       await panel.screenshot({ path: testInfo.outputPath("inline-wide.png") });
       await panel.getByRole("button", { name: "Exit fullscreen", exact: true }).click();
     }

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish the verified macOS arm64 TEST installer to GitHub Releases"
+        description: "Publish all four verified platform installers (unsigned test release)"
         type: boolean
         default: false
 
@@ -19,15 +19,33 @@ concurrency:
 
 jobs:
   build:
-    # Standard Apple Silicon runner; do not silently package Intel binaries as arm64.
-    runs-on: macos-15
-    timeout-minutes: 30
-    outputs:
-      commit: ${{ steps.assets.outputs.commit }}
-      tag: ${{ steps.assets.outputs.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac-arm64
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+          - target: mac-x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - target: win-x64
+            runner: windows-2022
+            platform: win32
+            arch: x64
+          - target: linux-x64
+            runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     env:
       PI_WEB_SENTRY_ENABLED: "false"
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      DESKTOP_EXPECTED_PLATFORM: ${{ matrix.platform }}
+      DESKTOP_EXPECTED_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,29 +55,73 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - name: Require native Apple Silicon
-        run: node -e "if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('Expected native macOS arm64 runner')"
-      - name: Validate release tag and immutable source before building
+      - name: Require the native target architecture
+        run: node -e "if(process.platform!==process.env.DESKTOP_EXPECTED_PLATFORM||process.arch!==process.env.DESKTOP_EXPECTED_ARCH) throw Error('Wrong native runner')"
+      - name: Validate release tag and immutable source
+        shell: bash
         run: |
           export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
           node scripts/desktop-release.mjs --check-source
-      - name: Install exactly the committed dependencies
-        run: npm ci
+      - run: npm ci
       - run: npm run check
-      - run: npm run test:desktop
       - run: npm run desktop:prepare
+      - name: Full SDK and POSIX integration suite
+        if: runner.os != 'Windows'
+        run: npm test
+      - name: Windows portable SDK, launcher and runtime boundaries
+        if: runner.os == 'Windows'
+        run: node --import ./test/setup-env.mjs --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/bridge-contract.test.ts test/desktop-download-entry.test.ts test/windows-pty.test.ts
+      - name: Windows desktop and release invariants
+        if: runner.os == 'Windows'
+        run: npm run test:desktop
       - run: npm run desktop:package
-      - run: npx playwright install chromium
-      - name: Verify the packaged app, shared browser and cleanup
+      - run: npx playwright install --with-deps chromium
+      - name: Mount the generated DMG read-only
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          files=(desktop-release/*.dmg)
+          test "${#files[@]}" -eq 1
+          mkdir -p "$RUNNER_TEMP/pi-dmg"
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/pi-dmg" "${files[0]}"
+          echo "PI_WEB_DESKTOP_EXECUTABLE=$RUNNER_TEMP/pi-dmg/pi.app/Contents/MacOS/pi" >> "$GITHUB_ENV"
+      - name: Install the generated Windows installer silently on this disposable runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem desktop-release/*.exe)
+          if ($files.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          $destination = Join-Path $env:RUNNER_TEMP 'pi-installed'
+          $installer = Start-Process -FilePath $files[0].FullName -ArgumentList @('/S', "/D=$destination") -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
+          if (-not (Test-Path "$destination/pi.exe")) { throw 'Installed pi.exe is missing' }
+          "PI_WEB_DESKTOP_EXECUTABLE=$destination/pi.exe" >> $env:GITHUB_ENV
+      - name: Extract the generated AppImage without requiring FUSE
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          files=("$GITHUB_WORKSPACE"/desktop-release/*.AppImage)
+          test "${#files[@]}" -eq 1
+          mkdir -p "$RUNNER_TEMP/pi-appimage"
+          cd "$RUNNER_TEMP/pi-appimage"
+          "${files[0]}" --appimage-extract
+          echo "PI_WEB_DESKTOP_EXECUTABLE=$RUNNER_TEMP/pi-appimage/squashfs-root/AppRun" >> "$GITHUB_ENV"
+      - name: Smoke the actual installed/mounted installer payload
+        timeout-minutes: 6
+        if: runner.os != 'Linux'
         run: npm run desktop:smoke -- --packaged
-      - name: Prepare checksummed assets and verify version, build, source and smoke gates
-        id: assets
+      - name: Smoke the AppImage payload in a virtual display
+        timeout-minutes: 6
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run desktop:smoke -- --packaged
+      - name: Prepare per-target checksummed and smoke-gated assets
+        shell: bash
         run: |
           export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
           node scripts/desktop-release.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: verified-desktop-macos-arm64
+          name: verified-desktop-${{ matrix.target }}
           path: .desktop/release-assets/*
           include-hidden-files: true
           if-no-files-found: error
@@ -67,34 +129,67 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: desktop-smoke-evidence
+          name: desktop-smoke-evidence-${{ matrix.target }}
           path: artifacts/desktop/
           if-no-files-found: ignore
           retention-days: 14
+      - name: Unmount only this runner's test DMG
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: hdiutil detach "$RUNNER_TEMP/pi-dmg" || true
 
-  publish:
-    if: github.event_name == 'push' || inputs.publish
+  assemble:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only this job can create tags/releases; no npm install or app code execution here.
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.build.outputs.commit }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
       - uses: actions/download-artifact@v4
         with:
-          name: verified-desktop-macos-arm64
+          pattern: verified-desktop-*
+          path: .desktop/incoming
+          merge-multiple: false
+      - name: Require all four matching native targets and assemble the release
+        shell: bash
+        run: |
+          export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          node scripts/desktop-release.mjs --assemble
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-desktop-bundle
+          path: .desktop/release-assets/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'push' || inputs.publish
+    needs: assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-desktop-bundle
           path: .desktop/release-assets
-      - name: Verify downloads before making the draft publicly visible
-        id: release
+      - name: Download-verify every draft asset before making the prerelease public
         env:
           GH_TOKEN: ${{ github.token }}
-          DESKTOP_SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
-        run: node scripts/publish-desktop-release.mjs
+        run: |
+          export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          node scripts/publish-desktop-release.mjs

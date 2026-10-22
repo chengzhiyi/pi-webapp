@@ -45,6 +45,8 @@ test('Chinese and English local search, keyboard open/select/escape', async ({ p
   await search.press('Escape');
   await expect(search).not.toBeVisible();
   await page.goto('./en/');
+  // SSR already exposes the button before Vue installs its keyboard listener.
+  await page.waitForFunction(() => Boolean((document.querySelector('#app') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
   await page.keyboard.press('Control+k');
   await expect(search).toBeVisible();
   await search.fill('recovery');

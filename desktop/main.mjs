@@ -23,6 +23,7 @@ let window;
 let backend;
 let backendUrl;
 let updater;
+let bundledPiVersion = "unknown";
 let quitting = false;
 let askingQuit = false;
 let startup = true;
@@ -101,7 +102,7 @@ function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: appName, submenu: [
       { label: `关于 ${appName}`, click: () => dialog.showMessageBox({ type: "info", message: appName,
-        detail: `版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n桌面版与 Web 共用界面和后端。请通过“检查桌面更新”获取桌面安装包。` }) },
+        detail: `版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n桌面版与 Web 共用界面和后端。请通过“检查桌面更新”获取桌面安装包。` }) },
       { label: "检查桌面更新…", click: () => { if (!startup) void updater?.run(); } },
       { label: "取消桌面更新下载", click: () => updater?.cancelDownload() },
       { type: "separator" }, { label: "退出…", accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
@@ -146,6 +147,7 @@ else {
       : fileURLToPath(new URL("../.desktop/runtime", import.meta.url));
     const packageRoot = join(runtime, "backend");
     const pkg = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+    bundledPiVersion = pkg.dependencies["@earendil-works/pi-coding-agent"];
     const nodeRoot = join(runtime, "node");
     const node = process.platform === "win32" ? join(nodeRoot, "node.exe") : join(nodeRoot, "bin", "node");
     const npmCli = join(nodeRoot, process.platform === "win32" ? "node_modules" : "lib/node_modules", "npm", "bin", "npm-cli.js");

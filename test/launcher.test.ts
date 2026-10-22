@@ -21,7 +21,7 @@ function run(args: string[], env: NodeJS.ProcessEnv) {
 }
 
 interface LifecycleRecord {
-  event: string; timestamp: string; instanceId: string; reason?: string;
+  event: string; timestamp: string; instanceId: string; reason?: string; stage?: string;
   ready?: boolean; signal?: string | null; exitCode?: number | null;
   uptimeMs: number; port?: number | null; forceStopRequested?: boolean;
 }
@@ -90,7 +90,7 @@ test("launcher starts Pi RPC in the background and stops it cleanly", { skip: pr
   const rpcInput = join(directory, "rpc-input");
   const rpcQuery = join(directory, "rpc-query");
   const opened = join(directory, "opened");
-  const env = { ...process.env, PATH: directory, DISPLAY: ":0", SSH_CONNECTION: undefined, SSH_TTY: undefined, SSH_CLIENT: undefined, PI_WEBAPP_AUTO_OPEN: "1", PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: argsFile, PI_TEST_RPC_QUERY: rpcQuery, PI_TEST_RPC_INPUT: rpcInput, PI_TEST_WEB_NAME: "web:1", PI_TEST_OPENED: opened };
+  const env = { ...process.env, PATH: directory, DISPLAY: ":0", SSH_CONNECTION: undefined, SSH_TTY: undefined, SSH_CLIENT: undefined, PI_WEBAPP_AUTO_OPEN: "1", PI_CODING_AGENT_DIR: join(directory, "agent"), PI_TEST_ARGS: argsFile, PI_TEST_RPC_QUERY: rpcQuery, PI_TEST_RPC_INPUT: rpcInput, PI_TEST_WEB_NAME: "web:1", PI_TEST_OPENED: opened, PI_WEBAPP_STARTUP_TRACE: "1" };
   try {
     await fakePi(join(directory, "pi"));
     const opener = join(directory, process.platform === "darwin" ? "open" : "xdg-open");
@@ -115,6 +115,8 @@ test("launcher starts Pi RPC in the background and stops it cleanly", { skip: pr
     assert.equal(stopped.status, 0, stopped.stderr);
     await assert.rejects(readFile(statePath));
     const records = await lifecycleLog(join(directory, "agent"));
+    assert.deepEqual(records.filter(record => record.event === "launcher_startup_stage").map(record => record.stage),
+      ["waiting-command-list", "first-rpc-output", "command-list-response", "opening-web-command", "web-ready-notification"]);
     const ready = records.filter(record => record.event === "launcher_ready");
     assert.equal(ready.length, 1, "opening the running service must not create a new lifecycle");
     assert.equal(ready[0]!.port, 12345);

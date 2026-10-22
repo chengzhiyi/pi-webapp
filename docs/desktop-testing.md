@@ -1,6 +1,6 @@
 # macOS 小范围测试安装 / Small-group test installation
 
-适用于 **desktop build 7 起、采用新签名流程构建**的 macOS Apple Silicon 测试包。
+适用于 **desktop build 7 起、采用新签名流程构建**的 macOS Apple Silicon / Intel 测试包。
 旧包不会因源码更新而自动修复；请安装新构建，不要覆盖发布过的同名安装包。
 
 ## 这些测试包能保证什么？
@@ -11,7 +11,8 @@
   Gatekeeper 仍可能拦截；`spctl --assess` 拒绝此包是预期限制，不等于打包签名校验失败。
 - SHA-256 只核对发行文件；临时签名只检查包是否符合当前签名，不验证开发者身份，
   二者都不能证明软件安全。只邀请明确知情、愿意信任项目的测试用户。
-- 桌面更新可下载、校验并交给 Finder 手动安装；不会自动安装 ad-hoc 测试包。
+- 桌面更新菜单可下载、校验并交给 Finder 手动安装 macOS arm64 测试包；不会自动安装 ad-hoc 包。
+  Intel macOS、Windows/Linux 的更新菜单打开官方 Releases，选择匹配的安装包。
 
 ## 测试用户安装步骤
 
@@ -19,8 +20,8 @@
    下载明确邀请测试的构建 DMG 和同一 Release 的 `SHA256SUMS`。
    不要使用转发的未知安装包、源码 ZIP 或不匹配版本的校验文件。
 2. 在终端运行 `shasum -a 256 <下载的DMG路径>`，与 `SHA256SUMS` 中该 DMG 的一行比较。
-   不一致就停止，不要关闭系统保护。若还下载了 ZIP，可在同目录运行
-   `shasum -a 256 -c SHA256SUMS`；只下载 DMG 时不要因缺少 ZIP 而误判其校验结果。
+   不一致就停止，不要关闭系统保护。`SHA256SUMS` 含四平台安装包；只下载一个 DMG 时，
+   逐行比较该文件即可，不要因未下载其他平台文件而误判其校验结果。
 3. 退出旧桌面再替换应用。先完成所有聊天/终端任务；若旧桌面使用内置后台，
    从其原入口停止该后台再替换。不要停止仍需使用的外部 Web 后台，也不要删除 `~/.pi`。
    打开 DMG，把 **pi.app** 拖入“应用程序”。旧 **Pi Webapp.app** 不会自动被覆盖，
@@ -62,7 +63,8 @@ Web 版，或从可信源码构建运行，不必购买开发者会员。
 - `npm run desktop:package` 与发布准备均拒绝未封装资源或签名校验失败的应用。
   `desktop-release.json` 的 `signing` 记录 `type` 和 `verified`；兼容字段 `unsigned: true`
   表示**没有发布者身份**，即使 ad-hoc 完整性校验通过也保持为 true。
-- 打包命令还会只读挂载 DMG、解压 ZIP，自动校验两者内实际应用的 deep/strict 签名。
+- 打包命令还会只读挂载 DMG、解压 ZIP，自动校验其中实际应用的 deep/strict 签名。
+  四平台发布清单可包含 macOS arm64 的可选更新 ZIP；没有发布者身份时仍只走 DMG 手动安装。
   执行 packaged smoke（含 PTY/浏览器共享后台）。
   这些检查不能替代“浏览器下载 → Finder 安装 → 用户明确同意”的隔离场景人工验收。
 - 每次交付递增 `desktop/release.json` 的构建号、重新生成校验和。

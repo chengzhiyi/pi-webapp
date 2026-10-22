@@ -61,6 +61,34 @@ test("manifest mismatches, traversal, wrong publisher/arch/asset and oversized u
   assert.throws(() => validateManifest(manifest, release, "arm64"));
 });
 
+test("schema-2 releases select the source-bound macOS receipt without trusting aggregate signing state", async () => {
+  const { manifest: target, release } = fixtureManifest();
+  target.target = "mac-arm64";
+  const bundle = { ...target, schemaVersion: 2, unsigned: true, targets: [target], assets: [{ ...target.asset }, { ...target.updateAsset }] };
+  const selected = validateManifest(bundle, release, "arm64");
+  assert.equal(selected.schemaVersion, 1);
+  assert.equal(selected.unsigned, false, "publisher identity comes from the verified target, not the aggregate");
+  assert.equal(selected.asset.name, target.asset.name);
+  assert.ok(Object.isFrozen(selected));
+  const discovered = await checkDesktopRelease({ version: "0.1.20", build: 6 }, {
+    arch: "arm64", fetchRequest: async url => json(url.includes("api.github.com") ? [release] : bundle),
+  });
+  assert.equal(discovered.updateAsset.name, target.updateAsset.name);
+  for (const change of [
+    value => value.targets.push(structuredClone(value.targets[0])),
+    value => value.targets[0].sourceCommit = "b".repeat(40),
+    value => value.targets[0].arch = "x64",
+    value => value.assets[0].sha256 = "f".repeat(64),
+    value => value.assets.pop(),
+  ]) {
+    const broken = structuredClone(bundle); change(broken);
+    assert.throws(() => validateManifest(broken, release, "arm64"));
+  }
+  const dmgOnly = structuredClone(bundle);
+  delete dmgOnly.targets[0].updateAsset; dmgOnly.assets.pop(); dmgOnly.targets[0].unsigned = true;
+  assert.equal(validateManifest(dmgOnly, release, "arm64").updateAsset, undefined);
+});
+
 test("release fetch rejects rate limits, oversized/malformed JSON and unsafe redirect destinations", async () => {
   const { release } = fixtureManifest();
   await assert.rejects(checkDesktopRelease({ version: "0.1.20", build: 1 }, { arch: "arm64", fetchRequest: async () => new Response("", { status: 403 }) }), /访问频率/);

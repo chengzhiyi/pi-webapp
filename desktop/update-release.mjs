@@ -69,6 +69,23 @@ function validateAsset(asset, name) {
 }
 
 export function validateManifest(manifest, release, arch) {
+  // Schema 2 aggregates native targets; select only a matching, source-bound
+  // macOS receipt, then apply the same strict schema-1 installation checks.
+  if (manifest.schemaVersion === 2) {
+    const targets = manifest.targets?.filter(target => target.target === `mac-${arch}`);
+    if (targets?.length !== 1 || !Array.isArray(manifest.assets)) throw new Error("更新发布缺少唯一的目标平台");
+    const target = targets[0];
+    for (const key of ["repository", "productName", "version", "build", "tag", "sourceCommit", "prerelease"]) {
+      if (target[key] !== manifest[key]) throw new Error("更新平台与发布来源不一致");
+    }
+    for (const asset of [target.asset, target.updateAsset].filter(Boolean)) {
+      const published = manifest.assets.filter(value => value.name === asset.name);
+      if (published.length !== 1 || published[0].bytes !== asset.bytes || published[0].sha256 !== asset.sha256) {
+        throw new Error("更新平台与发布文件不一致");
+      }
+    }
+    manifest = target;
+  }
   const tag = `desktop-v${manifest.version}-b${manifest.build}`;
   compareDesktop(manifest, manifest);
   if (manifest.schemaVersion !== 1 || manifest.repository !== repository || manifest.productName !== "pi"

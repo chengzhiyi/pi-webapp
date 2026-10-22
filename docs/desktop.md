@@ -20,7 +20,13 @@ npm run desktop:start
 nodejs.org, verifies the archive against the official HTTPS SHA-256 manifest,
 and installs the pinned production dependencies from
 `desktop/runtime-manifest/package-lock.json`. It verifies the bundled Pi version
-and actually starts a PTY before declaring success. Internet is required while
+and actually starts an interactive PTY, answers terminal queries, and checks its
+output and clean exit before declaring success. Linux compiles only the pinned
+`node-pty` lifecycle with the bundled Node and archive headers (the package has
+no Linux prebuild); Windows stages its pinned ConPTY DLL/helper payload. No
+Electron-ABI addon or host build is reused. Linux builders need Python and a C++
+toolchain; end users do not need these to run the packaged PTY.
+Internet is required while
 building, not to install Node/Pi on the end user's machine. Model calls,
 authorization and package installation can still require internet.
 
@@ -50,14 +56,22 @@ e.g. `pi-0.1.20-desktop.5-mac-arm64.dmg`. “pi → 关于 pi” shows the build
 and executable location, so different desktop rebuilds are distinguishable even
 when their shared backend stays at the same npm version. `desktop/release.json`
 is the single source for the desktop name/build; increment its build number for
-each delivered rebuild. The CFBundleVersion / Windows file version also changes.
+each delivered rebuild. The CFBundleVersion / Windows file version also changes. AppImage filenames use
+electron-builder's Linux deployment spelling `x86_64`; the runner/runtime
+architecture and release target ID remain `x64` / `linux-x64`.
 
 Cross-platform/architecture flags are
 intentionally rejected by the wrapper: using the current machine's Node/native
 modules in another platform's installer would create a broken application. Use
 native runners for each target. `desktop.yml` remains a manual cross-platform
 packaging/artifact workflow. The separate `desktop-release.yml` below handles
-verified macOS arm64 prereleases, not every main push.
+verified four-platform prereleases, not every main push.
+
+The embedded runtime never automatically launches a second browser for its Web
+page: the shared browser opener honors `PI_WEBAPP_AUTO_OPEN=0` and desktop runtime
+identity. In particular, startup does not await a long-lived `xdg-open` browser
+before announcing backend readiness. The explicit native “在浏览器中打开” menu and
+confirmed connection-recovery actions remain available.
 
 The application embeds Node and Pi. Git, SSH, project compilers and other system
 tools are **not** bundled. Missing tools must be installed by the user. Model
@@ -76,79 +90,56 @@ These are two separate release responsibilities:
 
 Starting with desktop build 7, default macOS packages use **complete ad-hoc
 signatures, without publisher identity or notarization**, for opt-in small-group
-testing. No certificate is needed: `mac.identity` defaults to `-`. Electron-builder
-signs nested code before creating DMG/ZIP; both packaging and release preparation
-reject failed deep/strict verification or a missing resource seal. Certificate
-discovery stays disabled. Windows/Linux defaults are unchanged.
+testing. No certificate is needed: `mac.identity` defaults to `-`; an authorized
+operator may explicitly select `CSC_NAME` for Developer ID signing. Certificate
+discovery stays disabled. Windows/Linux's unsigned release paths are unchanged.
 
-**Ad-hoc is not Developer ID.** Gatekeeper can still block the download; a GitHub
-prerelease and a valid resource seal do not prove publisher identity or safety.
-Follow the [tester installation and trust instructions](desktop-testing.md),
-including checksum verification, stopping on signature failure, and a manual,
-app-scoped trust exception only for a known, trusted test build. Do not disable
-OS security globally. Public distribution needs a separately configured,
-authorized signing/notarization workflow; local packaging/smoke success is not
-proof of downloaded first-launch acceptance.
+Electron-builder signs nested code before creating the DMG/ZIP. Packaging verifies
+the app, the read-only mounted DMG, and the extracted ZIP; release preparation requires deep/strict
+verification and a complete resource seal on both macOS architectures. macOS
+receipts record `signing: { type: "ad-hoc" | "developer-id", verified: true }`;
+`unsigned: true` means **no publisher identity**, including valid ad-hoc signatures.
 
-Use **pi → 检查桌面更新…** (also available in the connection-recovery dialog).
-The native app checks the latest 100 official GitHub Releases, including the
-explicitly labeled test prereleases; npm's `latest` does not drive desktop updates.
-Checks also run once after a successful desktop connection (set
-`PI_WEBAPP_DESKTOP_UPDATE_CHECK=manual` to use menu-only checks, as smoke QA does).
-Nothing is downloaded
-or installed without consent. Versions compare backend version, then desktop build.
-Older versions/builds and drafts are never selected.
+**Ad-hoc is not Developer ID.** Gatekeeper can still block the download. Follow
+the [tester installation and trust instructions](desktop-testing.md): verify the
+checksum and signature, stop on verification failure, and only use a conscious,
+manual, app-scoped trust exception for a known test build. Never disable OS
+security globally. Public distribution needs authorized signing/notarization;
+local packaging success is not proof of downloaded first-launch acceptance.
 
-- Downloads are streamed into private temporary directories, limited to 2 GiB and
-  15 minutes, and verified against the release's exact byte count and SHA-256.
-  Only the fixed publisher's HTTPS GitHub URLs and GitHub release-asset redirects
-  are accepted; no backend/renderer-supplied update URL or privileged IPC is used.
-  Download progress appears on the main window's OS progress indicator. Use
-  **pi → 取消桌面更新下载** to abort; partial downloads are removed.
-- **Unsigned current app or release / old manifest without a ZIP:** download and
-  verify the DMG, reveal it in Finder, and install manually. A checksum over HTTPS
-  is not a code signature; unsigned packages are never silently executed or
-  automatically installed. Checked DMGs remain in the temporary directory for
-  the manual handoff (the OS may eventually clean them).
-- **Publisher-signed current app and target ZIP:** after SHA-256 verification,
-  a separate **安装并重启** confirmation and backend safety check are required
-  **before** handing anything to Squirrel.Mac. Its native updater then verifies
-  the target against the installed app's signing identity and stages replacement.
-  Squirrel may apply a staged update on normal exit too, so deferring installation
-  keeps only the ZIP, not a native-pending update. The backend is checked again
-  before installation/normal exit once native staging has completed.
-  A random-token loopback feed serves only the already
-  checked ZIP, closes after staging, and is never exposed to the shared Web page.
-  Failed staging leaves the original app untouched. Atomic replacement/relaunch
-  and install-failure recovery are delegated to Squirrel.Mac, not a shell script
-  that rewrites `.app`. A native staging failure/timeout requires restarting the
-  desktop before another native attempt; download/check failures may be retried.
-- **Live bundled runtime (owned or attached) or unknown/starting backend:** install
-  is deferred. Finish **all** browser/desktop tasks and terminal operations, then
-  stop the bundled service from its original entry point (`pi-webapp stop`). Keep
-  the desktop open and choose the update menu again to install the staged update.
-  The updater itself never stops a service, guesses whether a terminal is idle,
-  or writes launcher/update/restart metadata. Live authenticated external npm
-  backends remain running and are rechecked for replacement before installation.
-  If the backend changed versions, reopening may still require browser recovery:
-  desktop updates do not imply arbitrary cross-version protocol compatibility.
+Use **pi → 检查桌面更新…** (also available in connection recovery). Checks run
+once after a successful connection unless `PI_WEBAPP_DESKTOP_UPDATE_CHECK=manual`.
+The native updater uses the latest 100 official GitHub Releases, including labeled
+prereleases, not npm's `latest`. Drafts, downgrades, and other architectures are
+rejected. Schema-1 receipts and schema-2 four-platform bundles are supported;
+aggregate metadata must agree with the selected macOS arm64 receipt and its assets.
 
-The old desktop without this updater still needs a one-time manual installation.
-This feature does not modify an already installed app merely by editing source.
-Current unsigned test releases exercise the manual-download branch; actual native
-replacement needs signed old/new applications and a separate signed release QA.
-Use an authorized Developer ID signing setup with `desktop:package` to produce
-signed DMG/ZIP pairs (the wrapper disables discovery, so the release operator must
-explicitly select their configured identity with `CSC_NAME`); do not enable certificate discovery or publish merely to
-try this feature. Release preparation checks the actual app's deep/strict code
-signature and TeamIdentifier, rather than trusting an environment flag. The
-manifest records `signing: { type: "ad-hoc" | "developer-id", verified: true }`.
-Its compatibility field `unsigned: true` means **no publisher identity**, and
-remains true for ad-hoc packages so they never enable native auto-installation.
-The manifest does not claim notarization; public signing/notarization remains a
-separately authorized release responsibility. Windows/Linux/Intel macOS automatic
-installation is not implemented; their native menu opens official Releases.
+- Downloads need consent, are streamed into private temporary files, are bounded
+  to 2 GiB / 15 minutes, and verify the exact byte count and SHA-256. Only fixed
+  official GitHub URLs and release-asset redirects are accepted. Progress uses
+  the OS window indicator; **取消桌面更新下载** aborts and cleans partial files.
+- An ad-hoc/unsigned current app or target, or a manifest without an update ZIP,
+  only downloads a checked DMG and reveals it in Finder for **manual installation**.
+  Checksums do not prove publisher identity; Gatekeeper is not bypassed.
+- A publisher-signed current app and target ZIP still require a separate
+  **安装并重启** confirmation before Squirrel.Mac sees an update. The native
+  updater verifies the installed signing identity; a token-bound private loopback
+  feed serves only the checked ZIP. Deferring consent does not stage a native
+  update. Native failure/timeout requires restarting the desktop before retrying.
+- A live bundled runtime (owned or attached), unknown backend, or startup in
+  progress blocks installation. Finish all tasks and terminals, stop the bundled
+  service from its original entry, and retry from the still-open desktop. The
+  updater never stops tasks or writes launcher/restart metadata. External npm
+  backends stay running and are checked again for replacement before installation.
+  A staged native update is guarded on normal exit too, because Squirrel may
+  apply it then. Failed checks leave the original app and background work intact.
 
+Automatic installation is limited to publisher-signed macOS arm64 applications;
+Intel macOS, Windows/Linux, and source runs open official Releases instead.
+Actual signed replacement still needs signed old/new applications and separate
+release QA; unit tests and ad-hoc smoke do not certify it. Existing desktop builds
+without this updater need one manual upgrade. Public signing/notarization remains
+separately authorized; the wrapper does not discover certificates automatically.
 Desktop-managed backends reject the Web/npm update and restart paths,
 so the UI cannot overwrite the bundled runtime. A desktop window attached to an
 existing npm-managed backend preserves that backend's original update behavior.
@@ -177,8 +168,9 @@ keeps its existing name; this rename is for the native desktop application.
 
 Download builds from **[GitHub Releases](https://github.com/chengzhiyi/pi-webapp/releases)**,
 not the npm package, source ZIP or an expired Actions artifact. The current
-release channel only offers tested macOS Apple Silicon DMGs; Windows/Linux and
-Intel macOS need their own acceptance before becoming release targets.
+build-8 channel offers macOS arm64/Intel, Windows x64, and Linux x64 test installers.
+Use each release's actual asset list and acceptance notes, not matrix configuration
+alone, to determine support.
 
 `.github/workflows/desktop-release.yml` supports:
 
@@ -197,26 +189,40 @@ its independent npm pipeline may write another version. Increment the desktop
 build number for each delivered rebuild. Tag creation/release is an intentional
 publication action, not part of an ordinary main commit.
 
-The build job uses standard `macos-15` arm64, pinned npm lockfiles, standalone
-Node/Pi preparation, icon/config tests and the **packaged** desktop/browser/PTY
-smoke. Sentry reporting and certificate discovery are disabled; macOS ad-hoc
-signing and strict integrity checks are required. It produces:
+The release pipeline uses four **native** targets:
 
-- `pi-<version>-desktop.<build>-mac-arm64.dmg` (manual installation)
-- `pi-<version>-desktop.<build>-mac-arm64.zip` (native updater archive)
-- `SHA256SUMS` (DMG and ZIP SHA-256)
-- `desktop-release.json` (source SHA, backend/build/runtime versions, actual signing
-  status, platform/architecture, DMG/ZIP sizes/checksums and smoke checks)
-- `release-notes.md` (used as the Release body, not a separate download asset)
+| Target | Runner | Installer payload tested |
+| --- | --- | --- |
+| macOS arm64 | macos-15 | Read-only mounted DMG / pi.app |
+| macOS x64 | macos-15-intel | Read-only mounted DMG / pi.app |
+| Windows x64 | windows-2022 | NSIS silently installed pi.exe on disposable CI runner |
+| Linux x64 | ubuntu-22.04 | Extracted AppImage AppRun under Xvfb, without requiring FUSE |
 
-A separate Ubuntu job has scoped `contents: write` and no npm installation/app
-execution. It revalidates the source-bound files, creates a **draft prerelease**,
-uploads only the four intended assets, downloads them to verify their bytes,
-and only then publishes the prerelease with `latest=false`. Ad-hoc integrity is
-recorded, but publisher identity and notarization are not claimed. An interrupted upload leaves a draft; retrying the same source/tag may
-repair a draft. A published release is never clobbered: a retry only succeeds
-when downloaded assets are byte-identical. A conflicting source/tag or different
-published bytes fails rather than replacing a public download.
+Each uses locked dependencies, standalone Node/Pi, full unit tests and actual
+installer-payload desktop/browser/PTY smoke. The smoke reads the installed Pi
+package and requires the same pinned version. Certificate discovery and Sentry
+are disabled; macOS ad-hoc signing and strict integrity checks are required from
+build 7. ARM Windows/Linux and other targets are not implicitly supported.
+
+A read-only aggregation job requires **all four** verified receipts from the
+same source/version/build/Pi pair. It collects four installers, SHA256SUMS,
+`desktop-release.json` (schema 2, per-target runtime and smoke evidence), optional
+macOS arm64 updater ZIP, and release-notes.md. Updater menu smoke is required on
+every target; the download/handoff smoke is required only on supported macOS arm64. A missing/failed target prevents the complete release; matrix
+entries alone are not an acceptance claim. Build-only runs also exercise this
+aggregation, but never create a public Release.
+
+Only the final Ubuntu publish job gets `contents: write`, with no npm installation
+or app execution. It checks the bundle, creates a **draft prerelease**, uploads
+four installers, any declared updater ZIP, checksums and metadata, downloads all
+declared assets to verify their bytes, then publishes with `latest=false`. An interrupted upload stays a
+draft; retries may repair it. Published assets are never clobbered: a retry only
+succeeds if every downloaded file is byte-identical. Conflicting source/tag or
+bytes fail rather than replacing a public download.
+
+The original public build 5 remains macOS-arm64-only with Pi 0.87.1. Build 8
+provides four-platform installers with Pi 1.3.0. Never advertise a new candidate's
+support or download URLs until native jobs pass and it has actually been published.
 
 The packing wrapper deliberately retains `--publish never`: explicit CI Release
 upload owns publication. The manual cross-platform package workflow remains
@@ -303,7 +309,21 @@ without global Node/Pi. It tests renderer isolation, real PTY interaction,
 authentication, file listing, desktop update protection, a browser connected to
 the same service, and confirmed shutdown/process cleanup. It does **not** submit
 a paid model request, log in to a provider, or use the user's saved credentials.
-Screenshots/results are written to `artifacts/desktop/`.
+Screenshots/results are written to `artifacts/desktop/`. CI also persists a
+secret-free phase receipt before each major step, bounds installer smoke to six
+minutes, and bounds cleanup of its exact isolated Electron child. Failures retain
+only bounded, redacted tails of that fixture's launcher log and Electron stderr,
+plus allowlisted launcher metadata (never the URL, nonce, auth files or user
+sessions). Locale is seeded before navigation; the first UI must become usable
+before a real reload is tested, avoiding interruption of initial bootstrap.
+The locale seed touches only the actual HTTP loopback root, not opaque/error
+pages; real loopback storage errors still fail the test. Smoke opts into
+`PI_WEBAPP_STARTUP_TRACE=1`: the launcher records fixed RPC startup milestones,
+never RPC payloads, command bodies, URLs or access/control tokens. POSIX SDK and
+shell/Git integration tests run on macOS/Linux. Windows runs portable SDK/launcher
+boundaries, desktop/release invariants, an interactive native cmd PTY test, and
+the actual installed-payload GUI smoke; Unix executable fixtures are not treated
+as Windows tests. All four installer receipts remain mandatory for assembly.
 
 The legacy smoke uses a temporary HOME/agent directory and copies the old package
 without changing its launcher or extension JavaScript. It prepares node-pty's
@@ -318,6 +338,28 @@ If the local harness wraps Git with a forced author, the existing Git history te
 may observe that author instead of its fixture author. Run tests with the normal
 system Git in PATH in an isolated test environment; do not change global Git
 configuration to make a fixture pass.
+
+## Why the bundled Pi may not be the latest upstream version
+
+The build-6 candidate pins **Pi 1.3.0**, the upstream latest checked on
+2026-10-20. The previously published build 5 bundles **Pi 0.87.1**. A source
+upgrade does not mutate that old download or a running external Web service. `package.json` and `desktop/runtime-manifest/package-lock.json`
+pin both `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai` together.
+The standalone Node runtime and native PTY are verified as part of that unit.
+The app version, desktop build number and bundled Pi version are separate.
+
+The public npm `latest` for both Pi packages was **1.3.0 when checked on
+2026-10-20**. Thus the older build's 0.87.1 is **not** the latest Pi. The candidate upgrade
+has passed typechecks and existing tests; native package gates still decide
+whether it may be offered as a new public download.
+Moving from the tested 0.x SDK to 1.x needs API/type compatibility review, paired
+lockfile updates, authentication/plugin/session regressions, native PTY checks,
+and packaged desktop/Web smoke tests before publishing a new installer.
+
+Do not replace the signed/packaged runtime in place or install `latest` on every
+startup. Upgrade it deliberately through a new tested desktop build, recording
+the exact Pi version in `desktop-release.json` and release notes. This preserves
+reproducibility and prevents silently changing a user's running tasks.
 
 ## Updating runtime dependencies
 
@@ -340,8 +382,5 @@ macOS arm64 is the local implementation/QA target. Windows/Linux installer
 configuration is provided but must be tested on their own runners before promising
 support. Custom icons are configured for all platforms; the icon replacement
 has only been verified in a packaged macOS arm64 app.
-Formal signing/notarization, actual signed old-to-new installation acceptance,
-tray integration, completion notifications and cross-platform end-to-end QA are
-not claimed by the ad-hoc test build. The desktop updater's feed, hash verification,
-consent, task protection and native-stage success/failure paths have regression
-tests; these do not substitute for signed installer acceptance on macOS.
+Formal signing, automatic desktop updates, tray integration, completion
+notifications and cross-platform end-to-end QA are not included in this delivery.

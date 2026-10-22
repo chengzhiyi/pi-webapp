@@ -1,6 +1,6 @@
 {
   "name": "pi-webapp",
-  "version": "0.1.20",
+  "version": "0.1.25",
   "type": "module",
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
@@ -15,7 +15,7 @@
     "pi-webapp": "./bin/pi-webapp.mjs"
   },
   "pi": {
-    "image": "https://cdn.jsdelivr.net/npm/pi-webapp@0.1.20/assets/cover-webapp.png",
+    "image": "https://cdn.jsdelivr.net/npm/pi-webapp@0.1.25/assets/cover-webapp.png",
     "extensions": [
       "./dist/extension.js"
     ]
@@ -71,8 +71,8 @@
   },
   "devDependencies": {
     "@chengzhiyi/pi-web-protocol": "0.1.0",
-    "@earendil-works/pi-ai": "0.87.1",
-    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-coding-agent": "1.3.0",
     "@playwright/test": "1.63.0",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sentry/vite-plugin": "5.4.0",

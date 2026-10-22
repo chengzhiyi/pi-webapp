@@ -21,8 +21,10 @@ export async function verifyMacArchives({ dmg, zip, signing, run = execute, insp
     await run("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, resolve(dmg)], { timeout: 120000 });
     attached = true;
     assert.deepEqual(await inspectSignature(join(mount, "pi.app")), signing, "DMG signature differs from the packaged app");
-    await run("/usr/bin/ditto", ["-x", "-k", resolve(zip), extracted], { timeout: 120000 });
-    assert.deepEqual(await inspectSignature(join(extracted, "pi.app")), signing, "ZIP signature differs from the packaged app");
+    if (zip) {
+      await run("/usr/bin/ditto", ["-x", "-k", resolve(zip), extracted], { timeout: 120000 });
+      assert.deepEqual(await inspectSignature(join(extracted, "pi.app")), signing, "ZIP signature differs from the packaged app");
+    }
   } finally {
     // If detach fails, preserve the mountpoint rather than recursively deleting it.
     if (attached) await run("/usr/bin/hdiutil", ["detach", mount], { timeout: 30000 });

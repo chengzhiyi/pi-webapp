@@ -6,6 +6,8 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
+**桌面测试版 build 8：** [macOS · Apple 芯片](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage)。请核对 [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS)；测试包未签名或无发布者身份，macOS 未公证。[安全安装说明](#桌面端下载)。
+
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
 *一边跟进对话，一边查看消息中链接的源码。截图来自真实界面，使用英文演示数据，并非真实模型执行记录。*

@@ -6,6 +6,8 @@ Bring conversations, project files, terminals, and Git into one interface—with
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
+**Desktop test build 8:** [macOS · Apple Silicon](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage). Verify [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS); unsigned/unnotarized test-release limits apply. [Install safely](#desktop-downloads).
+
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
 *Follow the conversation and inspect the linked source file in the same workspace. Real UI, seeded demo data—not a live model transcript.*
