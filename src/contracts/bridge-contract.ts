@@ -34,6 +34,15 @@ export interface ViewMessage {
 /** Runtime delivery policy, not an interruption or a new concurrent run. */
 export type PromptDelivery = "steer" | "followUp";
 export interface PromptQueue { steering: string[]; followUp: string[] }
+export interface QueuedPrompt {
+  id: string;
+  revision: number;
+  text: string;
+  attachments: Array<{ name: string; image: boolean }>;
+  status: "queued" | "sending";
+  error?: string;
+}
+export type QueuedPromptAction = { kind: "edit"; text: string } | { kind: "remove" } | { kind: "steer" };
 
 export interface SessionView {
   schemaVersion: typeof SESSION_SCHEMA_VERSION;
@@ -47,6 +56,8 @@ export interface SessionView {
   paused?: boolean;
   /** Native SDK queue; pending prompts are not yet transcript messages. */
   promptQueue?: PromptQueue;
+  /** Host-owned pending submissions remain editable until handed to Pi. */
+  queuedPrompts?: QueuedPrompt[];
   /** TUI contexts expose only whether a native queue is pending. */
   hasPendingPrompts?: boolean;
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;

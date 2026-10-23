@@ -21,8 +21,9 @@ import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { isExpectedError, isContentOperation, opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { VERSION } from "@earendil-works/pi-coding-agent";
 import { buildId } from "../../../contracts/build-info.ts";
-import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
+import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
+import { PromptQueueError } from "../sessions/editable-prompt-queue.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
@@ -51,6 +52,7 @@ export interface BridgeHost {
   config(): ConfigView | Promise<ConfigView>;
   updateConfig(change: ConfigChange): Promise<ConfigView>;
   send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): void | Promise<void>;
+  updateQueuedPrompt?(sessionId: string, id: string, revision: number, action: QueuedPromptAction): Promise<void>;
   abort(sessionId: string): void | Promise<void>;
   resume?(sessionId: string, correlation?: ErrorCorrelation): void | Promise<void>;
   newSession(sessionId: string): Promise<void>;
@@ -333,7 +335,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -516,6 +518,20 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               json(res, 400, { error: "npm 或 Git 来源请在「包」中添加；扩展和技能只接受文件或目录路径" }); return;
             }
             json(res, 200, await host.updateConfig(change as ConfigChange)); return;
+          } else if (path === "/api/prompt-queue") {
+            const input = body as Record<string, unknown>;
+            const action = input.action as Record<string, unknown> | undefined;
+            if (typeof input.id !== "string" || input.id.length > 100 || !Number.isSafeInteger(input.revision) || (input.revision as number) < 1
+              || !action || typeof action !== "object" || !["edit", "remove", "steer"].includes(action.kind as string)
+              || action.kind === "edit" && (typeof action.text !== "string" || action.text.length > 32_000)) {
+              json(res, 400, { error: "队列操作无效" }); return;
+            }
+            const state = host.snapshot();
+            if (input.sessionId !== state.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            if (action.kind === "steer" && state.idle) { json(res, 409, { error: "当前没有可引导的执行，请先继续或发送任务" }); return; }
+            if (action.kind === "steer" && state.interactions?.length) { json(res, 409, { error: "请先完成当前交互或审批" }); return; }
+            if (!host.updateQueuedPrompt) { json(res, 409, { error: "请重载 Pi 以启用队列操作" }); return; }
+            await pluginRegistry.coordinateStart(state.cwd, async () => host.updateQueuedPrompt!(body.sessionId as string, input.id as string, input.revision as number, action as QueuedPromptAction));
           } else if (path === "/api/message") {
             const delivery = "delivery" in body ? body.delivery : undefined;
             if (delivery !== undefined && delivery !== "steer" && delivery !== "followUp") {
@@ -566,6 +582,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           json(res, 202, { accepted: true });
         } catch (error) {
+          if (error instanceof PromptQueueError) { json(res, error.status, { error: error.message }); return; }
           const failure = pluginRegistry.requestFailure(error);
           if (failure) { json(res, failure.status, failure.body); return; }
           const message = error instanceof Error ? error.message : "请求失败";

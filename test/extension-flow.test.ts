@@ -101,11 +101,27 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
       });
       assert.equal(appended.status, 202);
     }
-    assert.deepEqual(delivered, ["hello", "steer", "followUp"]);
+    assert.deepEqual(delivered, ["hello", "steer"], "a web follow-up stays editable rather than entering Pi immediately");
+    const pending = async () => (await (await fetch(`${url.origin}/api/session`, { headers })).json()).queuedPrompts as Array<{ id: string; revision: number; text: string }>;
+    const update = async (item: { id: string; revision: number }, action: object) => fetch(`${url.origin}/api/prompt-queue`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: "new", id: item.id, revision: item.revision, action }),
+    });
+    const row = (await pending())[0]!;
+    assert.equal((await update(row, { kind: "edit", text: "edited follow-up" })).status, 202);
+    assert.equal((await update(row, { kind: "remove" })).status, 409, "stale edits cannot delete a changed TUI row");
+    const edited = (await pending())[0]!;
+    assert.equal((await update(edited, { kind: "steer" })).status, 202);
+    assert.deepEqual(delivered, ["hello", "steer", "edited follow-up"]);
     assert.deepEqual(deliveryOptions.slice(1), [
-      { expandPromptTemplates: true, deliverAs: "steer" }, { expandPromptTemplates: true, deliverAs: "followUp" },
-    ], "the replacement TUI context receives native delivery modes, not the stale Pi API");
+      { expandPromptTemplates: true, deliverAs: "steer" }, { expandPromptTemplates: true, deliverAs: "steer" },
+    ], "the replacement TUI context receives steering, not the stale Pi API");
+    for (const text of ["delete this", "automatic next"]) await fetch(`${url.origin}/api/message`, { method: "POST", headers, body: JSON.stringify({ sessionId: "new", text, delivery: "followUp" }) });
+    assert.equal((await update((await pending())[0]!, { kind: "remove" })).status, 202);
     busy = false;
+    handlers.get("agent_settled")?.({ type: "agent_settled" }, fresh);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(delivered, ["hello", "steer", "edited follow-up", "automatic next"]);
+    assert.equal((await pending()).length, 0);
     // A deleted workspace must not turn unrelated list refreshes into Sentry errors.
     const registry = (shared as unknown as { workspaces: WorkspaceRegistry }).workspaces;
     const stalePath = join(temporary, "removed-worktree");
