@@ -80,6 +80,7 @@ async function requestQuit() {
   askingQuit = true;
   try {
     await updater?.assertQuitSafe(); // A native-staged update may install on normal exit.
+    await backend?.refresh();
     if (backend?.owned) {
       const answer = await dialog.showMessageBox({ type: "warning", title: `退出 ${appName}`,
         message: "是否同时停止后台服务？",
@@ -101,8 +102,11 @@ async function requestQuit() {
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: appName, submenu: [
-      { label: `关于 ${appName}`, click: () => dialog.showMessageBox({ type: "info", message: appName,
-        detail: `版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n桌面版与 Web 共用界面和后端。请通过“检查桌面更新”获取桌面安装包。` }) },
+      { label: `关于 ${appName}`, click: async () => {
+        await backend?.refresh().catch(() => {});
+        return dialog.showMessageBox({ type: "info", message: appName,
+          detail: `桌面外壳版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n当前 pi-webapp ${backend?.state?.version ?? "unknown"}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n业务包通过界面设置中的“应用更新”升级；“检查桌面更新”仅更新桌面外壳安装包。` });
+      } },
       { label: "检查桌面更新…", click: () => { if (!startup) void updater?.run(); } },
       { label: "取消桌面更新下载", click: () => updater?.cancelDownload() },
       { type: "separator" }, { label: "退出…", accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
@@ -156,7 +160,8 @@ else {
     const agentDir = resolve((process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")).replace(/^~(?=$|[\\/])/, homedir()));
     backend = new DesktopBackend({ agentDir, version: pkg.version, node, npmCli, piCli,
       launcher: join(packageRoot, "bin", "pi-webapp.mjs"), cwd: homedir(),
-      env: { ...process.env, PI_CODING_AGENT_DIR: agentDir } });
+      env: { ...process.env, PI_CODING_AGENT_DIR: agentDir,
+        PI_WEBAPP_DESKTOP_VERSION: app.getVersion(), PI_WEBAPP_DESKTOP_BUILD: String(release.buildNumber) } });
     const state = await connectBackend(backend, {
       showMessageBox: options => dialog.showMessageBox(options), openExternal: url => shell.openExternal(url),
       checkDesktopUpdates: () => updater.run(), isInstalling: () => quitting || updater.nativeAttempted,

@@ -3,6 +3,7 @@ import { openSync, closeSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { desktopProtocolVersion, readDesktopRelease, rollbackDesktopRelease } from "./managed-release.mjs";
 
 export function localAddress(value) {
   const url = new URL(value);
@@ -40,7 +41,7 @@ export function runtimeEnvironment(base, { node, npmCli, piCli }) {
     "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS"]) delete env[key];
   const pathKey = Object.keys(env).find(key => key.toLowerCase() === "path") ?? "PATH";
   env[pathKey] = `${dirname(node)}${delimiter}${env[pathKey] ?? ""}`;
-  return { ...env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RUNTIME: "desktop", PI_WEBAPP_PI_CLI: piCli,
+  return { ...env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RUNTIME: "desktop", PI_WEBAPP_DESKTOP_PACKAGE_UPDATES: "1", PI_WEBAPP_PI_CLI: piCli,
     npm_execpath: npmCli };
 }
 
@@ -98,6 +99,7 @@ export class DesktopBackend {
     this.stopPath = join(agentDir, "pi-web", "launcher.stop");
     this.logPath = join(agentDir, "pi-web", "launcher.log");
     this.owned = false;
+    this.bundled = { version, launcher, piCli };
   }
 
   async readState() {
@@ -140,14 +142,19 @@ export class DesktopBackend {
     try { url = localAddress(state.url); }
     catch { throw new DesktopConnectionError("invalid-address", "已有服务的本地地址无效；不会连接或接管未知服务。"); }
     const result = await this.request(url, "/api/update/version");
-    let current;
-    try { current = (await result.json()).current; }
+    let current; let protocol;
+    try { const identity = await result.json(); current = identity.current; protocol = identity.desktopProtocolVersion; }
     catch { throw new DesktopConnectionError("health-failed", "本地服务健康检查返回无效数据；未停止或修改该服务。"); }
     const browserUrl = typeof current === "string" ? url.href : undefined;
     if (typeof current !== "string") throw new DesktopConnectionError("health-failed", "无法确认已有服务版本；未停止或修改该服务。");
-    if (current !== this.version || (state.version !== undefined && state.version !== current)) {
+    const compatibleProtocol = state.desktopProtocolVersion === desktopProtocolVersion && protocol === desktopProtocolVersion;
+    if ((current !== this.version && !compatibleProtocol) || (state.version !== undefined && state.version !== current)) {
       const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : "未知";
       throw new DesktopConnectionError("version-incompatible", `尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, browserUrl);
+    }
+    if ((state.desktopProtocolVersion !== undefined && state.desktopProtocolVersion !== desktopProtocolVersion)
+        || (protocol !== undefined && protocol !== desktopProtocolVersion)) {
+      throw new DesktopConnectionError("protocol-incompatible", "后台使用不支持的桌面连接协议，请更新桌面外壳。", browserUrl);
     }
     if (state.bridgeVersion === 1 && state.version === current) return state;
     if (state.bridgeVersion === 1) {
@@ -208,6 +215,17 @@ export class DesktopBackend {
   async connect() {
     const existing = await this.existing();
     if (existing) { this.state = existing; return existing; }
+    const selected = await readDesktopRelease(this.agentDir, this.bundled.version);
+    Object.assign(this, selected ?? this.bundled);
+    try { return await this.launch(); }
+    catch (error) {
+      if (!selected) throw error;
+      await rollbackDesktopRelease(this.agentDir, selected.launcher);
+      return this.connect(); // At most the previous selection, then the bundled fallback.
+    }
+  }
+
+  async launch() {
     await mkdir(dirname(this.statePath), { recursive: true });
     const fd = openSync(this.logPath, "a", 0o600);
     try {
@@ -262,8 +280,21 @@ export class DesktopBackend {
     }
   }
 
+  /** A supervised package restart keeps the URL/token, but changes the owner nonce.
+   * Only adopt this desktop's authenticated successor; never claim a shared service.
+   */
+  async refresh() {
+    const current = await this.readState();
+    if (!current?.url || !this.isAlive(current.pid)) return;
+    if (!this.state || current.url !== this.state.url || current.nonce === this.state.nonce) return;
+    if (current.runtimeKind !== "desktop" || this.state.runtimeKind !== "desktop"
+        || current.desktopProtocolVersion !== desktopProtocolVersion || this.state.desktopProtocolVersion !== desktopProtocolVersion) return;
+    this.state = await this.validate(current);
+  }
+
   async stop() {
     if (!this.owned || !this.state) return;
+    await this.refresh();
     const current = await this.readState();
     if (current?.pid !== this.state.pid || current?.nonce !== this.state.nonce || !this.isAlive(current.pid)) return;
     await writeFile(this.stopPath, this.state.nonce, { mode: 0o600 });

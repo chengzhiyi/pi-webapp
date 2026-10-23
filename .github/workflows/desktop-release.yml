@@ -70,7 +70,7 @@ jobs:
         run: npm test
       - name: Windows portable SDK, launcher and runtime boundaries
         if: runner.os == 'Windows'
-        run: node --import ./test/setup-env.mjs --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/bridge-contract.test.ts test/desktop-download-entry.test.ts test/windows-pty.test.ts
+        run: node --import ./test/setup-env.mjs --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/bridge-contract.test.ts test/desktop-download-entry.test.ts test/desktop-package-update.test.ts test/windows-pty.test.ts
       - name: Windows desktop and release invariants
         if: runner.os == 'Windows'
         run: npm run test:desktop

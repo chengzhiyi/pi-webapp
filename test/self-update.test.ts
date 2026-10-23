@@ -34,7 +34,7 @@ test("desktop-managed runtime never invokes npm or writes an update request", as
     const status = await updater.check();
     assert.equal(status.canRestart, false);
     assert.equal(status.available, false);
-    assert.match(status.reason ?? "", /桌面应用管理/);
+    assert.match(status.reason ?? "", /桌面外壳尚不支持/);
     await assert.rejects(updater.prepare(), /桌面应用/);
     await assert.rejects(updater.requestRestart({ version: "0.2.0", launcher: "other" }), /桌面应用/);
     await assert.rejects(readFile(join(root, "pi-web", "update.json")), { code: "ENOENT" });

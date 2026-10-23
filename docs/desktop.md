@@ -140,9 +140,46 @@ Actual signed replacement still needs signed old/new applications and separate
 release QA; unit tests and ad-hoc smoke do not certify it. Existing desktop builds
 without this updater need one manual upgrade. Public signing/notarization remains
 separately authorized; the wrapper does not discover certificates automatically.
-Desktop-managed backends reject the Web/npm update and restart paths,
-so the UI cannot overwrite the bundled runtime. A desktop window attached to an
-existing npm-managed backend preserves that backend's original update behavior.
+### Business-package updates (independent of the desktop shell)
+
+Capable desktop shells set `PI_WEBAPP_DESKTOP_PACKAGE_UPDATES=1`. In these shells,
+**Settings → App updates → Update and restart** uses npm to update `pi-webapp`,
+just like the browser launcher. This does **not** replace Electron, standalone
+Node, app icons or any files inside `pi.app`. Those still use the desktop installer
+channel above. Settings and About show the running business-package version
+separately from the desktop shell version/build.
+
+- An exact npm release is installed into a fresh private directory under
+  `~/.pi/agent/pi-web/releases/<version>-<unique-id>/`. npm integrity checking and
+  engine requirements apply; dependency lifecycle scripts remain disabled.
+- The currently tested Pi SDK pair is explicitly pinned. The exact matching
+  `node-pty` payload is copied from the current runtime and tested with the same
+  standalone Node using an interactive PTY probe. A changed native dependency,
+  incompatible Node engine or failed probe aborts the update before selection;
+  these may require a new shell installer. No compiler or new SDK is silently installed.
+- A separate `desktop-update.json` selects the desktop business package, with one
+  previous selection for rollback; the npm launcher's `update.json` is untouched.
+  The shell validates the selected path, package identity and files before launch.
+  On a failed startup, it tries the previous selection, then its bundled fallback.
+- Updating is blocked while any retained chat is running or any terminal is open.
+  New mutations are locked during download/restart, so another browser cannot
+  start work while the update is being installed. Finish tasks and close terminals
+  first; do not update silently during an active session.
+- A supervised restart preserves the authenticated loopback address, allowing both
+  desktop and browser to reconnect. The shell follows only its authenticated desktop
+  successor for shutdown ownership; merely attaching to a shared service never claims it.
+- Shell/backend compatibility uses `package.json`'s `piWebappDesktopProtocol` plus an
+  explicitly versioned desktop protocol in launcher state and the authenticated
+  version response, not equal npm versions. An incompatible package is rejected
+  before it is selected.
+  Unknown protocols are rejected; older unmarked services retain their existing
+  exact-version/legacy checks. Breaking that protocol requires a shell update.
+
+**Migration:** published build 8/9 shells do not advertise this capability and must
+be replaced once with a newly built capable desktop shell. Updating npm alone
+cannot add it to an already installed shell. Older shells continue to reject npm
+updates rather than accidentally modifying their bundled runtime. A desktop window
+attached to an existing npm-managed backend preserves that backend's update behavior.
 
 ### Upgrading from the former “Pi Webapp” app
 
@@ -259,8 +296,9 @@ The existing launcher state directory and exclusive lock are reused under
 `~/.pi/agent/pi-web/` (or `PI_CODING_AGENT_DIR`). Model credentials and Pi sessions
 stay in Pi's existing data directory, not inside the application bundle.
 
-- The desktop checks a live launcher's bridge version, exact app version, token
-  and authenticated version endpoint before attaching. The released **0.1.19**
+- The desktop checks a live launcher's bridge version, token and authenticated
+  desktop protocol before attaching. Marked compatible backends may run a different
+  business-package version; unmarked backends still require the exact app version. The released **0.1.19**
   Web launcher predates these metadata fields: when they are absent, the desktop
   also checks the authenticated session schema (v1) and the initial NDJSON
   snapshot event before attaching. This is a narrow, tested legacy allowlist,
@@ -357,9 +395,10 @@ lockfile updates, authentication/plugin/session regressions, native PTY checks,
 and packaged desktop/Web smoke tests before publishing a new installer.
 
 Do not replace the signed/packaged runtime in place or install `latest` on every
-startup. Upgrade it deliberately through a new tested desktop build, recording
-the exact Pi version in `desktop-release.json` and release notes. This preserves
-reproducibility and prevents silently changing a user's running tasks.
+startup. Bundled Node/Pi upgrades still require a new tested desktop build, recording
+the exact Pi version in `desktop-release.json` and release notes. Business-package
+updates are opt-in, installed outside the bundle, and retain the current tested SDK
+pair and native PTY. This prevents silently changing a user's running tasks.
 
 ## Updating runtime dependencies
 

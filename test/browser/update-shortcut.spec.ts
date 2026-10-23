@@ -69,6 +69,25 @@ for (const collapsed of [false, true]) {
   });
 }
 
+for (const capable of [false, true]) {
+  test(`desktop package update status separates the shell version (capable=${capable})`, async ({ page }) => {
+    const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
+    await page.route("**/api/update", route => route.fulfill({ contentType: "application/json", body: JSON.stringify(capable
+      ? { ...updateStatus, desktopShell: { version: "0.1.16", build: "10" } }
+      : { current: "0.1.16", latest: null, available: false, canRestart: false, reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" }) }));
+    try {
+      await page.goto(bridge.url);
+      await page.getByRole("button", { name: /Pi 设置|Pi Settings/ }).click();
+      await expect(page.getByRole("button", { name: /^(检查更新|Check for updates)$/ })).toBeEnabled();
+      await expect(page.getByText(/^(已是最新版本|Up to date)$/)).toHaveCount(0);
+      if (capable) {
+        await expect(page.getByText(/(桌面外壳|Desktop shell) 0\.1\.16 · build 10/)).toBeVisible();
+        await expect(page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ })).toBeEnabled();
+      } else await expect(page.getByText("当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。")).toBeVisible();
+    } finally { await bridge.close(); }
+  });
+}
+
 test("successful update waits for the running version then reloads and hides the entry", async ({ page }) => {
   const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
   let ready = false;

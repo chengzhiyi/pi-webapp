@@ -25,6 +25,7 @@ import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
+import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
 
 export interface BridgeHost {
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
@@ -217,7 +218,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         json(res, 200, telemetry.config.browser); return;
       }
       if (req.method === "GET" && path === "/api/update/version") {
-        try { json(res, 200, { current: await host.selfUpdate?.runningVersion() ?? null }); }
+        try { json(res, 200, { current: await host.selfUpdate?.runningVersion() ?? null, desktopProtocolVersion }); }
         catch (error) { fail(error, 503, error instanceof Error ? error.message : "无法读取版本"); }
         return;
       }
@@ -351,6 +352,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             json(res, 400, { error: "缺少会话标识" });
             return;
           }
+          if (restarting) { json(res, 409, { error: "更新正在安装或重启，请稍后重试" }); return; }
           if (path === "/api/plugin-management") {
             const input = body as Record<string, unknown>;
             if (typeof input.id !== "string" || input.id.length > 200 || typeof input.enabled !== "boolean" || typeof input.expected !== "string") { json(res, 400, { error: "插件开关参数无效" }); return; }
@@ -401,8 +403,13 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
             if (!host.snapshot().idle) { json(res, 409, { error: "请等待当前回复结束后再升级" }); return; }
             if (!host.selfUpdate) { json(res, 409, { error: "当前扩展不支持在线升级" }); return; }
-            const prepared = await host.selfUpdate.prepare();
+            const blocker = pluginRegistry.restartBlocker();
+            if ((host.busyGitWorkspaces?.() ?? []).length || blocker) { json(res, 409, { error: blocker ?? "请等待所有聊天任务结束后再升级" }); return; }
+            // Lock mutations before the download starts, not after it completes.
             restarting = true;
+            let prepared;
+            try { prepared = await host.selfUpdate.prepare(); }
+            catch (error) { restarting = false; throw error; }
             json(res, 202, { accepted: true, version: prepared.version });
             setTimeout(() => { void host.selfUpdate?.requestRestart(prepared).catch((error) => { restarting = false; telemetry.capture(error, { stage: "restart" }); console.error("pi-webapp restart:", error); }); }, 500).unref();
             return;

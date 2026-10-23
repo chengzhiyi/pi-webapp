@@ -53,6 +53,7 @@ test("runtime environment uses bundled Node/npm and removes inherited control fl
   { node: "/runtime/bin/node", npmCli: "/runtime/npm-cli.js", piCli: "/runtime/pi-cli.js" });
   assert.equal(env.PATH, `/runtime/bin${delimiter}user-path`);
   assert.equal(env.PI_WEBAPP_RUNTIME, "desktop");
+  assert.equal(env.PI_WEBAPP_DESKTOP_PACKAGE_UPDATES, "1");
   assert.equal(env.PI_WEBAPP_AUTO_OPEN, "0");
   assert.equal(env.npm_execpath, "/runtime/npm-cli.js");
   assert.equal(env.PI_WEBAPP_PI_CLI, "/runtime/pi-cli.js");

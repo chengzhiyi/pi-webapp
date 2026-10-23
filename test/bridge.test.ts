@@ -287,7 +287,7 @@ test("update endpoints require authorization and restart only after a validated 
     const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
     assert.equal((await fetch(`${url.origin}/api/update`)).status, 401);
     assert.equal((await fetch(`${url.origin}/api/update`, { headers })).status, 200);
-    assert.deepEqual(await (await fetch(`${url.origin}/api/update/version`, { headers })).json(), { current: "0.1.0" });
+    assert.deepEqual(await (await fetch(`${url.origin}/api/update/version`, { headers })).json(), { current: "0.1.0", desktopProtocolVersion: 1 });
     const stale = await fetch(`${url.origin}/api/update`, { method: "POST", headers, body: JSON.stringify({ sessionId: "other" }) });
     assert.equal(stale.status, 409);
     assert.equal(restarts, 0);

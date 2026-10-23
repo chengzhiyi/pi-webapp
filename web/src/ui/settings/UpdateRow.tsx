@@ -17,13 +17,14 @@ export function UpdateRow(props: AppUpdateActions) {
       <div className={css.details}>
         <div className={css.title}>{t("应用更新", "App updates")}</div>
         <p className={css.summary}>{summary}</p>
+        {status?.desktopShell && <p className={css.summary}>{t("桌面外壳", "Desktop shell")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
       </div>
       <div className={css.actions}>
         {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <Button variant="primary" disabled={installing || checking} onClick={() => { void install(); }}>{installing ? t("正在安装…", "Installing…") : t("升级并重启", "Update and restart")}</Button>}
         <Button variant="outline" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("检查中…", "Checking…") : t("检查更新", "Check for updates")}</Button>
       </div>
     </div>
-    {status && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
+    {status?.latest && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
     {targetVersion && <p className={css.note} role="status">{t("正在重启并等待新版连接…", "Restarting and waiting for the new version…")}</p>}
     {error && <p className={css.error} role="alert">{error}</p>}

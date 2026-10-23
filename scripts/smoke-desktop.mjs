@@ -24,7 +24,8 @@ const env = { ...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR
   PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_DESKTOP_UPDATE_CHECK: "manual",
   ELECTRON_ENABLE_LOGGING: "1", PI_WEBAPP_STARTUP_TRACE: "1",
   // No npm/global Node/Pi paths: only system shells and utilities remain available.
-  PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin" };
+  PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin",
+  ...(process.platform === "win32" ? {} : { SHELL: "/bin/sh" }) };
 delete env.NODE_OPTIONS;
 delete env.ELECTRON_RUN_AS_NODE;
 let electron;
@@ -82,7 +83,8 @@ try {
     dialog.showMessageBox = async options => { about = options; return { response: 0 }; };
     try {
       const menu = Menu.getApplicationMenu();
-      await menu.items[0].submenu.items[0].click();
+      menu.items[0].submenu.items[0].click();
+      for (let attempt = 0; !about && attempt < 100; attempt++) await new Promise(resolve => setTimeout(resolve, 10));
       return { name: app.getName(), menu: menu.items[0].label, title: BrowserWindow.getAllWindows()[0].getTitle(), about };
     } finally { dialog.showMessageBox = show; }
   });
@@ -163,9 +165,13 @@ try {
   const sessionId = await rightbar.getAttribute("data-sidebar-right-session");
   const address = new URL(state.url);
   const authorization = { Authorization: `Bearer ${address.hash.slice(1)}` };
-  const update = await fetch(`${address.origin}/api/update`, { headers: authorization, signal: AbortSignal.timeout(10000) }).then(r => r.json());
-  assert.equal(update.canRestart, false);
-  assert.match(update.reason, /桌面应用/);
+  const update = await fetch(`${address.origin}/api/update`, { headers: authorization, signal: AbortSignal.timeout(30000) }).then(r => r.json());
+  assert.equal(update.canRestart, true);
+  assert.match(update.reason, /用户目录/);
+  assert.equal(update.desktopShell.build, String(release.buildNumber));
+  const blocked = await fetch(`${address.origin}/api/update`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) });
+  assert.equal(blocked.status, 409, "an open terminal must block package restarts");
+  assert.match((await blocked.json()).error, /终端/);
   assert.equal((await fetch(`${address.origin}/api/update/version`, { signal: AbortSignal.timeout(10000) })).status, 401);
   const files = await fetch(`${address.origin}/api/workspace/files/list`, { method: "POST", signal: AbortSignal.timeout(10000),
     headers: { ...authorization, "Content-Type": "application/json", Origin: address.origin },
@@ -197,7 +203,7 @@ try {
     checks: [...(installerPayload ? ["installer-payload-launch"] : []), "native-desktop-update-menu",
       ...(supportsUpdateDownload ? ["native-desktop-update-download"] : []),
       "native-name-menu-title-pi", "about-build-and-executable-location", "custom-app-icon-loads", "standalone-runtime-without-system-node-pi", "sandboxed-renderer", "native-pty", "workspace-files",
-      "authenticated-backend", "desktop-update-protection", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
+      "authenticated-backend", "desktop-update-protection", "desktop-package-update-enabled", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
   console.log("Desktop smoke passed: standalone runtime, sandbox, PTY, files, shared browser, update guard and shutdown.");
 } catch (error) {
   await writeFile(join(artifacts, "smoke-failure.json"), JSON.stringify({ phase, platform: process.platform, arch: process.arch, errorType: error.name }) + "\n");

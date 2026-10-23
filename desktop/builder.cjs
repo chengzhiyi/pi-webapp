@@ -9,7 +9,7 @@ module.exports = {
   electronVersion: pkg.devDependencies.electron,
   directories: { app: "desktop", output: "desktop-release" },
   extraMetadata: { version: pkg.version },
-  files: ["main.mjs", "backend.mjs", "connect.mjs", "updater.mjs", "update-release.mjs", "update-native.mjs", "package.json", "release.json", "icons/icon.png", "!node_modules{,/**/*}"],
+  files: ["main.mjs", "backend.mjs", "managed-release.mjs", "connect.mjs", "updater.mjs", "update-release.mjs", "update-native.mjs", "package.json", "release.json", "icons/icon.png", "!node_modules{,/**/*}"],
   extraResources: [{ from: ".desktop/runtime", to: "runtime", filter: ["**/*"] }],
   asar: true,
   npmRebuild: false, // Native modules live beside the standalone Node runtime, not in Electron.

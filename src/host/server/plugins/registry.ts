@@ -72,5 +72,9 @@ export class ServerPluginRegistry {
     for (const plugin of this.plugins) { const failure = plugin.requestFailure?.(error); if (failure) return failure; }
     return null;
   }
+  restartBlocker() {
+    if (this.changing || [...this.running.values()].some(count => count > 0)) return "插件操作正在进行，请完成后再升级";
+    return this.plugins.map(plugin => plugin.restartBlocker?.()).find(Boolean) ?? null;
+  }
   async close() { await Promise.all(this.plugins.map(plugin => plugin.close?.())); }
 }

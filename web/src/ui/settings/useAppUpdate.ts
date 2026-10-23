@@ -43,7 +43,7 @@ export function useAppUpdate({ getUpdate, getRunningVersion, update }: AppUpdate
       clearTimeout(timer);
       setTargetVersion(null);
       setRestartTimedOut(true);
-      setError(textFor(locale, "新版启动超时。请运行 pi-webapp status 查看状态，或重新启动 pi-webapp。", "The new version did not start in time. Check pi-webapp status or start pi-webapp again."));
+      setError(textFor(locale, "新版未能及时就绪，后台可能已回退到旧版。请刷新页面检查当前版本；若无法连接，请重新打开应用。", "The new version was not ready in time; the backend may have rolled back. Refresh to check the running version, or reopen the app if disconnected."));
       reportError(new Error("Updated service did not become ready within 60 seconds"), { stage: "update_restart", code: "update_restart_timeout", route: "/api/update/version", timeoutMs: 60_000 });
     }, 60_000);
     const poll = async () => {

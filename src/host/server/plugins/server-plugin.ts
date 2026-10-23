@@ -18,6 +18,8 @@ export interface ServerPlugin {
   /** Coordinate agent starts against capability mutations without importing domain internals into transport. */
   coordinateStart?<T>(cwd: string, operation: () => Promise<T>): Promise<T>;
   requestFailure?(error: unknown): { status: number; body: { error: string; errorCode: string; reason: string } } | null;
+  /** Explain why restarting the shared backend would interrupt live resources. */
+  restartBlocker?(): string | null;
   disable?(): Promise<void>;
   close?(): Promise<void>;
 }

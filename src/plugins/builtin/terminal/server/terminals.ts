@@ -150,6 +150,7 @@ export class TerminalRegistry {
     await terminal.close();
     if (this.terminals.get(id) === terminal) this.terminals.delete(id);
   }
+  get size() { return this.terminals.size; }
   async clear() { await Promise.all([...this.terminals.values()].map(item => item.close())); this.terminals.clear(); }
   async close() { this.stopped = true; await this.clear(); }
 }

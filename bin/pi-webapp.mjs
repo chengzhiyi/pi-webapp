@@ -2,25 +2,27 @@
 import { spawn as spawnNode } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, openSync, watch } from "node:fs";
-import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
 import { npmCommand } from "./npm-command.mjs";
+import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
 const minimum = [0, 87, 1];
 const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const runtimeKind = process.env.PI_WEBAPP_RUNTIME === "desktop" ? "desktop" : "npm";
-const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind };
+const desktopPackages = runtimeKind === "desktop" && process.env.PI_WEBAPP_DESKTOP_PACKAGE_UPDATES === "1";
+const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind, desktopProtocolVersion };
 const launcher = fileURLToPath(import.meta.url);
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));
 const agentDir = resolve((process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")).replace(/^~(?=$|[\\/])/, homedir()));
 const statePath = join(agentDir, "pi-web", "launcher.json");
 const stopPath = join(agentDir, "pi-web", "launcher.stop");
 const restartPath = join(agentDir, "pi-web", "launcher.restart");
-const updatePath = join(agentDir, "pi-web", "update.json");
+const updatePath = desktopPackages ? desktopUpdatePath(agentDir) : join(agentDir, "pi-web", "update.json");
 const logPath = join(agentDir, "pi-web", "launcher.log");
 
 function versionParts(value) {
@@ -180,7 +182,8 @@ async function serve(pi, args) {
     try {
       const request = JSON.parse(await readFile(restartPath, "utf8"));
       const prepared = JSON.parse(await readFile(updatePath, "utf8"));
-      if (runtimeKind !== "desktop" && request.nonce === nonce && request.launcher === prepared.launcher && existsSync(request.launcher)) {
+      const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : prepared;
+      if ((runtimeKind !== "desktop" || desktopPackages) && request.nonce === nonce && request.launcher === selected?.launcher && existsSync(request.launcher)) {
         restartRequest = request;
         shutdown("restart_request");
       }
@@ -289,11 +292,15 @@ async function serve(pi, args) {
     const fd = openSync(logPath, "a", 0o600);
     const restartEnv = { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RESTART_PORT: oldUrl.port, PI_WEBAPP_RESTART_TOKEN: oldUrl.hash.slice(1) };
     try {
-      const runLauncher = (path) => new Promise((resolveExit) => {
-        const next = spawnNode(process.execPath, [path, "start", ...args], { cwd: process.cwd(), env: restartEnv, stdio: ["ignore", fd, fd] });
-        next.once("error", () => resolveExit(1));
-        next.once("exit", (code) => resolveExit(code ?? 1));
-      });
+      const runLauncher = async (path) => {
+        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : null;
+        const env = selected?.launcher === path ? { ...restartEnv, PI_WEBAPP_PI_CLI: selected.piCli } : restartEnv;
+        return new Promise((resolveExit) => {
+          const next = spawnNode(process.execPath, [path, "start", ...args], { cwd: process.cwd(), env, stdio: ["ignore", fd, fd] });
+          next.once("error", () => resolveExit(1));
+          next.once("exit", (code) => resolveExit(code ?? 1));
+        });
+      };
       if (await runLauncher(restartRequest.launcher) !== 0) {
         await clearManagedLauncher(restartRequest.launcher);
         console.error("pi-webapp: 新版启动失败，正在恢复旧版服务");
@@ -304,12 +311,18 @@ async function serve(pi, args) {
 }
 
 async function clearManagedLauncher(path) {
+  if (desktopPackages) { await rollbackDesktopRelease(agentDir, path); return; }
   try {
     if (JSON.parse(await readFile(updatePath, "utf8")).launcher === path) await unlink(updatePath);
   } catch { /* No matching managed release. */ }
 }
 
 async function managedLauncher() {
+  if (runtimeKind === "desktop") {
+    if (!desktopPackages) return null;
+    const selected = await readDesktopRelease(agentDir, packageVersion);
+    return selected && await realpath(selected.launcher) !== await realpath(launcher) ? selected.launcher : null;
+  }
   try {
     if (existsSync(fileURLToPath(new URL("../.git", import.meta.url)))) return null;
     const update = JSON.parse(await readFile(updatePath, "utf8"));
@@ -330,7 +343,9 @@ async function start(args) {
   }
   const managed = await managedLauncher();
   if (managed) {
-    const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd: process.cwd(), env: process.env, stdio: "inherit" });
+    const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : null;
+    const env = selected?.launcher === managed ? { ...process.env, PI_WEBAPP_PI_CLI: selected.piCli } : process.env;
+    const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd: process.cwd(), env, stdio: "inherit" });
     const code = await new Promise((resolveExit, rejectExit) => { next.once("error", rejectExit); next.once("exit", (status) => resolveExit(status)); });
     if (code !== 0) {
       await clearManagedLauncher(managed);
