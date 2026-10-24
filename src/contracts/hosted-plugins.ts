@@ -14,8 +14,8 @@ export interface HostedPluginCard {
   documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
 }
 export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean }
-export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy";
-export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
+export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy" | "cancel-download";
+export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; /** Exact client nonce; cancellation cannot target another request. */ downloadId?: string; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
 export interface HostedActionInput {
   sessionId: string; pluginId: string; generation: number; action: string; input?: unknown;
   /** Host adapter attaches these, never the iframe. Used ONLY for bounded flush-action admission. */

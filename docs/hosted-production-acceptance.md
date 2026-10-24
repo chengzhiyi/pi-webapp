@@ -2,11 +2,15 @@
 
 This is **not A01–A25 release approval**. Implementation is authorized; npm publication, push and release-branch merging are not. Shared alpha was not edited. Historical observations are not promoted to current-source results.
 
-## ORI-39 local follow-up (not yet parent-integrated)
+## ORI-39 local follow-up (source integrated; joint verification below)
 
 See [bounded compatibility report](hosted-ori39-compatibility.md): actual independent v1 plan package + host UI/actions; streamed old-schema batch/two-window update; mixed native 100-element canvas parity/byte fencing; and real historical-card/checkpoint/localStorage recovery. Host/plugin fixes are independent local commits. Final follow-up source passes 408 Node + 94 desktop / 1 Windows skip, plugin 17/17, and Chromium 20 clean body + shutdown passes / 1 obsolete diagnostic skip, including the policy case. This does not certify the remaining platform, native terminal, arbitrary-callback or pressure matrix.
 
-## Base integration (683a4a3)
+## ORI-40 bounded local supplement
+
+See [fault injection and real editor resource-lifecycle evidence](hosted-ori40-fault-lifecycle.md) for cancellation UI/HTTP, precise staging ENOSPC, stronger stale-file/newer-edit crash assertions, and 70 different local-version controller/tool/editor/worker cycles. New source results: 410 Node + 94 desktop pass / 1 Windows skip; relevant Chromium 19 pass / 1 obsolete diagnostic skip. Final local editor switch P95 753.54ms; loopback transfer is explicitly separate from install/registry time. Historical results below remain historical; strict long-term leak and residual release gates remain explicit in the supplement.
+
+## Base integration (683a4a3; historical checkpoint)
 
 - Host integrates ORI-34/35/36, ORI-37 (`275ff79`) and ORI-38 (`b1eddd5`); plugin is `b8f74b1` (ORI-37 applied after `6108c6b`). Optional-default extraction remains: no builtin drawing tools/API, root editor dependency, drawing fonts or drawing-specific build. Official metadata remains offline-visible.
 - Exact independently rebuilt local development archive: SHA-256 **932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5**, **15,643,698 bytes**, 426 resources. This is not a newly published immutable npm version.

@@ -123,8 +123,12 @@ for (const stage of ["forked", "prepared", "committed", "cleaned"] as const) tes
     await assert.rejects(broker.call(request, "state.read", { key: "draft" }), /generation/);
     const latest = { ...request, generation: 2, requestId: "new" };
     await broker.call(latest, "state.compareAndSwap", { key: "draft", expectedRevision: 1, schema: 1, value: "postcommit new writes" });
+    const nextFile = await broker.call(latest, "workspace.commit", { path: "场景.excalidraw", expectedHash: (saved as { hash: string }).hash, text: "postcommit accepted file bytes" });
+    await assert.rejects(broker.call(request, "workspace.commit", { path: "场景.excalidraw", expectedHash: (nextFile as { hash: string }).hash, text: "stale worker overwrite" }), /generation/);
+    await assert.rejects(broker.call({ ...latest, requestId: "late-response" }, "workspace.commit", { path: "场景.excalidraw", expectedHash: (saved as { hash: string }).hash, text: "late response overwrite" }), /changed|conflict/i);
     await broker.recover();
     assert.equal((await broker.call(latest, "state.read", { key: "draft" }) as { value: string }).value, "postcommit new writes");
+    assert.equal(await readFile(join(cwd, "场景.excalidraw"), "utf8"), "postcommit accepted file bytes");
   } else {
     assert.equal((await broker.call(request, "state.read", { key: "draft" }) as { value: string }).value, "before");
     await assert.rejects(broker.collect(async () => {}), /fork.json/); // retained unresolved reservation, never guessed away
@@ -135,7 +139,7 @@ for (const stage of ["forked", "prepared", "committed", "cleaned"] as const) tes
     await broker.activate(1, { version: "0.2.0", stateRef: next, schema: 1, enabled: true });
     assert.equal((await broker.call({ ...request, generation: 2 }, "state.read", { key: "draft" }) as { value: string }).value, "before");
   }
-  assert.deepEqual(await broker.call({ ...request, generation: (await broker.active())!.generation }, "workspace.read", { path: "场景.excalidraw" }), { text: "original user file", ...(saved as { hash: string }) });
+  assert.deepEqual(await broker.call({ ...request, generation: (await broker.active())!.generation }, "workspace.read", { path: "场景.excalidraw" }), committed ? { text: "postcommit accepted file bytes", hash: (await import("node:crypto")).createHash("sha256").update("postcommit accepted file bytes").digest("hex") } : { text: "original user file", ...(saved as { hash: string }) });
 });
 
 test("unknown journal/pointer relationship refuses recovery instead of discarding evidence", async t => {
@@ -165,7 +169,7 @@ test("cross-schema replacement after newer accepted writes remains fail-closed w
   await supervisor.shutdown();
 });
 
-test("candidate SIGKILL during health preserves old worker, active pointer, state and workspace hash", async t => {
+test("candidate SIGKILL after newer-version accepted edits preserves current worker/data, never old snapshot", async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-health-crash-")), entry = await worker(root);
   const manager = new HostedPluginManager({ root, hostVersion: "0.1.29", workerEntry: entry, hooks });
   const fixture = integrationFixture(); await manager.installer.installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
@@ -174,7 +178,7 @@ test("candidate SIGKILL during health preserves old worker, active pointer, stat
   const runtime = "export const createRuntime=()=>({describe:()=>({tools:[]}),health:()=>process.kill(process.pid,'SIGKILL'),invoke:()=>null});";
   await writeFile(join(candidateRoot, "dist/runtime.js"), runtime);
   const { sha256, validateHostedPackage } = await import("../src/host/server/plugins/hosted/resources.ts");
-  const manifest = JSON.parse(await readFile(join(candidateRoot, "package.json"), "utf8")); manifest.version = "0.2.0";
+  const manifest = JSON.parse(await readFile(join(candidateRoot, "package.json"), "utf8")); manifest.version = "0.3.0";
   await atomicJson(join(candidateRoot, "package.json"), manifest);
   const resources = JSON.parse(await readFile(join(candidateRoot, "dist/resources.json"), "utf8"));
   Object.assign(resources.files.find((file: { path: string }) => file.path === "dist/runtime.js"), { bytes: Buffer.byteLength(runtime), sha256: sha256(runtime) });
@@ -182,7 +186,12 @@ test("candidate SIGKILL during health preserves old worker, active pointer, stat
   const { HostedPluginSupervisor } = await import("../src/host/server/plugins/hosted/supervisor.ts");
   const broker = new HostedStateBroker(join(root, "data"), id), supervisor = new HostedPluginSupervisor(broker, entry);
   t.after(async () => { await supervisor.shutdown(); await rm(root, { recursive: true, force: true }); });
-  await supervisor.replace(pkg); const active = (await broker.active())!, pid = supervisor.pid;
+  await supervisor.replace(pkg);
+  const next = integrationFixture("0.2.0");
+  const newer = await manager.installer.installArchive(id, next.bytes, integrity(next.bytes), "0.2.0");
+  await supervisor.replace(newer);
+  const active = (await broker.active())!, pid = supervisor.pid;
+  assert.equal(active.version, "0.2.0");
   const request = { requestId: "health-save", generation: active.generation, kind: "action" as const, action: "read", input: {}, scope: { cwd: root, sessionId: "s", workspaceId: "w" } };
   const saved = await broker.call(request, "workspace.commit", { path: "health.excalidraw", expectedHash: null, text: "keep bytes" });
   await broker.call(request, "state.compareAndSwap", { key: "draft", expectedRevision: 0, schema: 1, value: "keep state" });
@@ -190,7 +199,7 @@ test("candidate SIGKILL during health preserves old worker, active pointer, stat
   assert.equal(supervisor.pid, pid); assert.equal(supervisor.phase, "active"); assert.deepEqual(await broker.active(), active);
   assert.equal((await broker.call(request, "state.read", { key: "draft" }) as { value: string }).value, "keep state");
   assert.deepEqual(await broker.call(request, "workspace.read", { path: "health.excalidraw" }), { text: "keep bytes", ...(saved as { hash: string }) });
-  assert.equal((await supervisor.invoke({ ...request, requestId: "old-still-live" }) as { version: string }).version, "0.1.0");
+  assert.equal((await supervisor.invoke({ ...request, requestId: "old-still-live" }) as { version: string }).version, "0.2.0");
   await supervisor.shutdown();
 });
 

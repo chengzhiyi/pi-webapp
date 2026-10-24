@@ -10,6 +10,7 @@ export function HostedPluginManagement({ locale, generation = 0 }: { locale: "zh
   const [catalog, setCatalog] = useState<HostedPluginCatalog>({ plugins: [OFFICIAL_HOSTED_PLUGIN], offline: true });
   const [known, setKnown] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [download, setDownload] = useState<{ pluginId: string; id: string } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
@@ -21,13 +22,15 @@ export function HostedPluginManagement({ locale, generation = 0 }: { locale: "zh
   const operate = async (card: HostedPluginCard, operation: HostedManageOperation, reopenEditors = false, updatePolicy?: HostedPluginCard["updatePolicy"]) => {
     if (busy) return;
     if ((operation === "disable" || operation === "uninstall") && !window.confirm(t("将关闭相关视图；仅在所有视图保存成功后继续。工作区文件不会删除。", "Related views will close only after every view saves successfully. Workspace files are retained."))) return;
+    const downloadId = ["install", "update", "check"].includes(operation) ? crypto.randomUUID() : undefined;
+    setDownload(downloadId ? { pluginId: card.pluginId, id: downloadId } : null);
     setBusy(true); setError(""); setNotice("");
     try {
-      setCatalog(await hostedApi.manage({ pluginId: card.pluginId, operation, ...(updatePolicy ? { updatePolicy, ...(updatePolicy === "pinned" ? { version: card.version } : {}) } : {}), ...(reopenEditors ? { reopenEditors: true } : {}) })); setKnown(true);
+      setCatalog(await hostedApi.manage({ pluginId: card.pluginId, operation, ...(downloadId ? { downloadId } : {}), ...(updatePolicy ? { updatePolicy, ...(updatePolicy === "pinned" ? { version: card.version } : {}) } : {}), ...(reopenEditors ? { reopenEditors: true } : {}) })); setKnown(true);
       setNotice(t("已收到服务端确认；编辑器打开时更新默认等待关闭。", "Server acknowledged. Updates wait for open editors to close by default."));
       window.dispatchEvent(new Event("pi:hosted-catalog-changed"));
     } catch (cause) { setError(`${String(cause)}${t("；操作不会自动重试，请刷新确认状态。", "; no automatic retry. Refresh to verify state.")}`); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setDownload(null); }
   };
   const cards = catalog.plugins.some(card => card.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId) ? catalog.plugins : [...catalog.plugins, OFFICIAL_HOSTED_PLUGIN];
   return <section className={css.section} data-hosted-management aria-busy={busy}>
@@ -35,6 +38,9 @@ export function HostedPluginManagement({ locale, generation = 0 }: { locale: "zh
     {catalog.offline && <p className={css.status} role="status">{t("离线目录 · 显示官方插件；安装状态须以服务端确认为准。", "Offline catalog · Official plugin shown; installation state requires server confirmation.")}</p>}
     {error && <p className={css.error} role="alert">{error}</p>}{notice && <p className={css.notice} role="status">{notice}</p>}
     <button type="button" disabled={busy} onClick={() => setReload(value => value + 1)}>{t("刷新 / 重试连接", "Refresh / retry connection")}</button>
+    {download && <button type="button" onClick={() => {
+      void hostedApi.manage({ pluginId: download.pluginId, operation: "cancel-download", downloadId: download.id }).then(() => setNotice(t("已请求取消下载；已提交的安装不会回滚，请刷新确认最终状态。", "Download cancellation requested; committed installations are not rolled back. Refresh to verify the outcome."))).catch(cause => setError(String(cause)));
+    }}>{t("取消下载（不回滚已提交安装）", "Cancel download (no rollback after commit)")}</button>}
     <ul className={css.cards}>{cards.map(card => <li className={css.card} key={card.pluginId} data-hosted-card={card.pluginId}>
       <div className={css.heading}><span className={css.artwork} aria-hidden="true"><ExcalidrawIcon size={26} /></span><div><h3>{card.name} {card.official && t("（官方）", "(Official)")}</h3><code>{card.pluginId}</code></div></div>
       <p className={css.status}>{!known ? t("安装状态未知 · 启用状态未知", "Installation unknown · Enablement unknown") : `${card.installed ? t("已安装", "Installed") : t("未安装", "Not installed")} · ${card.enabled ? t("已启用", "Enabled") : t("未启用", "Disabled")}`} {card.version}</p>
