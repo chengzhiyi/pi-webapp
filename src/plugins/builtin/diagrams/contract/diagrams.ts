@@ -11,7 +11,7 @@ export interface DiagramGraph { nodes: DiagramNode[]; edges: DiagramEdge[]; layo
 export interface DiagramPatch { addNodes?: DiagramNode[]; addEdges?: DiagramEdge[]; updateNodes?: { id: string; label: string }[]; updateElements?: DiagramElementUpdate[]; removeIds?: string[] }
 export interface SceneElement { id: string; type: string; x: number; y: number; width: number; height: number; isDeleted?: boolean; text?: string; containerId?: string | null; customData?: Record<string, unknown>; [key: string]: unknown }
 export interface DiagramScene { type: "excalidraw"; version: 2; source: string; elements: SceneElement[]; appState: { viewBackgroundColor: string }; files: Record<string, never> }
-export interface Candidate { id: string; baseRevision: number; graph?: DiagramGraph; patch?: DiagramPatch }
+export interface Candidate { id: string; baseRevision: number; graph?: DiagramGraph; patch?: DiagramPatch; elements?: Record<string, unknown>[] }
 export interface DiagramDraft { id: string; title: string; revision: number; scene: DiagramScene; path: string | null; diskHash: string | null; savedRevision: number | null; candidate: Candidate | null }
 export type DiagramSummary = Pick<DiagramDraft, "id" | "title" | "revision" | "path" | "savedRevision"> & { pending: boolean };
 export class DiagramError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.name = "DiagramError"; this.status = status; } }
@@ -109,6 +109,73 @@ export function validatePatch(value: unknown, scene: DiagramScene): DiagramPatch
   for (const n of patch.addNodes!) if (n.groupId && (!availableGroups.has(n.groupId) || patch.removeIds!.includes(n.groupId) || n.kind === "group")) fail("分组引用无效");
   if (!patch.updateElements.length && !patch.addNodes!.length && !patch.addEdges!.length && !patch.updateNodes.length && !patch.removeIds.length) fail("修改为空");
   return patch;
+}
+/** Compact Excalidraw skeletons, not executable content or unrestricted native JSON. */
+export function validateDrawing(value: unknown): Record<string, unknown>[] {
+  if (typeof value === "string") {
+    if (new TextEncoder().encode(value).length > MAX_SCENE_BYTES) fail("图稿超过 512 KiB");
+    try { value = JSON.parse(value); } catch { fail("elements 须为有效 JSON 数组字符串"); }
+  }
+  if (!Array.isArray(value) || !value.length || value.length > 150) fail("每次需要 1–150 个绘图元素");
+  if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_SCENE_BYTES) fail("图稿超过 512 KiB");
+  const allowed = new Set(["type", "id", "x", "y", "width", "height", "text", "fontSize", "fontFamily", "strokeColor", "backgroundColor", "strokeWidth", "strokeStyle", "fillStyle", "roughness", "opacity", "angle", "roundness", "points", "start", "end", "startArrowhead", "endArrowhead", "label", "groupIds", "textAlign", "verticalAlign"]);
+  const drawing = value.map(item => {
+    if (!record(item) || Object.keys(item).some(k => !allowed.has(k))) fail("绘图元素包含不支持字段");
+    if (!["rectangle", "ellipse", "diamond", "text", "line", "arrow"].includes(String(item.type))) fail("绘图类型不支持");
+    const result: Record<string, unknown> = { ...item, id: identifier(item.id) };
+    for (const key of ["x", "y", "width", "height", "fontSize", "strokeWidth", "roughness", "opacity", "angle"] as const) {
+      const n = item[key];
+      if (n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 100000)) fail("绘图数值无效");
+    }
+    if (typeof item.x !== "number" || typeof item.y !== "number") fail("绘图坐标缺失");
+    if (["rectangle", "ellipse", "diamond"].includes(String(item.type)) && (["width", "height"].some(k => typeof item[k] !== "number" || (item[k] as number) < 20 || (item[k] as number) > 10000))) fail("绘图尺寸无效");
+    if (item.fontSize !== undefined && ((item.fontSize as number) < 12 || (item.fontSize as number) > 96)) fail("字号须为 12–96");
+    if (item.fontFamily !== undefined && item.fontFamily !== 5) fail("绘图默认使用本地 Excalifont");
+    style(item);
+    if (item.type === "text") label(item.text);
+    else if (item.text !== undefined) fail("形状文字请放入 label");
+    for (const [key, max] of [["roughness", 3], ["opacity", 100], ["strokeWidth", 16]] as const) if (item[key] !== undefined && ((item[key] as number) < 0 || (item[key] as number) > max)) fail("绘图样式数值无效");
+    for (const key of ["width", "height"] as const) if (item[key] !== undefined && ((item[key] as number) < 0 || (item[key] as number) > 10000)) fail("绘图尺寸无效");
+    if (item.label !== undefined) {
+      if (!record(item.label) || Object.keys(item.label).some(k => !["text", "fontSize", "fontFamily", "textAlign", "verticalAlign"].includes(k))) fail("绘图标签无效");
+      label(item.label.text); style(item.label);
+      if (item.label.fontFamily !== undefined && item.label.fontFamily !== 5) fail("绘图标签字体无效");
+    }
+    for (const target of [item, item.label].filter(record)) {
+      if (target.textAlign !== undefined && !["left", "center", "right"].includes(String(target.textAlign))) fail("文字对齐无效");
+      if (target.verticalAlign !== undefined && !["top", "middle", "bottom"].includes(String(target.verticalAlign))) fail("文字对齐无效");
+    }
+    if (item.fillStyle !== undefined && !["solid", "hachure", "cross-hatch", "zigzag"].includes(String(item.fillStyle))) fail("填充样式无效");
+    if (item.roundness !== undefined && (!record(item.roundness) || Object.keys(item.roundness).some(k => k !== "type") || ![1, 2, 3].includes(item.roundness.type as number))) fail("圆角无效");
+    for (const key of ["startArrowhead", "endArrowhead"] as const) if (item[key] !== undefined && item[key] !== null && !["arrow", "bar", "dot", "triangle"].includes(String(item[key]))) fail("箭头样式无效");
+    for (const key of ["start", "end"] as const) if (item[key] !== undefined) {
+      const binding = item[key];
+      if (!record(binding) || Object.keys(binding).some(k => k !== "id")) fail("端点绑定无效");
+      identifier(binding.id);
+    }
+    if (item.groupIds !== undefined && (!Array.isArray(item.groupIds) || item.groupIds.length > 10 || item.groupIds.some(id => typeof id !== "string" || !/^[\\w-]{1,80}$/.test(id)))) fail("元素分组无效");
+    if (["arrow", "line"].includes(String(item.type)) && (!Array.isArray(item.points) || item.points.length < 2 || item.points.length > 100 || item.points.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 100000)))) fail("路径坐标无效");
+    return structuredClone(result);
+  });
+  unique(drawing.map(e => e.id as string));
+  const shapes = new Set(drawing.filter(e => ["rectangle", "ellipse", "diamond"].includes(String(e.type))).map(e => e.id));
+  for (const e of drawing) for (const key of ["start", "end"]) if (record(e[key]) && !shapes.has(e[key].id)) fail("连线引用了不存在的形状");
+  return drawing;
+}
+
+/** Parse only complete top-level objects from a streamed JSON array, respecting quoted braces. */
+export function partialDrawing(text: string): unknown[] {
+  if (text.length > MAX_SCENE_BYTES || !text.trimStart().startsWith("[")) return [];
+  const items: unknown[] = [];
+  let depth = 0, start = -1, quoted = false, escaped = false;
+  for (let i = text.indexOf("[") + 1; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) { if (escaped) escaped = false; else if (c === "\\\\") escaped = true; else if (c === '"') quoted = false; continue; }
+    if (c === '"') { quoted = true; continue; }
+    if (c === "{") { if (depth++ === 0) start = i; }
+    if (c === "}" && --depth === 0 && start >= 0) { try { items.push(JSON.parse(text.slice(start, i + 1))); } catch { return items; } if (items.length >= 150) return items; }
+  }
+  return items;
 }
 export function emptyScene(): DiagramScene { return { type: "excalidraw", version: 2, source: "pi-webapp", elements: [], appState: { viewBackgroundColor: "#ffffff" }, files: {} }; }
 /** Only inert native geometry. Reject imports we cannot round-trip; never silently strip images. */

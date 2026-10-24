@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import { DiagramError, emptyScene, identifier, label, record, validateGraph, validatePatch, validateScene, type DiagramDraft, type DiagramSummary } from "../contract/diagrams.ts";
+import { DiagramError, emptyScene, identifier, label, record, validateDrawing, validateGraph, validatePatch, validateScene, type DiagramDraft, type DiagramSummary } from "../contract/diagrams.ts";
 import { readDiagram, saveDiagram } from "./files.ts";
 import { diagramReference } from "../contract/reference.ts";
 
@@ -8,6 +8,8 @@ import { diagramReference } from "../contract/reference.ts";
 export class DiagramStore {
   private readonly scopes = new Map<string, Map<string, DiagramDraft>>();
   private readonly saving = new Set<string>();
+  private readonly focused = new Map<string, string>();
+  private scopeKey(cwd: string, sessionId: string) { return JSON.stringify([cwd, sessionId]); }
   private scope(cwd: string, sessionId: string) {
     const key = JSON.stringify([cwd, sessionId]);
     let map = this.scopes.get(key); if (!map) { map = new Map(); this.scopes.set(key, map); }
@@ -26,7 +28,7 @@ export class DiagramStore {
     const map = this.scope(cwd, sessionId);
     if (map.size >= 100) throw new DiagramError("当前会话图稿已达 100 份上限");
     const draft: DiagramDraft = { id: randomUUID(), title, revision: 0, scene: emptyScene(), path: null, diskHash: null, savedRevision: null, candidate: null };
-    map.set(draft.id, draft); return draft;
+    map.set(draft.id, draft); this.focused.set(this.scopeKey(cwd, sessionId), draft.id); return draft;
   }
   tool(cwd: string, sessionId: string, action: string, input: unknown) {
     if (!record(input)) throw new DiagramError("绘图工具输入无效");
@@ -35,9 +37,21 @@ export class DiagramStore {
       const graph = validateGraph(input.graph), title = label(input.title);
       const draft = this.add(cwd, sessionId, title);
       draft.candidate = { id: randomUUID(), baseRevision: draft.revision, graph };
-      return { id: draft.id, title, revision: draft.revision, status: "pending_canvas_acceptance", message: "结构候选已建立；打开画布预览并接受后才成为图稿，尚未保存文件或生成 PNG。" };
+      return { id: draft.id, title, revision: draft.revision, status: "pending_canvas_acceptance", message: "结构已建立，图稿将在对话中自动呈现并可直接编辑，无需用户接受首次创建。尚未保存文件或生成 PNG。" };
     }
-    const draft = this.draft(cwd, sessionId, input.id);
+    if (action === "view") {
+      const elements = validateDrawing(input.elements);
+      const title = input.title === undefined ? "Excalidraw" : label(input.title);
+      const draft = input.id === undefined ? this.add(cwd, sessionId, title) : this.draft(cwd, sessionId, input.id);
+      if (input.id !== undefined) {
+        this.expected(draft, input.baseRevision);
+        if (draft.candidate) throw new DiagramError("请先在对话中处理已有修改", 409);
+        // Full scene replacement is an explicit candidate, never a silent overwrite of hand edits.
+      }
+      draft.candidate = { id: randomUUID(), baseRevision: draft.revision, elements };
+      return { id: draft.id, title: draft.title, revision: draft.revision, status: input.id === undefined ? "pending_canvas" : "pending_review", message: input.id === undefined ? "图稿将在对话中自动呈现并可直接编辑，无需用户接受首次创建。尚未写入工作区或导出图片。" : "修改已在对话中预览，保留原图，等待用户确认。" };
+    }
+    const draft = this.draft(cwd, sessionId, input.id ?? (action === "read" ? this.focused.get(this.scopeKey(cwd, sessionId)) : undefined));
     if (action === "read") {
       const selected = input.elementIds === undefined ? null : Array.isArray(input.elementIds) && input.elementIds.length <= 100 ? new Set(input.elementIds.map(identifier)) : (() => { throw new DiagramError("元素读取范围无效"); })();
       const all = draft.scene.elements.filter(e => !e.isDeleted);
@@ -47,10 +61,10 @@ export class DiagramStore {
     }
     if (action !== "patch") throw new DiagramError("未知绘图工具");
     this.expected(draft, input.baseRevision);
-    if (draft.candidate) throw new DiagramError("请先在画布接受或拒绝已有候选", 409);
+    if (draft.candidate) throw new DiagramError("请先在对话中应用已有修改或保留原图", 409);
     const patch = validatePatch(input.patch, draft.scene);
     draft.candidate = { id: randomUUID(), baseRevision: draft.revision, patch };
-    return { id: draft.id, title: draft.title, revision: draft.revision, status: "pending_canvas_acceptance", message: "修改候选已建立；原图未被替换，请用户在画布预览、接受或拒绝。" };
+    return { id: draft.id, title: draft.title, revision: draft.revision, status: "pending_canvas_acceptance", message: "修改已在对话工具结果中预览，原图未被替换；请用户在对话中应用修改或保留原图。右侧仍可手动编辑原图。" };
   }
   async action(cwd: string, sessionId: string, action: string, input: Record<string, unknown>, guard: () => void) {
     guard();
@@ -72,12 +86,14 @@ export class DiagramStore {
     }
     const draft = this.draft(cwd, sessionId, input.id);
     if (action === "get") return structuredClone(draft);
+    if (action === "focus") { this.focused.set(this.scopeKey(cwd, sessionId), draft.id); return { id: draft.id }; }
     this.expected(draft, input.revision);
     if (action === "sync") { draft.scene = validateScene(input.scene); draft.revision++; return structuredClone(draft); }
-    if (action === "accept" || action === "reject") {
+    if (action === "initialize" || action === "accept" || action === "reject") {
       const candidate = draft.candidate;
       if (!candidate || candidate.id !== input.candidateId) throw new DiagramError("候选已变化", 409);
-      if (action === "accept") {
+      if (action === "initialize" && (draft.revision !== 0 || draft.scene.elements.length || candidate.patch)) throw new DiagramError("只能自动呈现尚未编辑的新图稿", 409);
+      if (action === "accept" || action === "initialize") {
         if (candidate.baseRevision !== draft.revision) throw new DiagramError("候选基于旧图稿，不能覆盖最新手改；请拒绝后重新生成", 409);
         draft.scene = validateScene(input.scene); draft.revision++;
       }

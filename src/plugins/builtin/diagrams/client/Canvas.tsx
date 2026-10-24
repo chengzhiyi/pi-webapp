@@ -17,7 +17,8 @@ export async function png(scene: DiagramScene, transparent: boolean) {
   await document.fonts.ready;
   return exportToBlob({ elements: native(scene).filter(e => !e.isDeleted), appState: { ...scene.appState, exportBackground: !transparent, exportWithDarkMode: false }, files: {}, mimeType: "image/png", maxWidthOrHeight: 4096 });
 }
-export default function Canvas({ scene, readOnly, locale, onChange, onError }: { scene: DiagramScene; readOnly: boolean; locale: "zh" | "en"; onChange(scene: DiagramScene): void; onError(message: string): void }) {
+export default function Canvas({ scene, readOnly, locale, onChange, onError, onSave, onOpen, onImport, onRecover, onExport, onDownload, saveStatus }: { scene: DiagramScene; readOnly: boolean; locale: "zh" | "en"; onChange(scene: DiagramScene): void; onError(message: string): void; onSave(): void; onOpen(): void; onImport(): void; onRecover(): void; saveStatus: string; onExport(transparent: boolean): void; onDownload(): void }) {
+  const t = (zh: string, en: string) => locale === "zh" ? zh : en;
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const last = useRef(JSON.stringify(scene));
   const lastValid = useRef(scene);
@@ -48,6 +49,18 @@ export default function Canvas({ scene, readOnly, locale, onChange, onError }: {
     onLinkOpen={(_e, event) => event.preventDefault()} onPaste={() => false}
     UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false } }}
     onChange={(elements, state) => change(elements, state.viewBackgroundColor)}>
-    <MainMenu><MainMenu.DefaultItems.ToggleTheme /><MainMenu.DefaultItems.ChangeCanvasBackground /></MainMenu>
+    <MainMenu>
+      <MainMenu.Item disabled>{saveStatus}</MainMenu.Item>
+      <MainMenu.Item onSelect={onOpen}>{t("打开工作区图稿", "Open workspace diagram")}</MainMenu.Item>
+      <MainMenu.Item onSelect={onImport}>{t("导入源文件", "Import source")}</MainMenu.Item>
+      <MainMenu.Item onSelect={onRecover}>{t("恢复本地备份", "Recover local backup")}</MainMenu.Item>
+      <MainMenu.Item onSelect={onSave}>{t("保存 / 另存到工作区", "Save / Save as to workspace")}</MainMenu.Item>
+      <MainMenu.Item onSelect={onDownload}>{t("下载源文件", "Download source")}</MainMenu.Item>
+      <MainMenu.Separator />
+      <MainMenu.Item onSelect={() => onExport(false)}>{t("导出 PNG", "Export PNG")}</MainMenu.Item>
+      <MainMenu.Item onSelect={() => onExport(true)}>{t("导出透明底 PNG", "Export transparent PNG")}</MainMenu.Item>
+      <MainMenu.Separator />
+      <MainMenu.DefaultItems.ToggleTheme /><MainMenu.DefaultItems.ChangeCanvasBackground />
+    </MainMenu>
   </Excalidraw>;
 }

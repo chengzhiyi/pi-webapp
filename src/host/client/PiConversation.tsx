@@ -37,6 +37,7 @@ interface Props {
   composerInteraction?: ReactNode;
   rightbarControl?: ReactNode;
   renderPluginSlot: (slot: WebSlotName, turn?: TurnReference) => ReactNode;
+  renderToolView?: (call: ViewBlock, result: ViewMessage | undefined, running: boolean) => ReactNode;
   plugins: LoadedPlugin[];
   onPluginAction: (pluginId: string, action: string, input?: unknown) => Promise<unknown>;
   session: SessionView | null;
@@ -94,8 +95,8 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   );
 }
 
-function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, artifactTools, running = false, cwd }: {
-  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; artifactTools: readonly string[]; running?: boolean; cwd?: string;
+function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, renderToolView, artifactTools, viewTools, running = false, cwd }: {
+  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; renderToolView: Props["renderToolView"]; artifactTools: readonly string[]; viewTools: readonly string[]; running?: boolean; cwd?: string;
 }) {
   const lastAssistant = [...turn.messages].reverse().find((message) => message.role === "assistant" && message.blocks.some((block) => block.kind === "text" && block.text.trim()));
   const answerBlocks = lastAssistant?.blocks.filter((block) => block.kind === "text") ?? [];
@@ -104,7 +105,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
     if (message.role !== "assistant") continue;
     message.blocks.forEach((block, index) => {
       if (message === lastAssistant && block.kind === "text") return;
-      if (block.kind === "toolCall" && artifactTools.includes(block.toolName ?? "")) return;
+      if (block.kind === "toolCall" && (viewTools.includes(block.toolName ?? "") || artifactTools.includes(block.toolName ?? ""))) return;
       process.push({ message, block, index });
     });
   }
@@ -122,6 +123,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
         {process.map(({ message, block, index }) => <PiMessage key={`${message.id}-${index}`} message={{ ...message, blocks: [block] }} results={results} loadImage={loadImage} running={message.id === "stream"} cwd={cwd} onInspect={onInspect} />)}
       </div>}
     </>}
+    {turn.messages.filter(message => message.role === "assistant").flatMap(message => message.blocks.filter(block => block.kind === "toolCall" && viewTools.includes(block.toolName ?? "")).map((call, index) => <div key={call.toolCallId ?? `${message.id}-${index}`} data-tool-view={call.toolName}>{renderToolView?.(call, call.toolCallId ? results.get(call.toolCallId) : undefined, running && !results.has(call.toolCallId ?? ""))}</div>))}
     {answerBlocks.length > 0 && lastAssistant && <PiMessage message={{ ...lastAssistant, blocks: answerBlocks }} results={results} loadImage={loadImage} running={lastAssistant.id === "stream"} />}
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
     {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>{t("模型请求失败", "Model request failed")}</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
@@ -438,7 +440,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   );
 }
 
-export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Props) {
+export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -503,7 +505,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="" onScroll={onScroll} onWheel={onWheel}>
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
-              {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
+              {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? [])} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
           <div ref={composer} className={conversationCss.composerSeat} data-composer-seat="">

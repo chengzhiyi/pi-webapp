@@ -2,7 +2,7 @@ import type { ServerPlugin } from "../../../../host/server/plugins/server-plugin
 import { metadata } from "../contract/manifest.ts";
 import { DiagramError } from "../contract/diagrams.ts";
 import { DiagramStore } from "./store.ts";
-const actions = ["list", "new", "get", "open", "import", "sync", "accept", "reject", "save"];
+const actions = ["list", "new", "get", "open", "import", "sync", "focus", "initialize", "accept", "reject", "save"];
 export function createDiagramsPlugin(): ServerPlugin {
   const store = new DiagramStore();
   return {

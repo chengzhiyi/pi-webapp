@@ -1,55 +1,26 @@
-.panel { padding: 22px; overflow: auto; height: 100%; box-sizing: border-box; }
-.panel p, .controls small, .editComposer small { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
-.welcome { padding: 20px 0 10px; text-align: center; }
-.welcome h3 { font-size: 22px; margin: 10px 0; font-weight: 600; }
-.welcomeIcon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: #eef2ff; color: #6366f1; font-size: 30px; }
-.editor { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
-.controls { flex: 0 0 auto; max-height: 38%; overflow: auto; padding: 12px 14px 4px; border-bottom: 1px solid var(--border-color, #e5e7eb); }
-.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-.toolbar > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
-.toolbar input:not([type='checkbox']) { flex: 1; min-width: 120px; }
-.panel button, .editor button, .artifact button, .file { padding: 7px 11px; border: 1px solid var(--border-color, #dce0e7); border-radius: 8px; color: inherit; background: var(--background-secondary, transparent); cursor: pointer; font: inherit; transition: background .15s; }
-.panel button:hover, .editor button:hover, .artifact button:hover { background: var(--background-hover, #eef2ff); }
-.panel button:focus-visible, .editor button:focus-visible, .artifact button:focus-visible, .more summary:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
-.editor button.primary, .startComposer button { background: #6366f1; border-color: #6366f1; color: white; }
-.editor button.primary:hover, .startComposer button:hover { background: #4f46e5; }
-.panel input:not([type='file']), .editor input:not([type='checkbox']), .startComposer textarea { padding: 9px 10px; border: 1px solid var(--border-color, #dce0e7); border-radius: 8px; color: inherit; background: transparent; font: inherit; }
-.panel button:disabled, .editor button:disabled, .artifact button:disabled { opacity: .5; cursor: default; }
-.file input { display: none; }
-.canvas { flex: 1; min-height: 180px; width: 100%; background: white; position: relative; }
+.editor { position: relative; height: 100%; min-height: 0; overflow: hidden; background: white; }
+.canvas { height: 100%; width: 100%; min-height: 180px; background: white; }
 .canvas :global(.excalidraw) { height: 100%; }
-/* Remote libraries, embeddings and external asset insertion remain outside the local surface. */
+/* Local-only editing: no remote libraries, uploads, embedded web pages or external assets. */
 .canvas :global(.default-sidebar-trigger), .canvas :global(.library-button), .canvas :global([data-testid='toolbar-embeddable']), .canvas :global([data-testid='toolbar-image']) { display: none !important; }
-.notice { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; padding: 10px; background: #fffbeb; color: #713f12; border: 1px solid #fde68a; border-radius: 10px; font-size: 12px; margin-bottom: 8px; }
-.notice > strong { flex: 1; min-width: 130px; }
-.notice span { width: 100%; }
-.list { list-style: none; padding: 0; }
-.list li { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--border-color, #eceef2); }
-.list small { overflow-wrap: anywhere; opacity: .65; font-size: 11px; }
-.more { font-size: 12px; }
-.more summary { list-style: none; padding: 7px 11px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border-color, #dce0e7); }
-.more[open] { flex-basis: 100%; }
-.advanced { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 0; }
-.advanced > label:first-child { display: flex; align-items: center; gap: 8px; width: 100%; }
-.advanced small { width: 100%; overflow-wrap: anywhere; }
-.editComposer { flex-shrink: 0; padding: 12px 14px; border-top: 1px solid var(--border-color, #e5e7eb); }
-.editComposer .toolbar { margin-bottom: 4px; }
-.editComposer .toolbar > input { min-width: 150px; }
-.badge { flex-shrink: 0; padding: 3px 7px; font-size: 11px; color: var(--text-secondary, #64748b); background: var(--background-secondary, #f1f5f9); border-radius: 6px; font-weight: 400; }
-.startComposer { border: 1px solid var(--border-color, #dce0e7); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin: 8px 0 12px; }
-.startComposer textarea { box-sizing: border-box; width: 100%; resize: vertical; border: 0; outline-offset: 2px; line-height: 1.6; }
-.startComposer button { font-size: 13px; }
-.suggestions { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 24px; }
-.suggestions button { text-align: left; font-size: 11px; color: var(--text-secondary); }
-.artifact { margin: 14px 0; width: 100%; min-width: 0; border: 1px solid var(--border-color, #dce0e7); border-radius: 14px; overflow: hidden; background: var(--background-primary, white); }
-.artifactHeader { display: flex; gap: 9px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color, #eceef2); }
-.artifactHeader strong { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.artifactHeader button { flex-shrink: 0; font-size: 12px; }
-.artifactIcon { color: #6366f1; font-size: 20px; }
-.previewViewport { max-height: 520px; min-height: 180px; overflow: auto; background: white; }
-.previewViewport img { display: block; height: auto; min-height: 120px; }
-.previewPlaceholder { display: grid; place-items: center; min-height: 200px; padding: 20px; font-size: 12px; color: #64748b; }
-.previewFooter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border-color, #eceef2); color: var(--text-secondary, #64748b); font-size: 11px; }
-.previewFooter > div { display: flex; gap: 4px; }
-.previewFooter button { border: 0; padding: 4px 8px; font-size: 12px; }
-@media (max-width: 600px) { .panel { padding: 14px; } .controls { padding: 9px 10px 2px; } .artifactHeader { padding: 10px; gap: 6px; } .artifactHeader .badge { display: none; } .previewViewport { max-height: 380px; } .editComposer { padding: 10px; } }
+.hidden { display: none; }
+.artifact { margin: 14px 0; width: 100%; min-width: 0; border: 1px solid var(--border-color, #dce0e7); border-radius: 12px; overflow: hidden; background: white; }
+.toolHeader { display: flex; align-items: center; gap: 9px; padding: 12px 14px; color: var(--text-secondary, #64748b); border-bottom: 1px solid var(--border-color, #eceef2); font-size: 13px; }
+.toolHeader > span { color: #50b95a; }
+.previewViewport { position: relative; max-height: 540px; min-height: 180px; overflow: auto; background: white; }
+.previewViewport img, .streamImage { display: block; width: 100%; height: auto; }
+.previewPlaceholder { display: grid; place-items: center; min-height: 180px; padding: 20px; font-size: 12px; color: #64748b; }
+.editButton { position: absolute; top: 12px; right: 12px; box-shadow: 0 1px 4px #0001; }
+.editButton, .review button, .dialog button, .recovery button, .error button { padding: 7px 11px; border: 1px solid #dce0e7; border-radius: 7px; color: #1e1e1e; background: white; cursor: pointer; font: inherit; font-size: 12px; }
+.editButton:focus-visible, .review button:focus-visible, .dialog button:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+.review { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #eceef2; color: #64748b; font-size: 12px; }
+.review > span { flex: 1; }
+.review button:disabled { opacity: .5; cursor: default; }
+.modalBackdrop { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; padding: 18px; background: #0003; }
+.dialog { box-sizing: border-box; width: min(440px, 100%); padding: 22px; border-radius: 12px; color: #1e1e1e; background: white; box-shadow: 0 8px 40px #0002; font-size: 14px; }
+.dialog label { display: flex; flex-direction: column; gap: 8px; }
+.dialog input { padding: 10px; min-width: 0; border: 1px solid #dce0e7; border-radius: 7px; font: inherit; }
+.dialog > div { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.dialog p, .inlineError { color: #a52020; font-size: 12px; padding: 8px; overflow-wrap: anywhere; }
+.error, .recovery { position: absolute; z-index: 5; bottom: 56px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; color: #713f12; font-size: 12px; }
+@media (max-width: 600px) { .previewViewport { max-height: 380px; } .toolHeader { padding: 10px; } }

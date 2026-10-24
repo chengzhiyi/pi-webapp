@@ -83,6 +83,14 @@ function finalize(scene: DiagramScene): DiagramScene {
   return validateScene({ ...scene, elements: restoreElements(scene.elements as unknown as ExcalidrawElement[], null) });
 }
 export function materialize(base: DiagramScene, candidate: Candidate): DiagramScene {
+  if (candidate.elements) {
+    const skeletons = candidate.elements.map(element => ({
+      roughness: 1, fillStyle: "solid", ...element,
+      ...(element.type === "text" ? { fontFamily: 5 } : {}),
+      ...(element.label ? { label: { fontFamily: 5, fontSize: 20, ...(element.label as object) } } : {}),
+    })) as unknown as ExcalidrawElementSkeleton[];
+    return finalize({ ...emptyScene(), elements: convert(skeletons) });
+  }
   if (candidate.graph) {
     const shapes = convert(layout(candidate.graph));
     return finalize({ ...emptyScene(), elements: withEdges(shapes, candidate.graph.edges) });

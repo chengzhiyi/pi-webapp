@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DIAGRAM_PLUGIN, emptyScene, validateGraph, validatePatch, validateScene, type DiagramDraft } from "../src/plugins/builtin/diagrams/contract/diagrams.ts";
+import { DIAGRAM_PLUGIN, emptyScene, validateDrawing, partialDrawing, validateGraph, validatePatch, validateScene, type DiagramDraft } from "../src/plugins/builtin/diagrams/contract/diagrams.ts";
 import { readDiagram, saveDiagram } from "../src/plugins/builtin/diagrams/server/files.ts";
 import { DiagramStore } from "../src/plugins/builtin/diagrams/server/store.ts";
 import { diagramTools } from "../src/plugins/builtin/diagrams/server/tools.ts";
@@ -124,7 +124,7 @@ test("diagram HTTP and agent operations share real plugin enablement gates, auth
   assert.equal((await post("/api/diagrams/new", {}, { Origin: "https://other.example" })).status, 403);
   assert.equal((await post("/api/diagrams/new", { sessionId: "stale" })).status, 409);
   const tools = diagramTools((...args) => bridge.runPluginTool(...args));
-  assert.deepEqual(tools.map(t => t.name), ["diagram_reference", "diagram_create", "diagram_read", "diagram_patch"]);
+  assert.deepEqual(tools.map(t => t.name), ["excalidraw_read_me", "excalidraw_create_view", "diagram_reference", "diagram_create", "diagram_read", "diagram_patch"]);
   const created = await bridge.runPluginTool(DIAGRAM_PLUGIN, cwd, "terminal-a", "create", { title: "中文图稿", graph }) as { id: string };
   const loaded = await (await post("/api/diagrams/get", { id: created.id })).json(); assert.equal(loaded.title, "中文图稿");
   const big = { ...emptyScene(), elements: Array.from({ length: 100 }, (_, i) => ({ id: `n${i}`, type: "text", text: "文".repeat(400), x: 0, y: i * 50, width: 100, height: 30 })) };

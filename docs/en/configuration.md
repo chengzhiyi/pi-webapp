@@ -19,7 +19,7 @@ Bundled plugin switches persist globally and require all chats to be idle. Disab
 
 ## Diagrams
 
-Select **Diagrams** in the right workbench, or ask the agent to draw a flowchart. Open its response card and accept the preview candidate before editing. Save locally as `.excalidraw`, import/reopen source files, download the source, or export white/transparent PNG. AI edits require acceptance again; stale revisions and file conflicts cannot force-overwrite your changes.
+Ask the agent to draw in the **main chat**. The drawing appears in its tool result; new drawings require no acceptance step. **Edit** opens only the native Excalidraw canvas and toolbar on the right. Request further changes in the main chat; existing-diagram AI edits use **Apply edits / Keep original** in chat, with stale-revision protection. Save/Open/Import, source download, white/transparent PNG export and backup recovery live in Excalidraw's menu. Workspace files use `.excalidraw` and remain conflict-protected. The right-workbench **Excalidraw** entry opens a blank native canvas, without a separate drawing landing page or prompt form.
 
 The editor is embedded locally, without Excalidraw cloud services. Manual editing works without a model. Browser draft backups are not a substitute for saving files. Images, links, collaboration and headless PNG rendering are not supported. See [Diagrams](../diagrams.md) for boundaries. Rebuild/restart the backend after updating; refreshing the page alone is insufficient.
 

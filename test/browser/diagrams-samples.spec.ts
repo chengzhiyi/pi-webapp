@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { terminalHost } from "../helpers/terminal-host.ts";
 import { startBridge } from "../../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
+import { publishDrawing } from "../helpers/diagram-browser.ts";
 import { DIAGRAM_PLUGIN, type DiagramDraft, type DiagramGraph } from "../../src/plugins/builtin/diagrams/contract/diagrams.ts";
 
 const samples: [string, string[], [number, number, string?][], DiagramGraph["layout"]?][] = [
@@ -31,19 +32,19 @@ test("ten fixed Chinese structures preserve labels, bindings and non-overlapping
   const panel = page.locator("[data-sidebar-right-session]");
   const metrics: object[] = [];
   try {
-    await page.goto(bridge.url); await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
-    await panel.getByRole("button", { name: "Diagrams", exact: true }).click();
+    await page.goto(bridge.url);
     const thirty: DiagramGraph = { nodes: Array.from({ length: 30 }, (_, i) => ({ id: `n${i}`, label: `处理节点 ${i + 1}` })), edges: Array.from({ length: 29 }, (_, i) => ({ id: `e${i}`, from: `n${i}`, to: `n${i + 1}` })) };
     const fixtures = [["三十节点性能基线", thirty] as const, ...samples.map(([title, labels, edges, layout]) => [title, { nodes: labels.map((label, i) => ({ id: `n${i}`, label, kind: label.includes("？") ? "decision" as const : "process" as const })), edges: edges.map(([from, to, label], i) => ({ id: `e${i}`, from: `n${from}`, to: `n${to}`, ...(label ? { label } : {}) })), layout }] as const)];
     for (const [title, graph] of fixtures) {
       const created = await bridge.runPluginTool(DIAGRAM_PLUGIN, cwd, "terminal-a", "create", { title, graph }) as { id: string };
-      const entry = panel.getByRole("button", { name: new RegExp(title) }); await expect(entry).toBeVisible();
-      const started = Date.now(); await entry.click();
-      await expect(panel.getByRole("button", { name: "Accept candidate", exact: true })).toBeEnabled();
+      const started = Date.now();
+      publishDrawing(host, bridge, created, title, "diagram_create", { title, graph });
+      const artifact = page.getByRole("article", { name: `Diagram: ${title}`, exact: true });
+      await expect(artifact.getByRole("img")).toBeVisible();
+      await expect.poll(async () => !!(await get(created.id)).candidate).toBe(false);
+      await artifact.getByRole("button", { name: "Edit Excalidraw", exact: true }).click();
       await expect(panel.locator(".excalidraw canvas.interactive")).toBeVisible();
       metrics.push({ title, openToInteractiveMs: Date.now() - started, nodes: graph.nodes.length });
-      await panel.getByRole("button", { name: "Accept candidate", exact: true }).click();
-      await expect.poll(async () => !!(await get(created.id)).candidate).toBe(false);
       const scene = (await get(created.id)).scene;
       for (const n of graph.nodes) { expect(scene.elements.some(e => e.id === n.id)).toBe(true); expect(scene.elements.some(e => e.text === n.label && e.containerId === n.id)).toBe(true); }
       for (const edge of graph.edges) {
@@ -55,10 +56,9 @@ test("ten fixed Chinese structures preserve labels, bindings and non-overlapping
       }
       const nodes = scene.elements.filter(e => graph.nodes.some(n => n.id === e.id));
       for (let i = 0; i < nodes.length; i++) for (const b of nodes.slice(i + 1)) { const a = nodes[i]!; expect(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y).toBe(true); }
-      await expect(panel.getByRole("button", { name: "Accept candidate", exact: true })).toHaveCount(0);
+      await expect(panel.getByRole("textbox")).toHaveCount(0);
       if (title !== "三十节点性能基线") await page.screenshot({ path: info.outputPath(`${title}.png`) });
-      await panel.getByRole("button", { name: "New tab", exact: true }).click();
-      await panel.getByRole("button", { name: "Diagrams", exact: true }).click();
+      await panel.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();
       await expect(panel.locator("[data-diagram-canvas] .excalidraw")).toHaveCount(0);
     }
     const assets = await page.evaluate(() => performance.getEntriesByType("resource").filter(e => e.name.includes("/assets/")).map(e => ({ url: new URL(e.name).pathname, bytes: (e as PerformanceResourceTiming).decodedBodySize, transferred: (e as PerformanceResourceTiming).transferSize })));
