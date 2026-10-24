@@ -125,6 +125,11 @@ export class WorkspaceSessions {
   private ensureAvailable() {
     if (this.disposed) throw new Error("工作区服务已关闭");
   }
+  /** Authenticated hosted routes may access retained/background sessions, never disk-only IDs. */
+  hostedScope(id: string): { cwd: string; sessionId: string } | null {
+    const runtime = this.runtimes.get(id);
+    return !this.disposed && runtime && !runtime.closing ? { cwd: runtime.cwd, sessionId: id } : null;
+  }
   hasSession(cwd: string, id: string): boolean { return this.runtimes.get(id)?.cwd === cwd; }
   hasWorkspace(cwd: string): boolean { return this.selectedByWorkspace.has(cwd); }
   retainedSessions() {

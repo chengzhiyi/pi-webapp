@@ -136,7 +136,7 @@ async function listen(server: Server, requestedPort = 0): Promise<number> {
   return address.port;
 }
 
-export async function startBridge(host: BridgeHost, webRoot: string, telemetry = new NodeTelemetry(), options: { pluginSettingsFile?: string } = {}): Promise<Bridge> {
+export async function startBridge(host: BridgeHost, webRoot: string, telemetry = new NodeTelemetry(), options: { pluginSettingsFile?: string; excludeBuiltinDiagrams?: boolean } = {}): Promise<Bridge> {
   telemetry.setState({ piVersion: VERSION });
   const fixedToken = process.env.PI_WEBAPP_RESTART_TOKEN;
   const tokenText = fixedToken && /^[A-Za-z0-9_-]{32}$/.test(fixedToken) ? fixedToken : randomBytes(24).toString("base64url");
@@ -145,7 +145,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const streams = new Set<ServerResponse>();
   const preferences = new PluginPreferences(options.pluginSettingsFile ?? join(getAgentDir(), "pi-web", "plugins.json"));
   try { await preferences.load(); } catch (error) { await telemetry.close(); throw error; }
-  const pluginRegistry = new ServerPluginRegistry(builtinServerPlugins(), preferences);
+  const pluginRegistry = new ServerPluginRegistry(builtinServerPlugins({ excludeDiagrams: options.excludeBuiltinDiagrams }), preferences);
   const externalCatalog = async () => await host.plugins?.() ?? { plugins: [], errors: [] };
   const pluginState = () => ({ type: "plugin_state" as const, disabled: pluginRegistry.plugins.filter(plugin => !preferences.enabled(plugin.metadata.id)).map(plugin => plugin.metadata.id) });
   const publishPluginState = () => { for (const stream of streams) stream.write(`${JSON.stringify(pluginState())}\n`); };
