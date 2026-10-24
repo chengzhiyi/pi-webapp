@@ -131,7 +131,10 @@ export class HostedPluginInstaller {
     if (!response.ok || !response.body) throw new HostedPluginError("download_failed", `Registry download failed (${response.status})`);
     if (response.url && new URL(response.url).origin !== url.origin) throw new HostedPluginError("registry_denied", "Registry redirect is forbidden");
     const reader = response.body.getReader(), chunks: Buffer[] = []; let length = 0;
+    const cancel = () => { void reader.cancel(abort.reason).catch(() => {}); };
+    abort.addEventListener("abort", cancel, { once: true });
     try {
+      abort.throwIfAborted();
       if (Number(response.headers.get("content-length")) > limit) throw new HostedPluginError("download_too_large", "Registry response exceeds budget");
       for (;;) {
         const next = await reader.read(); if (next.done) break;
@@ -140,7 +143,7 @@ export class HostedPluginInstaller {
         chunks.push(Buffer.from(next.value));
       }
       abort.throwIfAborted(); return Buffer.concat(chunks);
-    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    } finally { abort.removeEventListener("abort", cancel); await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
   async check(id: string, installedVersion?: string, exact?: string, signal?: AbortSignal): Promise<RegistryRelease> {
     const plugin = officialPlugin(id, this.catalog);

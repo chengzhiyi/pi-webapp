@@ -2,6 +2,10 @@
 
 This is **not A01–A25 release approval**. Implementation is authorized; npm publication, push and release-branch merging are not. Shared alpha was not edited. Historical observations are not promoted to current-source results.
 
+## ORI-40 bounded local supplement
+
+See [fault injection and real editor resource-lifecycle evidence](hosted-ori40-fault-lifecycle.md) for cancellation UI/HTTP, precise staging ENOSPC, stronger stale-file/newer-edit crash assertions, and 70 different local-version controller/tool/editor/worker cycles. New source results: 410 Node + 94 desktop pass / 1 Windows skip; relevant Chromium 19 pass / 1 obsolete diagnostic skip. Final local editor switch P95 753.54ms; loopback transfer is explicitly separate from install/registry time. Historical results below remain historical; strict long-term leak and residual release gates remain explicit in the supplement.
+
 ## Current integration
 
 - Host integrates ORI-34/35/36, ORI-37 (`275ff79`) and ORI-38 (`b1eddd5`); plugin is `b8f74b1` (ORI-37 applied after `6108c6b`). Optional-default extraction remains: no builtin drawing tools/API, root editor dependency, drawing fonts or drawing-specific build. Official metadata remains offline-visible.
