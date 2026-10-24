@@ -53,8 +53,9 @@ test("100-element local switch: 20 warmups + 50 complete-host controller/worker 
       const response = await fetch(address.origin + "/api/hosted-plugins/action", { method: "POST", headers, body: JSON.stringify({ pluginId: id, generation: (await broker.active())!.generation, sessionId, action, input }) });
       expect(response.status).toBe(200); return response.json();
     };
-    // Valid native scene including grouped shapes and Chinese text; immutable data is compared
-    // byte-for-byte after every switch, not merely element count or draft ID.
+    // Request native shapes/Chinese/viewport, then compare the validated persisted checkpoint
+    // byte-for-byte after every switch. This does NOT assert import/viewport fidelity; the
+    // separate red A06 native gesture test owns that gate (current schema strips viewport).
     const scene = { type: "excalidraw", version: 2, source: "pi-webapp", files: {},
       appState: { viewBackgroundColor: "#ffffff", scrollX: 31, scrollY: 47, zoom: { value: 0.75 } },
       elements: Array.from({ length: 100 }, (_, i) => ({ id: "element-" + i, type: i === 99 ? "text" : "rectangle", x: i % 10 * 120, y: Math.floor(i / 10) * 80, width: 100, height: 60,
@@ -120,7 +121,7 @@ test("100-element local switch: 20 warmups + 50 complete-host controller/worker 
       parentRssBytes: { min: Math.min(...hostRss), max: Math.max(...hostRss), last: hostRss.at(-1) },
       browserPostGcHeapBytes: { firstMedian: first, lastMedian: last, growth: last - first, samples: heaps },
       oldWorkerPidsConfirmedExited: observedPids.size, generation: active.generation, activeFrames: 1, activeTools: 6, retainedStateSnapshots: 2, externalRequests: external.length, pageErrors: errors.length,
-      limitations: ["Same-version local reactivation, not different-version installation", "No editor gesture, frame ports/timers direct census, child CPU/RSS or Electron/other-platform certification", "Browser heap budget is smoke-only; not an exhaustive leak proof"] };
+      limitations: ["Same-version local reactivation, not different-version installation", "Hash covers validated persisted checkpoint, not native viewport/import fidelity; separate A06 regression remains", "No editor gesture, frame ports/timers direct census, child CPU/RSS or Electron/other-platform certification", "Browser heap budget is smoke-only; not an exhaustive leak proof"] };
     expect(observedPids.size).toBe(70);
     await info.attach("reference-measurement.json", { body: JSON.stringify(report, null, 2), contentType: "application/json" });
     console.log(JSON.stringify(report, null, 2));
