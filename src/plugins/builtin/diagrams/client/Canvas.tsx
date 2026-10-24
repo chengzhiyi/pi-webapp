@@ -22,9 +22,22 @@ export default function Canvas({ scene, readOnly, locale, onChange, onError, onS
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const last = useRef(JSON.stringify(scene));
   const lastValid = useRef(scene);
+  const refit = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(refit.current), []);
   useEffect(() => {
     const fingerprint = JSON.stringify(scene);
-    if (api && fingerprint !== last.current) { last.current = fingerprint; lastValid.current = scene; api.updateScene({ elements: native(scene), appState: scene.appState, captureUpdate: CaptureUpdateAction.IMMEDIATELY }); }
+    if (api && fingerprint !== last.current) {
+      const ids = new Set(lastValid.current.elements.filter(e => !e.isDeleted).map(e => e.id));
+      const added = scene.elements.some(e => !e.isDeleted && !ids.has(e.id));
+      last.current = fingerprint; lastValid.current = scene;
+      api.updateScene({ elements: native(scene), appState: scene.appState, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+      // Reveal newly accepted AI content that may be outside the old viewport. Native hand edits
+      // already update last.current in onChange, so dragging/typing never triggers this refit.
+      if (added) {
+        cancelAnimationFrame(refit.current);
+        refit.current = requestAnimationFrame(() => api.scrollToContent(api.getSceneElements(), { fitToViewport: true }));
+      }
+    }
   }, [api, scene]);
   useEffect(() => {
     if (!api) return;
