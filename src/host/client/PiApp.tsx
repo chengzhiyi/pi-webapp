@@ -18,6 +18,7 @@ import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.ts
 import { PluginInteraction, PluginSlot, PluginToolView, useWebPlugins } from "./plugin-runtime.tsx";
 import { useHostedPlugins } from "./hosted/runtime.tsx";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
+import { drawingRecovery, OFFICIAL_DRAWINGS } from "./legacy-diagrams.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
 import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, localize as t } from "../../../web/src/ui/locale/preference.ts";
@@ -48,13 +49,15 @@ export function PiApp() {
   const { plugins: v1Plugins, errors: pluginErrors } = useWebPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.plugins, bridge.pluginGeneration);
   const hostedCallbacks = useRef<{ openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> }>({});
   const hosted = useHostedPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.pluginGeneration, hostedCallbacks, locale);
-  // Backend must reject duplicate tool ownership. Do not replace/remove builtin drawings here.
-  const plugins = [...v1Plugins, ...hosted.plugins.filter(plugin => !v1Plugins.some(existing =>
-    existing.id === plugin.id || existing.definition.artifactTools?.some(tool => plugin.definition.artifactTools?.includes(tool))))];
-  const panel = usePluginPanel(bridge.session?.sessionId, bridge.disabledPlugins);
-  const panelId = panel.panelId;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
+  const recovery = useMemo(() => drawingRecovery(() => setPluginsOpen(true)), []);
+  // Backend rejects duplicate tool ownership; the compatibility card contains no editor.
+  const activePlugins = [...v1Plugins, ...hosted.plugins.filter(plugin => !v1Plugins.some(existing =>
+    existing.id === plugin.id || existing.definition.artifactTools?.some(tool => plugin.definition.artifactTools?.includes(tool))))];
+  const plugins = activePlugins.some(plugin => plugin.id === OFFICIAL_DRAWINGS) ? activePlugins : [...activePlugins, recovery];
+  const panel = usePluginPanel(bridge.session?.sessionId, bridge.disabledPlugins);
+  const panelId = panel.panelId;
   const needsModelSetup = bridge.connection === "connected" && bridge.session !== null && bridge.modelsStatus === "ready" && bridge.models.length === 0;
   useEffect(() => {
     if (needsModelSetup) setSettingsOpen(true);

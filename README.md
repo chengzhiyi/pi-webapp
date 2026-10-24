@@ -125,6 +125,8 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 | **Guardrails at the host boundary** | Loopback transport uses token/origin checks; file previews enforce workspace and symlink boundaries. Git writes reject stale state and coordinate known chats sharing the worktree. These checks are not an OS sandbox. |
 | **One UI across entry points** | React + TypeScript power the workbench, Vite/esbuild bundle the app, and Electron provides the desktop shell without a separate conversation UI. |
 
+**Optional drawings:** install and enable the official `@chengzhiyi/pi-excalidraw` card in Plugins. The host ships no Excalidraw editor/fonts and does not auto-install it on offline startup. Hotplug keeps existing sessions; ordinary updates wait for open editors, while explicit reopen resets native undo. Old drawings/backups are preserved; see [migration and recovery](docs/diagrams.md). The development protocol/plugin artifacts on this branch are verification-only, not a published release.
+
 Source layout: `src/adapters/pi/` → Pi entry · `src/host/` → server/browser host · `src/plugins/builtin/` → workspace capabilities · `src/contracts/` → cross-boundary contracts · `web/src/ui/` → shared UI · `desktop/` → Electron shell.
 
 Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin integration notes](docs/web-plugins.md) for lifecycle and extension details.

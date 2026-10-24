@@ -1,20 +1,19 @@
 # Hosted production bootstrap (ORI-28)
 
-## Explicit opt-in, not the release default
+## Optional official plugin, default hosted ownership
 
-Start a **new host process** with `PI_WEBAPP_HOSTED_EXCALIDRAW=1` after building.
-Without that exact flag the existing builtin drawings remain unchanged. In opt-in
-mode the composition root excludes builtin drawing Agent tools and its server
-plugin together: no builtin drawing routes, catalog card, browser contribution or
-second tool owner. Files, terminal, git and v1 plugins (including plan mode) remain.
-The adapter refuses conflicting tools in retained older sessions before activation;
-it does not overwrite those owners or reconstruct sessions to make activation pass.
-Changing ownership mode through a development reload is refused.
+Start a **new host process** after migrating from a builtin-era host. Hosted is
+now the only drawing owner; no flag is required. `PI_WEBAPP_HOSTED_EXCALIDRAW` is
+retired (even `0` cannot bring the builtin back). The official package is absent
+until explicitly installed; offline startup restores enabled installed intent only.
+Files, terminal, git and v1 plugins (including plan mode) remain. The adapter rejects
+conflicting tools without overwriting owners, reloading or replacing sessions.
+Reloading an older builtin host into this ownership mode is explicitly refused.
 
-The root editor dependency, build chunks and fonts are deliberately still present.
-**Zero-editor-download final default is NOT satisfied**. Parent parity/migration
-acceptance must precede changing the default or removing those root dependencies.
-No publication, push, release merge or credential changes are part of this patch.
+The root editor dependency, exclusive overrides, builtin drawing client/server,
+font/chunk build hook and notices are removed. Only tiny metadata/icon/history
+recovery remain. See [migration and package verification](hosted-excalidraw-migration.md).
+This is not authorization for publication, push, release merge or credentials.
 
 ## Composition and authenticated boundaries
 
@@ -107,12 +106,12 @@ node --import ./test/setup-env.mjs --experimental-strip-types --test \
   test/hosted-bootstrap.test.ts test/hosted-integration*.test.ts \
   test/hosted-agent*.test.ts test/hosted-views.test.ts test/hosted-routes.test.ts \
   test/hosted-installation.test.ts test/hosted-plugins.test.ts \
-  test/background-sessions.test.ts test/diagram-tools-sdk.test.ts \
+  test/background-sessions.test.ts test/drawing-*.test.ts test/legacy-checkpoints.test.ts \
   test/prompt-queue-bridge.test.ts test/web-plugins.test.ts
 npm run build
 ```
 
-42 tests pass, with actual SDK, Node worker, manager and authenticated HTTP fixtures,
+Historical bootstrap milestone: 42 tests passed, with actual SDK, Node worker, manager and authenticated HTTP fixtures,
 without provider networking. Coverage includes actual pi-host opt-in lifecycle,
 old-schema batches finishing before drain, concurrent management serialization,
 retained/new same-object session tools, install/enable/update/retry/disable/uninstall
@@ -128,8 +127,8 @@ package, legacy import/edit/save/restart/disable/uninstall persistence. That tes
 certifies the manager/package layer, not a full browser-plus-bootstrap end-to-end.
 
 Build succeeds with existing large-chunk/use-client warnings and the parent-owned
-worker debug-ID proxy's missing default-export warning. Root editor fonts/chunks
-are still visibly emitted, as required by the parity gate.
+worker debug-ID proxy's missing default-export warning. Current default/package
+results supersede the older milestone counts above; see the migration report.
 
 Not claimed: full management browser/TUI interaction, real-provider concurrency,
 Electron/OS packaging matrix, final Excalidraw parity or release acceptance. The

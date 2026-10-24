@@ -1,6 +1,10 @@
 # Hosted UI / all-window barrier handoff (ORI-26)
 
-This change is an inspectable frontend/coordinator implementation, **not production activation of Excalidraw**. The existing built-in drawings and v1 runtime remain. No tools are registered by the browser. Parent integration must reject duplicate tool ownership before enabling an external replacement; disabling built-in drawings is a separate parity-gated decision.
+Historical frontend milestone; current optional-default ownership and builtin removal
+are documented in [migration verification](hosted-excalidraw-migration.md). The earlier
+scope below is preserved as provenance, not the current composition.
+
+This change was an inspectable frontend/coordinator implementation, **not production activation of Excalidraw**. The existing built-in drawings and v1 runtime remain. No tools are registered by the browser. Parent integration must reject duplicate tool ownership before enabling an external replacement; disabling built-in drawings is a separate parity-gated decision.
 
 ## Delivered paths
 

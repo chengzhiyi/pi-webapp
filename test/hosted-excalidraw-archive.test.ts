@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "esbuild";
 import { HostedPluginManager } from "../src/host/server/plugins/hosted/manager.ts";
 import { legacyCheckpointLoader } from "../src/host/server/plugins/hosted/legacy-checkpoints.ts";
-import { PersistentDiagramStore } from "../src/plugins/builtin/diagrams/server/persistence.ts";
+import { writeLegacyCheckpoint } from "./helpers/legacy-checkpoint.ts";
 
 /** Cross-repo artifact supplied explicitly, never silently resolved from sibling node_modules. */
 test("exact external Excalidraw tgz: install, import, edit, save, drain, restart, disable and uninstall preserve data", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async t => {
@@ -16,8 +16,12 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   const workerEntry = join(root,"worker.mjs");
   await build({entryPoints:[new URL("../src/host/server/plugins/hosted/worker-entry.ts",import.meta.url).pathname],outfile:workerEntry,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
   const id = "@chengzhiyi/pi-excalidraw", scope = {cwd,workspaceId:"workspace",sessionId:"session"};
-  const legacyRoot = join(root,"legacy"), legacy = new PersistentDiagramStore(legacyRoot);
-  const old = await legacy.action(cwd,scope.sessionId,"new",{},()=>{}) as { id:string; scene:unknown; revision:number };
+  const legacyRoot = join(root,"legacy");
+  const old = await writeLegacyCheckpoint(legacyRoot,cwd,scope.sessionId);
+  const nativeBytes = Buffer.from(JSON.stringify(old.scene)+"\n");
+  await writeFile(join(cwd,"original.excalidraw"),nativeBytes);
+  const rich = {...old,scene:{...old.scene,elements:[{id:"hand",type:"rectangle",x:999,y:30,width:200,height:100,groupIds:["核心层"]}]},id:"saved-historical",revision:7,savedRevision:5,path:"original.excalidraw",diskHash:createHash("sha256").update(nativeBytes).digest("hex"),candidate:{id:"stale-candidate",baseRevision:6,patch:{removeIds:["gone"]}}};
+  await writeLegacyCheckpoint(legacyRoot,cwd,scope.sessionId,rich);
   const options = {root:join(root,"hosted"),hostVersion:"0.1.29",workerEntry,
     legacy:()=>legacyCheckpointLoader(legacyRoot),
     async lifecycle<T>(_id: string, operation: () => Promise<T>): Promise<T> {
@@ -44,8 +48,12 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   assert.equal(await manager.assetRequest(assetUrl.replace(/\/([A-Za-z0-9_-]{32})\//,"/"+"x".repeat(32)+"/")),null);
   const generation = () => manager.tools[0]!.generation;
   const invoke = (action:string,input:unknown={},kind:"action"|"tool"="action") => manager.invoke(id,generation(),{requestId:randomUUID(),scope,kind,action,input});
-  const list = await invoke("list") as Array<{id:string}>; assert.equal(list[0]?.id,old.id);
-  await assert.rejects(legacy.action(cwd,scope.sessionId,"new",{},()=>{}),e=>(e as {reason?:string}).reason==="diagram_migrated");
+  const list = await invoke("list") as Array<{id:string}>; assert.ok(list.some(d=>d.id===old.id));
+  assert.deepEqual(await invoke("get",{id:rich.id}),rich);
+  assert.equal((await invoke("read",{},"tool") as {id:string}).id,rich.id);
+  await assert.rejects(invoke("accept",{id:rich.id,revision:7,candidateId:rich.candidate.id,scene:old.scene}),/旧图稿/);
+  assert.deepEqual(await readFile(join(cwd,"original.excalidraw")),nativeBytes);
+  await assert.rejects(writeLegacyCheckpoint(legacyRoot,cwd,scope.sessionId),e=>(e as {reason?:string}).reason==="diagram_migrated");
   const edited = await invoke("sync",{id:old.id,revision:0,scene:old.scene}) as {id:string;revision:number}; assert.equal(edited.revision,1);
   const saved = await invoke("save",{id:old.id,revision:1,path:"diagrams/中文.excalidraw"}) as {diskHash:string;revision:number};
   const file = await readFile(join(cwd,"diagrams/中文.excalidraw")); assert.equal(createHash("sha256").update(file).digest("hex"),saved.diskHash);
@@ -58,10 +66,13 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   assert.equal((await invoke("read",{id:old.id},"tool") as {revision:number}).revision,1);
   await manager.shutdown(); manager = new HostedPluginManager(options); await manager.start();
   assert.equal((await invoke("read",{id:old.id},"tool") as {revision:number}).revision,1);
+  assert.deepEqual(await invoke("get",{id:rich.id}),rich);
   await manager.manage(id,"disable"); assert.equal(manager.tools.length,0);
   await manager.manage(id,"uninstall"); assert.equal((await manager.inventory()).plugins[0]!.installed,false);
   assert.deepEqual(await readFile(join(cwd,"diagrams/中文.excalidraw")),file);
   await manager.installer.installArchive(id,bytes,integrity,"0.1.0"); await manager.manage(id,"enable");
   assert.equal((await invoke("read",{id:old.id},"tool") as {revision:number}).revision,1);
+  assert.deepEqual(await invoke("get",{id:rich.id}),rich);
+  assert.deepEqual(await readFile(join(cwd,"original.excalidraw")),nativeBytes);
   assert.equal(freezes>0,true); assert.equal(commits>0,true);
 });

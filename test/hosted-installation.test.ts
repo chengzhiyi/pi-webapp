@@ -12,7 +12,7 @@ import { compareVersions, satisfiesHost } from "../src/host/server/plugins/hoste
 import { sha256 } from "../src/host/server/plugins/hosted/resources.ts";
 import { failure } from "../src/host/server/plugins/hosted/errors.ts";
 import { legacyCheckpointLoader } from "../src/host/server/plugins/hosted/legacy-checkpoints.ts";
-import { PersistentDiagramStore } from "../src/plugins/builtin/diagrams/server/persistence.ts";
+import { writeLegacyCheckpoint } from "./helpers/legacy-checkpoint.ts";
 
 const id = OFFICIAL_PLUGINS[0]!.id;
 const code = (expected: string) => (e: unknown) => (e as {code?: string}).code === expected;
@@ -128,13 +128,13 @@ test("install journal recovery keeps atomic index authoritative; uninstall remov
 });
 
 test("legacy checkpoint import aggregates exact scope, fences builtin writer under lock and preserves bytes", async t => {
-  const root = await temporary(t), legacy = new PersistentDiagramStore(root), sessionId = "session";
-  const draft = await legacy.action(root,sessionId,"new",{},()=>{}) as {id:string};
+  const root = await temporary(t), sessionId = "session";
+  const draft = await writeLegacyCheckpoint(root,root,sessionId);
   const folder = join(root,sha256(JSON.stringify([root,sessionId]))), original = await readFile(join(folder,draft.id+".json"));
   const loader = legacyCheckpointLoader(root);
   const r = {requestId:randomUUID(),generation:1,scope:{cwd:root,sessionId,workspaceId:"workspace"},kind:"action" as const,action:"get",input:{}};
   const imported = await loader(r) as {drafts:unknown[];focused:string}; assert.equal(imported.drafts.length,1); assert.equal(imported.focused,draft.id);
-  await assert.rejects(legacy.action(root,sessionId,"new",{},()=>{}),e=>(e as {reason?:string}).reason === "diagram_migrated");
+  await assert.rejects(writeLegacyCheckpoint(root,root,sessionId),e=>(e as {reason?:string}).reason === "diagram_migrated");
   assert.deepEqual(await readFile(join(folder,draft.id+".json")),original);
   assert.deepEqual(await loader(r),imported);
   assert.equal((await loader({...r,scope:{...r.scope,sessionId:"other"}}) as {drafts:unknown[]}).drafts.length,0);

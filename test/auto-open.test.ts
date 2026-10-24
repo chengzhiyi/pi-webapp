@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import piWeb from "../src/host/server/bootstrap/pi-host.ts";
+import { ExtensionHandlers } from "./helpers/extension-handlers.ts";
 
 test("launcher mode opens the web bridge on Pi session start only once", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-web-auto-open-"));
@@ -18,13 +19,14 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
   const previousSession = SessionManager.create(previousWorkspace);
   previousSession.appendMessage({ role: "user", content: "Earlier conversation", timestamp: Date.now() });
   previousSession.appendMessage({ role: "assistant", content: [{ type: "text", text: "Earlier reply" }], timestamp: Date.now() } as Parameters<SessionManager["appendMessage"]>[0]);
-  const handlers = new Map<string, (event: unknown, ctx: unknown) => void>();
+  const handlers = new ExtensionHandlers();
   let openCount = 0;
   let resolveOpened!: (url: string) => void;
   const opened = new Promise<string>((resolve) => { resolveOpened = resolve; });
   piWeb({
     events: createEventBus(),
-    on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
+    on(event: string, handler: (event: unknown, ctx: unknown) => void) { return handlers.set(event, handler); },
+    getActiveTools: () => [], setActiveTools() {}, getAllTools: () => [],
     registerCommand() {},
     registerTool() {},
   } as unknown as ExtensionAPI, async (url) => {
@@ -53,15 +55,15 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
   globals[legacyKey] = legacyState;
   const shared = (globalThis as Record<symbol, { bridge: { close(): Promise<void> } | null; autoOpened: boolean }>)[Symbol.for(`pi-web.bridge-state:${new URL("../src/host/server/bootstrap/pi-host.ts", import.meta.url).href}`)];
   try {
-    handlers.get("session_start")?.({}, context);
-    handlers.get("session_start")?.({}, context);
+    await handlers.get("session_start")?.({}, context);
+    await handlers.get("session_start")?.({}, context);
     const url = new URL(await opened);
     const headers = { Authorization: `Bearer ${url.hash.slice(1)}` };
     const response = await fetch(`${url.origin}/api/session`, { headers });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).sessionId, "startup");
     assert.equal(openCount, 1);
-    handlers.get("session_shutdown")?.({ reason: "reload" }, context);
+    await handlers.get("session_shutdown")?.({ reason: "reload" }, context);
     await handlers.get("session_start")?.({ reason: "reload" }, context);
     assert.equal((await fetch(`${url.origin}/api/session`, { headers })).status, 200);
     assert.equal(globals[legacyKey], legacyState);

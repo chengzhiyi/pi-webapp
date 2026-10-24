@@ -57,16 +57,16 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
   const { host } = terminalHost(root); host.hosted = integration.handlers; host.snapshot = () => sessions.snapshot();
   host.workspaces = async () => ({ items: [{ id: "workspace", title: "Local workspace", path: root }], activeId: "workspace", sessions: [{ id: sessionId, workspaceId: "workspace", path: null, name: "Hosted test", modified: new Date().toISOString() }] });
   host.selectSession = async () => {};
-  bridge = await startBridge(host, new URL("../../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { excludeBuiltinDiagrams: true, pluginSettingsFile: join(root, "plugins.json") });
+  bridge = await startBridge(host, new URL("../../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "plugins.json") });
   const address = new URL(bridge.url), headers = { Authorization: `Bearer ${address.hash.slice(1)}`, Origin: address.origin, "Content-Type": "application/json" };
   const card = () => integration.inventory().then(value => value.plugins[0]!);
   const action = async (action: string, input = {}) => {
     const response = await fetch(address.origin + "/api/hosted-plugins/action", { method: "POST", headers, body: JSON.stringify({ pluginId: id, generation: (await card()).generation, sessionId, action, input }) });
     expect(response.status).toBe(200); return response.json();
   };
-  const errors: string[] = [], external: string[] = [];
+  const errors: string[] = [], external: string[] = [], requests: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  page.on("request", request => { if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== address.origin) external.push(request.url()); });
+  page.on("request", request => { requests.push(request.url()); if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== address.origin) external.push(request.url()); });
   await page.setViewportSize({ width, height: 1000 });
   await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); localStorage.setItem("pi-web-theme", "light"); Reflect.deleteProperty(window, "showSaveFilePicker"); });
   const manager = page.locator("[data-hosted-management]");
@@ -80,6 +80,8 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await page.goto(bridge.url);
     const bootId = await page.evaluate(() => { const value = crypto.randomUUID(); (window as any).__hostedTestBoot = value; return value; });
     await showManager(); await expect(manager).toContainText("Not installed"); expect(downloads).toBe(0);
+    expect(requests.filter(url => /\/hosted-plugins\/|Excalifont|Virgil|Xiaolai|mermaid/i.test(url))).toEqual([]);
+    expect(retained.getAllTools().some(tool => /^(diagram_|excalidraw_)/.test(tool.name))).toBe(false);
     await manager.getByRole("button", { name: "Install", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled"); expect(downloads).toBe(1);
     await manager.getByRole("button", { name: "Enable", exact: true }).click();

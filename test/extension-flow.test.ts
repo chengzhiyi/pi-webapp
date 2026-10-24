@@ -10,13 +10,14 @@ import type { Bridge } from "../src/host/server/transport/bridge.ts";
 import type { WorkspaceRegistry } from "../src/host/server/workspaces/workspaces.ts";
 import type { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 import { controlledReply } from "./helpers/controlled-reply.ts";
+import { ExtensionHandlers } from "./helpers/extension-handlers.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "pi-web-flow-"));
   const canonicalTemporary = await realpath(temporary);
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = join(temporary, "agent");
-  const handlers = new Map<string, (event: any, ctx: any) => void>();
+  const handlers = new ExtensionHandlers();
   const delivered: string[] = [];
   const deliveryOptions: unknown[] = [];
   let busy = false;
@@ -53,16 +54,17 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     ...context("old"),
     async newSession(options?: { withSession?: (ctx: ExtensionCommandContext) => Promise<void> }) {
       oldRuntimeStale = true;
-      handlers.get("session_shutdown")?.({ reason: "new" }, initial);
+      await handlers.get("session_shutdown")?.({ reason: "new" }, initial);
       await options?.withSession?.(fresh);
-      handlers.get("session_start")?.({ type: "session_start" }, fresh);
+      await handlers.get("session_start")?.({ type: "session_start" }, fresh);
       return { cancelled: false };
     },
   } as unknown as ExtensionCommandContext;
   piWeb({
     events: createEventBus(),
     registerTool() {},
-    on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
+    on(event: string, handler: (event: unknown, ctx: unknown) => void) { return handlers.set(event, handler); },
+    getActiveTools: () => [], setActiveTools() {}, getAllTools: () => [],
     registerCommand(name: string, definition: { handler: typeof command }) { if (name === "web") command = definition.handler; },
     getSessionName() { if (oldRuntimeStale) throw new Error("stale Pi API"); return undefined; },
     sendUserMessage() { if (oldRuntimeStale) throw new Error("stale Pi API"); },
@@ -119,7 +121,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     for (const text of ["delete this", "automatic next"]) await fetch(`${url.origin}/api/message`, { method: "POST", headers, body: JSON.stringify({ sessionId: "new", text, delivery: "followUp" }) });
     assert.equal((await update((await pending())[0]!, { kind: "remove" })).status, 202);
     busy = false;
-    handlers.get("agent_settled")?.({ type: "agent_settled" }, fresh);
+    await handlers.get("agent_settled")?.({ type: "agent_settled" }, fresh);
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(delivered, ["hello", "steer", "edited follow-up", "automatic next"]);
     assert.equal((await pending()).length, 0);

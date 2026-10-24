@@ -38,7 +38,7 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   await sessions.open(root, "new"); const first = sessions.session!, sessionId = first.sessionManager.getSessionId();
   let reloads = 0; sessions.reload = async () => { reloads++; throw new Error("reload forbidden"); };
   const { host } = terminalHost(root); host.hosted = integration.handlers;
-  const bridge = await startBridge(host, new URL("../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "preferences.json"), excludeBuiltinDiagrams: true });
+  const bridge = await startBridge(host, new URL("../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "preferences.json") });
   t.after(async () => {
     integration.adapter.thaw(); await integration.shutdown(); await bridge.close(); await sessions.dispose();
     if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
