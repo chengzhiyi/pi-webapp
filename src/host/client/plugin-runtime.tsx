@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { WebSlotName, WebSlotProps } from "@chengzhiyi/pi-web-protocol";
-import type { SessionView, WebPluginCatalogView } from "../../contracts/bridge-contract.ts";
+import type { SessionView, WebPluginCatalogView, ViewBlock, ViewMessage } from "../../contracts/bridge-contract.ts";
 import { WebPluginRuntime, type LoadedPlugin } from "./plugin-manager.ts";
 import { loadBuiltinPlugin } from "../../plugins/builtin/client.ts";
 export type { LoadedPlugin } from "./plugin-manager.ts";
@@ -64,6 +64,12 @@ export function PluginInteraction({ plugins, props }: { plugins: readonly Loaded
   const Component = plugin?.definition.interactions?.find((item) => item.kind === interaction?.kind)?.component;
   if (!interaction || !plugin || !Component) return null;
   return <PluginBoundary key={`${plugin.instanceId ?? plugin.id}/${interaction.requestId}`} id={plugin.id}><Component {...boundProps({ ...props, interaction }, plugin.id)} /></PluginBoundary>;
+}
+export function PluginToolView({ plugins, props, call, result, running }: { plugins: readonly LoadedPlugin[]; props: PluginHostProps; call: ViewBlock; result?: ViewMessage; running: boolean }) {
+  const owner = plugins.flatMap(plugin => (plugin.definition.workbench?.toolViews ?? []).map(view => ({ plugin, view }))).find(({ view }) => view.tools.includes(call.toolName ?? ""));
+  if (!owner) return null;
+  const Component = owner.view.component;
+  return <PluginBoundary id={owner.plugin.id}><Component {...boundProps(props, owner.plugin.id)} call={call} result={result} running={running} /></PluginBoundary>;
 }
 export function PluginSlot({ plugins, slot, props }: { plugins: readonly LoadedPlugin[]; slot: WebSlotName; props: PluginHostProps }) {
   const contributions = plugins.flatMap((plugin) => (plugin.definition.slots ?? []).filter((item) => item.slot === slot).map((item) => ({ plugin, item })));

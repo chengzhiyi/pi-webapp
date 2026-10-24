@@ -15,7 +15,7 @@ import { MarkdownText } from "../../../web/src/ui/shared/primitives/markdown/Mar
 import { MarkdownDelegateProvider } from "../../../web/src/ui/shared/primitives/markdown/MarkdownDelegate.tsx";
 import { workspacePreviewPath } from "../../../web/src/ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
-import { PluginInteraction, PluginSlot, useWebPlugins } from "./plugin-runtime.tsx";
+import { PluginInteraction, PluginSlot, PluginToolView, useWebPlugins } from "./plugin-runtime.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
 import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, localize as t } from "../../../web/src/ui/locale/preference.ts";
@@ -39,6 +39,10 @@ export function PiApp() {
     "brand.localBuild": "pi-webapp",
   };
   const bridge = usePiBridge();
+  const activeSendSession = useRef(bridge.session?.sessionId);
+  activeSendSession.current = bridge.session?.sessionId;
+  const [preSendError, setPreSendError] = useState("");
+  useEffect(() => setPreSendError(""), [bridge.session?.sessionId]);
   const { plugins, errors: pluginErrors } = useWebPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.plugins, bridge.pluginGeneration);
   const panel = usePluginPanel(bridge.session?.sessionId, bridge.disabledPlugins);
   const panelId = panel.panelId;
@@ -88,7 +92,9 @@ export function PiApp() {
     collapseRightbar() { setLayout(previous => ({ ...previous, rightbarFocus: false })); panel.controller.setExpanded(false); },
   }), [closeSidebar, panel.controller]);
   const openPanel = (id: string) => {
-    panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
+    const resolved = plugins.flatMap(plugin => { const target = plugin.definition.workbench?.resolvePanel?.(id); return target ? [{ ...target, pluginId: plugin.id }] : []; })[0];
+    if (resolved) panel.openContent(resolved.kind, resolved.contentId, resolved.title, undefined, resolved.pluginId);
+    else panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
     panel.controller.setExpanded(true);
     setLayout((previous) => ({ ...previous, narrowExpanded: false }));
   };
@@ -105,6 +111,15 @@ export function PiApp() {
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
   const renderMarkdown = useCallback((text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
+  const send: typeof bridge.send = async (...args) => {
+    const sessionId = bridge.session?.sessionId;
+    setPreSendError("");
+    try {
+      if (sessionId) for (const plugin of plugins) await plugin.definition.workbench?.beforeSend?.(sessionId);
+      if (sessionId !== activeSendSession.current) throw new Error(t("会话已切换，请在原会话重试", "Session changed. Retry in the original conversation."));
+    } catch (error) { setPreSendError(error instanceof Error ? error.message : String(error)); throw error; }
+    return bridge.send(...args);
+  };
   const pluginProps = {
     session: bridge.session,
     locale,
@@ -113,7 +128,7 @@ export function PiApp() {
     panelId,
     invokePluginAction: bridge.invokePluginAction,
     resolvePluginInteraction: bridge.resolvePluginInteraction,
-    sendMessage: (text: string) => bridge.send(text, []),
+    sendMessage: (text: string) => send(text, []),
     renderMarkdown,
   };
   const renderPluginSlot = (slot: WebSlotName, turn?: TurnReference) => <PluginSlot plugins={plugins} slot={slot} props={{ ...pluginProps, turn }} />;
@@ -160,7 +175,7 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={bridge.error} onSend={bridge.send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
+    if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={preSendError || bridge.error} onSend={send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={bridge.newSession} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderToolView={(call, result, running) => <PluginToolView plugins={plugins} props={pluginProps} call={call} result={result} running={running} />} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
     if (key === "rightbar" && !pluginsOpen && Object.keys(panel.snapshot.state.tabs).length > 0) return <PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} />;
     return null;
   };

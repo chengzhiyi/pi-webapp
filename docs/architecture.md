@@ -18,6 +18,7 @@ src/plugins/builtin/
   git/{server,client,contract}/
   files/{server,client,contract}/
   terminal/{server,client,contract}/
+  diagrams/{server,client,contract}/
 src/contracts/              Host wire DTOs, event validation and workbench contributions
 src/platform/telemetry/      Shared diagnostics implementation
 web/src/                    Browser bootstrap and common UI/design primitives
@@ -29,7 +30,7 @@ Source ownership is separate from execution: `server` runs in Node and `client` 
 
 ## Contribution ownership
 
-`src/plugins/builtin/server.ts` and `client.ts` are the builtin composition roots. The transport dispatches through `ServerPluginRegistry`; it does not import Git, file or terminal request implementations. Each server registration owns its request routes, domain validation and teardown. Existing `/api/workspace/*` and `/api/terminal/*` routes remain compatible aliases; bounded non-streaming operations also accept the common `/api/plugin-action` envelope with a builtin plugin ID and action name.
+`src/plugins/builtin/server.ts` and `client.ts` are the builtin composition roots. The local Diagrams plugin adds a lazy Excalidraw editor and session-owned agent tools; see [diagrams.md](diagrams.md) for data, persistence and asset boundaries. `builtinAgentTools` supplies tools to both the foreground extension and retained SDK sessions; execution uses the same registry's enablement/toggle coordination. Workbench artifact resolvers map plugin links to typed, owned tabs. The transport dispatches through `ServerPluginRegistry`; it does not import Git, file or terminal request implementations. Each server registration owns its request routes, domain validation and teardown. Existing `/api/workspace/*` and `/api/terminal/*` routes remain compatible aliases; bounded non-streaming operations also accept the common `/api/plugin-action` envelope with a builtin plugin ID and action name.
 
 Builtin browser modules use `defineWebPlugin`, API v1 validation, synchronous activation and scoped cleanup just like external browser modules. The additive, host-owned `workbench.apiVersion: 1` contribution declares a guide entry, panel kinds, renderers and optional titles. `src/contracts/workbench.ts` owns the TypeScript definitions. Unsupported contribution versions and duplicate panel kinds fail that plugin's load. Existing protocol-v1 slots, actions and interactions remain supported; this does not modify the published `@chengzhiyi/pi-web-protocol` package.
 

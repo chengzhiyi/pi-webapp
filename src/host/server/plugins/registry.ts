@@ -55,6 +55,14 @@ export class ServerPluginRegistry {
     finally { this.running.set(id, this.running.get(id)! - 1); }
     return true;
   }
+  async runAgentAction(id: string, cwd: string, sessionId: string, action: string, input: unknown): Promise<unknown> {
+    const plugin = this.plugins.find(p => p.metadata.id === id);
+    if (!plugin?.agentAction || !this.preferences.enabled(id)) throw new PluginManagementError("绘图插件不可用或已停用", 403);
+    if (this.changing) throw new PluginManagementError("插件配置正在保存，请稍后重试");
+    this.running.set(id, (this.running.get(id) ?? 0) + 1);
+    try { return await plugin.agentAction(cwd, sessionId, action, input); }
+    finally { this.running.set(id, this.running.get(id)! - 1); }
+  }
   async coordinateStart<T>(cwd: string, operation: () => Promise<T>): Promise<T> {
     if (this.changing) throw new PluginManagementError("插件配置正在保存，请稍后重试");
     const key = "@host/start";

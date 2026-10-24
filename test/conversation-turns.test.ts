@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conversationTurns, toolResults } from "../src/host/client/conversation-turns.ts";
+import { conversationTurns, toolResults, toolViewCalls } from "../src/host/client/conversation-turns.ts";
 import { projectEntry, sessionTitle } from "../src/host/server/sessions/view.ts";
 import type { ViewMessage } from "../src/host/client/pi-bridge.ts";
 
@@ -29,6 +29,18 @@ test("preserves a failed assistant response even when it has no text or tokens",
   } as Parameters<typeof projectEntry>[0]);
   assert.equal(failed?.error, "Codex error: The usage limit has been reached");
   assert.deepEqual(failed?.blocks, []);
+});
+
+test("tool views deduplicate stream/commit overlap by identity, not arguments or tool name", () => {
+  const call = (id: string | undefined, messageId: string, text: string): ViewMessage => ({ id: messageId, role: "assistant", timestamp: "2026-01-01", blocks: [{ kind: "toolCall", toolCallId: id, toolName: "draw", text }] });
+  const committed = call("one", "saved", "complete"), stream = call("one", "stream", "partial");
+  for (const messages of [[committed, stream], [stream, committed]]) {
+    assert.deepEqual(toolViewCalls(messages, ["draw"]), [{ key: "one", call: committed.blocks[0] }]);
+  }
+  assert.equal(toolViewCalls([committed, call("two", "second", "complete")], ["draw"]).length, 2);
+  assert.equal(toolViewCalls([call(undefined, "a", "same"), call(undefined, "b", "same")], ["draw"]).length, 2);
+  assert.deepEqual(toolViewCalls([committed], ["other"]), []);
+  assert.equal(toolViewCalls([stream, call("one", "stream", "new delta")], ["draw"])[0]?.call.text, "new delta");
 });
 
 test("keeps turn usage separate and pairs only matching tool results", () => {

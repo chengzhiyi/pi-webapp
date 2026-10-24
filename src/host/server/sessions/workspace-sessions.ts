@@ -1,4 +1,4 @@
-import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, VERSION } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, type ToolDefinition, VERSION } from "@earendil-works/pi-coding-agent";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest } from "@chengzhiyi/pi-web-protocol";
 import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
@@ -43,7 +43,7 @@ export interface WorkspaceTelemetry {
 /** Independent SDK runtimes; selection only controls the foreground view. */
 export class WorkspaceSessions {
   readonly telemetryVersion = 2;
-  readonly runtimeVersion = 3;
+  readonly runtimeVersion = 4;
   private active: WorkspaceRuntime | null = null;
   private readonly runtimes = new Map<string, WorkspaceRuntime>();
   private readonly selectedByWorkspace = new Map<string, WorkspaceRuntime>();
@@ -56,10 +56,12 @@ export class WorkspaceSessions {
   private readonly reportError: (cause: unknown, context: DiagnosticFields) => string | undefined;
   private readonly telemetry: WorkspaceTelemetry;
   private readonly onSessionsChanged: () => void;
+  private readonly customTools: ToolDefinition[];
 
-  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}) {
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}, customTools: ToolDefinition[] = []) {
     this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted; this.reportError = reportError;
     this.onSessionsChanged = onSessionsChanged;
+    this.customTools = customTools;
     this.telemetry = {
       enabled: () => { try { return telemetry.enabled(); } catch { return false; } },
       breadcrumb: (category, context) => { try { if (telemetry.enabled()) telemetry.breadcrumb(category, context); } catch { /* Failed instrumentation cannot break a session. */ } },
@@ -150,7 +152,7 @@ export class WorkspaceSessions {
       const loadErrors = resourceLoader.getExtensions().errors;
       if (loadErrors.length) throw new Error(loadErrors.map(item => `${item.path}: ${item.error}`).join("; "));
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
-      const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader });
+      const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
       const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null! };
       runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {

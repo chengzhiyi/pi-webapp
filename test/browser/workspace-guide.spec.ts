@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { startBridge } from "../../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
+import { BUILTIN_IDS } from "../../src/contracts/plugins.ts";
 
 async function expectTopAlignedGrid(grid: Locator) {
   await expect(grid).toBeVisible();
@@ -18,14 +19,14 @@ async function expectTopAlignedGrid(grid: Locator) {
     };
   })).toEqual({ topInset: 24, extraHeight: 0, extraWidth: 0 });
   const entries = grid.getByRole("button");
-  await expect(entries).toHaveCount(3);
+  await expect(entries).toHaveCount(Object.keys(BUILTIN_IDS).length);
   for (const entry of await entries.all()) await expect(entry).toBeInViewport({ ratio: 1 });
   const boxes = await entries.evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect();
     return { x: box.x, y: box.y, bottom: box.bottom, width: box.width, height: box.height };
   }));
   const availableWidth = await grid.evaluate(node => node.clientWidth);
-  const columns = Math.min(3, Math.floor((availableWidth + 12) / (224 + 12)) || 1);
+  const columns = Math.min(Object.keys(BUILTIN_IDS).length, Math.floor((availableWidth + 12) / (224 + 12)) || 1);
   for (let i = 0; i < boxes.length; i++) {
     expect(boxes[i].height).toBeGreaterThanOrEqual(156);
     expect(Math.abs(boxes[i].width - boxes[0].width)).toBeLessThan(1);

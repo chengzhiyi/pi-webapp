@@ -15,4 +15,4 @@ export interface ManagedPlugin extends PluginMetadata {
 }
 export interface PluginManagementView { revision: string; items: ManagedPlugin[]; scope: "global" }
 export interface PluginToggle { id: string; enabled: boolean; expected: string }
-export const BUILTIN_IDS = { git: "@pi-webapp/git", files: "@pi-webapp/files", terminal: "@pi-webapp/terminal" } as const;
+export const BUILTIN_IDS = { diagrams: "@pi-webapp/diagrams", git: "@pi-webapp/git", files: "@pi-webapp/files", terminal: "@pi-webapp/terminal" } as const;

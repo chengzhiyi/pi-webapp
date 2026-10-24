@@ -69,6 +69,7 @@ export interface Bridge {
   readonly buildId: string;
   readonly url: string;
   publish(event: BridgeEvent): void;
+  runPluginTool(pluginId: string, cwd: string, sessionId: string, action: string, input: unknown): Promise<unknown>;
   reportError(cause: unknown, context?: DiagnosticFields): string | undefined;
   breadcrumb(category: string, context?: DiagnosticFields): void;
   close(options?: { reconnect?: boolean }): Promise<void>;
@@ -96,13 +97,13 @@ function authorized(req: IncomingMessage, token: Buffer): boolean {
   return presented.length === token.length && timingSafeEqual(presented, token);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<unknown> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += bytes.length;
-    if (size > 64 * 1024) throw new Error("请求内容过大");
+    if (size > limit) throw new Error("请求内容过大");
     chunks.push(bytes);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -346,7 +347,8 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         }
         try {
           let body: unknown;
-          try { body = await readJson(req); } catch (cause) {
+          try { body = await readJson(req, path.startsWith("/api/diagrams/") || path === "/api/plugin-action" ? 544 * 1024 : 64 * 1024); } catch (cause) {
+            if (cause instanceof Error && cause.message === "请求内容过大") { json(res, 413, { error: cause.message }); return; }
             if (cause instanceof SyntaxError || isExpectedError(cause)) { json(res, 400, { error: "请求内容无效" }); return; }
             throw cause;
           }
@@ -614,6 +616,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   return {
     protocolVersion: 7,
     buildId,
+    runPluginTool: (id, cwd, sessionId, action, input) => pluginRegistry.runAgentAction(id, cwd, sessionId, action, input),
     reportError(cause, context) { return telemetry.capture(cause, context); },
     breadcrumb(category, context) { telemetry.breadcrumb(category, context); },
     url: `${origin}/#${tokenText}`,

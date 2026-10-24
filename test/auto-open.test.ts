@@ -26,6 +26,7 @@ test("launcher mode opens the web bridge on Pi session start only once", async (
     events: createEventBus(),
     on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
     registerCommand() {},
+    registerTool() {},
   } as unknown as ExtensionAPI, async (url) => {
     openCount++;
     resolveOpened(url);
