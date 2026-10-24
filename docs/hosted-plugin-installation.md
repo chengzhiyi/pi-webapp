@@ -1,6 +1,9 @@
 # Hosted v2 installation and real-package integration
 
-This is a second engineering milestone, **not final full-hot-plug acceptance**.
+Historical second milestone, **not final full-hot-plug acceptance**. For the current
+optional-by-default composition, migration and packaged-consumer results, see
+[migration verification](hosted-excalidraw-migration.md). The builtin implementation
+has since been removed; below records the installation milestone's earlier scope.
 The service and authenticated HTTP routes are implemented. `pi-host.ts` has not yet
 connected the service to the frontend coordinator/dynamic Agent adapters. Those
 adapters are implemented and their contributions are merged in this feature

@@ -1,6 +1,10 @@
 # ORI-27: long-lived hosted tools (SDK 1.3.0)
 
-This patch supplies a **generic host adapter**, not production Excalidraw activation.
+Historical adapter milestone; current default-hosted/optional-package composition is in
+[migration verification](hosted-excalidraw-migration.md). Builtin drawings have since
+been removed; no second owner or reload fallback exists.
+
+This patch originally supplied a **generic host adapter**, not production Excalidraw activation.
 Built-in drawings remain unchanged. Never register both implementations' names.
 No plugin module, renderer, worker object or editor code is imported here.
 

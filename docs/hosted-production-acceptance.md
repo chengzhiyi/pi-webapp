@@ -1,5 +1,12 @@
 # Hosted Excalidraw: production integration acceptance checkpoint
 
+**Historical checkpoint, not current status.** Subsequent parent integration passed
+the strict-CSP font fix and GC acceptance (see task provenance); ORI-31 removes
+the builtin and verifies optional-default migration and clean installation.
+Current bounded results are in [migration verification](hosted-excalidraw-migration.md).
+The CSP failures and builtin retention below describe this older checkpoint only.
+Do not promote the remaining A01–A25 matrix to a full release pass.
+
 ORI-22 implementation checkpoint, not release acceptance. The user authorized implementation, not npm publication, release-branch merge or push. Shared alpha remains untouched. Default builtin diagrams and root editor dependencies are deliberately retained until the migration/parity gate passes.
 
 ## Delivered in this checkpoint

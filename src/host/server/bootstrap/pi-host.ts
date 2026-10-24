@@ -27,7 +27,6 @@ import { EditablePromptQueue, PromptQueueError, type PromptImages } from "../ses
 import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
-import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
@@ -293,14 +292,15 @@ async function changeConfig(change: ConfigChange): Promise<ConfigView> {
 }
 
 export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promise<boolean> = openWebPage): void {
-  const hostedMode = process.env.PI_WEBAPP_HOSTED_EXCALIDRAW === "1";
-  if (shared.hostedMode !== undefined && shared.hostedMode !== hostedMode || hostedMode && shared.hostedMode === undefined && shared.workspaceSessions) throw new Error("Hosted ownership mode cannot change through reload; stop the older builtin host first");
-  shared.hostedMode = hostedMode;
+  // Hosted is the only drawing owner. The retired opt-in flag (including 0) cannot
+  // restore a second builtin implementation in retained sessions.
+  if (shared.hostedMode === false || shared.hostedMode === undefined && shared.workspaceSessions) throw new Error("Stop the older builtin host before migrating drawing ownership; reload cannot replace retained sessions");
+  shared.hostedMode = true;
   const trustedScope = (cwd: string, sessionId: string) => {
     const canonical = realpathSync(cwd);
     return { cwd: canonical, sessionId, workspaceId: createHash("sha256").update(canonical).digest("hex") };
   };
-  shared.hosted ??= hostedMode ? new HostedPluginIntegration({
+  shared.hosted ??= new HostedPluginIntegration({
     root: join(getAgentDir(), "pi-web", "hosted"),
     hostVersion: (JSON.parse(readFileSync(resolve(webRoot, "../../package.json"), "utf8")) as { version: string }).version,
     workerEntry: resolve(webRoot, "../../dist/hosted-worker.js"),
@@ -313,15 +313,10 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     },
     legacy: () => legacyCheckpointLoader(join(getAgentDir(), "pi-web", "diagrams")),
     changed: () => shared.bridge?.publish({ type: "plugins_changed" }),
-  }) : undefined;
+  });
   shared.offHostedThaw?.();
   shared.offHostedThaw = shared.hosted?.adapter.onThaw(scheduleTuiQueue);
   shared.pi = pi;
-  const builtinTools = hostedMode ? [] : builtinAgentTools(async (...args) => {
-    if (!shared.bridge?.runPluginTool) throw new Error("请先打开 Web 工作台以使用绘图插件");
-    return shared.bridge.runPluginTool(...args);
-  });
-  for (const tool of builtinTools) pi.registerTool(tool);
   shared.tools?.clear();
   shared.tools = new ToolDiagnostics({
     enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
@@ -499,7 +494,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
             breadcrumb: (category, context) => shared.bridge?.breadcrumb?.(category, context),
             anonymize: value => shared.telemetry?.session(value) ?? "unavailable",
-          }, () => { void publishWorkspaces(); }, builtinTools, shared.hosted ? { adapter: shared.hosted.adapter, scope: trustedScope } : undefined);
+          }, () => { void publishWorkspaces(); }, [], { adapter: shared.hosted!.adapter, scope: trustedScope });
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
@@ -791,7 +786,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           host.selectSession = shared.lifecycle.wrap(host.selectSession);
           host.newSession = shared.lifecycle.wrap(host.newSession);
           host.updateConfig = shared.lifecycle.wrap(host.updateConfig);
-          shared.bridge = await startBridge(host, webRoot, shared.telemetry, { excludeBuiltinDiagrams: hostedMode });
+          shared.bridge = await startBridge(host, webRoot, shared.telemetry);
         }
         if (shared.stopPluginWatch === null && process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS) {
           const watchers: FSWatcher[] = [];

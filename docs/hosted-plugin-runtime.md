@@ -1,12 +1,10 @@
 # Hosted plugin v2 runtime — implementation milestone
 
-This is **infrastructure, not an enabled production feature**. Existing v1 plugins
-and the built-in drawing integration are unchanged. Do not advertise full
-hot-plugging until the installation/UI/session integration and acceptance matrix
-are complete. The second milestone implements installation/management service,
-optional authenticated routes and a real-package lifecycle test; see
-[installation integration](hosted-plugin-installation.md). Bootstrap/UI/Agent
-integration and final acceptance are still pending.
+Historical infrastructure milestone below. Current default ownership, migration
+and clean-package results are in [migration verification](hosted-excalidraw-migration.md)
+and [bootstrap](hosted-production-bootstrap.md): builtin drawings are removed,
+the official package is optional/absent by default, and v1 plugins remain supported.
+The remaining platform/updater/performance acceptance matrix is not a release pass.
 
 ## Repositories and ownership
 
@@ -86,7 +84,7 @@ parent directories or writing through unrelated non-cooperative processes.
 ```sh
 node --import ./test/setup-env.mjs --experimental-strip-types --test \
   test/hosted-plugins.test.ts \
-  test/diagram-persistence.test.ts test/diagram-recovery.test.ts \
+  test/legacy-checkpoints.test.ts test/drawing-*.test.ts \
   test/web-plugins.test.ts
 npm run check
 ```
@@ -119,6 +117,6 @@ certify full application behavior or browser/desktop integration.
   checks filesystem retention and offline edits; it does not claim heap SLOs.
 - Electron packaging/child bootstrap and macOS/Windows/Linux, browser realm
   lifecycle, real provider concurrency and reference-machine performance.
-- No built-in registration, drawing root dependency or fallback removal until
-  external package parity and migrations are verified; never activate both
-  implementations with the same tool names.
+- Builtin registration/root editor removal is now complete after the bounded
+  migration gate; never activate both implementations with the same tool names.
+  Full release/platform/performance acceptance remains distinct.

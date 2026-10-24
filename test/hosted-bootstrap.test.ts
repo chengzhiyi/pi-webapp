@@ -7,10 +7,10 @@ import { createAgentSession, DefaultResourceLoader, SessionManager } from "@eare
 import piWeb from "../src/host/server/bootstrap/pi-host.ts";
 import { closeAgentSession } from "../src/host/server/sessions/lifecycle.ts";
 
-test("actual pi-host opt-in starts offline coordinator from TUI lifecycle without builtin diagram ownership", async () => {
+test("actual pi-host defaults to offline hosted coordinator without builtin drawing ownership (retired flag ignored)", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "hosted-bootstrap-"));
   const prior = process.env.PI_CODING_AGENT_DIR, flag = process.env.PI_WEBAPP_HOSTED_EXCALIDRAW;
-  process.env.PI_CODING_AGENT_DIR = join(cwd, "agent"); process.env.PI_WEBAPP_HOSTED_EXCALIDRAW = "1";
+  process.env.PI_CODING_AGENT_DIR = join(cwd, "agent");
   const loader = new DefaultResourceLoader({ cwd, agentDir: join(cwd, "agent"), noExtensions: true, noSkills: true, noPromptTemplates: true, extensionFactories: [api => piWeb(api, async () => false)] });
   await loader.reload();
   const { session } = await createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resourceLoader: loader });
