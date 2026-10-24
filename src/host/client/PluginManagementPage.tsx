@@ -7,6 +7,7 @@ import { FileTypeIcon } from "../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { ExcalidrawIcon } from "../../../web/src/ui/primitives/ExcalidrawIcon.tsx";
 import { IconBranchOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import css from "./PluginManagementPage.module.css";
+import { HostedPluginManagement } from "./hosted/management.tsx";
 
 interface Props {
   getPluginManagement(): Promise<PluginManagementView>;
@@ -96,6 +97,7 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, genera
       })}
       {!shown.length && <p className={css.scope}>{t("没有匹配的插件", "No matching plugins")}</p>}
     </>}
+    <HostedPluginManagement locale={locale} generation={generation} />
     <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={t("停用终端？", "Disable Terminal?")} closeLabel={t("关闭", "Close")} description={t("这会结束此服务所有聊天中的终端进程。未保存的 shell 工作可能丢失。", "This ends terminal processes in every chat on this service. Unsaved shell work may be lost.")} footer={<><button className={css.back} type="button" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</button><button className={css.danger} type="button" onClick={() => { if (confirm) void change(confirm); }}>{t("停用并结束终端", "Disable and stop terminals")}</button></>} />
   </section>;
 }
