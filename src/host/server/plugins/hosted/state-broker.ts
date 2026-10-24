@@ -1,10 +1,10 @@
-import { lstat, mkdir, open, realpath, readdir, link, rename, unlink, copyFile } from "node:fs/promises";
+import { lstat, mkdir, open, realpath, readdir, link, rename, unlink, copyFile, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { HostedInvocation, HostedStateRecord } from "@chengzhiyi/pi-web-protocol";
 import { HostedPluginError, isMissing } from "./errors.ts";
 import { sha256 } from "./resources.ts";
-import { atomicJson, boundedRead, privateDirectory, readJson, withStorageLock } from "./storage.ts";
+import { atomicJson, boundedRead, privateDirectory, readJson, readJournal, withStorageLock } from "./storage.ts";
 
 const MAX_STATE = 192 * 1024 * 1024;
 const MAX_FILE = 512 * 1024;
@@ -12,6 +12,7 @@ export interface ActiveHostedPlugin { version: string; generation: number; state
 export type ActivationTarget = Omit<ActiveHostedPlugin, "generation" | "operationId">;
 interface StateEnvelope extends HostedStateRecord { requestId: string; inputHash: string }
 interface FileIntent { requestId: string; inputHash: string; nextHash: string; committed: boolean }
+interface TransitionJournal { version?: number; before: ActiveHostedPlugin | null; next: ActiveHostedPlugin }
 const refValid = (ref: unknown): ref is string => typeof ref === "string" && /^[a-f0-9-]{36}$/.test(ref);
 function object(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new HostedPluginError("invalid_input", "Expected object input");
@@ -37,12 +38,19 @@ export class HostedStateBroker {
   async recover(): Promise<{ active: ActiveHostedPlugin | null; recovered: "none" | "committed" | "not_committed" }> {
     return withStorageLock(this.root, async () => {
       const active = await this.active();
-      const journal = await readJson<{ next: ActiveHostedPlugin }>(join(this.root, "transition.json"));
+      const journal = await readJournal<TransitionJournal>(join(this.root, "transition.json"));
       if (!journal) return { active, recovered: "none" };
-      if (!journal.next) throw new HostedPluginError("invalid_storage", "Invalid activation journal");
+      if (!journal.next || !Object.hasOwn(journal, "before") || Object.keys(journal).some(k => !["version", "before", "next"].includes(k)) || (Object.hasOwn(journal, "version") && journal.version !== 1)) throw new HostedPluginError("invalid_storage", "Invalid activation journal; stop all owners and inspect transition.json");
       validateActive(journal.next);
+      validateActive(journal.before);
       const recovered = active?.operationId === journal.next.operationId ? "committed" : "not_committed";
       // Active is the atomic source of truth. Never restore an old snapshot over accepted newer edits.
+      const before = journal.before;
+      if (recovered === "committed" && before && before.stateRef !== active!.stateRef) await atomicJson(join(this.root, "previous.json"), before);
+      if (recovered === "committed") {
+        const fork = await readJournal<{ version: number; stateRef: string }>(join(this.root, "fork.json"));
+        if (fork?.version === 1 && fork.stateRef === active!.stateRef && Object.keys(fork).every(k => ["version", "stateRef"].includes(k))) await unlink(join(this.root, "fork.json"));
+      }
       await unlink(join(this.root, "transition.json"));
       return { active, recovered };
     });
@@ -51,6 +59,8 @@ export class HostedStateBroker {
     return withStorageLock(this.root, async () => {
       const before = await this.active();
       if ((before?.generation ?? 0) !== expectedGeneration) throw new HostedPluginError("stale_generation", "Plugin activation changed concurrently");
+      const reservation = await readJournal<{ version: number; stateRef: string }>(join(this.root, "fork.json"));
+      if (reservation && (reservation.version !== 1 || reservation.stateRef !== target.stateRef || Object.keys(reservation).some(k => !["version", "stateRef"].includes(k)))) throw new HostedPluginError("gc_recovery_required", "Activation refused: unresolved fork.json belongs to another target; stop all owners and inspect it");
       const next = validateActive({ ...target, generation: expectedGeneration + 1, operationId: randomUUID() })!;
       await privateDirectory(join(this.root, "states"));
       await privateDirectory(join(this.root, "states", next.stateRef));
@@ -60,7 +70,12 @@ export class HostedStateBroker {
         // A directory-fsync error after rename is an ambiguous success, not permission to roll back.
         if ((await this.active())?.operationId !== next.operationId) throw error;
       }
-      await unlink(join(this.root, "transition.json")).catch(() => {});
+      // Journal retains before until rollback metadata is durable. Same-state disable preserves it.
+      try {
+        if (before && before.stateRef !== next.stateRef) await atomicJson(join(this.root, "previous.json"), before);
+        await unlink(join(this.root, "transition.json"));
+        await unlink(join(this.root, "fork.json")).catch(() => {});
+      } catch { /* Active committed: recovery completes metadata; never resume the old generation. */ }
       return next;
     });
   }
@@ -68,6 +83,8 @@ export class HostedStateBroker {
     return withStorageLock(this.root, async () => {
       const current = await this.assertGeneration(expectedGeneration, false);
       const next = randomUUID(), directory = join(this.root, "states", next);
+      if (await readJournal(join(this.root, "fork.json"))) throw new HostedPluginError("gc_recovery_required", "Unresolved fork.json; stop all owners and inspect the reserved state before retrying");
+      await atomicJson(join(this.root, "fork.json"), { version: 1, stateRef: next });
       await privateDirectory(directory);
       const source = join(this.root, "states", current.stateRef);
       for (const name of await readdir(source)) {
@@ -77,6 +94,47 @@ export class HostedStateBroker {
         await copyFile(join(source, name), join(directory, name));
       }
       return next;
+    });
+  }
+  /** Manager calls only after settled replacement; the disk lock excludes every actual commit.
+   * Unknown/interrupted transactions block cleanup rather than guessing their references.
+   */
+  async collect<T>(operation: (references: ActiveHostedPlugin[]) => Promise<T>): Promise<T> {
+    return withStorageLock(this.root, async () => {
+      for (const name of ["transition.json", "fork.json"]) {
+        if (await boundedRead(join(this.root, name), 2 * 1024 * 1024)) throw new HostedPluginError("gc_recovery_required", `GC refused: unresolved ${name}; stop all owners and inspect recovery references`);
+      }
+      const active = await this.active(), previous = validateActive(await readJournal<ActiveHostedPlugin>(join(this.root, "previous.json")));
+      if (!active && await boundedRead(join(this.root, "active.json"), 2 * 1024 * 1024)) throw new HostedPluginError("gc_recovery_required", "GC refused: null active pointer; restore activation metadata before cleanup");
+      const references = [active, previous].filter((v): v is ActiveHostedPlugin => !!v);
+      const states = join(this.root, "states"); await privateDirectory(states);
+      const names = await readdir(states), keep = new Set(references.map(v => v.stateRef));
+      // Validate the whole deletion set before touching anything. Never traverse a linked tree.
+      for (const name of names) {
+        if (!refValid(name)) throw new HostedPluginError("gc_recovery_required", "GC refused: unexpected state directory; inspect states before cleanup");
+        const directory = join(states, name), info = await lstat(directory);
+        if (!info.isDirectory() || info.isSymbolicLink()) throw new HostedPluginError("gc_recovery_required", "GC refused: linked/non-directory state snapshot");
+        for (const file of await readdir(directory)) {
+          const stat = await lstat(join(directory, file));
+          if (!/^[a-f0-9]{64}\.json$/.test(file) || !stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new HostedPluginError("gc_recovery_required", "GC refused: unexpected snapshot content; original bytes preserved");
+          if (!keep.has(name)) {
+            const value = await readJson<StateEnvelope | FileIntent>(join(directory, file), MAX_STATE);
+            if (!value) throw new HostedPluginError("gc_recovery_required", "GC refused: missing snapshot record");
+            if (Object.hasOwn(value, "committed")) {
+              const intent = value as FileIntent;
+              if (Object.keys(intent).some(k => !["requestId", "inputHash", "nextHash", "committed"].includes(k)) || intent.committed !== true || !/^[a-f0-9]{64}$/.test(intent.inputHash) || !/^[a-f0-9]{64}$/.test(intent.nextHash) || typeof intent.requestId !== "string") throw new HostedPluginError("gc_recovery_required", `GC refused: unresolved file intent in states/${name}; reconcile the workspace save before cleanup`);
+            } else {
+              if (Object.keys(value).some(k => !["revision", "schema", "value", "requestId", "inputHash"].includes(k))) throw new HostedPluginError("gc_recovery_required", "GC refused: unknown snapshot envelope; original bytes preserved");
+              this.validateState(value as StateEnvelope);
+            }
+          }
+        }
+      }
+      for (const ref of keep) if (!names.includes(ref)) throw new HostedPluginError("gc_recovery_required", "GC refused: referenced snapshot is missing; restore recovery data first");
+      const result = await operation(references);
+      // A crash can only partially delete unreferenced snapshots; rerunning is idempotent.
+      for (const name of names) if (!keep.has(name)) await rm(join(states, name), { recursive: true, force: true });
+      return result;
     });
   }
   private async assertGeneration(generation: number, requireEnabled = true): Promise<ActiveHostedPlugin> {

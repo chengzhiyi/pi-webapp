@@ -7,7 +7,7 @@ import { officialPlugin, type OfficialPlugin, type RegistryRelease, type UpdateP
 import { HostedStateBroker } from "./state-broker.ts";
 import { HostedPluginSupervisor, type HostedSwitchHooks } from "./supervisor.ts";
 import { hostedAsset, type HostedPackage } from "./resources.ts";
-import { atomicJson, readJson, withStorageLock } from "./storage.ts";
+import { atomicJson, boundedRead, readJson, withStorageLock } from "./storage.ts";
 import { compareVersions } from "./versions.ts";
 
 interface Policy { updatePolicy: UpdatePolicy; pinnedVersion?: string }
@@ -39,6 +39,7 @@ export class HostedPluginManager {
   private readonly operations = new Map<string, Promise<unknown>>();
   private readonly errors = new Map<string, ReturnType<typeof failure>>();
   private readonly available = new Map<string, RegistryRelease>();
+  private readonly assetLeases = new Map<string, Map<string, number>>();
   private closing = false;
   constructor(options: HostedManagerOptions) {
     this.options = options;
@@ -80,7 +81,10 @@ export class HostedPluginManager {
   }
   private async policies(): Promise<Record<string, Policy>> {
     const value = await readJson<Record<string, Policy>>(join(this.options.root, "policies", "policies.json"));
-    if (!value) return {};
+    if (!value) {
+      if (await boundedRead(join(this.options.root, "policies", "policies.json"), 2 * 1024 * 1024)) throw new HostedPluginError("invalid_storage", "Null plugin policies; restore pin/disable choices before cleanup");
+      return {};
+    }
     for (const [id, p] of Object.entries(value)) {
       officialPlugin(id, this.installer.catalog);
       if (!p || !["notify", "automatic", "pinned"].includes(p.updatePolicy) || p.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(p.pinnedVersion)) throw new HostedPluginError("invalid_storage", "Invalid plugin update policy");
@@ -104,6 +108,7 @@ export class HostedPluginManager {
       try {
         const pkg = await this.installer.load(plugin.id, active.version);
         await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
+        await this.collect(plugin.id);
       } catch (error) { this.errors.set(plugin.id, failure(error)); }
     }
   }
@@ -131,7 +136,7 @@ export class HostedPluginManager {
     return this.serialize(id, async () => {
       const s = this.supervisor(id), installed = (await this.installer.inventory()).versions[id] ?? [];
       const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
-      switch (operation) {
+      const result = await (async () => { switch (operation) {
         case "check": {
           const release = await this.installer.check(id, latest); this.available.set(id, release); return { version: release.version };
         }
@@ -171,8 +176,21 @@ export class HostedPluginManager {
           return { installed: false, dataPreserved: true };
         }
         default: throw new HostedPluginError("invalid_operation", "Unknown plugin management operation");
-      }
+      } })();
+      if (["install", "enable", "retry", "update"].includes(operation)) await this.collectSettled(id);
+      return result;
     });
+  }
+  /** Explicit offline maintenance uses the same manager fence as lifecycle operations. */
+  collect(id: string): Promise<string[]> { return this.serialize(id, () => this.collectSettled(id)); }
+  private async collectSettled(id: string): Promise<string[]> {
+    const s = this.supervisor(id);
+    return s.broker.collect(async references => this.installer.collect(id, async () => {
+      const policy = (await this.policies())[id];
+      return [...references.map(v => v.version), ...(s.pendingVersion ? [s.pendingVersion] : []),
+        ...(this.packages.has(id) ? [this.packages.get(id)!.version] : []),
+        ...(policy?.pinnedVersion ? [policy.pinnedVersion] : []), ...(this.assetLeases.get(id)?.keys() ?? [])];
+    }));
   }
   /** Scope is filled from retained authenticated host sessions; caller generation is mandatory. */
   invoke(id: string, generation: number, request: Omit<HostedInvocation, "generation">): Promise<unknown> {
@@ -188,7 +206,15 @@ export class HostedPluginManager {
   }
   async asset(id: string, digest: string, path: string) {
     const pkg = this.packages.get(id);
-    return pkg ? hostedAsset(pkg, path, digest) : null;
+    if (!pkg) return null;
+    let leases = this.assetLeases.get(id);
+    if (!leases) { leases = new Map(); this.assetLeases.set(id, leases); }
+    leases.set(pkg.version, (leases.get(pkg.version) ?? 0) + 1);
+    try { return await hostedAsset(pkg, path, digest); }
+    finally {
+      const count = leases.get(pkg.version)! - 1;
+      if (count) leases.set(pkg.version, count); else leases.delete(pkg.version);
+    }
   }
   /** Capability-qualified URL is required because subresource requests cannot attach a bearer header.
    * No user/session data is served here. Capability rotates on every committed generation.
