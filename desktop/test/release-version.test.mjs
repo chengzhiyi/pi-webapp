@@ -24,5 +24,6 @@ test("the shared version helper is independently importable from the packaged de
   assert.ok(pkg.files.includes("desktop/release-version.mjs"));
   const prepare = await readFile(new URL("../../scripts/prepare-desktop.mjs", import.meta.url), "utf8");
   assert.match(prepare, /"desktop\/release-version.mjs"/);
-  assert.match(prepare, /manifest.piWebappDataVersion = pkg.piWebappDataVersion/);
+  assert.match(prepare, /import \{ applyRuntimePackageIdentity \} from "\.\/desktop-runtime-package\.mjs"/);
+  assert.match(prepare, /applyRuntimePackageIdentity\(manifest, pkg\)/); // Values are exercised by runtime-package.test.mjs.
 });

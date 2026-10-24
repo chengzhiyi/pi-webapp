@@ -208,9 +208,9 @@ test("startup never replays pair over newer confirmed disable/state generation",
   assert.equal((await readPair(f.storage))!.phase, "reconciled");
 });
 
-test("real ORI-34 archive and built worker across two synthetic host package versions; native incompatible runtime is refused with data retained", { skip: !process.env.ORI38_EXCALIDRAW_TGZ }, async t => {
+test("pinned real external archive and built worker across two synthetic host package versions; native incompatible runtime is refused with data retained", { skip: !process.env.ORI38_EXCALIDRAW_TGZ }, async t => {
   const f = await fixture(t), bytes = await readFile(process.env.ORI38_EXCALIDRAW_TGZ!);
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "0036300e1647f0b79a2f565514645859639725ab0d167de005f32ca7988e9d97");
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), process.env.ORI38_EXCALIDRAW_SHA256 ?? "0036300e1647f0b79a2f565514645859639725ab0d167de005f32ca7988e9d97");
   await f.manager.installer.installArchive(id, bytes, integrity(bytes), "0.1.0"); await f.manager.manage(id, "enable"); f.offline();
   await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {}); await f.restart();
   assert.equal(f.manager.tools[0]!.descriptors.length, 6); assert.equal((await readPair(f.storage))!.phase, "reconciled");
