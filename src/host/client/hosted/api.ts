@@ -6,7 +6,7 @@ export async function hostedRequest<T>(path: string, input?: unknown, signal?: A
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(input === undefined ? {} : { "Content-Type": "application/json" }) },
     body: input === undefined ? undefined : JSON.stringify(input) });
   const value = await response.json();
-  if (!response.ok) throw Object.assign(new Error(value.error?.message ?? value.error ?? `Hosted plugin request failed (${response.status})`), { status: response.status, code: value.error?.code, reason: value.error?.reason });
+  if (!response.ok) throw Object.assign(new Error(value.error?.message ?? value.error ?? `Hosted plugin request failed (${response.status})`), { status: response.status, code: value.error?.code ?? value.errorCode, reason: value.error?.reason ?? value.reason });
   return value as T;
 }
 export const hostedApi = {
