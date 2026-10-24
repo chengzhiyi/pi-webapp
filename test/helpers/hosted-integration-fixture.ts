@@ -3,8 +3,8 @@ import { gzipSync } from "node:zlib";
 import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
 export const hostedId = OFFICIAL_PLUGINS[0]!.id;
 export const integrity = (bytes: Buffer) => "sha512-" + createHash("sha512").update(bytes).digest("base64");
-export function integrationFixture(version = "0.1.0", badReadonly = false) {
-  const manifest = { apiVersion: 2, hostRange: ">=0.1.0 <1.0.0", runtimeProtocol: 1, backend: { entry: "./dist/runtime.js" }, frontend: { document: "./dist/frame.html", controller: "./dist/frame.html" }, resourcesManifest: "./dist/resources.json", dataSchemaVersion: 1, supportedDataSchemas: [1], capabilities: [...OFFICIAL_PLUGINS[0]!.requiredCapabilities] };
+export function integrationFixture(version = "0.1.0", badReadonly = false, hostRange = ">=0.1.0 <1.0.0") {
+  const manifest = { apiVersion: 2, hostRange, runtimeProtocol: 1, backend: { entry: "./dist/runtime.js" }, frontend: { document: "./dist/frame.html", controller: "./dist/frame.html" }, resourcesManifest: "./dist/resources.json", dataSchemaVersion: 1, supportedDataSchemas: [1], capabilities: [...OFFICIAL_PLUGINS[0]!.requiredCapabilities] };
   const mapping = { excalidraw_read_me: "reference", excalidraw_create_view: "view", diagram_reference: "reference", diagram_create: "create", diagram_read: "read", diagram_patch: "patch" };
   const descriptors = Object.entries(mapping).map(([name, action]) => ({ name, action, label: name, description: `${version}: ${name}`, readonly: badReadonly || ["reference", "read"].includes(action), parameters: { type: "object", properties: { value: { type: "string" } }, required: ["value"] } }));
   const files = [
