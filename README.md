@@ -6,7 +6,7 @@ Bring conversations, project files, terminals, and Git into one interface—with
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 8:** [macOS · Apple Silicon](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage). Verify [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS); unsigned/unnotarized test-release limits apply. [Install safely](#desktop-downloads).
+**Desktop test build 10:** [macOS · Apple Silicon](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage). Verify [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS); unsigned/unnotarized test-release limits apply. [Install safely](#desktop-downloads).
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -89,22 +89,24 @@ Enter **`/web`** inside Pi. The browser stays synchronized with that terminal se
 
 ## Desktop downloads
 
-**Latest desktop test release: [pi 0.1.24 · build 8](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.24-b8).** Download the installer for your operating system and CPU:
+**Latest desktop test release: [pi 0.1.28 · build 10](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.28-b10).** Download the installer for your operating system and CPU:
 
 | Platform | Download |
 | --- | --- |
-| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) |
-| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) |
-| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) |
-| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage) |
+| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) |
+| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) |
+| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) |
+| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage) |
 
-[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/desktop-release.json)
+[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/desktop-release.json)
+
+**Build 10 separates shell and business-package updates.** It can safely attach to existing npm 0.1.26/0.1.27 services without stopping their tasks. Install this shell once, then use **Settings → App updates** for compatible `pi-webapp` package updates in your user directory. Finish chats and close terminals before restarting the backend.
 
 The **pi** desktop app bundles Node and Pi—no separate runtime installation needed. It can reuse a compatible Web service, open the same service in your browser, and let you choose whether background tasks continue after closing the app. Bring your own model credentials, Git/SSH setup, and project toolchains.
 
 - **Install:** macOS: drag **pi.app** from the DMG into Applications. Windows: run the EXE installer. Linux: make the AppImage executable and run it; see the release notes for the FUSE alternative.
-- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 8** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
-- **Test-release limits:** these are opt-in prereleases, not publisher-signed stable distributions. macOS uses ad-hoc signatures without Apple notarization and may be blocked by Gatekeeper; follow the [macOS test installation guide](docs/desktop-testing.md) and stop if verification fails. Windows/Linux packages are unsigned. Never disable system security globally. Desktop updates require manual installation; Windows ARM and Linux ARM are not included.
+- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 10** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
+- **Test-release limits:** these are opt-in prereleases, not publisher-signed stable distributions. macOS uses ad-hoc signatures without Apple notarization and may be blocked by Gatekeeper; follow the [macOS test installation guide](docs/desktop-testing.md) and stop if verification fails. Windows/Linux packages are unsigned. Never disable system security globally. Desktop shell updates require manual installation; business-package updates use the app's Settings. Windows ARM and Linux ARM are not included.
 
 ## Architecture highlights
 

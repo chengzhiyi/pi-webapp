@@ -212,7 +212,7 @@ keeps its existing name; this rename is for the native desktop application.
 
 Download builds from **[GitHub Releases](https://github.com/chengzhiyi/pi-webapp/releases)**,
 not the npm package, source ZIP or an expired Actions artifact. The current
-build-8 channel offers macOS arm64/Intel, Windows x64, and Linux x64 test installers.
+build-10 channel offers macOS arm64/Intel, Windows x64, and Linux x64 test installers.
 Use each release's actual asset list and acceptance notes, not matrix configuration
 alone, to determine support.
 

@@ -6,7 +6,7 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 8：** [macOS · Apple 芯片](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage)。请核对 [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS)；测试包未签名或无发布者身份，macOS 未公证。[安全安装说明](#桌面端下载)。
+**桌面测试版 build 10：** [macOS · Apple 芯片](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage)。请核对 [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS)；测试包未签名或无发布者身份，macOS 未公证。[安全安装说明](#桌面端下载)。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -89,22 +89,24 @@ pi
 
 ## 桌面端下载
 
-**最新桌面测试版：[pi 0.1.24 · build 8](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.24-b8)。** 请按系统与芯片选择安装包：
+**最新桌面测试版：[pi 0.1.28 · build 10](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.28-b10)。** 请按系统与芯片选择安装包：
 
 | 平台 | 下载 |
 | --- | --- |
-| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-arm64.dmg) |
-| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-mac-x64.dmg) |
-| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-win-x64.exe) |
-| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/pi-0.1.24-desktop.8-linux-x86_64.AppImage) |
+| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) |
+| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) |
+| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) |
+| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage) |
 
-[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.24-b8/desktop-release.json)
+[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/desktop-release.json)
+
+**build 10 已分离桌面外壳与业务包更新。** 可安全连接已有 npm 0.1.26/0.1.27 后台，不停止其任务。手动安装一次此外壳后，兼容的 `pi-webapp` 业务包可在「设置 → 应用更新」中更新到用户目录；重启后台前，请先完成聊天任务并关闭终端。
 
 桌面应用名为 **pi**，自带 Node 和 Pi，无需另装运行时。支持复用兼容的 Web 服务、在浏览器中打开同一服务，以及退出时选择是否保留后台任务。模型凭据、Git/SSH 配置和项目工具链仍需自行准备。
 
 - **安装：** macOS 从 DMG 将 **pi.app** 拖入“应用程序”；Windows 运行 EXE；Linux 为 AppImage 添加执行权限后运行，不支持 FUSE 时可参考该版本发布说明中的替代方式。
-- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 8**。替换前先退出旧桌面，不要删除 `~/.pi`。
-- **测试版边界：** 当前为自愿参与的预发布测试包，不是具有发布者签名的稳定发行版。macOS 使用 ad-hoc 临时签名、未经过 Apple 公证，可能被 Gatekeeper 拦截；请按 [macOS 测试安装说明](docs/desktop-testing.md)核验，失败就停止。Windows/Linux 安装包未签名。不要全局关闭系统安全保护。桌面更新需手动安装；暂不包含 Windows ARM 和 Linux ARM。
+- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 10**。替换前先退出旧桌面，不要删除 `~/.pi`。
+- **测试版边界：** 当前为自愿参与的预发布测试包，不是具有发布者签名的稳定发行版。macOS 使用 ad-hoc 临时签名、未经过 Apple 公证，可能被 Gatekeeper 拦截；请按 [macOS 测试安装说明](docs/desktop-testing.md)核验，失败就停止。Windows/Linux 安装包未签名。不要全局关闭系统安全保护。桌面外壳更新仍需手动安装，业务包更新在应用设置中进行；暂不包含 Windows ARM 和 Linux ARM。
 
 ## 技术架构亮点
 
