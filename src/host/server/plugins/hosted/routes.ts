@@ -15,7 +15,16 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   if (path === "/api/hosted-plugins") return host.inventory();
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new HostedPluginError("invalid_input", "Expected plugin request object", {status: 400});
   const body = input as Record<string, unknown>;
-  if (path === "/api/hosted-plugins/views") return host.views(body);
+  if (path === "/api/hosted-plugins/views") {
+    if (body.operation !== "pollMany") return host.views(body);
+    // Bounded read-only aggregation. Every member still traverses the authenticated
+    // session resolver and exact generation/mount/token checks in host.views.
+    if (!Array.isArray(body.views) || !body.views.length || body.views.length > 64 || body.views.some(view => !view || typeof view !== "object" || Array.isArray(view) || view.operation !== "poll")) throw new HostedPluginError("invalid_input", "Expected 1–64 view polls", { status: 400 });
+    return { replies: await Promise.all(body.views.map(async view => {
+      try { return { reply: await host.views({ ...view, operation: "poll", immediate: true }) }; }
+      catch (error) { return { failure: hostedHttpFailure(error) }; }
+    })) };
+  }
   if (typeof body.pluginId !== "string" || body.pluginId.length > 214) throw new HostedPluginError("invalid_input", "Invalid plugin identity", {status: 400});
   if (path === "/api/hosted-plugins/manage") {
     if (typeof body.operation !== "string" || !["install", "enable", "disable", "update", "uninstall", "check", "retry", "policy"].includes(body.operation) || body.version !== undefined && (typeof body.version !== "string" || !/^\d+\.\d+\.\d+$/.test(body.version))) throw new HostedPluginError("invalid_input", "Invalid plugin management request", {status: 400});

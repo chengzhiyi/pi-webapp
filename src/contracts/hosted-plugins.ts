@@ -28,7 +28,7 @@ export interface HostedMount {
 export interface HostedViewIdentity { sessionId: string; pluginId: string; generation: number; mountId: string }
 export type HostedViewInput = HostedViewIdentity & (
   | { operation: "register"; kind: HostedMount["kind"] }
-  | { operation: "poll"; viewToken: string; after: number }
+  | { operation: "poll"; viewToken: string; after: number; /** Aggregate transport never holds a socket. */ immediate?: boolean }
   | { operation: "change"; viewToken: string; dirty: boolean; busy: boolean }
   | { operation: "ack"; viewToken: string; commandId: number; ok: boolean; error?: string }
   | { operation: "close"; viewToken: string }
