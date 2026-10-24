@@ -33,7 +33,7 @@ test("offline enabled startup aligns broker/view generations; disabled intent an
   integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
   assert.equal((await integration.inventory()).plugins[0]!.enabled, false); assert.equal(registryCalls, 1);
   await integration.shutdown(); integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
-  assert.equal(registryCalls, 1, "failed offline reconciliation is recorded once per host version; explicit check remains available");
+  assert.equal(registryCalls, 2, "failed offline reconciliation retries on the next startup; success alone marks the host version");
 });
 
 test("older builtin session tool ownership refuses candidate before active pointer publication", async t => {

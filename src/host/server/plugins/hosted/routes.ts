@@ -1,8 +1,9 @@
 import { HostedPluginError, failure } from "./errors.ts";
+import type { HostedManageInput } from "../../../../contracts/hosted-plugins.ts";
 
 export interface HostedBridgeHandlers {
   inventory(): Promise<unknown>;
-  manage(input: {pluginId: string; operation: "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry"; version?: string; reopenEditors?: boolean}): Promise<unknown>;
+  manage(input: HostedManageInput): Promise<unknown>;
   action(input: {sessionId: string; pluginId: string; generation: number; action: string; input: unknown; viewToken?: string; mountId?: string}): Promise<unknown>;
   views(input: Record<string, unknown>): Promise<unknown>;
   asset(path: string): Promise<{bytes: Buffer; mime: string} | null>;
@@ -17,9 +18,10 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   if (path === "/api/hosted-plugins/views") return host.views(body);
   if (typeof body.pluginId !== "string" || body.pluginId.length > 214) throw new HostedPluginError("invalid_input", "Invalid plugin identity", {status: 400});
   if (path === "/api/hosted-plugins/manage") {
-    if (typeof body.operation !== "string" || !["install", "enable", "disable", "update", "uninstall", "check", "retry"].includes(body.operation) || body.version !== undefined && (typeof body.version !== "string" || !/^\d+\.\d+\.\d+$/.test(body.version))) throw new HostedPluginError("invalid_input", "Invalid plugin management request", {status: 400});
+    if (typeof body.operation !== "string" || !["install", "enable", "disable", "update", "uninstall", "check", "retry", "policy"].includes(body.operation) || body.version !== undefined && (typeof body.version !== "string" || !/^\d+\.\d+\.\d+$/.test(body.version))) throw new HostedPluginError("invalid_input", "Invalid plugin management request", {status: 400});
     if (body.reopenEditors !== undefined && typeof body.reopenEditors !== "boolean") throw new HostedPluginError("invalid_input", "Invalid editor reopen consent", {status:400});
-    return host.manage({pluginId: body.pluginId,operation:body.operation as Parameters<HostedBridgeHandlers["manage"]>[0]["operation"],...(typeof body.version === "string" ? {version:body.version} : {}),...(typeof body.reopenEditors === "boolean" ? {reopenEditors:body.reopenEditors} : {})});
+    if (body.updatePolicy !== undefined && !["notify", "automatic", "pinned"].includes(body.updatePolicy as string) || body.operation === "policy" && (typeof body.updatePolicy !== "string" || body.updatePolicy === "pinned" && !body.version)) throw new HostedPluginError("invalid_input", "Invalid update policy or missing exact pin", {status:400});
+    return host.manage({pluginId: body.pluginId,operation:body.operation as Parameters<HostedBridgeHandlers["manage"]>[0]["operation"],...(typeof body.updatePolicy === "string" ? {updatePolicy:body.updatePolicy as HostedManageInput["updatePolicy"]} : {}),...(typeof body.version === "string" ? {version:body.version} : {}),...(typeof body.reopenEditors === "boolean" ? {reopenEditors:body.reopenEditors} : {})});
   }
   if (path === "/api/hosted-plugins/action") {
     if (typeof body.sessionId !== "string" || !body.sessionId || body.sessionId.length > 200 || !Number.isSafeInteger(body.generation) || Number(body.generation) < 1 || typeof body.action !== "string" || !/^[\w.-]{1,80}$/.test(body.action)) throw new HostedPluginError("invalid_input", "Invalid plugin action request", {status: 400});

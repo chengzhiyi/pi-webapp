@@ -11,6 +11,10 @@ import { atomicJson, boundedRead, readJson, withStorageLock } from "./storage.ts
 import { compareVersions } from "./versions.ts";
 
 interface Policy { updatePolicy: UpdatePolicy; pinnedVersion?: string }
+export interface UpdateDiagnostic {
+  hostVersion: string; checkedAt: string; status: "available" | "up-to-date" | "failed";
+  version?: string; message: string;
+}
 export interface HostedManagerOptions {
   root: string;
   hostVersion: string;
@@ -26,7 +30,7 @@ export interface ManagedHostedPlugin {
   id: string; name: string; description: { zh: string; en: string }; official: true;
   installed: boolean; installedVersions: string[]; version: string | null; activeVersion: string | null;
   enabled: boolean; phase: string; generation: number | null; pendingVersion: string | null;
-  updatePolicy: UpdatePolicy; availableVersion: string | null; error?: ReturnType<typeof failure>;
+  updatePolicy: UpdatePolicy; pinnedVersion?: string; updateDiagnostic?: UpdateDiagnostic; availableVersion: string | null; error?: ReturnType<typeof failure>;
   digest?: string; document?: string; controller?: string; assetBase?: string;
 }
 /** Application-level service; authentication/scope resolution belongs to the host, never the plugin. */
@@ -87,15 +91,39 @@ export class HostedPluginManager {
     }
     for (const [id, p] of Object.entries(value)) {
       officialPlugin(id, this.installer.catalog);
-      if (!p || !["notify", "automatic", "pinned"].includes(p.updatePolicy) || p.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(p.pinnedVersion)) throw new HostedPluginError("invalid_storage", "Invalid plugin update policy");
+      if (!p || !["notify", "automatic", "pinned"].includes(p.updatePolicy) || p.updatePolicy === "pinned" && !p.pinnedVersion || p.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(p.pinnedVersion)) throw new HostedPluginError("invalid_storage", "Invalid plugin update policy");
     }
     return value;
   }
+  private async diagnostics(): Promise<Record<string, UpdateDiagnostic>> {
+    return await readJson<Record<string, UpdateDiagnostic>>(join(this.options.root, "policies", "update-checks.json")) ?? {};
+  }
+  private async recordCheck(id: string, detail: Omit<UpdateDiagnostic, "hostVersion" | "checkedAt">): Promise<void> {
+    await withStorageLock(join(this.options.root, "policies"), async () => {
+      const diagnostics = await this.diagnostics();
+      diagnostics[id] = { ...detail, hostVersion: this.options.hostVersion, checkedAt: new Date().toISOString() };
+      await atomicJson(join(this.options.root, "policies", "update-checks.json"), diagnostics);
+    });
+  }
+  private async check(id: string, current?: string, exact?: string): Promise<RegistryRelease> {
+    try {
+      const release = await this.installer.check(id, current, exact);
+      const newer = !current || compareVersions(release.version, current) > 0;
+      if (newer) this.available.set(id, release); else this.available.delete(id);
+      await this.recordCheck(id, { status: newer ? "available" : "up-to-date", version: release.version,
+        message: newer ? "Compatible stable release available" : "No newer compatible stable release; installed code preserved" });
+      return release;
+    } catch (error) {
+      this.available.delete(id);
+      await this.recordCheck(id, { status: "failed", message: failure(error).message });
+      throw error;
+    }
+  }
   async setPolicy(id: string, policy: Policy): Promise<void> {
     this.supervisor(id);
-    if (!["notify", "automatic", "pinned"].includes(policy.updatePolicy) || policy.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(policy.pinnedVersion)) throw new HostedPluginError("invalid_input", "Invalid plugin update policy");
+    if (!["notify", "automatic", "pinned"].includes(policy.updatePolicy) || policy.updatePolicy === "pinned" && !policy.pinnedVersion || policy.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(policy.pinnedVersion)) throw new HostedPluginError("invalid_input", "Invalid plugin update policy");
     await withStorageLock(join(this.options.root, "policies"), async () => {
-      const policies = await this.policies(); policies[id] = policy;
+      const policies = await this.policies(); policies[id] = { updatePolicy: policy.updatePolicy, ...(policy.updatePolicy === "pinned" ? { pinnedVersion: policy.pinnedVersion } : {}) };
       await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
     });
   }
@@ -113,7 +141,7 @@ export class HostedPluginManager {
     }
   }
   async inventory(): Promise<{ plugins: ManagedHostedPlugin[]; errors: string[] }> {
-    const installed = await this.installer.inventory(), policies = await this.policies();
+    const installed = await this.installer.inventory(), policies = await this.policies(), diagnostics = await this.diagnostics();
     const plugins = await Promise.all(this.installer.catalog.map(async plugin => {
       const s = this.supervisor(plugin.id), active = await s.broker.active(), pkg = this.packages.get(plugin.id);
       const versions = (installed.versions[plugin.id] ?? []).map(v => v.version).sort((a, b) => compareVersions(b, a));
@@ -122,7 +150,8 @@ export class HostedPluginManager {
         installed: !!versions.length, installedVersions: versions, version: versions[0] ?? null,
         activeVersion: active?.version ?? null, enabled: active?.enabled ?? false,
         phase: s.phase, generation: s.generation, pendingVersion: s.pendingVersion,
-        updatePolicy: policies[plugin.id]?.updatePolicy ?? "notify", availableVersion: this.available.get(plugin.id)?.version ?? null,
+        updatePolicy: policies[plugin.id]?.updatePolicy ?? "notify", pinnedVersion: policies[plugin.id]?.pinnedVersion,
+        updateDiagnostic: diagnostics[plugin.id], availableVersion: this.available.get(plugin.id)?.version ?? (diagnostics[plugin.id]?.status === "available" ? diagnostics[plugin.id]!.version ?? null : null),
         ...(this.errors.has(plugin.id) ? { error: this.errors.get(plugin.id)! } : {}),
         ...(pkg && s.phase === "active" ? { digest: pkg.digest, document: pkg.manifest.frontend.document.slice(2), controller: pkg.manifest.frontend.controller.slice(2), assetBase: `/hosted-plugins/${encodeURIComponent(plugin.id)}/${this.assetTokens.get(plugin.id)}/${pkg.digest}/` } : {}),
       };
@@ -138,24 +167,29 @@ export class HostedPluginManager {
       const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
       const result = await (async () => { switch (operation) {
         case "check": {
-          const release = await this.installer.check(id, latest); this.available.set(id, release); return { version: release.version };
+          const release = await this.check(id, latest); return { version: release.version };
         }
         case "install": {
           const policy = (await this.policies())[id];
-          const release = await this.installer.check(id, latest, version ?? policy?.pinnedVersion);
+          if (policy?.updatePolicy === "pinned" && version && version !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Change the pin before selecting another version");
+          const release = await this.check(id, latest, version ?? policy?.pinnedVersion);
           const pkg = await this.installer.install(id, release); this.available.delete(id);
+          await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; enablement unchanged" });
           // Installation and activation are separate: downloaded code is not silently enabled.
           return { installed: true, version: pkg.version };
         }
         case "enable": {
           const policy = (await this.policies())[id], selected = version ?? policy?.pinnedVersion ?? latest;
+          if (policy?.updatePolicy === "pinned" && selected !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Change the pin before enabling another version");
           if (!selected) throw new HostedPluginError("not_installed", "Install the plugin first");
           const pkg = await this.installer.load(id, selected), result = await this.lifecycle(id, () => s.replace(pkg));
           if (!result.pending) this.packages.set(id, pkg);
           return result;
         }
         case "retry": {
-          const pending = s.pendingVersion, result = await this.lifecycle(id, () => s.retryPending());
+          const pending = s.pendingVersion, policy = (await this.policies())[id];
+          if (pending && policy?.updatePolicy === "pinned" && pending !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Pending release differs from the current pin; change policy or enable the pinned version");
+          const result = await this.lifecycle(id, () => s.retryPending());
           if (pending && !result.pending) this.packages.set(id, await this.installer.load(id, pending));
           return result;
         }
@@ -164,9 +198,12 @@ export class HostedPluginManager {
           if (!latest) throw new HostedPluginError("not_installed", "Only installed plugins can be updated");
           const policy = (await this.policies())[id];
           if (policy?.updatePolicy === "pinned" && version !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Plugin version is pinned; change its policy before updating");
-          const release = await this.installer.check(id, latest, version), pkg = await this.installer.install(id, release);
-          this.available.delete(id);
+          const release = await this.check(id, latest, version);
           const active = await s.broker.active();
+          if (release.version === latest && (!active?.enabled || active.version === latest) && !s.pendingVersion) return { unchanged: true, version: latest };
+          const pkg = release.version === latest ? await this.installer.load(id, latest) : await this.installer.install(id, release);
+          this.available.delete(id);
+          await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; activation may wait for editors" });
           if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
           const result = await this.lifecycle(id, () => s.replace(pkg)); if (!result.pending) this.packages.set(id, pkg); return result;
         }
@@ -230,14 +267,19 @@ export class HostedPluginManager {
   /** Host-upgrade/startup reconciliation: only installed items; preserve disable and pin choices.
    * Registry failure never discards compatible local code. Incompatibility remains a visible error.
    */
-  async reconcileHostUpgrade(): Promise<void> {
+  async reconcileHostUpgrade(): Promise<boolean> {
     const inventory = await this.installer.inventory(), policies = await this.policies();
+    let succeeded = true;
     for (const plugin of this.installer.catalog) {
       const versions = inventory.versions[plugin.id]; if (!versions?.length) continue;
       if (policies[plugin.id]?.updatePolicy === "pinned") continue;
-      try { await this.manage(plugin.id, "update"); }
-      catch (error) { this.errors.set(plugin.id, failure(error)); }
+      try { await this.manage(plugin.id, policies[plugin.id]?.updatePolicy === "automatic" ? "update" : "check"); }
+      catch (error) {
+        succeeded = false; this.errors.set(plugin.id, failure(error));
+        await this.recordCheck(plugin.id, { status: "failed", message: failure(error).message });
+      }
     }
+    return succeeded;
   }
   async shutdown(): Promise<void> {
     this.closing = true;
