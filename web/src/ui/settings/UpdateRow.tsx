@@ -1,6 +1,7 @@
 import { useAppUpdate, type AppUpdateActions } from "./useAppUpdate.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { Button } from "../primitives/Button.tsx";
+import { SettingsSelect } from "./SettingsSelect.tsx";
 import css from "./UpdateRow.module.css";
 
 export function UpdateRow(props: AppUpdateActions) {
@@ -13,13 +14,13 @@ export function UpdateRow(props: AppUpdateActions) {
     : checking ? t("正在读取版本…", "Reading version…") : t("暂时无法读取版本", "Version unavailable");
 
   return <section className={css.group} aria-label={t("应用更新", "App updates")}>
-    {status?.channel && props.setUpdateChannel && <label className={css.preference}>
-      {t("更新偏好", "Update preference")}
-      <select aria-label={t("更新偏好", "Update preference")} value={status.channel} disabled={checking || installing || Boolean(targetVersion) || restartTimedOut} onChange={event => { void changeChannel(event.target.value as "stable" | "alpha"); }}>
-        <option value="stable">{t("稳定版（推荐）", "Stable (recommended)")}</option>
-        <option value="alpha">{t("体验版（包含 alpha）", "Preview (including alpha)")}</option>
-      </select>
-    </label>}
+    {status?.channel && props.setUpdateChannel && <div className={css.preference}>
+      <div className={css.title}>{t("更新偏好", "Update preference")}</div>
+      <SettingsSelect label={t("更新偏好", "Update preference")} menuLabel={t("选择更新偏好", "Choose update preference")} value={status.channel} disabled={checking || installing || Boolean(targetVersion) || restartTimedOut} onChange={channel => { void changeChannel(channel); }} options={[
+        { id: "stable", label: t("稳定版（推荐）", "Stable (recommended)") },
+        { id: "alpha", label: t("体验版（包含 alpha）", "Preview (including alpha)") },
+      ]} />
+    </div>}
     {status?.channel === "alpha" && <p className={css.note}>{t("体验版包含尚在验证的新功能，可能不稳定。", "Preview releases include features still under testing and may be unstable.")}</p>}
     <div className={css.row}>
       <div className={css.details}>
