@@ -7,6 +7,8 @@ export class HostedViewClient {
   private token = "";
   get capability() { return { viewToken: this.token, mountId: this.identity.mountId }; }
   private stopped = false;
+  private closed = false;
+  private closing?: Promise<void>;
   private abort = new AbortController();
   private snapshot: unknown;
   private frozen = false;
@@ -14,7 +16,14 @@ export class HostedViewClient {
   private frameStarted = false;
   connecting() { this.frameStarted = true; }
   async flushed() { await this.changed({ dirty: false, busy: false }); this.safeToClose = true; }
-  constructor(private identity: HostedViewIdentity, private adapter: FrameAdapter, private mount: HostedMount, private reconnect: () => void, private failed: (error: unknown) => void) {}
+  private identity: HostedViewIdentity;
+  private adapter: FrameAdapter;
+  private mount: HostedMount;
+  private reconnect: () => void;
+  private failed: (error: unknown) => void;
+  constructor(identity: HostedViewIdentity, adapter: FrameAdapter, mount: HostedMount, reconnect: () => void, failed: (error: unknown) => void) {
+    this.identity = identity; this.adapter = adapter; this.mount = mount; this.reconnect = reconnect; this.failed = failed;
+  }
   async start() {
     this.token = (await hostedApi.view({ ...this.identity, operation: "register", kind: this.mount.kind })).viewToken;
   }
@@ -37,7 +46,7 @@ export class HostedViewClient {
           if (command.type === "resume" && this.frozen) { await this.adapter.call("restore", this.snapshot); this.frozen = false; }
           if (command.type === "committed") {
             await this.request({ operation: "ack", commandId: command.id, ok: true });
-            await this.request({ operation: "close" }); this.stopped = true; this.reconnect(); return;
+            await this.close(); this.reconnect(); return;
           }
         } catch (cause) { error = cause; }
         await this.request({ operation: "ack", commandId: command.id, ok: !error, ...(error ? { error: error instanceof Error ? error.message : String(error) } : {}) });
@@ -46,12 +55,21 @@ export class HostedViewClient {
       }
     }
   }
-  async close() {
+  close(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (this.closing) return this.closing;
     this.stopped = true; this.abort.abort();
-    if (!this.token) return;
-    // Use an independent request because the long poll has been aborted.
-    if (!this.frozen && this.frameStarted && !this.safeToClose) await this.adapter.call("flush");
-    await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
-    await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "close" });
+    this.closing = (async () => {
+      if (!this.token) return;
+      // Use independent requests because the long poll has been aborted. A frozen view is
+      // already checkpointed. Its old-generation capability may CLOSE, but not CHANGE.
+      if (!this.frozen) {
+        if (this.frameStarted && !this.safeToClose) await this.adapter.call("flush");
+        await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
+      }
+      await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "close" });
+      this.closed = true;
+    })();
+    return this.closing;
   }
 }

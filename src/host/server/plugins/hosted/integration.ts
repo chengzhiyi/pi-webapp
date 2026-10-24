@@ -184,7 +184,8 @@ export class HostedPluginIntegration {
   async manage(input: HostedManageInput): Promise<HostedPluginCatalog> {
     await this.enqueue(async () => {
       const view = this.coordinator(input.pluginId);
-      view.allowImmediateReopen(input.reopenEditors === true);
+      // Explicit disable/uninstall closes editors after flush; it is not an automatic update.
+      view.allowImmediateReopen(input.reopenEditors === true || input.operation === "disable" || input.operation === "uninstall");
       try {
         const result = await this.manager.manage(input.pluginId, input.operation, input.version);
         if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
@@ -206,7 +207,11 @@ export class HostedPluginIntegration {
   }
   async shutdown(): Promise<void> {
     this.closing = true;
-    await this.enqueue(() => this.manager.shutdown(), true);
+    await this.enqueue(async () => {
+      // Host exit necessarily closes realms. Still require every registered view to flush/ack.
+      for (const view of this.views.values()) view.allowImmediateReopen(true);
+      await this.manager.shutdown();
+    }, true);
     for (const view of this.views.values()) view.dispose();
   }
 }

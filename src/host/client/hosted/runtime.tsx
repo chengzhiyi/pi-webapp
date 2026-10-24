@@ -59,8 +59,10 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     void work.catch(report);
     return () => {
       alive = false; remove(); adapter.current = null;
-      // Keep the port alive for the final checkpoint; missing acknowledgements retain a server blocker.
-      void work.catch(() => {}).then(async () => { await client.close(); await frame.call("dispose"); }).catch(cause => console.error("Hosted view cleanup did not acknowledge edits", cause)).finally(() => frame.dispose());
+      // Navigation/tab closure preflushes through FrameRegistry; generation changes freeze first.
+      // React has removed/replaced the iframe here, so its realm/pagehide owns remote cleanup.
+      // Do not issue a dispose RPC into a destroyed realm and retain a doomed timeout/port.
+      void work.catch(() => {}).then(() => client.close()).catch(cause => console.error("Hosted view cleanup did not acknowledge edits", cause)).finally(() => frame.dispose());
     };
   }, [card.pluginId, card.generation, card.documentUrl, card.controllerUrl, mount.sessionId, mount.kind, mount.contentId]);
   useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => setError(String(cause))); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);

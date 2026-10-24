@@ -119,7 +119,17 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   assert.equal((await manage("update")).status, 500);
   assert.deepEqual(await new HostedStateBroker(join(options.root, "data"), id).active(), before, "unverified readonly descriptor fails BEFORE persistent activation");
   assert.ok((await card()).error); assert.equal(integration.adapter.isFrozen, false);
-  assert.equal((await manage("disable")).status, 200);
+  const closingIdentity = { pluginId: id, sessionId, generation: (await card()).generation!, mountId: "editor-to-disable" };
+  const closingRegistration = await (await post("views", { ...closingIdentity, operation: "register", kind: "editor" })).json();
+  const closingView = { ...closingIdentity, viewToken: closingRegistration.viewToken };
+  await post("views", { ...closingView, operation: "change", dirty: true, busy: false });
+  const disabling = manage("disable");
+  const closingPoll = await (await post("views", { ...closingView, operation: "poll", after: 0 })).json();
+  const closingFreeze = closingPoll.commands.find((command: { type: string }) => command.type === "freeze");
+  assert.ok(closingFreeze, "explicit disable drains an open editor instead of treating it as an automatic update");
+  await post("views", { ...closingView, operation: "ack", commandId: closingFreeze.id, ok: true });
+  assert.equal((await disabling).status, 200);
+  await post("views", { ...closingView, operation: "close" });
   assert.equal(first.getAllTools().find(tool => tool.name === "diagram_read")!.exposure, "hidden");
   assert.equal((await manage("uninstall")).status, 200); assert.equal((await card()).installed, false); assert.equal(reloads, 0);
   await integration.shutdown();
