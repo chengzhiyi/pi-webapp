@@ -20,10 +20,14 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   const old = await legacy.action(cwd,scope.sessionId,"new",{},()=>{}) as { id:string; scene:unknown; revision:number };
   const options = {root:join(root,"hosted"),hostVersion:"0.1.29",workerEntry,
     legacy:()=>legacyCheckpointLoader(legacyRoot),
-    hooks:()=>({canSwitch:()=>!editorOpen,freeze:async()=>{freezes++},committed:async()=>{commits++},resume:async()=>{}}),
+    async lifecycle<T>(_id: string, operation: () => Promise<T>): Promise<T> {
+      assert.equal(inLifecycle,false); inLifecycle = true; lifecycleEntries++;
+      try { return await operation(); } finally { inLifecycle = false; }
+    },
+    hooks:()=>({canSwitch:()=>!editorOpen,validateCandidate:(tools: readonly {name:string}[])=>{assert.equal(inLifecycle,true);assert.equal(tools.length,6)},freeze:async()=>{assert.equal(inLifecycle,true);freezes++},committed:async()=>{commits++},resume:async()=>{}}),
     fetch:async()=>{throw new Error("Offline test must not contact registry")},
   };
-  let editorOpen = false, freezes = 0, commits = 0;
+  let editorOpen = false, freezes = 0, commits = 0, lifecycleEntries = 0, inLifecycle = false;
   let manager = new HostedPluginManager(options);
   t.after(async () => { try { await manager.shutdown(); } finally { await rm(root, { recursive: true, force: true }); } });
   await manager.start(); assert.equal((await manager.inventory()).plugins[0]!.installed,false);
@@ -31,7 +35,7 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   const integrity = "sha512-"+createHash("sha512").update(bytes).digest("base64");
   const pkg = await manager.installer.installArchive(id,bytes,integrity,"0.1.0");
   assert.equal(pkg.resources.size,426);
-  assert.equal(manager.tools.length,0);
+  assert.equal(manager.tools.length,0); assert.equal(lifecycleEntries,0); // Download/verify never freezes Agent sessions.
   await manager.manage(id,"enable"); assert.equal(manager.tools[0]!.descriptors.length,6);
   const assetView = (await manager.inventory()).plugins[0]!;
   const assetUrl = assetView.assetBase! + assetView.document!;

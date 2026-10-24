@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { privateDirectory } from "./storage.ts";
-import type { HostedInvocation } from "@chengzhiyi/pi-web-protocol";
+import type { HostedInvocation, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
 import type { HostedPackage } from "./resources.ts";
 import { HostedRuntimeProcess } from "./runtime-process.ts";
 import { HostedStateBroker, type ActiveHostedPlugin } from "./state-broker.ts";
 import { HostedPluginError } from "./errors.ts";
 
 export interface HostedSwitchHooks {
+  /** Pure precommit policy/ownership validation against the VERIFIED candidate, never the old worker. */
+  validateCandidate?(tools: readonly HostedToolDescriptor[]): void | Promise<void>;
   /** False while an editor is open, composing, dragging or otherwise cannot preserve its state. */
   canSwitch(): boolean | Promise<boolean>;
   /** All affected clients and tool batches must reach a safe boundary, flush and freeze, or fail. */
@@ -89,6 +91,9 @@ export class HostedPluginSupervisor {
         await this.hooks.freeze();
         if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Checkpoint synchronization is still running");
         if (!await this.hooks.canSwitch()) throw new HostedPluginError("editor_busy", "Editor became active during preparation; switch deferred");
+        // Descriptor ownership/policy must be checked BEFORE the irreversible active-pointer commit.
+        // A failure here retains the old worker/state; a committed-hook check alone is too late.
+        await this.hooks.validateCandidate?.(structuredClone(candidate.tools));
         this.phaseValue = "switching";
         const stateRef = current ? await this.broker.forkState(generation) : randomUUID();
         const active = await this.broker.activate(generation, { version: pkg.version, stateRef, schema: pkg.manifest.dataSchemaVersion, enabled: true });

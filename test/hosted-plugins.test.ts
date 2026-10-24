@@ -170,6 +170,24 @@ test("open editors defer activation; freeze failure preserves old runtime; host 
   freezeFails = false; await supervisor.retryPending(); assert.equal(supervisor.pendingVersion, null); assert.notEqual(supervisor.pid, oldPid);
 });
 
+test("candidate descriptor ownership is validated before activation and rejection retains old worker and pointer", async t => {
+  const root = await temporary(t), entry = await workerEntry(root), first = await fixture(root), second = await fixture(root, "2.0.0");
+  const b = new HostedStateBroker(join(root, "state"), "@example/hosted");
+  let reject = false, checked = 0, resumed = 0;
+  const s = new HostedPluginSupervisor(b, entry, {
+    canSwitch: () => true, freeze: async () => {}, committed: async () => {}, resume: async () => { resumed++; },
+    validateCandidate: tools => { checked++; assert.equal(tools[0]?.name, "fixture_diagram"); if (reject) throw new Error("Tool already belongs to another extension"); },
+  });
+  disposeBeforeStorage(root, () => s.shutdown());
+  await s.replace(await validateHostedPackage(first.directory));
+  const before = await b.active(), pid = s.pid;
+  reject = true;
+  await assert.rejects(s.replace(await validateHostedPackage(second.directory)), /already belongs/);
+  assert.deepEqual(await b.active(), before); assert.equal(s.pid, pid); assert.equal(s.phase, "active");
+  assert.equal(checked, 2); assert.equal(resumed, 1);
+  assert.equal((await s.invoke({ ...request(root), action: "read" }) as { version: string }).version, "1.0.0");
+});
+
 test("timed out invocations keep drain leases; stale background broker calls and secrets are blocked", async t => {
   const root = await temporary(t), entry = await workerEntry(root), f = await fixture(root), pkg = await validateHostedPackage(f.directory);
   const b = new HostedStateBroker(join(root, "state"), pkg.id); await b.activate(0, { version: pkg.version, schema: 1, stateRef: randomUUID(), enabled: true });

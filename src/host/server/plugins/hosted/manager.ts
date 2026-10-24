@@ -18,6 +18,8 @@ export interface HostedManagerOptions {
   catalog?: readonly OfficialPlugin[];
   fetch?: typeof globalThis.fetch;
   hooks(id: string): HostedSwitchHooks;
+  /** Enter the all-Agent settled barrier only for activation/disable, AFTER background preparation. */
+  lifecycle?<T>(pluginId: string, operation: () => Promise<T>): Promise<T>;
   legacy?(id: string): (request: HostedInvocation) => Promise<unknown>;
 }
 export interface ManagedHostedPlugin {
@@ -45,6 +47,7 @@ export class HostedPluginManager {
       const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id));
       const hooks = options.hooks(plugin.id);
       this.supervisors.set(plugin.id, new HostedPluginSupervisor(broker, options.workerEntry, {
+        validateCandidate: tools => hooks.validateCandidate?.(tools),
         canSwitch: () => hooks.canSwitch(),
         freeze: () => hooks.freeze(),
         resume: () => hooks.resume(),
@@ -72,6 +75,9 @@ export class HostedPluginManager {
     void result.then(() => this.errors.delete(id), error => { this.errors.set(id, failure(error)); }).finally(() => { if (this.operations.get(id) === result) this.operations.delete(id); });
     return result;
   }
+  private lifecycle<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    return this.options.lifecycle ? this.options.lifecycle(id, operation) : operation();
+  }
   private async policies(): Promise<Record<string, Policy>> {
     const value = await readJson<Record<string, Policy>>(join(this.options.root, "policies", "policies.json"));
     if (!value) return {};
@@ -97,7 +103,7 @@ export class HostedPluginManager {
       if (!active?.enabled) continue;
       try {
         const pkg = await this.installer.load(plugin.id, active.version);
-        await s.replace(pkg); this.packages.set(plugin.id, pkg);
+        await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
       } catch (error) { this.errors.set(plugin.id, failure(error)); }
     }
   }
@@ -139,16 +145,16 @@ export class HostedPluginManager {
         case "enable": {
           const policy = (await this.policies())[id], selected = version ?? policy?.pinnedVersion ?? latest;
           if (!selected) throw new HostedPluginError("not_installed", "Install the plugin first");
-          const pkg = await this.installer.load(id, selected), result = await s.replace(pkg);
+          const pkg = await this.installer.load(id, selected), result = await this.lifecycle(id, () => s.replace(pkg));
           if (!result.pending) this.packages.set(id, pkg);
           return result;
         }
         case "retry": {
-          const pending = s.pendingVersion, result = await s.retryPending();
+          const pending = s.pendingVersion, result = await this.lifecycle(id, () => s.retryPending());
           if (pending && !result.pending) this.packages.set(id, await this.installer.load(id, pending));
           return result;
         }
-        case "disable": await s.disable(); this.packages.delete(id); return { enabled: false };
+        case "disable": await this.lifecycle(id, () => s.disable()); this.packages.delete(id); return { enabled: false };
         case "update": {
           if (!latest) throw new HostedPluginError("not_installed", "Only installed plugins can be updated");
           const policy = (await this.policies())[id];
@@ -157,10 +163,10 @@ export class HostedPluginManager {
           this.available.delete(id);
           const active = await s.broker.active();
           if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
-          const result = await s.replace(pkg); if (!result.pending) this.packages.set(id, pkg); return result;
+          const result = await this.lifecycle(id, () => s.replace(pkg)); if (!result.pending) this.packages.set(id, pkg); return result;
         }
         case "uninstall": {
-          await s.disable(); this.packages.delete(id);
+          await this.lifecycle(id, () => s.disable()); this.packages.delete(id);
           await this.installer.removeVersions(id, installed.map(v => v.version)); this.available.delete(id);
           return { installed: false, dataPreserved: true };
         }
@@ -210,7 +216,7 @@ export class HostedPluginManager {
   async shutdown(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.operations.values());
-    await Promise.all([...this.supervisors.values()].map(s => s.shutdown()));
+    await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown())));
     this.packages.clear(); this.assetTokens.clear();
   }
 }
