@@ -142,10 +142,51 @@ test("A09: actual hosted tool frame paints progressive arguments before any fina
     await expect(page.getByText("Draw progressively (committed)", { exact: true })).toBeVisible();
     await expect(page.locator('[data-tool-view]')).toHaveCount(1);
     await expect.poll(() => page.locator('iframe[title="Excalidraw tool"]').getAttribute("src")).toBe(frameIdentity);
+    const oldMount = new URL(frameIdentity!, h.bridge.url).searchParams.get("mountId");
+    let closeRequested!: () => void, releaseClose!: () => void;
+    const closing = new Promise<void>(resolve => { closeRequested = resolve; });
+    const gate = new Promise<void>(resolve => { releaseClose = resolve; });
+    await page.route("**/api/hosted-plugins/views", async route => {
+      const input = route.request().postDataJSON();
+      if (input.operation === "close" && input.mountId === oldMount) { closeRequested(); await gate; }
+      await route.continue();
+    });
     const created = await h.tool("excalidraw_create_view", drawing);
+    try {
+      await closing;
+      // The authoritative history has actually removed the call, but its ORIGINAL
+      // realm remains attached until its real freeze + identity-bound close finish.
+      expect(await page.locator('iframe[title="Excalidraw tool"]').getAttribute("src")).toBe(frameIdentity);
+    } finally { releaseClose(); }
     await expect(preview).toHaveCount(0); await expect(frame.getByRole("img")).toBeVisible();
+    expect(await page.locator('iframe[title="Excalidraw tool"]').getAttribute("src")).not.toBe(frameIdentity);
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements.length).toBe(2);
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
+  } finally { await h.close(); }
+});
+
+test("removed tool close network failure retains the original realm and exposes retry recovery", async ({ page }) => {
+  const h = await hostedParity(page);
+  try {
+    await page.goto(h.bridge.url);
+    await expect(page.getByRole("textbox", { name: "Send a message to the current Pi session", exact: true })).toBeVisible();
+    const timestamp = new Date().toISOString();
+    h.bridge.publish({ type: "snapshot", session: { ...h.sessions.snapshot(), idle: false, messages: [], streaming: { id: "stream", role: "assistant", timestamp, blocks: [{ kind: "toolCall", toolCallId: "removed-network", toolName: "excalidraw_create_view", text: JSON.stringify(boxes()) }] } } });
+    const iframe = page.locator('iframe[title="Excalidraw tool"]');
+    await expect(page.frameLocator('iframe[title="Excalidraw tool"]').locator("[data-stream-preview]")).toBeVisible();
+    const identity = await iframe.getAttribute("src");
+    let offline = true;
+    await page.route("**/api/hosted-plugins/views", async route => {
+      if (offline && route.request().postDataJSON()?.operation === "close") await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "network unavailable" }) });
+      else await route.continue();
+    });
+    h.bridge.publish({ type: "snapshot", session: { ...h.sessions.snapshot(), streaming: null, messages: [] } });
+    await expect(page.getByRole("alert")).toContainText("retained for recovery");
+    expect(await iframe.getAttribute("src")).toBe(identity);
+    offline = false;
+    await page.getByRole("button", { name: "Retry view cleanup", exact: true }).click();
+    await expect(iframe).toHaveCount(0);
+    expect(h.errors).toEqual([]);
   } finally { await h.close(); }
 });
 
@@ -233,6 +274,15 @@ test("A11: competing real windows fence stale CAS and preserve losing local geom
     await second.getByRole("button", { name: "Restore", exact: true }).click();
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements[0].x).toBe(JSON.parse(losing!).elements[0].x);
     expect((await h.action("get", { id: created.id })).revision).toBeGreaterThan(winner.revision);
+    // Restore alone is NOT evidence for the lost realm. Reconcile each old capability
+    // explicitly, after rescuing the losing geometry above. No generic registry clear.
+    const unresolved = secondPage.locator("[data-unconfirmed-view]");
+    await expect(unresolved).not.toHaveCount(0);
+    while (await unresolved.count()) {
+      const count = await unresolved.count();
+      await unresolved.first().getByRole("button", { name: "Discard unconfirmed edits for this view", exact: true }).click();
+      await expect(unresolved).toHaveCount(count - 1);
+    }
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
   } finally { release?.(); await h.close(); }
 });

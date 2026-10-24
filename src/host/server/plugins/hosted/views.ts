@@ -6,6 +6,7 @@ export interface AuthenticatedViewScope { ownerId: string; workspaceId: string; 
 interface View {
   identity: HostedViewIdentity; scope: AuthenticatedViewScope; token: string; kind: string;
   dirty: boolean; busy: boolean; frozen: boolean; commands: HostedViewCommand[];
+  activeActions?: number;
   waiter?: () => void;
 }
 interface Barrier { id: number; pending: Set<string>; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
@@ -37,6 +38,14 @@ export class HostedViewCoordinator {
       && view.identity.generation === input.generation && view.identity.mountId === input.mountId
       && view.identity.sessionId === input.sessionId && scope.sessionId === input.sessionId
       && view.scope.ownerId === scope.ownerId && view.scope.workspaceId === scope.workspaceId);
+  }
+  /** Fence revoked capabilities on ordinary actions too; no bypass outside barriers. */
+  admitAction(input: HostedActionInput, scope: AuthenticatedViewScope): () => void {
+    if (input.viewToken === undefined && input.mountId === undefined) return () => {}; // v1 trusted host actions
+    const view = input.viewToken ? this.views.get(input.viewToken) : undefined;
+    if (!view || view.identity.generation !== this.generation || input.generation !== view.identity.generation || input.mountId !== view.identity.mountId || input.sessionId !== view.identity.sessionId || scope.ownerId !== view.scope.ownerId || scope.workspaceId !== view.scope.workspaceId || scope.sessionId !== view.identity.sessionId) throw fail("Unknown or stale view action capability");
+    view.activeActions = (view.activeActions ?? 0) + 1;
+    return () => { view.activeActions!--; };
   }
   private enqueue(view: View, type: HostedViewCommand["type"], id = ++this.sequence) {
     view.commands.push({ id, type, generation: this.generation }); view.waiter?.(); return id;
@@ -71,7 +80,12 @@ export class HostedViewCoordinator {
         }
         break;
       }
+      case "discard":
+        if (input.confirmation !== "discard-unconfirmed-edits") throw fail("Explicit per-view discard confirmation required");
+        if (this.switching || view.activeActions) throw fail("View has an active barrier or action; discard refused");
+        view.waiter?.(); this.views.delete(view.token); break;
       case "close":
+        if (view.activeActions) throw fail("View action still in flight");
         if ((view.dirty || view.busy) && !view.frozen) throw fail("Dirty view cannot close without a successful flush");
         if (this.barrier?.pending.has(view.token)) throw fail("View must acknowledge freeze before closing");
         view.waiter?.(); this.views.delete(view.token); break;

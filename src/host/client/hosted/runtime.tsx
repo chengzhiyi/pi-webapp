@@ -5,6 +5,7 @@ import type { HostedMount, HostedPluginCard, HostedViewIdentity } from "../../..
 import { hostedApi } from "./api.ts";
 import { retainHostedCards } from "./catalog.ts";
 import { FrameAdapter, hostedFrames } from "./frame-adapter.ts";
+import { HostedReconciliation } from "./reconciliation.tsx";
 import { HostedViewClient } from "./view-client.ts";
 
 interface HostedCallbacks { current: { openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> } }
@@ -55,7 +56,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       client.listen();
     })();
     ready.current = work;
-    const remove = hostedFrames.add({ identity, ready: work, adapter: frame, afterFlush: () => client.flushed() });
+    const remove = hostedFrames.add({ identity, ready: work, adapter: frame, afterFlush: () => client.flushed(), toolCallId: (update as ToolViewProps | undefined)?.call?.toolCallId, retire: () => client.close() });
     void work.catch(report);
     return () => {
       alive = false; remove(); adapter.current = null;
@@ -84,7 +85,7 @@ function definition(card: HostedPluginCard, reconnect: () => void, callbacks: Ho
       entry: { ...contribution.entry, kind: panelKind(contribution.entry.kind), icon: () => <span aria-hidden="true">◇</span> },
       panels: contribution.panels.map(kind => ({ kind: panelKind(kind), component: (props: WorkbenchPanelProps) => <HostedFrame card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
         mount={{ kind: kind === contribution.entry.kind ? "workspace" : "editor", sessionId: props.session.sessionId, contentId: props.contentId, title: props.title, visible: props.visible, locale: props.locale, theme: theme() }} open={(kind, id, title) => props.open(panelKind(kind), id, title)} sendMessage={props.sendMessage} /> })),
-      toolViews: contribution.toolViews.length ? [{ tools: contribution.toolViews, component: (props: ToolViewProps) => props.session ? <HostedFrame card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
+      toolViews: contribution.toolViews.length ? [{ tools: contribution.toolViews, component: (props: ToolViewProps) => props.session ? <HostedFrame key={hostedFrames.incarnation(props.session.sessionId, props.call.toolCallId)} card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
         mount={{ kind: "tool", sessionId: props.session.sessionId, locale: props.locale, theme: theme() }} update={{ call: props.call, result: props.result, running: props.running }}
         open={(kind, id) => props.openPanel(`${contribution.panelAlias.prefix}${id}`)} sendMessage={props.sendMessage} /> : null }] : [],
       resolvePanel: id => id.startsWith(contribution.panelAlias.prefix) ? { kind: panelKind(contribution.panelAlias.kind), contentId: id.slice(contribution.panelAlias.prefix.length), title: contribution.panelAlias.title } : null,
@@ -112,5 +113,5 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
   }), [cards, reconnect, callbacks]);
   const controllers = connected && sessionId ? cards.map(card => <HostedFrame key={`${sessionId}/${card.pluginId}/${card.generation}`} card={card} reconnect={reconnect}
     abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))} mount={{ kind: "controller", sessionId, locale, theme: theme() }} open={(_kind, id) => callbacks.current.openPanel?.(`${card.contribution!.panelAlias.prefix}${id}`)} sendMessage={async text => { if (!callbacks.current.sendMessage) throw new Error("Composer unavailable"); await callbacks.current.sendMessage(text); }} />) : null;
-  return { plugins: connected ? plugins : [], controllers, error };
+  return { plugins: connected ? plugins : [], controllers: <><HostedReconciliation sessionId={sessionId} />{controllers}</>, error };
 }
