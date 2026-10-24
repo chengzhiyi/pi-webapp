@@ -15,7 +15,9 @@
   animation: agent-activity-spin 1.8s linear infinite;
 }
 
-.copy {
+/* Override turnStatus's standalone top alignment, regardless of CSS order. */
+.root > .copy {
+  align-self: center;
   height: auto;
   white-space: normal;
   flex-wrap: wrap;

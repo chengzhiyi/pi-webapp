@@ -61,10 +61,34 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(activity).toHaveText(width === 1440 ? "Working, 12s elapsed…" : "正在处理，用时 12 秒…");
     await expect(activity.locator('[aria-hidden="true"]').first()).toHaveCSS("animation-name", /agent-activity-spin/);
     await expect(elapsed).toHaveAttribute("aria-hidden", "true");
+    // Compare the icon with the copy and both text spans, catching inherited
+    // top alignment even when the outer row itself uses align-items: center.
+    const expectAligned = async () => {
+      const offsets = await activity.evaluate(root => {
+        const icon = root.querySelector("svg")!.getBoundingClientRect();
+        const status = root.querySelector('[role="status"]')!.getBoundingClientRect();
+        const timer = root.querySelector("[data-agent-elapsed]")!.getBoundingClientRect();
+        const copy = root.lastElementChild!.getBoundingClientRect();
+        return {
+          lineCenter: Math.abs(icon.y + icon.height / 2 - status.y - status.height / 2),
+          copyCenter: Math.abs(icon.y + icon.height / 2 - copy.y - copy.height / 2),
+          sameLine: Math.abs(timer.y - status.y),
+        };
+      });
+      expect(offsets.lineCenter).toBeLessThanOrEqual(0.5);
+      expect(offsets.copyCenter).toBeLessThanOrEqual(0.5);
+      expect(offsets.sameLine).toBeLessThanOrEqual(0.5);
+    };
+    await expectAligned();
     await page.screenshot({ path: testInfo.outputPath(`agent-working-${width}.png`) });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(activity.locator('[aria-hidden="true"]').first()).toHaveCSS("animation-name", "none");
     await expect(activity.locator(":scope > span").last()).toHaveCSS("animation-name", "none");
+    for (const fontSize of [12, 16, 20]) {
+      await page.evaluate(size => document.documentElement.style.setProperty("--piw-content-font-size", `${size}px`), fontSize);
+      await expectAligned();
+    }
+    await page.evaluate(() => document.documentElement.style.removeProperty("--piw-content-font-size"));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
     publishStream(message("stream", "Here is the architecture"));
