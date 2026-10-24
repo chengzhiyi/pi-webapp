@@ -30,7 +30,7 @@ export default defineConfigWithTheme<DefaultTheme.Config & { sourceVersion: stri
   base: '/pi-webapp/',
   // Existing engineering/operations/history Markdown stays in GitHub.
   // check-site.mjs additionally enforces the reviewed output-page allowlist.
-  srcExclude: ['MAINTAINING.md', 'architecture.md', 'desktop.md', 'desktop-testing.md', 'sentry.md', 'sentry-triage.md', 'spec.md', 'web-plugins.md', 'prompt-delivery.md', 'decisions/**'],
+  srcExclude: ['MAINTAINING.md', 'architecture.md', 'desktop.md', 'desktop-testing.md', 'sentry.md', 'sentry-triage.md', 'spec.md', 'web-plugins.md', 'prompt-delivery.md', 'release-channels.md', 'decisions/**'],
   locales: {
     zh: {
       label: '简体中文', lang: 'zh-CN', link: '/zh/',

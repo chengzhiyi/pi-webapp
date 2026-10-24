@@ -14,8 +14,8 @@ export function PiUpdateShortcut({ wide, ...updates }: Props) {
   if (!status?.available || !status.canRestart) return null;
   const label = installing ? t("正在升级…", "Updating…")
     : targetVersion ? t("正在重启…", "Restarting…")
-    : t("下载升级", "Download updates");
-  const hint = error || t("下载并升级到新版本，服务将短暂重启", "Download and update to the new version; the service will briefly restart");
+    : status.downgrade ? t("切换到稳定版", "Switch to stable") : t("下载升级", "Download updates");
+  const hint = error || (status.downgrade ? t("按更新偏好切换到稳定版，需要确认后重启", "Switch to stable based on your preference; confirmation and restart required") : t("下载并升级到新版本，服务将短暂重启", "Download and update to the new version; the service will briefly restart"));
   return <div className={css.root}>
     <div className={`pi-settings-trigger-row ${wide ? "" : "pi-settings-trigger-rail"}`}>
       <Tooltip label={hint}>

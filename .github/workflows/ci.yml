@@ -2,9 +2,9 @@ name: CI and npm publish
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, alpha]
   push:
-    branches: [main]
+    branches: [main, alpha]
   workflow_dispatch:
 
 permissions:
@@ -64,22 +64,23 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       # These tests use only Node's built-ins and can run before npm ci.
-      - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts
+      - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/release-channels.test.ts test/release-plan.test.ts
 
   publish:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.verify.outputs.protocol_published == 'true'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.verify.outputs.protocol_published == 'true'
     needs: [verify, platform-smoke]
     runs-on: ubuntu-latest
     concurrency:
       group: pi-webapp-npm-publish
       cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          # Never replace the verified source with a newer branch tip.
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -89,7 +90,7 @@ jobs:
       - name: Resolve the published protocol dependency
         run: node scripts/sync-protocol-dependency.mjs
       - run: npm ci
-      - name: Choose the next patch version
+      - name: Choose the next version and npm distribution tag
         run: node scripts/prepare-release.mjs
       - run: npm run check
       # The integration tests serve web/dist; this local build does not upload.
@@ -121,14 +122,7 @@ jobs:
           PI_WEB_SENTRY_NODE_DSN: ${{ vars.PI_WEB_SENTRY_NODE_DSN || 'https://070c0b7c5ac18d940c294e63ecfa0793@o4506663318716416.ingest.us.sentry.io/4512191040716800' }}
           PI_WEB_SENTRY_BROWSER_DSN: ${{ vars.PI_WEB_SENTRY_BROWSER_DSN || 'https://070c0b7c5ac18d940c294e63ecfa0793@o4506663318716416.ingest.us.sentry.io/4512191040716800' }}
         run: npm run verify:sentry -- --pack-manifest .ci/release/pack.json
-      - name: Sync verified release version to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: sync release version [skip ci]"
-            git push origin HEAD:main
-          fi
+      # Version changes belong only to this verified artifact. Do not race branch
+      # pushes or create version-only merge conflicts between alpha and main.
       - name: Publish the verified tarball without lifecycle rebuilds
         run: node scripts/publish-verified-release.mjs

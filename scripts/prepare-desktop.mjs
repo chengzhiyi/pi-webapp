@@ -75,7 +75,7 @@ delete env.ELECTRON_RUN_AS_NODE;
 await exec(node, [npmCli, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
   cwd: backend, env, timeout: 240000, maxBuffer: 8 * 1024 * 1024,
 });
-for (const name of ["bin", "desktop/managed-release.mjs", "desktop/check-pty.cjs", "dist", "web/dist", "LICENSE", "README.md", "README.zh-CN.md"]) {
+for (const name of ["bin", "desktop/managed-release.mjs", "desktop/release-version.mjs", "desktop/check-pty.cjs", "dist", "web/dist", "LICENSE", "README.md", "README.zh-CN.md"]) {
   await cp(join(root, name), join(backend, name), { recursive: true });
 }
 // Preserve the real package name/version used by SelfUpdater and the launcher.
@@ -83,6 +83,7 @@ manifest.name = pkg.name;
 manifest.version = pkg.version;
 manifest.type = "module";
 manifest.piWebappDesktopProtocol = pkg.piWebappDesktopProtocol;
+manifest.piWebappDataVersion = pkg.piWebappDataVersion;
 await writeFile(join(backend, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 const ptyPreparation = await prepareNativePty({ platform, arch, node, nodeRoot, nodeVersion, npmCli, backend, env, run: exec });
 // Fail before packaging when the actual runtime cannot interact with and exit a PTY.

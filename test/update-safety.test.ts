@@ -53,3 +53,27 @@ test("updates protect background chats and terminals, and lock mutations during 
     assert.equal((await post("/api/message", { text: "still restarting" })).status, 409);
   } finally { release(); await bridge.close(); }
 });
+
+test("channel preferences require authentication, same origin, a current session and a known channel", async () => {
+  const { host } = terminalHost();
+  let channel = "stable"; let saved = 0;
+  host.selfUpdate = {
+    async check() { return { current: "0.1.0", latest: "0.2.0", available: true, canRestart: true }; },
+    async runningVersion() { return "0.1.0"; },
+    async setChannel(value) { channel = value; saved++; return { channel: value }; },
+    async prepare() { throw new Error("must not install"); }, async requestRestart() {},
+  };
+  const bridge = await startBridge(host, webRoot);
+  const url = new URL(bridge.url);
+  const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+  const post = (body: unknown, extra = {}) => fetch(`${url.origin}/api/update/channel`, { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await post({ sessionId: "terminal-a", channel: "alpha" }, { Authorization: "Bearer invalid" })).status, 401);
+    assert.equal((await post({ sessionId: "terminal-a", channel: "alpha" }, { Origin: "https://example.com" })).status, 403);
+    assert.equal((await post({ sessionId: "stale", channel: "alpha" })).status, 409);
+    assert.equal((await post({ sessionId: "terminal-a", channel: "beta" })).status, 400);
+    assert.equal(saved, 0);
+    assert.equal((await post({ sessionId: "terminal-a", channel: "alpha" })).status, 200);
+    assert.equal(channel, "alpha"); assert.equal(saved, 1);
+  } finally { await bridge.close(); }
+});

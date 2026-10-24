@@ -41,7 +41,7 @@ export function runtimeEnvironment(base, { node, npmCli, piCli }) {
     "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS"]) delete env[key];
   const pathKey = Object.keys(env).find(key => key.toLowerCase() === "path") ?? "PATH";
   env[pathKey] = `${dirname(node)}${delimiter}${env[pathKey] ?? ""}`;
-  return { ...env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RUNTIME: "desktop", PI_WEBAPP_DESKTOP_PACKAGE_UPDATES: "1", PI_WEBAPP_PI_CLI: piCli,
+  return { ...env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RUNTIME: "desktop", PI_WEBAPP_DESKTOP_PACKAGE_UPDATES: "1", PI_WEBAPP_DESKTOP_RELEASE_CHANNELS: "1", PI_WEBAPP_PI_CLI: piCli,
     npm_execpath: npmCli };
 }
 

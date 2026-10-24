@@ -3,14 +3,14 @@ import { useEffect, useState } from "react";
 import type {
   ViewMessage as WireViewMessage, SessionView as WireSessionView, WebPluginCatalogView,
   WorkspaceListView, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
-  AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, LoginMethod,
+  AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, UpdateChannel, UpdateRequest, LoginMethod,
   ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery,
 } from "../../contracts/bridge-contract.ts";
 import { parseBridgeEvent } from "../../contracts/bridge-events.ts";
 export type {
   ViewBlock, ViewUsage, WorkspaceView, WorkspaceSessionView, WorkspaceListView,
   DirectoryEntry, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
-  AttachmentReceipt, ConfigKind, ConfigScope, ResourceItem, ConfigView, UpdateStatus,
+  AttachmentReceipt, ConfigKind, ConfigScope, ResourceItem, ConfigView, UpdateStatus, UpdateChannel, UpdateRequest,
   LoginMethod, ProviderView, ProviderModelFields, ProviderModelRow, ProviderModelsView,
   ProviderModelChange, CustomProviderInput, LoginPrompt, LoginEvent, LoginView,
 } from "../../contracts/bridge-contract.ts";
@@ -315,9 +315,13 @@ export function usePiBridge() {
       // Restart polling expects the service to be briefly unavailable; HTTP/parse errors still report normally.
       return bridgeJson(await bridgeFetch("/api/update/version", { headers: { Authorization: `Bearer ${token}` }, signal }, { expectedNetworkFailure: true })) as Promise<{ current: string | null }>;
     },
-    async update(): Promise<{ version: string }> {
+    async setUpdateChannel(channel: UpdateChannel): Promise<{ channel: UpdateChannel }> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
-      return post("/api/update", { sessionId: session.sessionId });
+      return post("/api/update/channel", { sessionId: session.sessionId, channel });
+    },
+    async update(request?: UpdateRequest): Promise<{ version: string }> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      return post("/api/update", { sessionId: session.sessionId, ...request });
     },
     async getProviders() { return get<ProviderView[]>("/api/providers"); },
     async getProviderModels(providerId: string) { return get<ProviderModelsView>(`/api/provider/models?providerId=${encodeURIComponent(providerId)}`); },

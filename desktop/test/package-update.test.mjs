@@ -56,6 +56,16 @@ test("desktop reopens a selected user package without modifying or launching the
   assert.equal(shared.owned, false);
 });
 
+for (const version of ["9.0.0-alpha.10", "0.1.26"]) {
+  test(`desktop cold launch retains selected channel version ${version}`, async t => {
+    const backend = await fixture(t);
+    const release = await stageRuntime(backend.agentDir, version);
+    await writeDesktopRelease(backend.agentDir, { ...release, fallbackVersion: pkg.version });
+    assert.equal((await backend.connect()).version, version);
+    assert.equal(backend.owned, true);
+  });
+}
+
 test("desktop package restart keeps the URL and adopts only its authenticated successor", async t => {
   const backend = await fixture(t);
   const first = await backend.connect();

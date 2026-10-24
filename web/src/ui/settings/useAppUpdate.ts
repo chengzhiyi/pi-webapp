@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { UpdateStatus } from "../../../../src/host/client/pi-bridge.ts";
+import type { UpdateStatus, UpdateChannel, UpdateRequest } from "../../../../src/host/client/pi-bridge.ts";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { updateErrorMessage } from "./update-error.ts";
 import { reportError } from "../../../../src/host/client/telemetry.ts";
@@ -7,11 +7,12 @@ import { reportError } from "../../../../src/host/client/telemetry.ts";
 export interface AppUpdateActions {
   getUpdate: () => Promise<UpdateStatus>;
   getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
-  update: () => Promise<{ version: string }>;
+  setUpdateChannel?: (channel: UpdateChannel) => Promise<{ channel: UpdateChannel }>;
+  update: (request?: UpdateRequest) => Promise<{ version: string }>;
 }
 
 /** Shared by Settings and the one-click shortcut, including restart readiness. */
-export function useAppUpdate({ getUpdate, getRunningVersion, update }: AppUpdateActions) {
+export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, update }: AppUpdateActions) {
   const locale = useLocale();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [checking, setChecking] = useState(true);
@@ -20,17 +21,37 @@ export function useAppUpdate({ getUpdate, getRunningVersion, update }: AppUpdate
   const [restartTimedOut, setRestartTimedOut] = useState(false);
   const [error, setError] = useState("");
   const installLock = useRef(false);
+  const checkSequence = useRef(0);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const check = async () => {
+    const sequence = ++checkSequence.current;
     setChecking(true);
     setError("");
-    try { const result = await getUpdate(); if (mounted.current) setStatus(result); }
-    catch (cause) { if (mounted.current) { setStatus(null); setError(updateErrorMessage(cause, locale, "check")); } }
-    finally { if (mounted.current) setChecking(false); }
+    try { const result = await getUpdate(); if (mounted.current && sequence === checkSequence.current) setStatus(result); }
+    catch (cause) { if (mounted.current && sequence === checkSequence.current) { setStatus(null); setError(updateErrorMessage(cause, locale, "check")); } }
+    finally { if (mounted.current && sequence === checkSequence.current) setChecking(false); }
   };
-  useEffect(() => { void check(); }, []);
+  useEffect(() => {
+    void check();
+    const refresh = () => { void check(); };
+    window.addEventListener("pi-update-channel", refresh);
+    return () => { window.removeEventListener("pi-update-channel", refresh); };
+  }, []);
+
+  const changeChannel = async (channel: UpdateChannel) => {
+    if (!setUpdateChannel || checking || installing || targetVersion) return;
+    ++checkSequence.current;
+    setChecking(true); setError("");
+    try {
+      await setUpdateChannel(channel);
+      // Settings and the sidebar shortcut must never retain different targets.
+      window.dispatchEvent(new Event("pi-update-channel"));
+    } catch (cause) {
+      if (mounted.current) { setChecking(false); setError(updateErrorMessage(cause, locale, "check")); }
+    }
+  };
 
   useEffect(() => {
     if (!targetVersion) return;
@@ -60,12 +81,15 @@ export function useAppUpdate({ getUpdate, getRunningVersion, update }: AppUpdate
 
   const install = async () => {
     if (installLock.current || checking || !status?.available || !status.canRestart || targetVersion || restartTimedOut) return;
+    if (status.downgrade && !window.confirm(textFor(locale,
+      `将从 ${status.current} 切换至稳定版 ${status.latest}。部分新功能可能不可用；请先备份重要数据。是否继续？`,
+      `Switch from ${status.current} to stable ${status.latest}? Some new features may be unavailable. Back up important data before continuing.`))) return;
     installLock.current = true;
     setInstalling(true);
     setError("");
-    try { const result = await update(); if (mounted.current) setTargetVersion(result.version); }
+    try { const result = await update(status.channel && status.latest ? { channel: status.channel, version: status.latest, ...(status.downgrade ? { allowDowngrade: true } : {}) } : undefined); if (mounted.current) setTargetVersion(result.version); }
     catch (cause) { if (mounted.current) setError(updateErrorMessage(cause, locale, "install")); }
     finally { installLock.current = false; if (mounted.current) setInstalling(false); }
   };
-  return { status, checking, installing, targetVersion, restartTimedOut, error, check, install };
+  return { status, checking, installing, targetVersion, restartTimedOut, error, check, install, changeChannel };
 }

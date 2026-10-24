@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
 import { npmCommand } from "./npm-command.mjs";
+import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
 const minimum = [0, 87, 1];
@@ -313,7 +314,14 @@ async function serve(pi, args) {
 async function clearManagedLauncher(path) {
   if (desktopPackages) { await rollbackDesktopRelease(agentDir, path); return; }
   try {
-    if (JSON.parse(await readFile(updatePath, "utf8")).launcher === path) await unlink(updatePath);
+    const selected = JSON.parse(await readFile(updatePath, "utf8"));
+    if (selected.launcher === path) {
+      if (selected.previous) {
+        const temporary = `${updatePath}.${randomUUID()}.tmp`;
+        await writeFile(temporary, JSON.stringify(selected.previous), { mode: 0o600 });
+        await rename(temporary, updatePath);
+      } else await unlink(updatePath);
+    }
   } catch { /* No matching managed release. */ }
 }
 
@@ -327,8 +335,8 @@ async function managedLauncher() {
     if (existsSync(fileURLToPath(new URL("../.git", import.meta.url)))) return null;
     const update = JSON.parse(await readFile(updatePath, "utf8"));
     const current = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-    if (!/^\d+\.\d+\.\d+$/.test(update.version) || !/^\d+\.\d+\.\d+$/.test(current.version)) return null;
-    if (!compatible(versionParts(update.version), versionParts(current.version))) return null;
+    parseVersion(update.version); parseVersion(current.version);
+    if (compareVersions(update.version, current.version) < 0 && !(update.allowDowngrade === true && update.baseVersion === current.version)) return null;
     if (update.version === current.version || !existsSync(update.launcher)) return null;
     return update.launcher;
   } catch { return null; }

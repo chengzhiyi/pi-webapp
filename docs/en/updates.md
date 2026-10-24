@@ -10,6 +10,18 @@ Finish or explicitly pause work in **all** chats and terminals before updating, 
 - This **does not modify the npm global installation**. The global package version may differ from the running version; check runtime information in Settings.
 - If the new version cannot start, the launcher attempts to restore the previous service. This does not guarantee recovery of active work.
 
+### Update preference: stable / preview
+
+Choose an update preference under **App updates**. It is saved in Pi's data directory, surviving restarts, page reloads and different browsers:
+
+- **Stable (default)** selects the official release on npm's `latest` tag.
+- **Preview** selects the newer of npm's `latest` and `alpha` versions, including an official release that supersedes an older alpha.
+- Changing the preference **does not install or restart anything**. Review the target, then click **Update and restart**.
+- If the running alpha is newer than the latest stable release, selecting stable shows **Switch to stable and restart**. Confirm the lower target and back up important data first. Incompatible data formats block switching; no automatic data restore or conversion is performed.
+- If the release target or preference changes after checking, installation stops and requires a fresh check rather than silently installing another version.
+
+**Older entry points:** before using channels, finish active work and update the original npx/global launcher to a stable release supporting this feature. Updating only a managed business package does not update the global entry point. Older desktop shells also require a new installer; shells without channel support cannot select alpha. This preference controls the npm **business package**, not the desktop menu's separate GitHub Releases shell-update channel.
+
 If the page does not return:
 
 ```bash

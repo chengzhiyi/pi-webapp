@@ -9,23 +9,18 @@ import { desktopProtocolVersion, readDesktopRelease, validateDesktopRelease, wri
 import { desktopPeerSpecs, verifyDesktopPackage } from "./desktop-package.ts";
 
 const execFileAsync = promisify(execFile);
-const releasePattern = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+import { compareVersions, isStableVersion, isAlphaVersion, parseVersion } from "../../../../desktop/release-version.mjs";
+export { compareVersions } from "../../../../desktop/release-version.mjs";
 
-import type { UpdateStatus } from "../../../contracts/bridge-contract.ts";
+import type { UpdateChannel, UpdateRequest, UpdateStatus } from "../../../contracts/bridge-contract.ts";
 export type { UpdateStatus } from "../../../contracts/bridge-contract.ts";
 export interface PreparedUpdate { version: string; launcher: string }
 
-export function compareVersions(a: string, b: string): number {
-  const first = releasePattern.exec(a);
-  const second = releasePattern.exec(b);
-  if (!first || !second) throw new Error("版本号无效");
-  for (let index = 1; index <= 3; index++) {
-    const difference = Number(first[index]) - Number(second[index]);
-    if (difference) return difference;
-  }
-  if (!first[4] && second[4]) return 1;
-  if (first[4] && !second[4]) return -1;
-  return (first[4] ?? "").localeCompare(second[4] ?? "", undefined, { numeric: true });
+function dataVersion(pkg: { piWebappDataVersion?: unknown }): number {
+  // Releases predating this contract use data format 1 (no app-owned migrations).
+  const version = pkg.piWebappDataVersion ?? 1;
+  if (!Number.isSafeInteger(version) || Number(version) < 1) throw new Error("应用数据格式版本无效");
+  return Number(version);
 }
 
 async function npm(args: string[]): Promise<string> {
@@ -46,13 +41,15 @@ export class SelfUpdater {
   private readonly runNpm: (args: string[]) => Promise<string>;
   private readonly desktopManaged: boolean;
   private readonly desktopPackageUpdates: boolean;
+  private readonly desktopReleaseChannels: boolean;
   private readonly peerSpecs: typeof desktopPeerSpecs;
   private readonly verifyPackage: typeof verifyDesktopPackage;
   private preparing = false;
+  private savingPreference = false;
   private restartPending = false;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string>; desktopManaged?: boolean;
-    desktopPackageUpdates?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage }) {
+    desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
@@ -60,24 +57,54 @@ export class SelfUpdater {
     this.desktopManaged = options.desktopManaged ?? process.env.PI_WEBAPP_RUNTIME === "desktop";
     // Old shells retain their protection until upgraded once to a capable shell.
     this.desktopPackageUpdates = options.desktopPackageUpdates ?? process.env.PI_WEBAPP_DESKTOP_PACKAGE_UPDATES === "1";
+    this.desktopReleaseChannels = options.desktopReleaseChannels ?? process.env.PI_WEBAPP_DESKTOP_RELEASE_CHANNELS === "1";
     this.peerSpecs = options.peerSpecs ?? desktopPeerSpecs;
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
   }
 
   private async current(): Promise<string> {
     const pkg = JSON.parse(await readFile(join(this.packageRoot, "package.json"), "utf8"));
-    if (pkg.name !== "pi-webapp" || typeof pkg.version !== "string" || !releasePattern.test(pkg.version)) throw new Error("当前 pi-webapp 版本无效");
+    if (pkg.name !== "pi-webapp") throw new Error("当前 pi-webapp 版本无效");
+    parseVersion(pkg.version);
     return pkg.version;
   }
 
   async runningVersion(): Promise<string> { return this.current(); }
 
+  private get preferencePath(): string { return join(this.agentDir, "pi-web", "update-preferences.json"); }
+
+  private async channel(): Promise<UpdateChannel> {
+    try {
+      const preference = JSON.parse(await readFile(this.preferencePath, "utf8"));
+      return preference.channel === "alpha" ? "alpha" : "stable";
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "stable";
+      throw new Error("无法读取更新偏好，请检查 update-preferences.json");
+    }
+  }
+
+  async setChannel(channel: UpdateChannel): Promise<{ channel: UpdateChannel }> {
+    if (channel !== "stable" && channel !== "alpha") throw new Error("更新通道无效");
+    if (this.preparing || this.restartPending || this.savingPreference) throw new Error("升级或偏好保存正在进行中");
+    this.savingPreference = true;
+    const temporary = `${this.preferencePath}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(join(this.agentDir, "pi-web"), { recursive: true });
+      await writeFile(temporary, JSON.stringify({ channel }), { mode: 0o600 });
+      await rename(temporary, this.preferencePath);
+    } finally { this.savingPreference = false; await rm(temporary, { force: true }); }
+    return { channel };
+  }
+
   async check(): Promise<UpdateStatus> {
     const current = await this.current();
-    if (this.desktopManaged && !this.desktopPackageUpdates) return { current, latest: null, available: false, canRestart: false,
+    const channel = await this.channel();
+    if (this.desktopManaged && !this.desktopPackageUpdates) return { current, channel, latest: null, available: false, canRestart: false,
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
+    if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { current, channel, latest: null, available: false, canRestart: false,
+      reason: "当前桌面外壳尚不支持体验版持久化，请先安装支持更新通道的新版桌面应用。" };
     const sourceCheckout = existsSync(join(this.packageRoot, ".git"));
-    const status: UpdateStatus = { current, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
+    const status: UpdateStatus = { current, channel, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     if (this.desktopManaged && this.desktopPackageUpdates) {
@@ -85,28 +112,44 @@ export class SelfUpdater {
       if (status.canRestart) status.reason = "业务包更新安装到用户目录，不修改 pi.app。请先结束所有聊天任务并关闭终端，再升级并重启后台。";
     }
     try {
-      const result: unknown = JSON.parse((await this.runNpm(["view", "pi-webapp", "dist-tags.latest", "--json", "--prefer-online"])).trim());
-      // npm 12 wraps scalar JSON results in an array; older npm returns a string.
-      const latest = Array.isArray(result) && result.length === 1 ? result[0] : result;
-      if (typeof latest !== "string" || !releasePattern.test(latest)) throw new Error("npm 返回的版本号无效");
+      const result: unknown = JSON.parse((await this.runNpm(["view", "pi-webapp", channel === "alpha" ? "dist-tags" : "dist-tags.latest", "--json", "--prefer-online"])).trim());
+      // npm 12 wraps scalar/object JSON results in an array.
+      const value = Array.isArray(result) && result.length === 1 ? result[0] : result;
+      const tags: Record<string, unknown> | null = channel === "alpha" ? value as Record<string, unknown> | null : { latest: value };
+      if (!tags || !isStableVersion(tags.latest)) throw new Error("npm 返回的版本号无效");
+      let latest = tags.latest;
+      if (channel === "alpha" && tags.alpha !== undefined) {
+        if (!isAlphaVersion(tags.alpha)) throw new Error("npm 返回的 alpha 版本号无效");
+        if (compareVersions(tags.alpha, latest) > 0) latest = tags.alpha;
+      }
       status.latest = latest;
-      status.available = compareVersions(latest, current) > 0;
+      status.downgrade = compareVersions(latest, current) < 0;
+      // A channel switch may intentionally select an older stable release.
+      // Downgrades are actionable, never automatic, and require prepare() consent.
+      status.available = channel === "stable" ? compareVersions(latest, current) !== 0 : compareVersions(latest, current) > 0;
+      if (this.desktopManaged && status.downgrade && !this.desktopReleaseChannels && compareVersions(latest, process.env.PI_WEBAPP_DESKTOP_VERSION ?? current) < 0) {
+        status.canRestart = false;
+        status.reason = "当前桌面外壳尚不支持切回低于内置包的版本，请先安装支持更新通道的新版桌面应用。";
+      }
     } catch (error) {
       throw new Error(`检查 npm 更新失败：${error instanceof Error ? error.message : String(error)}`);
     }
     return status;
   }
 
-  async prepare(): Promise<PreparedUpdate> {
+  async prepare(request?: UpdateRequest): Promise<PreparedUpdate> {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新，请先安装新版桌面应用");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     if (existsSync(join(this.packageRoot, ".git"))) throw new Error("源码目录不能通过网页升级");
     if (this.restartPending) throw new Error("升级已完成，正在重启");
-    if (this.preparing) throw new Error("升级正在进行中");
+    if (this.preparing || this.savingPreference) throw new Error("升级或偏好保存正在进行中");
     this.preparing = true;
     try {
       const status = await this.check();
+      if (request && (request.channel !== status.channel || request.version !== status.latest)) throw new Error("更新目标或偏好已变化，请重新检查更新");
+      if (!status.canRestart) throw new Error(status.reason ?? "当前运行方式不支持更新");
       if (!status.available || !status.latest) throw new Error("当前已是最新版本");
+      if (status.downgrade && (request?.allowDowngrade !== true || request.channel !== "stable")) throw new Error("切回较低版本需明确确认，请在设置中选择稳定版后重试");
       const releases = join(this.agentDir, "pi-web", "releases");
       await mkdir(releases, { recursive: true });
       // Never delete a potentially live installation selected by another process.
@@ -117,6 +160,8 @@ export class SelfUpdater {
         const installed = join(releaseDir, "node_modules", "pi-webapp");
         const pkg = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
         if (pkg.name !== "pi-webapp" || pkg.version !== status.latest) throw new Error("下载的包与目标版本不符");
+        const currentPackage = JSON.parse(await readFile(join(this.packageRoot, "package.json"), "utf8"));
+        if (status.downgrade && dataVersion(pkg) !== dataVersion(currentPackage)) throw new Error("数据格式不兼容，不能直接切回旧版。请先备份并按恢复指南操作。");
         const launcher = join(installed, "bin", "pi-webapp.mjs");
         await Promise.all([launcher, join(installed, "dist", "extension.js"), join(installed, "web", "dist", "index.html")].map((path) => access(path)));
         if (this.desktopManaged) {
@@ -124,12 +169,19 @@ export class SelfUpdater {
           await this.verifyPackage(this.packageRoot, installed);
           const saved = await readDesktopRelease(this.agentDir, status.current);
           const previous = saved?.version === status.current ? saved : null;
-          await writeDesktopRelease(this.agentDir, { ...selected, ...(previous ? { previous } : {}) });
+          const fallbackVersion = process.env.PI_WEBAPP_DESKTOP_VERSION ?? saved?.fallbackVersion ?? status.current;
+          await writeDesktopRelease(this.agentDir, { ...selected, ...((status.downgrade || saved?.fallbackVersion) ? { fallbackVersion } : {}), ...(previous ? { previous } : {}) });
         } else {
           const stateDir = join(this.agentDir, "pi-web");
           const temporary = join(stateDir, `update.${randomUUID()}.tmp`);
           try {
-            await writeFile(temporary, JSON.stringify({ version: status.latest, launcher }), { mode: 0o600 });
+            let saved;
+            try { saved = JSON.parse(await readFile(join(stateDir, "update.json"), "utf8")); } catch { /* First managed release. */ }
+            const baseVersion = saved?.baseVersion ?? status.current;
+            const previous = saved?.version === status.current ? saved : undefined;
+            // Keep only one rollback entry, never a recursively growing chain.
+            if (previous) delete previous.previous;
+            await writeFile(temporary, JSON.stringify({ version: status.latest, launcher, baseVersion, ...((status.downgrade || saved?.allowDowngrade === true) ? { allowDowngrade: true } : {}), ...(previous ? { previous } : {}) }), { mode: 0o600 });
             await rename(temporary, join(stateDir, "update.json"));
           } finally { await rm(temporary, { force: true }); }
         }
