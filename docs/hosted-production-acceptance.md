@@ -2,7 +2,11 @@
 
 This is **not A01–A25 release approval**. Implementation is authorized; npm publication, push and release-branch merging are not. Shared alpha was not edited. Historical observations are not promoted to current-source results.
 
-## Current integration
+## ORI-39 local follow-up (not yet parent-integrated)
+
+See [bounded compatibility report](hosted-ori39-compatibility.md): actual independent v1 plan package + host UI/actions; streamed old-schema batch/two-window update; mixed native 100-element canvas parity/byte fencing; and real historical-card/checkpoint/localStorage recovery. Host/plugin fixes are independent local commits. Final follow-up source passes 408 Node + 94 desktop / 1 Windows skip, plugin 17/17, and Chromium 20 clean body + shutdown passes / 1 obsolete diagnostic skip, including the policy case. This does not certify the remaining platform, native terminal, arbitrary-callback or pressure matrix.
+
+## Base integration (683a4a3)
 
 - Host integrates ORI-34/35/36, ORI-37 (`275ff79`) and ORI-38 (`b1eddd5`); plugin is `b8f74b1` (ORI-37 applied after `6108c6b`). Optional-default extraction remains: no builtin drawing tools/API, root editor dependency, drawing fonts or drawing-specific build. Official metadata remains offline-visible.
 - Exact independently rebuilt local development archive: SHA-256 **932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5**, **15,643,698 bytes**, 426 resources. This is not a newly published immutable npm version.
@@ -30,9 +34,9 @@ This is **not A01–A25 release approval**. Implementation is authorized; npm pu
 | A01 | Current clean tgz/offline installed `/web` and absent card pass; all-target artifacts not certified. |
 | A02 | Current Chromium same-object SDK/parent boot lifecycle passes; current packaged macOS PIDs/boot/session ID pass. |
 | A03 | SDK/TUI direct/nested/codemode/tombstone negatives pass. |
-| A04 | Plan/allowlist tests pass; actual v1 plan-mode package UI interaction remains. |
-| A05 | Retained/background batch drain pass; long-provider-stream/multiwindow combinations remain. |
-| A06 | Native synchronized zoom/pan, identical canvas pixels, 100 groups and Chinese checkpoint pass; broader freehand/arrow/text matrix remains. |
+| A04 | ORI-39 actual independently packed v1 plan factory/command/review UI/mode action + subsequent v2 install pass; plan discovery stays read-only and execution-time empty allowlist denies writes. |
+| A05 | ORI-39 real SDK 128-delta/33,938-character local provider stream + pending old batch + same-profile concurrent updates pass, including changed required schema/worker PID and gated new admission; no remote-provider or multi-minute stress claim. |
+| A06 | ORI-39 native mixed 100 elements include Chinese text/freehand/bound arrow/groups/background; actual Open/edit/save/viewport/switch, exact canvas backing pixels and complete canonical scene hash/revision pass. OS IME remains separate. |
 | A07 | Held drag/synthetic composition pass; OS IME not run. |
 | A08 | Pending default, undo-reset warning, native undo/redo pass. |
 | A09 | Labeled/bare candidate, progressive preview AND real removed-view teardown/retry now pass. |
@@ -40,17 +44,17 @@ This is **not A01–A25 release approval**. Implementation is authorized; npm pu
 | A11 | Responsive same-profile windows/CAS loser rescue/explicit Restore and old-capability reconciliation pass; no claim of recovering arbitrary destroyed edits. |
 | A12 | Installer integrity/interruption/failure negatives pass; comprehensive disk-full/cancellation product matrix incomplete. |
 | A13 | Archive/resource negatives, strict CSP, desktop download allow/deny pass. |
-| A14 | Real state/file fencing and stale-generation switch pass; broader stale callback matrix remains. |
+| A14 | ORI-39 captured old-generation sync/save delivered after commit return 409 and leave actual checkpoint/native file bytes unchanged; arbitrary callback-ordering matrix is not certified. |
 | A15 | Precommit failure preserves data, unsupported schema refuses; generalized reverse migration/rollback not certified. |
 | A16 | Existing SIGKILL/recovery tests plus actual hard pair-owner exit/refusal/stopped-owner recovery pass; power-loss/OS uncertain-save gates remain. |
 | A17 | Compatible stable/no-downgrade/pin/retry/visible policy pass; no independent periodic scheduler claimed. |
 | A18 | Startup host-linked synchronization AND controlled paired selection/restart/recovery pass bounded tests; future host shapes/upgraded plugin fixtures are synthetic, not public releases. Native installer atomicity not claimed. |
 | A19 | Browser reinstall and current packaged disable/re-enable preserve files/drafts. |
 | A20 | Existing 50 different-version backend GC and current 70 controller/worker cycles pass bounded checks; direct ports/timers/listeners and long-term heap gate remain. |
-| A21 | SDK/TUI factories/retained sessions and current installed `/web` pass; wider terminal interactions remain. |
+| A21 | Actual v1 registered `/plan` command/factory, v1 browser actions, retained streaming SDK and existing real mountTui policy tests pass; physical TUI key/picker interaction NOT RUN. |
 | A22 | Current macOS arm64 app-directory smoke passes bounded scope. Windows/Linux/macOS x64, OS IME/native dialogs NOT RUN. |
 | A23 | Current Chromium full suite and macOS Electron bounded suite pass; other supported browser engines NOT RUN. |
-| A24 | Existing opaque checkpoint/ID/focus/history/localStorage migration/no-dual-registration regressions pass; broader old-history browser recovery remains. |
+| A24 | ORI-39 real old-card/ID/alias/checkpoint/native-file/localStorage migration once and explicit Restore-as-new/download pass. Missing ID stays 404; no scene reconstructed from old arguments and no automatic blank replacement. Arbitrary destroyed-history recovery is not claimed. |
 | A25 | Current specified local switch P95 meets target; network install, child CPU/RSS, active-editor/all-platform performance incomplete. |
 
 Remaining work must stay an explicit execution path, not silently become optional release notes. No repeated implementation approval is needed. Platform access and native human-input limitations must be recorded, not invented.
