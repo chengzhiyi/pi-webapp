@@ -32,6 +32,7 @@ export async function stageRuntime(agentDir, version, { broken = false } = {}) {
   await mkdir(join(root, "desktop"), { recursive: true });
   await cp(join(source, "bin"), join(root, "bin"), { recursive: true });
   await cp(join(source, "desktop", "managed-release.mjs"), join(root, "desktop", "managed-release.mjs"));
+  await cp(join(source, "desktop", "release-version.mjs"), join(root, "desktop", "release-version.mjs"));
   for (const path of ["dist", "web/dist", "node_modules"]) await mkdir(join(root, path), { recursive: true });
   await symlink(join(source, "node_modules", "cross-spawn"), join(root, "node_modules", "cross-spawn"), process.platform === "win32" ? "junction" : "dir");
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version, type: "module", piWebappDesktopProtocol: 1 }));

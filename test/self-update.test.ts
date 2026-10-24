@@ -19,7 +19,7 @@ test("update checks run npm without PATH in directories containing spaces and Ch
       env: { ...env, PATH: "", npm_execpath: cli }, encoding: "utf8", timeout: 15000,
     });
     assert.deepEqual(JSON.parse(stdout), {
-      current: "0.1.0", latest: "0.2.0", available: true, canRestart: false,
+      current: "0.1.0", channel: "stable", downgrade: false, latest: "0.2.0", available: true, canRestart: false,
       reason: "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。",
     });
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -57,7 +57,7 @@ test("update checks accept npm string and single-version array results", async (
       for (const result of [version, [version]]) {
         await t.test(JSON.stringify(result), async () => {
           const updater = new SelfUpdater({ agentDir: root, packageRoot: root, launcherNonce: "nonce", runNpm: async () => `\n${JSON.stringify(result)}\n` });
-          assert.deepEqual(await updater.check(), { current: "0.1.11", latest: version, available: version === "0.2.0", canRestart: true });
+          assert.deepEqual(await updater.check(), { current: "0.1.11", channel: "stable", downgrade: version === "0.1.10", latest: version, available: version !== "0.1.11", canRestart: true });
         });
       }
     }
@@ -99,7 +99,7 @@ test("installs a checked npm array release before requesting a supervised restar
       await writeFile(join(installed, "web", "dist", "index.html"), "");
       return "";
     } });
-    assert.deepEqual(await updater.check(), { current: "0.1.0", latest: "0.2.0", available: true, canRestart: true });
+    assert.deepEqual(await updater.check(), { current: "0.1.0", channel: "stable", downgrade: false, latest: "0.2.0", available: true, canRestart: true });
     const prepared = await updater.prepare();
     assert.equal(prepared.version, "0.2.0");
     assert.equal(calls.filter((args) => args[0] === "install").length, 1);

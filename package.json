@@ -3,6 +3,7 @@
   "version": "0.1.29",
   "type": "module",
   "piWebappDesktopProtocol": 1,
+  "piWebappDataVersion": 1,
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
     "assets/readme",
     "bin",
     "desktop/managed-release.mjs",
+    "desktop/release-version.mjs",
     "desktop/check-pty.cjs",
     "dist",
     "web/dist",

@@ -31,7 +31,7 @@ export interface BridgeHost {
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
-  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart">;
+  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart"> & Partial<Pick<SelfUpdater, "setChannel">>;
   resolvePluginInteraction?(sessionId: string, pluginId: string, requestId: string, value: unknown): Promise<void>;
   snapshot(): SessionView;
   /** Canonical cwd paths of every retained running chat, including background chats. */
@@ -333,7 +333,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -399,16 +399,26 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             json(res, 200, { value });
             return;
           }
+          if (path === "/api/update/channel") {
+            if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            if (!("channel" in body) || (body.channel !== "stable" && body.channel !== "alpha")) { json(res, 400, { error: "更新通道无效" }); return; }
+            if (!host.selfUpdate?.setChannel) { json(res, 409, { error: "当前后台不支持更新偏好，请先升级" }); return; }
+            json(res, 200, await host.selfUpdate.setChannel(body.channel));
+            return;
+          }
           if (path === "/api/update") {
             if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
             if (!host.snapshot().idle) { json(res, 409, { error: "请等待当前回复结束后再升级" }); return; }
             if (!host.selfUpdate) { json(res, 409, { error: "当前扩展不支持在线升级" }); return; }
             const blocker = pluginRegistry.restartBlocker();
             if ((host.busyGitWorkspaces?.() ?? []).length || blocker) { json(res, 409, { error: blocker ?? "请等待所有聊天任务结束后再升级" }); return; }
+            const input = body as Record<string, unknown>;
+            const hasTarget = "channel" in input || "version" in input || "allowDowngrade" in input;
+            if (hasTarget && ((input.channel !== "stable" && input.channel !== "alpha") || typeof input.version !== "string" || (input.allowDowngrade !== undefined && typeof input.allowDowngrade !== "boolean"))) { json(res, 400, { error: "更新参数无效" }); return; }
             // Lock mutations before the download starts, not after it completes.
             restarting = true;
             let prepared;
-            try { prepared = await host.selfUpdate.prepare(); }
+            try { prepared = await host.selfUpdate.prepare(hasTarget ? { channel: input.channel as "stable" | "alpha", version: input.version as string, allowDowngrade: input.allowDowngrade as boolean | undefined } : undefined); }
             catch (error) { restarting = false; throw error; }
             json(res, 202, { accepted: true, version: prepared.version });
             setTimeout(() => { void host.selfUpdate?.requestRestart(prepared).catch((error) => { restarting = false; telemetry.capture(error, { stage: "restart" }); console.error("pi-webapp restart:", error); }); }, 500).unref();
