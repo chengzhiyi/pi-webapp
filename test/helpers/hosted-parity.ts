@@ -111,6 +111,7 @@ export async function hostedParity(page: Page, options: { width?: number; locale
       const path = test.info().outputPath("shutdown-failed-closed.txt"); await writeFile(path, text);
       await test.info().attach("shutdown-failed-closed", { path, contentType: "text/plain" });
       console.error("TEARDOWN (not a successful flush):", error);
+      throw error; // A passing body is not lifecycle acceptance without real shutdown.
     } finally {
       for (const c of page.context().browser()?.contexts() ?? [page.context()]) for (const p of c.pages()) await p.close();
       await bridge!.close(); await sessions.dispose();

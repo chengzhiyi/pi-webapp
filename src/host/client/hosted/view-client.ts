@@ -1,5 +1,6 @@
 import type { HostedMount, HostedViewIdentity, HostedViewInput, HostedViewReply } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
+import { rememberView, forgetView } from "./view-journal.ts";
 import { FrameAdapter } from "./frame-adapter.ts";
 import { hostedViewPoller, HostedViewPoller } from "./view-poller.ts";
 
@@ -15,10 +16,9 @@ export class HostedViewClient {
   private after = 0;
   private snapshot: unknown;
   private frozen = false;
-  private safeToClose = false;
   private frameStarted = false;
   connecting() { this.frameStarted = true; }
-  async flushed() { await this.changed({ dirty: false, busy: false }); this.safeToClose = true; }
+  async flushed() { await this.changed({ dirty: false, busy: false }); }
   private identity: HostedViewIdentity;
   private adapter: FrameAdapter;
   private mount: HostedMount;
@@ -30,6 +30,7 @@ export class HostedViewClient {
   }
   async start() {
     this.token = (await hostedApi.view({ ...this.identity, operation: "register", kind: this.mount.kind })).viewToken;
+    rememberView(this.identity, this.token, this.mount);
   }
   listen() {
     if (this.stopped || this.unlisten) return;
@@ -42,7 +43,6 @@ export class HostedViewClient {
   async changed(input: unknown) {
     const status = input as { dirty?: unknown; busy?: unknown };
     if (typeof status?.dirty !== "boolean" || typeof status.busy !== "boolean") throw new Error("Invalid frame status");
-    if (status.dirty || status.busy) this.safeToClose = false;
     await this.request({ operation: "change", dirty: status.dirty, busy: status.busy });
   }
   private async receive(reply: HostedViewReply) {
@@ -71,12 +71,13 @@ export class HostedViewClient {
       // Use independent requests because in-flight status requests were aborted. A frozen view is
       // already checkpointed. Its old-generation capability may CLOSE, but not CHANGE.
       if (!this.frozen) {
-        if (this.frameStarted && !this.safeToClose) await this.adapter.call("flush");
+        if (this.frameStarted) await this.adapter.call("freeze");
         await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
       }
       await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "close" });
       this.closed = true;
-    })();
+      forgetView(this.token);
+    })().catch(error => { this.closing = undefined; throw error; });
     return this.closing;
   }
 }

@@ -13,6 +13,7 @@ import type { CommandOption, ModelOption } from "./pi-bridge.ts";
 import { PiMarkdown } from "./PiMarkdown.tsx";
 import { ReasoningRow } from "../../../web/src/ui/chat/ReasoningRow.tsx";
 import { ToolRow, TurnActions, TurnProcess } from "../../../web/src/ui/chat/ProcessRow.tsx";
+import { useHostedTranscript } from "./hosted/transcript.ts";
 import { conversationTurns, toolResults, toolViewCalls, toolViewTurnKey, type ConversationTurn } from "./conversation-turns.ts";
 import { PiTrajectory } from "../../../web/src/ui/trajectory/PiTrajectory.tsx";
 import { PiModelSelect } from "../../../web/src/ui/conversation/PiModelSelect.tsx";
@@ -453,7 +454,9 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     blocks: [{ kind: "text" as const, text: optimistic.text }, ...optimistic.files.filter((file) => /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type)).map(() => ({ kind: "image" as const, text: "" }))],
     localFiles: optimistic.files,
   } : null;
-  const empty = session === null || (session.messages.length === 0 && streaming === null && pending === null);
+  const viewTools = plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []);
+  const transcript = useHostedTranscript(session?.sessionId, [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])], viewTools);
+  const empty = session === null || transcript.messages.length === 0;
   const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
     if (!session) return;
     // Queued prompts stay out of the transcript until Pi actually consumes them.
@@ -476,7 +479,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     return () => observer.disconnect();
   }, []);
   const workspace = session?.cwd.split(/[\\/]/).filter(Boolean).at(-1) || t("Pi 工作区", "Pi workspace");
-  const liveMessages = [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])];
+  const liveMessages = transcript.messages;
   const results = toolResults(liveMessages);
   const turns = conversationTurns(liveMessages);
   const heroText = (key: string) => ({
@@ -514,6 +517,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
               {composerInteraction}
               <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
+              {transcript.error && <div className="pi-error" role="alert">{transcript.error}<button onClick={transcript.retry}>Retry view cleanup</button></div>}
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>

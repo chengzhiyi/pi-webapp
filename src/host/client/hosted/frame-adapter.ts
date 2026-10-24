@@ -79,10 +79,23 @@ export class FrameAdapter {
   }
 }
 
+interface RegisteredFrame { identity: HostedViewIdentity; ready: Promise<unknown>; adapter: FrameAdapter; afterFlush?(): Promise<void>; toolCallId?: string; retire?(): Promise<void> }
 /** No controller-only shortcut: hidden editors and all streaming tool frames participate. */
 export class FrameRegistry {
-  private frames = new Set<{ identity: HostedViewIdentity; ready: Promise<unknown>; adapter: FrameAdapter; afterFlush?(): Promise<void> }>();
-  add(item: { identity: HostedViewIdentity; ready: Promise<unknown>; adapter: FrameAdapter; afterFlush?(): Promise<void> }) { this.frames.add(item); return () => this.frames.delete(item); }
+  private frames = new Set<RegisteredFrame>();
+  private incarnations = new Map<string, number>();
+  incarnation(sessionId: string, callId: string | undefined) { return this.incarnations.get(`${sessionId}/${callId}`) ?? 0; }
+  add(item: RegisteredFrame) { this.frames.add(item); return () => this.frames.delete(item); }
+  async retireTools(sessionId: string, callIds: readonly string[]) {
+    const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId && frame.toolCallId && callIds.includes(frame.toolCallId));
+    await Promise.all(frames.map(async frame => { await frame.ready; if (!frame.retire) throw new Error("View cannot retire safely"); await frame.retire(); }));
+    // Publish new incarnations atomically, only when the retained projection can
+    // actually leave. A partially failed retirement must not remount closed siblings.
+    for (const frame of frames) {
+      const key = `${sessionId}/${frame.toolCallId}`;
+      this.incarnations.set(key, (this.incarnations.get(key) ?? 0) + 1);
+    }
+  }
   async flush(sessionId: string) {
     const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId);
     const results = await Promise.allSettled(frames.map(async frame => { await frame.ready; await frame.adapter.call("flush"); await frame.afterFlush?.(); }));

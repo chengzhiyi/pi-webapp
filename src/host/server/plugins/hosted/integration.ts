@@ -214,13 +214,16 @@ export class HostedPluginIntegration {
   private async action(input: HostedActionInput): Promise<unknown> {
     const scope = this.scope(input.sessionId);
     if (input.pluginId !== ID || !actions.has(input.action)) throw new HostedPluginError("action_denied", "Action is not reviewed by this host", { status: 403 });
-    const request = { requestId: randomUUID(), scope, action: input.action, input: input.input ?? {} };
-    if (this.adapter.isFrozen) {
-      if (!this.recovery && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return this.manager.flush(input.pluginId, input.generation, request);
-      throw new HostedPluginError("plugin_unavailable", "Only authenticated barrier checkpoint actions are admitted during switching", { status: 409 });
-    }
-    this.generation(input.pluginId, input.generation);
-    return this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
+    const release = this.coordinator(input.pluginId).admitAction(input, this.viewScope(scope));
+    try {
+      const request = { requestId: randomUUID(), scope, action: input.action, input: input.input ?? {} };
+      if (this.adapter.isFrozen) {
+        if (!this.recovery && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
+        throw new HostedPluginError("plugin_unavailable", "Only authenticated barrier checkpoint actions are admitted during switching", { status: 409 });
+      }
+      this.generation(input.pluginId, input.generation);
+      return await this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
+    } finally { release(); }
   }
   async shutdown(): Promise<void> {
     this.closing = true;
