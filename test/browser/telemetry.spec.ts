@@ -213,7 +213,10 @@ for (const failure of ["disconnected", "stale-version", "pending"] as const) {
       await page.clock.fastForward(1200);
       await expect.poll(() => attempts).toBe(1);
       await page.clock.fastForward(60_000);
-      await expect(page.getByRole("alert")).toContainText(/新版启动超时|The new version did not start in time/);
+      const timeoutAlert = page.getByRole("alert");
+      await expect(timeoutAlert).toContainText(/新版未能及时就绪|The new version was not ready in time/);
+      await expect(timeoutAlert).toContainText(/后台可能已回退到旧版|the backend may have rolled back/);
+      await expect(timeoutAlert).toContainText(/请刷新页面检查当前版本|Refresh to check the running version/);
       await expect.poll(() => f.browserEvents.length).toBe(1);
       expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ stage: "update_restart", code: "update_restart_timeout", route: "/api/update/version", timeoutMs: 60_000 });
       if (failure === "disconnected") expect(f.browserEvents[0]?.breadcrumbs?.some((item) => item.category === "request_failed" && item.data?.route === "/api/update/version")).toBe(true);
