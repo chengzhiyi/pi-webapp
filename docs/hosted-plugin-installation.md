@@ -2,7 +2,9 @@
 
 This is a second engineering milestone, **not final full-hot-plug acceptance**.
 The service and authenticated HTTP routes are implemented. `pi-host.ts` has not yet
-connected the service, frontend coordinator or dynamic Agent adapters. Existing
+connected the service to the frontend coordinator/dynamic Agent adapters. Those
+adapters are implemented and their contributions are merged in this feature
+branch; see `hosted-plugin-ui-integration.md` and `hosted-agent-wiring.md`. Existing
 builtin drawings remain registered until parity and migration are verified.
 
 ## Modules
@@ -100,6 +102,27 @@ shuts down and restarts, disables/uninstalls/reinstalls, and recovers the same
 draft revision without changing the saved file. It is offline; no registry
 install, npm scripts, publication, browser drawing/PNG or real AgentSession is
 involved. Those are distinct acceptance layers.
+
+## Settled/precommit seams after adapter integration
+
+`HostedManagerOptions.lifecycle<T>(id, operation)` wraps replace/retry/disable and
+shutdown **after** background download/resource verification. The parent must
+serialize this seam globally, pre-freeze all Agent batches while the old worker
+is active, and thaw only after descriptor/view publication succeeds. Holding the
+Agent barrier around network download is unnecessary and avoids no race.
+
+`HostedSwitchHooks.validateCandidate(tools)` receives cloned verified candidate
+descriptors after view freeze and before the persistent active-pointer commit.
+Use it for trusted readonly policy and adapter ownership preflight. The test
+injects a name conflict and verifies the old PID/pointer/routing remain intact;
+this resolves the adapter review finding that committed-hook-only validation
+would be too late. Committed failures still return reconnectRequired and must
+keep normal admission closed until explicit recovery.
+
+Latest combined validation: check/build passed; Node 356 passed / 1 Windows-only
+skip, desktop Node 90 passed; exact external tgz test included, not skipped. Host
+FrameAdapter -> actual cross-origin Excalidraw Chromium smoke passed separately.
+These are not a live bootstrap/full Electron acceptance claim.
 
 ## Remaining release gates
 

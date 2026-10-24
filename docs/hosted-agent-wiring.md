@@ -95,6 +95,14 @@ supervisor activation: the baseline supervisor swallows committed-hook failures
 into `reconnectRequired`. Parent must surface that failure and keep normal plugin
 admission closed if publication failed; never claim successful tool activation.
 
+Parent integration resolution: the combined feature branch now exposes
+`HostedManagerOptions.lifecycle<T>(id, operation)` (after background preparation)
+and `HostedSwitchHooks.validateCandidate(tools)` (verified candidate before
+persistent activation). Use these seams rather than validating active descriptors
+only in the committed hook. Tests reject candidate ownership conflicts while
+preserving the old PID and active pointer. Production bootstrap wiring is still
+in progress.
+
 No automatic fallback to reload/rebuild exists. An unsupported SDK fails before
 registration. Freeze deliberately waits rather than aborting/killing old batches;
 if an operator cancels a management attempt, leave the old runtime active and
