@@ -8,12 +8,14 @@ export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string;
+  updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
+  updateDiagnostic?: { hostVersion: string; checkedAt: string; status: "available" | "up-to-date" | "failed"; version?: string; message: string };
   /** Manifest-only, integrity-qualified served documents, never arbitrary package paths. */
   documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
 }
 export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean }
-export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry";
-export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; version?: string; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
+export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy";
+export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
 export interface HostedActionInput {
   sessionId: string; pluginId: string; generation: number; action: string; input?: unknown;
   /** Host adapter attaches these, never the iframe. Used ONLY for bounded flush-action admission. */

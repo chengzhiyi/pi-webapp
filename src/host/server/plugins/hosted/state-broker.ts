@@ -31,8 +31,10 @@ export class HostedStateBroker {
   readonly root: string;
   readonly pluginId: string;
   private readonly legacy?: (invocation: HostedInvocation) => Promise<unknown>;
-  constructor(storageRoot: string, pluginId: string, legacy?: (invocation: HostedInvocation) => Promise<unknown>) {
-    this.root = join(storageRoot, sha256(pluginId)); this.pluginId = pluginId; this.legacy = legacy;
+  private readonly checkpoint?: (stage: "forked" | "prepared" | "committed" | "cleaned") => Promise<void>;
+  constructor(storageRoot: string, pluginId: string, legacy?: (invocation: HostedInvocation) => Promise<unknown>,
+    checkpoint?: (stage: "forked" | "prepared" | "committed" | "cleaned") => Promise<void>) {
+    this.root = join(storageRoot, sha256(pluginId)); this.pluginId = pluginId; this.legacy = legacy; this.checkpoint = checkpoint;
   }
   active(): Promise<ActiveHostedPlugin | null> { return readJson<ActiveHostedPlugin>(join(this.root, "active.json")).then(validateActive); }
   async recover(): Promise<{ active: ActiveHostedPlugin | null; recovered: "none" | "committed" | "not_committed" }> {
@@ -44,6 +46,9 @@ export class HostedStateBroker {
       validateActive(journal.next);
       validateActive(journal.before);
       const recovered = active?.operationId === journal.next.operationId ? "committed" : "not_committed";
+      const same = (a: ActiveHostedPlugin | null, b: ActiveHostedPlugin | null) => a === null || b === null ? a === b :
+        (["version", "generation", "stateRef", "schema", "enabled", "operationId"] as const).every(key => a[key] === b[key]);
+      if (!same(active, recovered === "committed" ? journal.next : journal.before)) throw new HostedPluginError("gc_recovery_required", "Activation journal does not match the active pointer; original bytes preserved");
       // Active is the atomic source of truth. Never restore an old snapshot over accepted newer edits.
       const before = journal.before;
       if (recovered === "committed" && before && before.stateRef !== active!.stateRef) await atomicJson(join(this.root, "previous.json"), before);
@@ -65,17 +70,20 @@ export class HostedStateBroker {
       await privateDirectory(join(this.root, "states"));
       await privateDirectory(join(this.root, "states", next.stateRef));
       await atomicJson(join(this.root, "transition.json"), { version: 1, before, next });
+      await this.checkpoint?.("prepared");
       try { await atomicJson(join(this.root, "active.json"), next); }
       catch (error) {
         // A directory-fsync error after rename is an ambiguous success, not permission to roll back.
         if ((await this.active())?.operationId !== next.operationId) throw error;
       }
+      await this.checkpoint?.("committed");
       // Journal retains before until rollback metadata is durable. Same-state disable preserves it.
       try {
         if (before && before.stateRef !== next.stateRef) await atomicJson(join(this.root, "previous.json"), before);
         await unlink(join(this.root, "transition.json"));
         await unlink(join(this.root, "fork.json")).catch(() => {});
       } catch { /* Active committed: recovery completes metadata; never resume the old generation. */ }
+      await this.checkpoint?.("cleaned");
       return next;
     });
   }
@@ -93,6 +101,7 @@ export class HostedStateBroker {
         if (!bytes) throw new HostedPluginError("invalid_storage", "Missing state file");
         await copyFile(join(source, name), join(directory, name));
       }
+      await this.checkpoint?.("forked");
       return next;
     });
   }

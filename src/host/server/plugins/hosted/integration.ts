@@ -160,9 +160,10 @@ export class HostedPluginIntegration {
       if (this.recovery) throw new HostedPluginError("reconnect_required", "Startup publication failed; explicit recovery required", { status: 503 });
       const marker = join(this.options.root, "host-version.json");
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
-        await this.manager.reconcileHostUpgrade();
-        await privateDirectory(this.options.root);
-        await atomicJson(marker, { version: this.options.hostVersion });
+        if (await this.manager.reconcileHostUpgrade()) {
+          await privateDirectory(this.options.root);
+          await atomicJson(marker, { version: this.options.hostVersion });
+        } // Failed registry/install checks retry on the next startup, never claim reconciliation.
       }
     });
     this.started = true;
@@ -172,6 +173,7 @@ export class HostedPluginIntegration {
     return { plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
       phase: this.recovery ? "reconnect-required" : p.phase,
+      updatePolicy: p.updatePolicy, pinnedVersion: p.pinnedVersion, updateDiagnostic: p.updateDiagnostic,
       ...(p.activeVersion ?? p.version ? { version: (p.activeVersion ?? p.version)! } : {}),
       ...(p.availableVersion ? { availableVersion: p.availableVersion } : {}), ...(p.pendingVersion ? { pendingVersion: p.pendingVersion } : {}),
       ...(p.generation !== null ? { generation: p.generation } : {}),
@@ -187,6 +189,11 @@ export class HostedPluginIntegration {
       // Explicit disable/uninstall closes editors after flush; it is not an automatic update.
       view.allowImmediateReopen(input.reopenEditors === true || input.operation === "disable" || input.operation === "uninstall");
       try {
+        if (input.operation === "policy") {
+          if (!input.updatePolicy) throw new HostedPluginError("invalid_input", "Update policy is required");
+          await this.manager.setPolicy(input.pluginId, { updatePolicy: input.updatePolicy, ...(input.updatePolicy === "pinned" ? { pinnedVersion: input.version } : {}) });
+          return;
+        }
         const result = await this.manager.manage(input.pluginId, input.operation, input.version);
         if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
       } finally { view.allowImmediateReopen(false); }

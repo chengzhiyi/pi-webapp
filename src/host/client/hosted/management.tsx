@@ -18,12 +18,12 @@ export function HostedPluginManagement({ locale, generation = 0 }: { locale: "zh
     void hostedApi.catalog(abort.signal).then(value => { if (alive) { setCatalog(value); setKnown(true); setError(""); } }).catch(cause => { if (alive) { setError(String(cause)); setCatalog(previous => ({ ...previous, offline: true })); } });
     return () => { alive = false; abort.abort(); };
   }, [generation, reload]);
-  const operate = async (card: HostedPluginCard, operation: HostedManageOperation, reopenEditors = false) => {
+  const operate = async (card: HostedPluginCard, operation: HostedManageOperation, reopenEditors = false, updatePolicy?: HostedPluginCard["updatePolicy"]) => {
     if (busy) return;
     if ((operation === "disable" || operation === "uninstall") && !window.confirm(t("将关闭相关视图；仅在所有视图保存成功后继续。工作区文件不会删除。", "Related views will close only after every view saves successfully. Workspace files are retained."))) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      setCatalog(await hostedApi.manage({ pluginId: card.pluginId, operation, ...(reopenEditors ? { reopenEditors: true } : {}) })); setKnown(true);
+      setCatalog(await hostedApi.manage({ pluginId: card.pluginId, operation, ...(updatePolicy ? { updatePolicy, ...(updatePolicy === "pinned" ? { version: card.version } : {}) } : {}), ...(reopenEditors ? { reopenEditors: true } : {}) })); setKnown(true);
       setNotice(t("已收到服务端确认；编辑器打开时更新默认等待关闭。", "Server acknowledged. Updates wait for open editors to close by default."));
       window.dispatchEvent(new Event("pi:hosted-catalog-changed"));
     } catch (cause) { setError(`${String(cause)}${t("；操作不会自动重试，请刷新确认状态。", "; no automatic retry. Refresh to verify state.")}`); }
@@ -38,6 +38,15 @@ export function HostedPluginManagement({ locale, generation = 0 }: { locale: "zh
     <ul className={css.cards}>{cards.map(card => <li className={css.card} key={card.pluginId} data-hosted-card={card.pluginId}>
       <div className={css.heading}><span className={css.artwork} aria-hidden="true"><ExcalidrawIcon size={26} /></span><div><h3>{card.name} {card.official && t("（官方）", "(Official)")}</h3><code>{card.pluginId}</code></div></div>
       <p className={css.status}>{!known ? t("安装状态未知 · 启用状态未知", "Installation unknown · Enablement unknown") : `${card.installed ? t("已安装", "Installed") : t("未安装", "Not installed")} · ${card.enabled ? t("已启用", "Enabled") : t("未启用", "Disabled")}`} {card.version}</p>
+      {known && <label>{t("主程序版本变化时：", "When host version changes: ")}<select aria-label={t("插件更新策略", "Plugin update policy")} value={card.updatePolicy ?? "notify"} disabled={busy || !!catalog.offline} onChange={event => void operate(card, "policy", false, event.target.value as HostedPluginCard["updatePolicy"])}>
+        <option value="notify">{t("仅检查并通知（默认）", "Check and notify only (default)")}</option>
+        <option value="automatic">{t("自动更新已安装插件", "Automatically update installed plugin")}</option>
+        <option value="pinned" disabled={!card.version}>{t("固定当前版本", "Pin current version")}{card.pinnedVersion ? ` (${card.pinnedVersion})` : ""}</option>
+      </select></label>}
+      <p className={css.status}>{t("不会安装未安装插件或启用停用插件；自动更新仍等待编辑器安全关闭。不包含主程序更新器。", "Never installs absent plugins or enables disabled plugins. Automatic updates still wait for editors to close safely. Does not update the host application.")}</p>
+      {card.availableVersion && <p role="status">{t("可用兼容版本：", "Compatible release available: ")}{card.availableVersion}</p>}
+      {card.updateDiagnostic && <p role="status">{card.updateDiagnostic.message} · {card.updateDiagnostic.checkedAt} · {card.updateDiagnostic.hostVersion}</p>}
+      {card.error && /lock|owned/i.test(card.error) && <p>{t("锁恢复必须离线进行：停止全部主程序和插件进程，备份数据，再按 docs/hosted-update-recovery.md 检查并确认。此页面不会清锁。", "Lock recovery is offline only: stop all hosts and plugin processes, back up data, then inspect and confirm using docs/hosted-update-recovery.md. This page never clears locks.")}</p>}
       {card.pendingVersion && <p role="status">{t("待更新版本（请先关闭编辑器）：", "Pending version (close editors first): ")}{card.pendingVersion}</p>}
       {card.error && <p className={css.error} role="alert">{card.error}</p>}
       <div className={css.actions}>{(!known || !card.installed ? ["install"] : [card.enabled ? "disable" : "enable", "check", "update", "uninstall", "retry"]).map(operation => <button key={operation} type="button" disabled={busy || !known || !!catalog.offline} onClick={() => void operate(card, operation as HostedManageOperation)}>{({ install: t("安装", "Install"), enable: t("启用", "Enable"), disable: t("停用", "Disable"), check: t("检查更新", "Check updates"), update: t("更新（等待编辑器关闭）", "Update (wait for editors)"), uninstall: t("卸载", "Uninstall"), retry: t("重试", "Retry") } as Record<string, string>)[operation]}</button>)}
