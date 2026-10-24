@@ -21,6 +21,7 @@ import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
 import { resumeMessage } from "../sessions/execution-control.ts";
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
+import { EditablePromptQueue, PromptQueueError, type PromptImages } from "../sessions/editable-prompt-queue.ts";
 import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
@@ -41,6 +42,9 @@ interface SharedState {
   replacementSessionId: string | null;
   lastStreamAt: number;
   tuiStreaming: ViewMessage | null;
+  tuiPrompts: EditablePromptQueue;
+  tuiPromptSessionId: string | null;
+  tuiAgentError: boolean;
   workspaces: WorkspaceRegistry | null;
   workspaceSessions: WorkspaceSessions | null;
   selected: "tui" | "sdk";
@@ -67,6 +71,9 @@ const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
   replacementSessionId: null,
   lastStreamAt: 0,
   tuiStreaming: null,
+  tuiPrompts: new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); }),
+  tuiPromptSessionId: null,
+  tuiAgentError: false,
   workspaces: null,
   workspaceSessions: null,
   selected: "tui",
@@ -86,6 +93,9 @@ shared.tuiGeneration ??= 0;
 shared.stopChanged ??= null;
 shared.tuiWaitController ??= new AbortController();
 shared.tuiStreaming ??= null;
+shared.tuiPrompts ??= new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
+shared.tuiPromptSessionId ??= null;
+shared.tuiAgentError ??= false;
 function activeCatalog(): WebPluginCatalog | null {
   return shared.selected === "sdk" ? shared.workspaceSessions?.catalog ?? null : shared.tuiCatalog;
 }
@@ -112,8 +122,38 @@ async function currentProviderRuntime(): Promise<ModelRuntime> {
 
 function snapshot() {
   if (shared.selected === "sdk") return shared.workspaceSessions?.snapshot() ?? (() => { throw new Error("没有活动会话"); })();
+  return tuiSnapshot();
+}
+function tuiSnapshot() {
   if (shared.current === null) throw new Error("没有活动会话");
-  return { ...projectSession(shared.current, shared.current.sessionManager.getSessionName(), activeCatalog()?.ids() ?? []), streaming: shared.tuiStreaming, hasPendingPrompts: shared.current.hasPendingMessages?.() ?? false, interactions: shared.interactions?.pending(shared.current.sessionManager.getSessionId()) ?? [] };
+  return { ...projectSession(shared.current, shared.current.sessionManager.getSessionName(), shared.tuiCatalog?.ids() ?? []), idle: shared.current.isIdle() && !shared.tuiPrompts.sending,
+    streaming: shared.tuiStreaming, queuedPrompts: shared.tuiPrompts.view(), hasPendingPrompts: shared.current.hasPendingMessages?.() ?? false,
+    interactions: shared.interactions?.pending(shared.current.sessionManager.getSessionId()) ?? [] };
+}
+async function sendTui(sessionId: string, text: string, images: PromptImages, correlation?: ErrorCorrelation, delivery?: "steer" | "followUp") {
+  const active = sameSession(sessionId);
+  assertPromptDelivery({ ...tuiSnapshot(), idle: active.isIdle() }, text, delivery);
+  const starting = active.isIdle();
+  if (starting) shared.operation = correlation;
+  try {
+    const content = images.length ? [{ type: "text" as const, text }, ...images] : text;
+    if (shared.replacementContext !== null && shared.replacementSessionId === sessionId) await shared.replacementContext.sendUserMessage(content, { expandPromptTemplates: true, deliverAs: delivery });
+    else {
+      if (!shared.pi) throw new Error("Pi 会话不可用");
+      shared.pi.sendUserMessage(content, { expandPromptTemplates: true, deliverAs: delivery });
+    }
+    if (shared.current?.sessionManager.getSessionId() === sessionId && shared.selected === "tui") shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() });
+  } catch (cause) { if (starting) shared.operation = undefined; throw cause; }
+}
+function scheduleTuiQueue() {
+  const id = shared.current?.sessionManager.getSessionId();
+  const generation = shared.tuiGeneration;
+  const ready = () => {
+    if (!id || !shared.current || shared.tuiGeneration !== generation || shared.current.sessionManager.getSessionId() !== id || shared.tuiAgentError) return false;
+    const state = tuiSnapshot();
+    return shared.current.isIdle() && !state.paused && !state.interactions.length;
+  };
+  shared.tuiPrompts.schedule(ready, (text, images, correlation) => sendTui(id!, text, images, correlation));
 }
 
 function activeSession(sessionId: string) {
@@ -125,7 +165,7 @@ async function workspaceList(): Promise<WorkspaceListView> {
   const activeId = shared.activeWorkspaceId;
   const active = snapshot();
   const current = shared.current;
-  const tui = current ? projectSession(current, current.sessionManager.getSessionName(), shared.tuiCatalog?.ids() ?? []) : null;
+  const tui = current ? tuiSnapshot() : null;
   const activePath = await workspaceDirectory(active.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return null; });
   const tuiPath = tui ? await workspaceDirectory(tui.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return null; }) : null;
   const allSessions = await SessionManager.listAll();
@@ -273,6 +313,11 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.tuiGeneration++;
     bindChanged();
     shared.current = ctx;
+    if (shared.tuiPromptSessionId !== ctx.sessionManager.getSessionId()) {
+      shared.tuiPrompts = new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
+      shared.tuiPromptSessionId = ctx.sessionManager.getSessionId();
+    }
+    shared.tuiAgentError = false;
     if (shared.bridge) {
       const catalog = await WebPluginCatalog.discover(ctx.cwd, ctx.isProjectTrusted?.() ?? false);
       if (shared.current !== ctx) return;
@@ -300,15 +345,16 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       });
     }
   });
-  pi.on("agent_start", (_event, ctx) => { shared.bridge?.breadcrumb?.("agent_start", diagnosticContext(ctx)); publishSnapshot(ctx); void publishWorkspaces(); });
+  pi.on("agent_start", (_event, ctx) => { shared.tuiAgentError = false; shared.bridge?.breadcrumb?.("agent_start", diagnosticContext(ctx)); publishSnapshot(ctx); void publishWorkspaces(); });
   pi.on("agent_end", (_event, ctx) => publishSnapshot(ctx));
-  pi.on("agent_settled", (_event, ctx) => { shared.bridge?.breadcrumb?.("agent_end", diagnosticContext(ctx)); shared.tools?.clear(); shared.operation = undefined; shared.tuiStreaming = null; publishSnapshot(ctx); void publishWorkspaces(); });
+  pi.on("agent_settled", (_event, ctx) => { shared.bridge?.breadcrumb?.("agent_end", diagnosticContext(ctx)); shared.tools?.clear(); shared.operation = undefined; shared.tuiStreaming = null; scheduleTuiQueue(); publishSnapshot(ctx); void publishWorkspaces(); });
   pi.on("tool_execution_start", (event, ctx) => { shared.tools?.start(event, diagnosticContext(ctx)); });
   pi.on("tool_execution_end", (event, ctx) => { shared.tools?.end(event, diagnosticContext(ctx)); });
   pi.on("model_select", (_event, ctx) => publishSnapshot(ctx));
   pi.on("thinking_level_select", (_event, ctx) => publishSnapshot(ctx));
   pi.on("message_end", (event, ctx) => {
     if (event.message.role === "assistant" && event.message.stopReason === "error") {
+      shared.tuiAgentError = true;
       const errorId = shared.bridge?.reportError?.(new Error("Agent response failed"), { ...shared.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
       if (shared.selected === "tui") shared.bridge?.publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...shared.operation });
     }
@@ -389,14 +435,14 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
         // Replace an older bridge so new authenticated endpoints are available.
         if (shared.bridge && (shared.bridge.protocolVersion !== 7 || shared.bridge.buildId !== buildId || typeof shared.bridge.reportError !== "function")) {
           const previous = shared.bridge;
-          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 2) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
+          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 3) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
           shared.bridge = null;
           await previous.close();
           await shared.telemetry.close();
           shared.telemetry = new NodeTelemetry();
         }
         if (shared.bridge === null) {
-          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 2) ? shared.workspaceSessions : null;
+          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 3) ? shared.workspaceSessions : null;
           const retained = legacy?.session && legacy.path ? { path: legacy.path, sessionManager: legacy.session.sessionManager } : null;
           if (legacy) { await legacy.dispose(); shared.workspaceSessions = null; }
           shared.workspaceSessions ??= new WorkspaceSessions((event) => {
@@ -415,7 +461,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
-              if (shared.current && !shared.current.isIdle()) {
+              if (shared.current && (!shared.current.isIdle() || shared.tuiPrompts.sending)) {
                 try { paths.push(realpathSync(shared.current.cwd)); } catch { paths.push(shared.current.cwd); }
               }
               return paths;
@@ -623,27 +669,27 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
                 return;
               }
               const active = sameSession(sessionId);
-              assertPromptDelivery(snapshot(), text, delivery);
-              const starting = active.isIdle();
-              if (starting) shared.operation = correlation;
-              try {
-                shared.bridge?.breadcrumb?.("send", { ...correlation, piVersion: VERSION });
-                if (shared.replacementContext !== null && shared.replacementSessionId === sessionId) {
-                  await shared.replacementContext.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true, deliverAs: delivery });
-                  publishSnapshot(active);
-                  return;
-                }
-                if (shared.pi === null) throw new Error("Pi 会话不可用");
-                shared.pi.sendUserMessage(images.length ? [{ type: "text", text }, ...images] : text, { expandPromptTemplates: true, deliverAs: delivery });
-                publishSnapshot(active);
-              } catch (cause) { if (starting) shared.operation = undefined; throw cause; }
+              assertPromptDelivery(tuiSnapshot(), text, delivery);
+              if (delivery === "followUp" && (!active.isIdle() || shared.tuiPrompts.length > 0)) {
+                shared.tuiPrompts.enqueue(text, images, correlation);
+                scheduleTuiQueue();
+                return;
+              }
+              if (active.isIdle() && shared.tuiPrompts.sending) throw new PromptQueueError("队列正在发送，请稍后重试");
+              await sendTui(sessionId, text, images, correlation, delivery);
+            },
+            async updateQueuedPrompt(sessionId, id, revision, action) {
+              activeSession(sessionId);
+              if (shared.selected === "sdk") { await shared.workspaceSessions!.updateQueuedPrompt(id, revision, action); return; }
+              if (action.kind === "steer" && sameSession(sessionId).isIdle()) throw new PromptQueueError("当前没有可引导的执行，请先继续或发送任务");
+              await shared.tuiPrompts.update(id, revision, action, (text, images, correlation) => sendTui(sessionId, text, images, correlation, "steer"));
             },
             async abort(sessionId) {
               activeSession(sessionId);
               if (shared.selected === "sdk") await shared.workspaceSessions!.stop();
               else {
                 const active = sameSession(sessionId);
-                if (active.isIdle()) return;
+                if (active.isIdle() && !shared.tuiPrompts.sending) return;
                 if (!shared.pi) throw new Error("Pi 会话不可用");
                 shared.tools?.cancel();
                 shared.bridge?.breadcrumb?.("cancel", { ...shared.operation });
@@ -672,7 +718,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
                 return;
               }
               const active = sameSession(sessionId);
-              if (!active.isIdle() || shared.commandContext === null) {
+              if (!active.isIdle() || shared.tuiPrompts.length > 0 || shared.commandContext === null) {
                 await shared.workspaceSessions!.open(active.cwd, "new");
                 shared.selected = "sdk";
                 shared.bridge?.publish({ type: "snapshot", session: snapshot() });

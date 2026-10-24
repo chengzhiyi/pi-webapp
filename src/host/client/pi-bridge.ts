@@ -4,7 +4,7 @@ import type {
   ViewMessage as WireViewMessage, SessionView as WireSessionView, WebPluginCatalogView,
   WorkspaceListView, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
   AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, UpdateChannel, UpdateRequest, LoginMethod,
-  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery,
+  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery, QueuedPromptAction,
 } from "../../contracts/bridge-contract.ts";
 import { parseBridgeEvent } from "../../contracts/bridge-events.ts";
 export type {
@@ -244,6 +244,10 @@ export function usePiBridge() {
     async discardAttachment(id: string): Promise<void> {
       if (!session || connection !== "connected") return;
       await post("/api/attachment/remove", { sessionId: session.sessionId, id });
+    },
+    async updateQueuedPrompt(id: string, revision: number, action: QueuedPromptAction): Promise<void> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/prompt-queue", { sessionId: session.sessionId, id, revision, action });
     },
     async send(text: string, attachments: string[] = [], delivery?: PromptDelivery) {
       if (!session || connection !== "connected") return;

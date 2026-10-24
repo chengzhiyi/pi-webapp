@@ -25,7 +25,7 @@ import { PiCommandMenu, builtInCommands } from "../../../web/src/ui/conversation
 import { FileTypeIcon, fileExtension } from "../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { DropOverlay } from "../../../web/src/ui/conversation/DropOverlay.tsx";
 import { displayUserMessage } from "../../contracts/user-message.ts";
-import type { PromptDelivery } from "../../contracts/bridge-contract.ts";
+import type { PromptDelivery, QueuedPromptAction } from "../../contracts/bridge-contract.ts";
 import { PiPromptQueue } from "./PiPromptQueue.tsx";
 import { PiPromptControls } from "./PiPromptControls.tsx";
 import { localize as t, useLocale } from "../../../web/src/ui/locale/preference.ts";
@@ -44,6 +44,7 @@ interface Props {
   connection: ConnectionState;
   error: string;
   onSend: (text: string, attachments: string[], delivery?: PromptDelivery) => Promise<void>;
+  onUpdateQueuedPrompt: (id: string, revision: number, action: QueuedPromptAction) => Promise<void>;
   onLoadImage: (messageId: string, index: number) => Promise<Blob>;
   onUpload: (file: File, signal?: AbortSignal) => Promise<AttachmentReceipt>;
   onDiscardAttachment: (id: string) => Promise<void>;
@@ -144,7 +145,7 @@ interface ComposerDraft {
   error: string;
 }
 
-function PiInputBar({ hero, suspended = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; onSend: (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => Promise<void> }) {
+function PiInputBar({ hero, suspended = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpdateQueuedPrompt" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; onSend: (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => Promise<void> }) {
   const locale = useLocale();
   // Keep unsent text and uploads scoped to their session for this tab's lifetime.
   // Setters capture the originating key, so late async replies cannot edit another chat.
@@ -381,7 +382,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   return (
     <div hidden={suspended} className={`${inputCss.root} ${hero ? inputCss.hero : ""} ${suspended ? inputCss.suspended : ""}`}>
       {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? t("松开以上传文件", "Drop to upload files") : t("当前无法上传文件", "Files cannot be uploaded now"), desc: canAttach ? t("最多 20 个文件，每个不超过 20 MB", "Up to 20 files, 20 MB each") : undefined }} />}
-      <PiPromptQueue session={session} />
+      <PiPromptQueue key={session?.sessionId} session={session} onUpdate={onUpdateQueuedPrompt} connected={ready} />
       <form ref={form} className={inputCss.card} data-composer-card onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         {commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} grouped={!query} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />}
         <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label={t("选择要上传的文件", "Choose files to upload")} onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
@@ -425,7 +426,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
             {running
               ? <PiPromptControls hasDraft={draft.trim().length > 0 || attachments.length > 0} canSend={canSend} canStop={canStop}
                   pauseLabel={primaryAction?.label ?? t("暂停执行", "Pause")} pauseTitle={primaryAction?.title} pauseIcon={PrimaryIcon ? <PrimaryIcon size={16} /> : undefined}
-                  onSubmit={delivery => { void submit(delivery); }} onStop={() => { void stop(); }} />
+                  onStop={() => { void stop(); }} />
               : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
               : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
           </div>
@@ -437,7 +438,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   );
 }
 
-export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, renderPluginSlot, plugins, onPluginAction }: Props) {
+export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -510,7 +511,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
               {composerInteraction}
-              <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
+              <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>
