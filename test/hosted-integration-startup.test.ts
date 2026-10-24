@@ -1,0 +1,55 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { build } from "esbuild";
+import { Type } from "typebox";
+import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
+import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
+import { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
+import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
+
+test("offline enabled startup aligns broker/view generations; disabled intent and once-per-version reconciliation survive restart", async t => {
+  const root = await mkdtemp(join(tmpdir(), "hosted-startup-")), workerEntry = join(root, "worker.mjs");
+  await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+  let registryCalls = 0;
+  const options = { root, hostVersion: "0.1.29", workerEntry, ownerId: "local", resolveSession: (sessionId: string) => sessionId === "retained" ? { cwd: root, sessionId, workspaceId: "workspace" } : null, fetch: (async () => { registryCalls++; throw new Error("offline"); }) as typeof fetch };
+  let integration = new HostedPluginIntegration(options);
+  t.after(async () => { await integration.shutdown(); await rm(root, { recursive: true, force: true }); });
+  await integration.start(); assert.equal(registryCalls, 0);
+  const fixture = integrationFixture(); await integration.manager.installer.installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
+  await integration.manage({ pluginId: id, operation: "enable" });
+  const oldGeneration = (await integration.inventory()).plugins[0]!.generation!;
+  await integration.shutdown(); integration = new HostedPluginIntegration(options); await integration.start();
+  const card = (await integration.inventory()).plugins[0]!;
+  assert.equal(card.generation, oldGeneration + 1); assert.equal(card.phase, "active"); assert.equal(registryCalls, 0);
+  const identity = { pluginId: id, sessionId: "retained", mountId: "restart-client", generation: oldGeneration, operation: "register", kind: "controller" };
+  await assert.rejects(integration.handlers.views(identity), /re-handshake/);
+  const registered = await integration.handlers.views({ ...identity, generation: card.generation }) as { viewToken: string };
+  await integration.handlers.views({ ...identity, generation: card.generation, viewToken: registered.viewToken, operation: "change", dirty: false, busy: false });
+  await integration.handlers.views({ ...identity, generation: card.generation, viewToken: registered.viewToken, operation: "close" });
+  await integration.manage({ pluginId: id, operation: "disable" }); await integration.shutdown();
+  integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
+  assert.equal((await integration.inventory()).plugins[0]!.enabled, false); assert.equal(registryCalls, 1);
+  await integration.shutdown(); integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
+  assert.equal(registryCalls, 1, "failed offline reconciliation is recorded once per host version; explicit check remains available");
+});
+
+test("older builtin session tool ownership refuses candidate before active pointer publication", async t => {
+  const root = await mkdtemp(join(tmpdir(), "hosted-conflict-")), workerEntry = join(root, "worker.mjs");
+  const prior = process.env.PI_CODING_AGENT_DIR, roots = process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS;
+  process.env.PI_CODING_AGENT_DIR = join(root, "agent"); process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = "";
+  await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+  let sessions!: WorkspaceSessions;
+  const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
+  const integration = new HostedPluginIntegration({ root, hostVersion: "0.1.29", workerEntry, ownerId: "local", resolveSession: id => { const s = sessions?.hostedScope(id); return s ? scope(s.cwd, id) : null; } });
+  sessions = new WorkspaceSessions(() => {}, () => undefined, () => false, undefined, undefined, undefined, [{ name: "diagram_read", label: "old builtin owner", description: "old owner", parameters: Type.Object({}), execute: async () => ({ content: [], details: undefined }) }], { adapter: integration.adapter, scope });
+  t.after(async () => { await integration.shutdown(); await sessions.dispose(); if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior; if (roots === undefined) delete process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS; else process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = roots; await rm(root, { recursive: true, force: true }); });
+  await integration.start(); await sessions.open(root, "new"); const retained = sessions.session;
+  const fixture = integrationFixture(); await integration.manager.installer.installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
+  await assert.rejects(integration.manage({ pluginId: id, operation: "enable" }), /another extension or builtin/);
+  assert.equal(await new HostedStateBroker(join(root, "data"), id).active(), null);
+  assert.equal(sessions.session, retained); assert.equal(integration.adapter.isFrozen, false);
+  assert.equal(retained!.getAllTools().find(tool => tool.name === "diagram_read")!.description, "old owner");
+});

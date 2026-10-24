@@ -8,4 +8,6 @@ import type { ServerPlugin } from "../../host/server/plugins/server-plugin.ts";
 export function builtinAgentTools(run: RunPluginTool) { return diagramTools(run); }
 
 /** The composition root is the only host-facing list of bundled domain implementations. */
-export function builtinServerPlugins(): ServerPlugin[] { return [filesPlugin, createTerminalPlugin(), gitPlugin, createDiagramsPlugin()]; }
+export function builtinServerPlugins(options: { excludeDiagrams?: boolean } = {}): ServerPlugin[] {
+  return [filesPlugin, createTerminalPlugin(), gitPlugin, ...(options.excludeDiagrams ? [] : [createDiagramsPlugin()])];
+}
