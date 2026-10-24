@@ -22,10 +22,15 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   let sessions!: WorkspaceSessions, requests = 0, selected = integrationFixture();
+  let downloadGate: { entered: ReturnType<typeof latch>; release: ReturnType<typeof latch> } | undefined;
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "trusted-workspace" });
   const options = { root: join(root, "hosted"), hostVersion: "0.1.29", workerEntry, ownerId: "host-local-auth-principal",
     resolveSession: (sessionId: string) => { const retained = sessions?.hostedScope(sessionId); return retained ? scope(retained.cwd, sessionId) : null; },
-    fetch: (async (url: string | URL | Request) => { requests++; return String(url).endsWith(".tgz") ? new Response(selected.bytes) : new Response(JSON.stringify({ versions: { [selected.release.version]: selected.release } })); }) as typeof fetch,
+    fetch: (async (url: string | URL | Request) => {
+      requests++;
+      if (String(url).endsWith(".tgz") && downloadGate) { downloadGate.entered.resolve(); await downloadGate.release.promise; }
+      return String(url).endsWith(".tgz") ? new Response(selected.bytes) : new Response(JSON.stringify({ versions: { [selected.release.version]: selected.release } }));
+    }) as typeof fetch,
   };
   let integration = new HostedPluginIntegration(options);
   sessions = new WorkspaceSessions(() => {}, () => undefined, () => false, undefined, undefined, undefined, [], { adapter: integration.adapter, scope });
@@ -74,9 +79,16 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   };
   const batch = first.prompt("background batch admitted before freeze"); await entered.promise;
   selected = integrationFixture("0.2.0");
+  downloadGate = { entered: latch(), release: latch() };
+  const freezeEntered = latch(), freezeAdapter = integration.adapter.freeze.bind(integration.adapter);
+  integration.adapter.freeze = () => { const promise = freezeAdapter(); freezeEntered.resolve(); return promise; };
   const updating = integration.manage({ pluginId: id, operation: "update" });
   const checking = integration.manage({ pluginId: id, operation: "check" });
-  await tick(); assert.equal(integration.adapter.isFrozen, true);
+  await downloadGate.entered.promise;
+  assert.equal(integration.adapter.isFrozen, false, "network preparation must not freeze retained Agent sessions");
+  assert.equal((await post("action", action)).status, 200, "old editor stays usable while archive is downloading");
+  downloadGate.release.resolve(); downloadGate = undefined;
+  await freezeEntered.promise; assert.equal(integration.adapter.isFrozen, true);
   assert.equal((await post("action", action)).status, 409, "normal UI actions denied at outer prefreeze");
   release.resolve(); await batch; await updating; await checking;
   const result = first.messages.find(message => message.role === "toolResult" && message.toolCallId === "old-batch");
@@ -124,7 +136,9 @@ test("publication failure is visible, never thaws admission or claims successful
   await assert.rejects(integration.manage({ pluginId: id, operation: "enable" }), /publication failed|recovery required/);
   assert.equal(integration.adapter.isFrozen, true); assert.match((await integration.inventory()).plugins[0]!.error!, /publication failed/);
   assert.equal((await new HostedStateBroker(join(root, "data"), id).active())?.enabled, true, "new generation/data never silently rolled back");
-  // Explicit test teardown stops owned worker; production intentionally requires recovery instead.
-  await integration.manager.shutdown().catch(() => {});
+  // Recovery stays sticky for new work, but graceful shutdown must drain and release ownership.
+  const active = await new HostedStateBroker(join(root, "data"), id).active();
+  await integration.shutdown();
+  assert.deepEqual(await new HostedStateBroker(join(root, "data"), id).active(), active, "shutdown never disables or rolls back committed state");
   t.after(() => rm(root, { recursive: true, force: true }));
 });

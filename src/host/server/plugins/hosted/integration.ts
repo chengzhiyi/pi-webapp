@@ -36,6 +36,7 @@ export class HostedPluginIntegration {
   private readonly views = new Map<string, HostedViewCoordinator>();
   private readonly documents = new Map<string, { document: string; controller: string }>();
   private queue: Promise<unknown> = Promise.resolve();
+  private switches: Promise<unknown> = Promise.resolve();
   private recovery: unknown;
   private closing = false;
   private started = false;
@@ -58,7 +59,9 @@ export class HostedPluginIntegration {
         return { content: [{ type: "text", text: JSON.stringify(value) ?? "null" }], details: value };
       },
     });
-    this.manager = new HostedPluginManager({ ...options, hooks: id => ({
+    this.manager = new HostedPluginManager({ ...options,
+      lifecycle: (_id, operation) => this.lifecycle(operation, this.closing),
+      hooks: id => ({
       canSwitch: () => this.coordinator(id).canSwitch(),
       validateCandidate: (descriptors: readonly HostedToolDescriptor[]) => {
         if (descriptors.length !== tools.size) throw new HostedPluginError("unreviewed_tool", "Official tool set changed; review required");
@@ -120,19 +123,30 @@ export class HostedPluginIntegration {
     if (!live || live.generation !== generation) throw new HostedPluginError("stale_generation", "Reconnect and re-handshake hosted views", { status: 409 });
     return live;
   }
-  private lifecycle<T>(operation: () => Promise<T>, shutdown = false): Promise<T> {
+  /** Serialize management intent without freezing Agent/UI admission during downloads. */
+  private enqueue<T>(operation: () => Promise<T>, shutdown = false): Promise<T> {
     const result = this.queue.then(async () => {
       if (this.closing && !shutdown) throw new HostedPluginError("manager_closed", "Host is shutting down");
-      if (this.recovery) throw new HostedPluginError("reconnect_required", "Committed hosted publication failed; retain data and restart through explicit recovery", { status: 503 });
-      await this.adapter.freeze(); // Old-schema batches run against the still-ACTIVE old worker.
+      if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Committed hosted publication failed; explicit recovery required", { status: 503 });
+      return operation();
+    });
+    this.queue = result.catch(() => {});
+    return result;
+  }
+  private lifecycle<T>(operation: () => Promise<T>, shutdown = false): Promise<T> {
+    const result = this.switches.then(async () => {
+      if (this.closing && !shutdown) throw new HostedPluginError("manager_closed", "Host is shutting down");
+      if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Committed hosted publication failed; retain data and restart through explicit recovery", { status: 503 });
+      // A failed publication already holds admission frozen; shutdown still drains views/worker.
+      if (!(shutdown && this.recovery && this.adapter.isFrozen)) await this.adapter.freeze(); // Old-schema batches finish on the still-ACTIVE old worker.
       try {
         const result = await operation();
-        if (this.recovery) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
+        if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
         return result;
       }
       finally { for (const view of this.views.values()) view.allowImmediateReopen(false); if (!this.recovery && !shutdown) this.adapter.thaw(); }
     });
-    this.queue = result.catch(() => {});
+    this.switches = result.catch(() => {});
     return result;
   }
   async start(): Promise<void> {
@@ -141,7 +155,7 @@ export class HostedPluginIntegration {
       const active = await new HostedStateBroker(join(this.options.root, "data"), plugin.id).active();
       this.views.set(plugin.id, new HostedViewCoordinator(plugin.id, active?.generation ?? 0));
     }
-    await this.lifecycle(async () => {
+    await this.enqueue(async () => {
       await this.manager.start();
       if (this.recovery) throw new HostedPluginError("reconnect_required", "Startup publication failed; explicit recovery required", { status: 503 });
       const marker = join(this.options.root, "host-version.json");
@@ -168,11 +182,13 @@ export class HostedPluginIntegration {
     })) };
   }
   async manage(input: HostedManageInput): Promise<HostedPluginCatalog> {
-    await this.lifecycle(async () => {
+    await this.enqueue(async () => {
       const view = this.coordinator(input.pluginId);
       view.allowImmediateReopen(input.reopenEditors === true);
-      const result = await this.manager.manage(input.pluginId, input.operation, input.version);
-      if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
+      try {
+        const result = await this.manager.manage(input.pluginId, input.operation, input.version);
+        if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
+      } finally { view.allowImmediateReopen(false); }
     });
     this.options.changed?.();
     return this.inventory();
@@ -190,7 +206,7 @@ export class HostedPluginIntegration {
   }
   async shutdown(): Promise<void> {
     this.closing = true;
-    await this.lifecycle(() => this.manager.shutdown(), true);
+    await this.enqueue(() => this.manager.shutdown(), true);
     for (const view of this.views.values()) view.dispose();
   }
 }
