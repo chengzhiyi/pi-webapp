@@ -34,6 +34,10 @@ function session(value: unknown): value is SessionView {
     && array(string)(value.thinkingLevels) && boolean(value.idle) && optional(value, "paused", boolean)
     && optional(value, "hasPendingPrompts", boolean)
     && optional(value, "promptQueue", queue => record(queue) && array(string)(queue.steering) && array(string)(queue.followUp))
+    && optional(value, "queuedPrompts", array(item => record(item) && strings(item, ["id", "text"])
+      && Number.isSafeInteger(item.revision) && (item.revision as number) > 0
+      && ["queued", "sending"].includes(item.status as string) && optional(item, "error", string)
+      && array(file => record(file) && string(file.name) && boolean(file.image))(item.attachments)))
     && nullable(usage => record(usage) && nullable(number)(usage.tokens)
       && number(usage.contextWindow) && nullable(number)(usage.percent))(value.contextUsage)
     && array(message)(value.messages)
