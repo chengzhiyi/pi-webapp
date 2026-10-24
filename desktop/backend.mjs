@@ -58,6 +58,9 @@ export class DesktopConnectionError extends Error {
 // This is a narrow migration path for the released launcher that predates metadata,
 // not an assumption that every unmarked/future backend supports our protocol.
 const legacyVersions = new Set(["0.1.19"]);
+// Published npm launchers before the independent-package shell protocol. Require
+// their exact known identity AND authenticated wire probes; never broadly ignore versions.
+const migrationVersions = new Set(["0.1.26", "0.1.27"]);
 const maxProbeBytes = 16 * 1024 * 1024;
 function sessionCompatible(value) {
   return value?.schemaVersion === 1 && typeof value.sessionId === "string" && value.sessionId.length > 0
@@ -148,7 +151,9 @@ export class DesktopBackend {
     const browserUrl = typeof current === "string" ? url.href : undefined;
     if (typeof current !== "string") throw new DesktopConnectionError("health-failed", "无法确认已有服务版本；未停止或修改该服务。");
     const compatibleProtocol = state.desktopProtocolVersion === desktopProtocolVersion && protocol === desktopProtocolVersion;
-    if ((current !== this.version && !compatibleProtocol) || (state.version !== undefined && state.version !== current)) {
+    const migration = migrationVersions.has(current) && state.version === current && state.bridgeVersion === 1
+      && state.runtimeKind === "npm" && state.desktopProtocolVersion === undefined && protocol === undefined;
+    if ((current !== this.version && !compatibleProtocol && !migration) || (state.version !== undefined && state.version !== current)) {
       const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : "未知";
       throw new DesktopConnectionError("version-incompatible", `尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, browserUrl);
     }
@@ -156,14 +161,14 @@ export class DesktopBackend {
         || (protocol !== undefined && protocol !== desktopProtocolVersion)) {
       throw new DesktopConnectionError("protocol-incompatible", "后台使用不支持的桌面连接协议，请更新桌面外壳。", browserUrl);
     }
-    if (state.bridgeVersion === 1 && state.version === current) return state;
-    if (state.bridgeVersion === 1) {
+    if (state.bridgeVersion === 1 && state.version === current && !migration) return state;
+    if (state.bridgeVersion === 1 && !migration) {
       throw new DesktopConnectionError("metadata-incomplete", "已有服务的启动器兼容信息不完整。可在浏览器继续使用原服务；不会接管或停止它。", browserUrl);
     }
-    if (state.bridgeVersion !== undefined) {
+    if (state.bridgeVersion !== undefined && !migration) {
       throw new DesktopConnectionError("protocol-incompatible", "已有服务使用不支持的启动器协议。可在浏览器继续使用原服务；桌面不会自动停止或升级它。", browserUrl);
     }
-    if (!legacyVersions.has(current) || !Number.isInteger(state.pid) || state.pid < 1
+    if ((!legacyVersions.has(current) && !migration) || !Number.isInteger(state.pid) || state.pid < 1
         || typeof state.nonce !== "string" || !state.nonce) {
       throw new DesktopConnectionError("legacy-unverified", "已有服务缺少兼容标记，无法确认其启动器身份。可在浏览器继续使用；不会接管或停止该服务。", browserUrl);
     }

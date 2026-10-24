@@ -18,7 +18,7 @@ async function fixture(t, options = {}) {
     const respond = (value, type = "application/json") => { res.setHeader("Content-Type", type); res.end(JSON.stringify(value)); };
     if (req.url === "/api/update/version") {
       if (options.redirect) { res.writeHead(302, { Location: `/unexpected?token=${token}` }); res.end(); return; }
-      respond({ current: options.version ?? "0.1.19" }); return;
+      respond({ current: options.version ?? "0.1.19", ...(options.desktopProtocolVersion !== undefined ? { desktopProtocolVersion: options.desktopProtocolVersion } : {}) }); return;
     }
     if (req.url === "/api/session") {
       if (options.missingSession) { res.writeHead(404); res.end(); return; }
@@ -71,6 +71,41 @@ test("missing bridge marker with an otherwise matching version also takes legacy
   assert.deepEqual(await backend.connect(), markedVersion);
   assert.equal(requests.length, 3);
   await unchanged(backend, markedVersion);
+});
+
+for (const version of ["0.1.26", "0.1.27"]) {
+  test(`new shell attaches to published npm ${version} without restarting active work`, async t => {
+    const { backend, state, save, requests, streamClosed } = await fixture(t, { version });
+    backend.version = "0.1.28";
+    const existing = { ...state, version, bridgeVersion: 1, runtimeKind: "npm" };
+    await save(existing);
+    assert.deepEqual(await backend.connect(), existing);
+    await unchanged(backend, existing);
+    assert.deepEqual(requests.map(({ path }) => path), ["/api/update/version", "/api/session", "/api/events"]);
+    assert.ok(requests.every(request => request.method === "GET" && request.authorization === `Bearer ${token}`));
+    for (let i = 0; i < 30 && !streamClosed(); i++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(streamClosed(), true);
+  });
+}
+
+test("migration rejects unknown versions, inconsistent identities and incompatible wire protocols", async t => {
+  for (const [options, overrides] of [
+    [{ version: "0.1.25" }, {}],
+    [{ version: "0.1.27" }, { version: "0.1.26" }],
+    [{ version: "0.1.27" }, { desktopProtocolVersion: 99 }],
+    [{ version: "0.1.27", desktopProtocolVersion: 99 }, {}],
+    [{ version: "0.1.27" }, { bridgeVersion: 99 }],
+    [{ version: "0.1.27" }, { nonce: "" }],
+    [{ version: "0.1.27", session: { ...snapshot, schemaVersion: 99 } }, {}],
+    [{ version: "0.1.27", eventBody: JSON.stringify({ type: "snapshot", session: { ...snapshot, schemaVersion: 99 } }) + "\n" }, {}],
+  ]) {
+    const { backend, state, save } = await fixture(t, options);
+    backend.version = "0.1.28";
+    const existing = { ...state, version: options.version, bridgeVersion: 1, runtimeKind: "npm", ...overrides };
+    await save(existing);
+    await assert.rejects(backend.connect(), error => error instanceof DesktopConnectionError);
+    await unchanged(backend, existing);
+  }
 });
 
 test("legacy fallback rejects unsupported versions, explicit protocol markers and incomplete identity", async t => {

@@ -176,7 +176,14 @@ separately from the desktop shell version/build.
   exact-version/legacy checks. Breaking that protocol requires a shell update.
 
 **Migration:** published build 8/9 shells do not advertise this capability and must
-be replaced once with a newly built capable desktop shell. Updating npm alone
+be replaced once with build 10 or a newer capable desktop shell. Build 10 can attach
+to genuine npm 0.1.26/0.1.27 services with bridge-v1 metadata but no desktop protocol
+marker: it verifies their exact known identity, then probes authenticated session and
+initial event-snapshot schemas using GET only. It never stops or claims that service;
+existing chats and terminals survive the attachment. Unknown versions/protocols still
+fail closed. Once all work is idle, use the existing Web update UI to move that npm
+service to a protocol-marked release. All four native release jobs verify this
+migration against the genuine npm 0.1.27 package before publication. Updating npm alone
 cannot add it to an already installed shell. Older shells continue to reject npm
 updates rather than accidentally modifying their bundled runtime. A desktop window
 attached to an existing npm-managed backend preserves that backend's update behavior.
@@ -298,7 +305,8 @@ stay in Pi's existing data directory, not inside the application bundle.
 
 - The desktop checks a live launcher's bridge version, token and authenticated
   desktop protocol before attaching. Marked compatible backends may run a different
-  business-package version; unmarked backends still require the exact app version. The released **0.1.19**
+  business-package version; unmarked backends require the exact app version except
+  the explicitly probed npm 0.1.26/0.1.27 migration allowlist. The released **0.1.19**
   Web launcher predates these metadata fields: when they are absent, the desktop
   also checks the authenticated session schema (v1) and the initial NDJSON
   snapshot event before attaching. This is a narrow, tested legacy allowlist,

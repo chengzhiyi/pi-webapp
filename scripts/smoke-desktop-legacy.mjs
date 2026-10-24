@@ -13,19 +13,20 @@ import { _electron, chromium, expect } from "@playwright/test";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const args = process.argv.slice(2);
 const packageIndex = args.indexOf("--legacy-package");
-if (packageIndex < 0 || !args[packageIndex + 1]) throw new Error("Pass --legacy-package pointing to an unchanged installed pi-webapp 0.1.19 release.");
+if (packageIndex < 0 || !args[packageIndex + 1]) throw new Error("Pass --legacy-package pointing to an unchanged installed pi-webapp 0.1.19, 0.1.26 or 0.1.27 release.");
 const legacyRoot = resolve(args[packageIndex + 1]);
 const legacyPackage = JSON.parse(await readFile(join(legacyRoot, "package.json"), "utf8"));
 assert.equal(legacyPackage.name, "pi-webapp");
-assert.equal(legacyPackage.version, "0.1.19");
+assert.ok(["0.1.19", "0.1.26", "0.1.27"].includes(legacyPackage.version));
+const unmarked = legacyPackage.version === "0.1.19";
 const sourceLauncher = await readFile(join(legacyRoot, "bin/pi-webapp.mjs"));
-assert.ok(!sourceLauncher.toString().includes("bridgeVersion"), "use a genuine pre-desktop release, not edited state from a new launcher");
+assert.ok(!sourceLauncher.toString().includes(unmarked ? "bridgeVersion" : "desktopProtocolVersion"), "use a genuine pre-protocol release, not edited state from a new launcher");
 const packaged = args.includes("--packaged");
 const release = JSON.parse(await readFile(join(root, "desktop/release.json"), "utf8"));
 const appName = release.productName;
-const executablePath = process.platform === "darwin" ? join(root, `desktop-release/${process.arch === "arm64" ? "mac-arm64" : "mac"}/${appName}.app/Contents/MacOS/${appName}`)
+const executablePath = process.env.PI_WEB_DESKTOP_EXECUTABLE ?? (process.platform === "darwin" ? join(root, `desktop-release/${process.arch === "arm64" ? "mac-arm64" : "mac"}/${appName}.app/Contents/MacOS/${appName}`)
   : process.platform === "win32" ? join(root, `desktop-release/win-unpacked/${appName}.exe`)
-  : join(root, `desktop-release/linux-unpacked/${appName}`);
+  : join(root, `desktop-release/linux-unpacked/${appName}`));
 const temporary = await mkdtemp(join(tmpdir(), "pi-desktop-legacy-smoke-"));
 const home = join(temporary, "home");
 const agentDir = join(temporary, "agent");
@@ -38,9 +39,13 @@ await mkdir(artifacts, { recursive: true });
 const fixtureModules = join(temporary, "legacy/node_modules");
 const fixturePackage = join(fixtureModules, "pi-webapp");
 await cp(legacyRoot, fixturePackage, { recursive: true });
-await cp(join(dirname(legacyRoot), "node-pty"), join(fixtureModules, "node-pty"), { recursive: true });
+const runtime = join(root, ".desktop/runtime");
+const nativePty = join(runtime, "backend/node_modules/node-pty");
+assert.equal(JSON.parse(await readFile(join(nativePty, "package.json"), "utf8")).version,
+  JSON.parse(await readFile(join(dirname(legacyRoot), "node-pty/package.json"), "utf8")).version);
+await cp(nativePty, join(fixtureModules, "node-pty"), { recursive: true });
 for (const entry of await readdir(dirname(legacyRoot), { withFileTypes: true })) {
-  if (["pi-webapp", "node-pty"].includes(entry.name)) continue;
+  if (["pi-webapp", "node-pty"].includes(entry.name) || entry.name.startsWith(".") || !entry.isDirectory()) continue;
   await symlink(join(dirname(legacyRoot), entry.name), join(fixtureModules, entry.name), entry.isDirectory() ? "junction" : "file");
 }
 if (process.platform === "darwin") {
@@ -50,7 +55,6 @@ if (process.platform === "darwin") {
 const legacyLauncher = join(fixturePackage, "bin/pi-webapp.mjs");
 assert.deepEqual(await readFile(legacyLauncher), sourceLauncher);
 assert.deepEqual(await readFile(join(fixturePackage, "dist/extension.js")), await readFile(join(legacyRoot, "dist/extension.js")));
-const runtime = join(root, ".desktop/runtime");
 const node = join(runtime, "node", process.platform === "win32" ? "node.exe" : "bin/node");
 const piCli = join(runtime, "backend/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 const piShim = join(temporary, process.platform === "win32" ? "pi.cmd" : "pi");
@@ -59,7 +63,8 @@ await writeFile(piShim, process.platform === "win32" ? `@echo off\r\n"${node}" "
   : `#!/bin/sh\nexec ${quote(node)} ${quote(piCli)} "$@"\n`);
 await chmod(piShim, 0o755);
 const env = { ...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: agentDir,
-  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0",
+  PI_WEB_SENTRY_ENABLED: "false", PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_DESKTOP_UPDATE_CHECK: "manual",
+  ...(process.platform === "win32" ? {} : { SHELL: "/bin/sh" }),
   PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin" };
 for (const key of ["NODE_OPTIONS", "NODE_PATH", "ELECTRON_RUN_AS_NODE", "PI_WEBAPP_RUNTIME", "PI_WEBAPP_PI_CLI",
   "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS", "PI_WEBAPP_RESTART_TOKEN", "PI_WEBAPP_RESTART_PORT"]) delete env[key];
@@ -87,8 +92,9 @@ try {
   supervisor.disconnect();
   const originalState = await readFile(statePath, "utf8");
   state = JSON.parse(originalState);
-  assert.equal(state.version, undefined);
-  assert.equal(state.bridgeVersion, undefined);
+  assert.equal(state.version, unmarked ? undefined : legacyPackage.version);
+  assert.equal(state.bridgeVersion, unmarked ? undefined : 1);
+  assert.equal(state.desktopProtocolVersion, undefined);
   browser = await chromium.launch({ headless: true, ...(process.env.PI_WEB_TEST_CHROME === "true" ? { channel: "chrome" } : {}) });
   const web = await browser.newPage();
   await web.addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
@@ -131,8 +137,8 @@ try {
   const result = { packaged, platform: process.platform, arch: process.arch, legacyVersion: legacyPackage.version,
     legacyLauncherSha256: createHash("sha256").update(sourceLauncher).digest("hex"),
     appName, desktopBuild: release.buildNumber,
-    fixturePreparation: "isolated copy, unchanged launcher/extension; macOS PTY helper executable bit prepared only in fixture",
-    checks: ["genuine-unmodified-legacy-launcher", "missing-metadata-reproduced", "browser-started-first", "existing-pty-before-desktop",
+    fixturePreparation: "isolated copy, unchanged launcher/extension; matching prepared PTY from bundled Node runtime copied only into fixture",
+    checks: ["genuine-unmodified-legacy-launcher", "pre-protocol-metadata-reproduced", "browser-started-first", "existing-pty-before-desktop",
       "desktop-attaches-same-session", "launcher-state-byte-identical", "no-duplicate-supervisor", "existing-pty-during-desktop",
       "desktop-close-keeps-supervisor-and-pi-alive", "no-stop-file-written", "existing-browser-pty-after-desktop-close"], errors: [] };
   await writeFile(join(artifacts, "legacy-smoke-result.json"), JSON.stringify(result, null, 2) + "\n");

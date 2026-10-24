@@ -114,6 +114,18 @@ jobs:
         timeout-minutes: 6
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run desktop:smoke -- --packaged
+      - name: Install the genuine pre-protocol npm release for migration QA
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/legacy-npm" --ignore-scripts --no-audit --no-fund pi-webapp@0.1.27 @earendil-works/pi-coding-agent@1.3.0 @earendil-works/pi-ai@1.3.0
+      - name: Verify existing npm 0.1.27 tasks and terminals survive desktop attachment
+        timeout-minutes: 6
+        if: runner.os != 'Linux'
+        shell: bash
+        run: npm run desktop:smoke:legacy -- --packaged --legacy-package "$RUNNER_TEMP/legacy-npm/node_modules/pi-webapp"
+      - name: Verify npm 0.1.27 migration under a virtual display
+        timeout-minutes: 6
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run desktop:smoke:legacy -- --packaged --legacy-package "$RUNNER_TEMP/legacy-npm/node_modules/pi-webapp"
       - name: Prepare per-target checksummed and smoke-gated assets
         shell: bash
         run: |
