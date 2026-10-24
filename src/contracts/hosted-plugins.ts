@@ -1,0 +1,39 @@
+/** JSON-only browser API. The server resolves cwd/workspace from authenticated session access. */
+export interface HostedContribution {
+  entry: { label: string; description: { zh: string; en: string }; kind: string };
+  panels: string[]; artifactTools: string[]; toolViews: string[];
+  panelAlias: { prefix: string; kind: string; title: string };
+}
+export interface HostedPluginCard {
+  pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
+  version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
+  phase: string; error?: string;
+  /** Manifest-only, integrity-qualified served documents, never arbitrary package paths. */
+  documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
+}
+export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean }
+export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry";
+export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; version?: string; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
+export interface HostedActionInput {
+  sessionId: string; pluginId: string; generation: number; action: string; input?: unknown;
+  /** Host adapter attaches these, never the iframe. Used ONLY for bounded flush-action admission. */
+  viewToken?: string; mountId?: string;
+}
+export interface HostedMount {
+  kind: "controller" | "workspace" | "editor" | "tool"; sessionId: string;
+  locale: "zh" | "en"; theme: "light" | "dark"; contentId?: string; visible?: boolean; title?: string;
+}
+export interface HostedViewIdentity { sessionId: string; pluginId: string; generation: number; mountId: string }
+export type HostedViewInput = HostedViewIdentity & (
+  | { operation: "register"; kind: HostedMount["kind"] }
+  | { operation: "poll"; viewToken: string; after: number }
+  | { operation: "change"; viewToken: string; dirty: boolean; busy: boolean }
+  | { operation: "ack"; viewToken: string; commandId: number; ok: boolean; error?: string }
+  | { operation: "close"; viewToken: string }
+);
+export interface HostedViewCommand { id: number; type: "freeze" | "resume" | "committed"; generation: number }
+export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[] }
+export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {
+  pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true,
+  installed: false, enabled: false, phase: "not-installed",
+};
