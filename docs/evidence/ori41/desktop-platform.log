@@ -1,0 +1,23 @@
+PASS packaged-native-pointer-draw
+PASS composer-shortcuts-do-not-mutate-drawing
+PASS actual-freeze-ack-loss-fails-closed-retains-realm-scene-generation
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: /api/hosted-plugins/manage
+
+409 !== 200
+
+    at request (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/scripts/smoke-hosted-platform.mjs:36:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/scripts/smoke-hosted-platform.mjs:87:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 409,
+  expected: 200,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.21.0

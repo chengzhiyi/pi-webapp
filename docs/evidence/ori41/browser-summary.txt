@@ -1,0 +1,42 @@
+{
+  startTime: '2026-10-24T18:33:15.258Z',
+  duration: 161913.995,
+  expected: 6,
+  skipped: 2,
+  unexpected: 26,
+  flaky: 0
+}
+firefox failed A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation
+firefox passed A07: composition and held native drag reject send, preserve composer and then reach a real safe point
+firefox passed A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames
+firefox passed A09: patching an unlabeled native shape must render a review rather than crash materialization
+firefox failed A09: actual hosted tool frame paints progressive arguments before any final result
+firefox passed removed tool close network failure retains the original realm and exposes retry recovery
+firefox failed A11: same-profile second window must remain responsive with existing editor long polls
+firefox failed A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px
+firefox failed A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px
+firefox failed A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery
+webkit failed A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation
+webkit failed A07: composition and held native drag reject send, preserve composer and then reach a real safe point
+webkit failed A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames
+webkit failed A09: patching an unlabeled native shape must render a review rather than crash materialization
+webkit failed A09: actual hosted tool frame paints progressive arguments before any final result
+webkit failed removed tool close network failure retains the original realm and exposes retry recovery
+webkit failed A11: same-profile second window must remain responsive with existing editor long polls
+webkit failed A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px
+webkit failed A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px
+webkit failed A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery
+firefox failed real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px
+firefox failed real hosted archive + complete host UI + retained SDK hot lifecycle at 390px
+webkit failed real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px
+webkit failed real hosted archive + complete host UI + retained SDK hot lifecycle at 390px
+firefox skipped diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls
+firefox failed aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive
+webkit skipped diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls
+webkit failed aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive
+firefox passed visible policy control separates independent notify from default linked synchronization and honors pin
+webkit failed visible policy control separates independent notify from default linked synchronization and honors pin
+firefox passed ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+firefox failed ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation
+webkit failed ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+webkit failed ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation
