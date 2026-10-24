@@ -24,11 +24,13 @@ import { buildId } from "../../../contracts/build-info.ts";
 import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
 import { PromptQueueError } from "../sessions/editable-prompt-queue.ts";
+import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandlers } from "../plugins/hosted/routes.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
 
 export interface BridgeHost {
+  hosted?: HostedBridgeHandlers;
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
@@ -200,6 +202,17 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         }
         return;
       }
+      if (req.method === "GET" && path.startsWith("/hosted-plugins/")) {
+        try {
+          const asset = await host.hosted?.asset(path);
+          if (!asset) { json(res, 404, { error: "插件资源不存在" }); return; }
+          // Only capability-qualified local v2 documents may be framed. Parent CSP is unchanged.
+          res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'");
+          res.writeHead(200, { "Content-Type": asset.mime, "Cache-Control": "private, no-store" });
+          res.end(asset.bytes);
+        } catch { json(res, 404, { error: "插件资源不可用" }); }
+        return;
+      }
       if (req.method === "GET" && path.startsWith("/plugins/")) {
         try {
           const pluginAsset = await host.pluginAsset?.(req.url ?? path);
@@ -215,6 +228,22 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       }
       if (!authorized(req, token)) {
         json(res, 401, { error: "访问令牌无效" });
+        return;
+      }
+      if (req.method === "GET" && path === "/api/hosted-plugins") {
+        try { json(res, 200, await hostedApi(host.hosted, path, undefined)); }
+        catch (error) { const result = hostedHttpFailure(error); json(res, result.status, result.body); }
+        return;
+      }
+      if (req.method === "POST" && HOSTED_API_PATHS.includes(path)) {
+        if (req.headers.origin !== undefined && req.headers.origin !== origin) { json(res, 403, { error: "来源不匹配" }); return; }
+        if (!req.headers["content-type"]?.startsWith("application/json")) { json(res, 415, { error: "需要 JSON 请求" }); return; }
+        if (restarting) { json(res, 409, { error: "宿主正在更新，请稍后重试" }); return; }
+        let body: unknown;
+        try { body = await readJson(req, 2 * 1024 * 1024); }
+        catch (error) { json(res, error instanceof Error && error.message === "请求内容过大" ? 413 : 400, {error:"插件请求内容无效或过大"}); return; }
+        try { json(res, 200, await hostedApi(host.hosted, path, body)); }
+        catch (error) { const result = hostedHttpFailure(error); json(res, result.status, result.body); }
         return;
       }
       if (req.method === "GET" && path === "/api/telemetry/config") {

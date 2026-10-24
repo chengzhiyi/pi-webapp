@@ -16,8 +16,8 @@ process.on("message", (raw: unknown) => {
     if (!item) return;
     pending.delete(m.id);
     if (m.ok) item.resolve(m.value); else {
-      const error = m.error as { code?: string; message?: string } | undefined;
-      item.reject(Object.assign(new Error(error?.message ?? "Host broker rejected request"), { code: error?.code }));
+      const error = m.error as { code?: string; message?: string; status?: number; reason?: string } | undefined;
+      item.reject(Object.assign(new Error(error?.message ?? "Host broker rejected request"), { code: error?.code, status: error?.status, reason: error?.reason }));
     }
     return;
   }

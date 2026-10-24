@@ -59,7 +59,17 @@ export async function validateHostedPackage(directory: string, expectedId?: stri
   if (!pkg || typeof pkg.name !== "string" || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(pkg.name) || pkg.name.length > 214 || expectedId && pkg.name !== expectedId) reject("Package identity mismatch");
   if (typeof pkg.version !== "string" || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(pkg.version)) reject("Invalid package version");
   if (!isHostedPluginManifest(pkg.piWebapp)) reject("Unsupported hosted manifest");
+  if (pkg.type !== "module") reject("Hosted package must declare ESM module type");
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (entry.name === "dist" && entry.isDirectory()) continue;
+    if (!entry.isFile() || !["package.json", "README.md", "LICENSE", "NOTICE.txt"].includes(entry.name)) reject("Undeclared package-root asset or code");
+  }
   if (pkg.scripts && Object.keys(pkg.scripts as object).some(key => /^(?:preinstall|install|postinstall|prepare)$/.test(key))) reject("Hosted packages cannot run install lifecycle scripts");
+  // First-party v2 artifacts must be self-contained. No ambient node_modules/native build fallback.
+  for (const key of ["dependencies", "optionalDependencies"]) {
+    const dependencies = pkg[key];
+    if (dependencies && (typeof dependencies !== "object" || Object.keys(dependencies).length > 0)) reject("Hosted packages must contain all runtime dependencies");
+  }
   const manifest = pkg.piWebapp;
   const raw = json(await regularFile(root, manifest.resourcesManifest.slice(2), RESOURCE_LIMITS.other)) as Partial<HostedResourceManifest> | null;
   if (!raw || raw.version !== 1 || !Array.isArray(raw.files) || !raw.files.length || raw.files.length > RESOURCE_LIMITS.files) reject("Invalid resource manifest");
@@ -67,7 +77,10 @@ export async function validateHostedPackage(directory: string, expectedId?: stri
   let total = 0;
   for (const value of raw.files) {
     if (!value || typeof value !== "object") reject("Invalid resource entry");
-    const item = value as HostedResource;
+    // Public manifests may spell a package-relative path with './'; normalize once and reject
+    // aliases/duplicates before using it as an inventory key or filesystem path.
+    const rawItem = value as HostedResource;
+    const item = { ...rawItem, path: typeof rawItem.path === "string" && rawItem.path.startsWith("./") ? rawItem.path.slice(2) : rawItem.path };
     if (!hostedAssetPath(`./${item.path}`) || typeof item.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(item.sha256)
       || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || resources.has(item.path)) reject("Invalid or duplicate resource");
     const ext = item.path.split(".").at(-1)!;

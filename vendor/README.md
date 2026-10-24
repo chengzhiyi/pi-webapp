@@ -1,20 +1,20 @@
 # Development-only public protocol snapshot
 
-`chengzhiyi-pi-web-protocol-0.2.0-dev.0.tgz` is a prebuilt first-party npm artifact,
+`chengzhiyi-pi-web-protocol-0.2.0-dev.1.tgz` is a prebuilt first-party npm artifact,
 not a published registry release and not an Excalidraw implementation bundle.
 It preserves existing v1 exports and adds the hosted v2 data/runtime contract.
 
 - Source: https://github.com/chengzhiyi/pi-extensions
 - Local source branch: `feat/excalidraw-hosted-v2`
-- Source commit: `3e6bd11` (not yet pushed)
-- Package version in this development snapshot: `0.2.0-dev.0`
-- SHA-256: `5dd57ec87393f846e927423adc9f0396eb3f424353b6467486b3b26b8aed1dc3`
+- Source commit: `6328c63` (not yet pushed); additive RPC error status/reason fields
+- Package version in this development snapshot: `0.2.0-dev.1`
+- SHA-256: `90f877fd5a6f2c49cd0d41431141e16321142c8a741177755a3409ec1501a8d6`
 - Contents: TypeScript-compiled public protocol JS/declarations, package metadata,
   README and MIT LICENSE. No model/service credentials or editor dependencies.
 
 Reproduction: export `packages/protocol` at that source commit into an isolated
-checkout, set only its package version to `0.2.0-dev.0`, remove release-fingerprint
-metadata, add `piWebappSourceRevision: "3e6bd11"`, run `tsc -p tsconfig.json` with
+checkout, set only its package version to `0.2.0-dev.1`, remove release-fingerprint
+metadata, add `piWebappSourceRevision: "6328c63"`, run `tsc -p tsconfig.json` with
 TypeScript 7.0.2, then `npm pack --ignore-scripts`. The lockfile binds the resulting
 tarball with SHA-512 integrity. This snapshot is committed so verification does
 not depend on a live sibling checkout or a nonexistent npm version.

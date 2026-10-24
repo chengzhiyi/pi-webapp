@@ -3,7 +3,10 @@
 This is **infrastructure, not an enabled production feature**. Existing v1 plugins
 and the built-in drawing integration are unchanged. Do not advertise full
 hot-plugging until the installation/UI/session integration and acceptance matrix
-are complete.
+are complete. The second milestone implements installation/management service,
+optional authenticated routes and a real-package lifecycle test; see
+[installation integration](hosted-plugin-installation.md). Bootstrap/UI/Agent
+integration and final acceptance are still pending.
 
 ## Repositories and ownership
 
@@ -14,8 +17,8 @@ are complete.
   `pi-extensions/packages/excalidraw`, not this runtime.
 
 The host dev dependency is pinned to the checked-in, first-party protocol
-snapshot `vendor/chengzhiyi-pi-web-protocol-0.2.0-dev.0.tgz`, compiled from protocol
-commit `3e6bd11`. It has **not** been published to npm. This avoids a live sibling
+snapshot `vendor/chengzhiyi-pi-web-protocol-0.2.0-dev.1.tgz`, compiled from protocol
+commit `6328c63` (additive RPC error status/reason). It has **not** been published to npm. This avoids a live sibling
 symlink or a nonexistent registry version and makes the branch reproducible.
 Before release, replace the development snapshot with the reviewed release
 artifact/version and independently install the actual protocol/plugin packages.
@@ -97,11 +100,12 @@ certify full application behavior or browser/desktop integration.
 
 ## Explicit remaining work / limits
 
-- Installer, npm identity/compatibility policy, archive extraction, install
-  journal, immutable version registry and independent/host-linked updates.
+- Connect the implemented installer/manager/registry/update policy to bootstrap,
+  host-linked updater and frontend/session integration; finish signed source
+  identity policy and reference-aware version/snapshot collection.
 - Official offline catalog card and management UI.
-- Production authentication/routes, capability checks, SDK/TUI and retained
-  session tool-policy adapters, safe batch boundaries and tombstones.
+- Wire optional authenticated hosted routes and capability-qualified resources
+  to real retained scopes, SDK/TUI tool-policy adapters, batch boundaries and tombstones.
 - Browser MessageChannel/FrameAdapter, controller/editor/tool rendering,
   beforeSend, all-window freeze and native interaction regression tests.
 - Legacy checkpoint/ID aliases, verified schema migrations and lossless recovery.

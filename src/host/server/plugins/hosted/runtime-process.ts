@@ -76,8 +76,8 @@ export class HostedRuntimeProcess {
       if (!item) return;
       clearTimeout(item.timer); this.pending.delete(m.id);
       if (!item.expired) {
-        const e = m.error as { code?: string; message?: string } | undefined;
-        if (m.ok === true) item.resolve(m.value); else item.reject(new HostedPluginError(e?.code ?? "plugin_failed", e?.message ?? "Plugin request failed"));
+        const e = m.error as { code?: string; message?: string; status?: number; reason?: string } | undefined;
+        if (m.ok === true) item.resolve(m.value); else item.reject(new HostedPluginError(e?.code ?? "plugin_failed", e?.message ?? "Plugin request failed", e));
       }
       if (!this.inFlight) this.events.emit("idle");
     } else if (m.type === "broker-request" && typeof m.id === "string" && typeof m.invocationId === "string" && typeof m.method === "string") {

@@ -90,6 +90,9 @@ export class PersistentDiagramStore {
       await directory(this.root);
       const folder = join(this.root, digest(JSON.stringify([cwd, sessionId])));
       await directory(folder); release = await this.lock(folder);
+      // The hosted importer writes this marker under scope.lock before releasing the legacy snapshot.
+      // Refuse all later built-in access: imports must never create a second checkpoint writer.
+      if (await read(join(folder, "hosted-migration.json"), 2048)) throw new DiagramError("图稿已迁移至外置 Excalidraw 插件；请安装或启用该插件恢复", 409, "diagram_migrated");
       const names = (await readdir(folder)).filter(name => /^[\w-]{1,80}\.json$/.test(name) && name !== "focus.json");
       if (names.length > 100) throw new Error("Too many diagram checkpoints");
       const drafts: DiagramDraft[] = [], before = new Map<string, string>();

@@ -71,6 +71,8 @@ test("resource manifests permit fonts/nested assets, serve immutable declaration
 
 test("package validation rejects undeclared code, hashes, links, MIME mismatch and install scripts", async t => {
   const root = await temporary(t), f = await fixture(root);
+  await writeFile(join(f.directory, "extra.js"), "export default 'undeclared'");
+  await assert.rejects(validateHostedPackage(f.directory), /package-root/); await rm(join(f.directory, "extra.js"));
   await writeFile(join(f.directory, "dist/extra.js"), "export default 1");
   await assert.rejects(validateHostedPackage(f.directory), /Undeclared/); await rm(join(f.directory, "dist/extra.js"));
   f.files[0]!.sha256 = "0".repeat(64); await writeFile(join(f.directory, "dist/resources.json"), JSON.stringify({ version: 1, files: f.files }));
