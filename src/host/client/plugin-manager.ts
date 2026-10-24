@@ -40,6 +40,7 @@ function validateDefinition(value: unknown, expectedId: string): WebPluginDefini
   if (definition.artifactTools?.some(name => typeof name !== "string")) throw new Error("Invalid artifact tools");
   if (definition.workbench) {
     const { entry, panels } = definition.workbench;
+    if (definition.workbench.resolvePanel !== undefined && typeof definition.workbench.resolvePanel !== "function") throw new Error("Invalid workbench artifact resolver");
     if (definition.workbench.apiVersion !== 1 || !entry || typeof entry.kind !== "string" || !entry.kind || !isWebLocalizedText(entry.label) || !isWebLocalizedText(entry.description) || (entry.panelTitle !== undefined && !isWebLocalizedText(entry.panelTitle)) || typeof entry.icon !== "function" || !Array.isArray(panels) || !panels.some(panel => panel.kind === entry.kind) || panels.some(panel => typeof panel.kind !== "string" || typeof panel.component !== "function") || new Set(panels.map(panel => panel.kind)).size !== panels.length) throw new Error("Invalid workbench contribution");
   }
   return definition;

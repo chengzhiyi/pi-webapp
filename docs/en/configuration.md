@@ -13,9 +13,15 @@ Browser sign-in opens the provider page; follow manual-code prompts if the callb
 | Pi package | Can contain both extensions and skills. Add npm, Git, or local sources in **Settings → Packages & extensions**. |
 | Pi extension | Pi runtime capabilities; local extensions can also load individually. Loading in other workspace sessions depends on host isolation rules. |
 | Skill | Discovered task guidance. Inspect or manually configure a `SKILL.md` file/directory in **Settings → Skills**. |
-| Web plugin | Web interactions and panels. Bundled Git/Files/Terminal are managed in sidebar **Plugins**; external runtimes remain under **Packages & extensions**. |
+| Web plugin | Web interactions and panels. Bundled Git/Files/Terminal/Diagrams are managed in sidebar **Plugins**; external runtimes remain under **Packages & extensions**. |
 
 Bundled plugin switches persist globally and require all chats to be idle. Disabling closes related tabs and blocks backend requests. Disabling Terminal requires confirmation and ends all service-owned terminals. **Installing a package is not toggling a bundled plugin.** External plugins do not offer a misleading UI-only switch.
+
+## Diagrams
+
+Select **Diagrams** in the right workbench, or ask the agent to draw a flowchart. Open its response card and accept the preview candidate before editing. Save locally as `.excalidraw`, import/reopen source files, download the source, or export white/transparent PNG. AI edits require acceptance again; stale revisions and file conflicts cannot force-overwrite your changes.
+
+The editor is embedded locally, without Excalidraw cloud services. Manual editing works without a model. Browser draft backups are not a substitute for saving files. Images, links, collaboration and headless PNG rendering are not supported. See [Diagrams](../diagrams.md) for boundaries. Rebuild/restart the backend after updating; refreshing the page alone is insufficient.
 
 ## When to reload
 

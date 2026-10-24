@@ -116,7 +116,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
             }
             return existing.value as ReturnType<typeof create>;
           };
-          return <PluginBoundary id={plugin.id}><Component session={props.session} locale={props.locale} visible={visible} contentId={tab.contentId} title={tab.title} renderMarkdown={props.renderMarkdown} resource={resource} open={(kind, id, title) => open(kind, id, title, paneId, plugin.id)} /></PluginBoundary>;
+          return <PluginBoundary id={plugin.id}><Component sendMessage={props.sendMessage} session={props.session} locale={props.locale} visible={visible} contentId={tab.contentId} title={tab.title} renderMarkdown={props.renderMarkdown} resource={resource} open={(kind, id, title) => open(kind, id, title, paneId, plugin.id)} /></PluginBoundary>;
         }
         return <PluginSlot plugins={plugins} slot="rightbar.panel" props={{ ...props, panelId: tab.contentId }} />;
       }}

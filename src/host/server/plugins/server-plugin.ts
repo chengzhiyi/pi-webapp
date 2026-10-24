@@ -15,6 +15,8 @@ export interface ServerPlugin {
   metadata: PluginMetadata;
   routes: readonly string[];
   handle(context: PluginRequestContext): Promise<void>;
+  /** Model-facing, session-owned operation; registry enforces enablement and toggle coordination. */
+  agentAction?(cwd: string, sessionId: string, action: string, input: unknown): unknown | Promise<unknown>;
   /** Coordinate agent starts against capability mutations without importing domain internals into transport. */
   coordinateStart?<T>(cwd: string, operation: () => Promise<T>): Promise<T>;
   requestFailure?(error: unknown): { status: number; body: { error: string; errorCode: string; reason: string } } | null;

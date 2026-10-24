@@ -29,7 +29,7 @@ test("plugin management persists real backend gates and validates auth, origin, 
   const get = () => fetch(url.origin + "/api/plugin-management", { headers }).then(response => response.json()) as Promise<PluginManagementView>;
   const post = (body: object, extra: Record<string, string> = {}) => fetch(url.origin + "/api/plugin-management", { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify({ sessionId: "terminal-a", ...body }) });
   let view = await get();
-  assert.equal(view.items.filter(item => item.kind === "builtin").length, 3);
+  assert.equal(view.items.filter(item => item.kind === "builtin").length, Object.keys(BUILTIN_IDS).length);
   assert.equal(view.items.find(item => item.id === "@example/external")?.managed, false);
   const input = { id: BUILTIN_IDS.git, enabled: false, expected: view.revision };
   assert.equal((await post(input, { Authorization: "Bearer wrong" })).status, 401);

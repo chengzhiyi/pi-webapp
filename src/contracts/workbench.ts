@@ -11,6 +11,7 @@ export interface WorkbenchPanelProps {
   title: string;
   renderMarkdown(text: string): ReactNode;
   open(kind: string, contentId: string, title: string): void;
+  sendMessage(text: string): Promise<void>;
   resource<T>(create: () => T, dispose?: (value: T) => void, activate?: (value: T, active: boolean) => void): T;
 }
 export interface WorkbenchPanelContribution {
@@ -24,5 +25,7 @@ export interface WorkbenchPluginDefinition extends WebPluginDefinition {
     apiVersion: 1;
     entry: { label: WebLocalizedText; panelTitle?: WebLocalizedText; description: WebLocalizedText; kind: string; multiple?: boolean; icon: ComponentType<{ size?: number }> };
     panels: readonly WorkbenchPanelContribution[];
+    /** Resolve a plugin-owned artifact link into a typed, owned workbench tab. */
+    resolvePanel?(panelId: string): { kind: string; contentId: string; title: string } | null;
   };
 }

@@ -61,6 +61,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
   } as unknown as ExtensionCommandContext;
   piWeb({
     events: createEventBus(),
+    registerTool() {},
     on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
     registerCommand(name: string, definition: { handler: typeof command }) { if (name === "web") command = definition.handler; },
     getSessionName() { if (oldRuntimeStale) throw new Error("stale Pi API"); return undefined; },

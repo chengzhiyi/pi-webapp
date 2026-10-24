@@ -25,6 +25,7 @@ import { EditablePromptQueue, PromptQueueError, type PromptImages } from "../ses
 import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
+import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
@@ -286,6 +287,11 @@ async function changeConfig(change: ConfigChange): Promise<ConfigView> {
 
 export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promise<boolean> = openWebPage): void {
   shared.pi = pi;
+  const builtinTools = builtinAgentTools(async (...args) => {
+    if (!shared.bridge?.runPluginTool) throw new Error("请先打开 Web 工作台以使用绘图插件");
+    return shared.bridge.runPluginTool(...args);
+  });
+  for (const tool of builtinTools) pi.registerTool(tool);
   shared.tools?.clear();
   shared.tools = new ToolDiagnostics({
     enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
@@ -433,16 +439,16 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
         if (shared.selected === "tui") shared.activeWorkspaceId = initialWorkspace.id;
         // Pi's /reload re-evaluates extensions but retains this process-wide state.
         // Replace an older bridge so new authenticated endpoints are available.
-        if (shared.bridge && (shared.bridge.protocolVersion !== 7 || shared.bridge.buildId !== buildId || typeof shared.bridge.reportError !== "function")) {
+        if (shared.bridge && (shared.bridge.protocolVersion !== 7 || shared.bridge.buildId !== buildId || typeof shared.bridge.reportError !== "function" || typeof shared.bridge.runPluginTool !== "function")) {
           const previous = shared.bridge;
-          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 3) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
+          if (shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 4) && shared.workspaceSessions.session && !shared.workspaceSessions.session.isIdle) throw new Error("请等待当前回复结束再切换工作区");
           shared.bridge = null;
           await previous.close();
           await shared.telemetry.close();
           shared.telemetry = new NodeTelemetry();
         }
         if (shared.bridge === null) {
-          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 3) ? shared.workspaceSessions : null;
+          const legacy = shared.workspaceSessions && (shared.workspaceSessions.telemetryVersion !== 2 || shared.workspaceSessions.runtimeVersion !== 4) ? shared.workspaceSessions : null;
           const retained = legacy?.session && legacy.path ? { path: legacy.path, sessionManager: legacy.session.sessionManager } : null;
           if (legacy) { await legacy.dispose(); shared.workspaceSessions = null; }
           shared.workspaceSessions ??= new WorkspaceSessions((event) => {
@@ -454,7 +460,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
             breadcrumb: (category, context) => shared.bridge?.breadcrumb?.(category, context),
             anonymize: value => shared.telemetry?.session(value) ?? "unavailable",
-          }, () => { void publishWorkspaces(); });
+          }, () => { void publishWorkspaces(); }, builtinTools);
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE }),

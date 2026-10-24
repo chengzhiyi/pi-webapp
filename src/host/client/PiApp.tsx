@@ -88,7 +88,9 @@ export function PiApp() {
     collapseRightbar() { setLayout(previous => ({ ...previous, rightbarFocus: false })); panel.controller.setExpanded(false); },
   }), [closeSidebar, panel.controller]);
   const openPanel = (id: string) => {
-    panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
+    const resolved = plugins.flatMap(plugin => { const target = plugin.definition.workbench?.resolvePanel?.(id); return target ? [{ ...target, pluginId: plugin.id }] : []; })[0];
+    if (resolved) panel.openContent(resolved.kind, resolved.contentId, resolved.title, undefined, resolved.pluginId);
+    else panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
     panel.controller.setExpanded(true);
     setLayout((previous) => ({ ...previous, narrowExpanded: false }));
   };
