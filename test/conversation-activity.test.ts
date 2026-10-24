@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conversationActivity } from "../src/host/client/conversation-activity.ts";
+import { conversationActivity, conversationIsWorking } from "../src/host/client/conversation-activity.ts";
 import type { SessionView, ViewMessage } from "../src/host/client/pi-bridge.ts";
 
 const session: SessionView = {
@@ -26,6 +26,19 @@ test("live answers, reasoning, and tool calls replace the placeholder", () => {
   ]) assert.equal(conversationActivity({ ...session, idle: false }, stream([block]), "connected", false), null);
   // Committed history must not hide work between tool calls and the next response.
   assert.equal(conversationActivity({ ...session, idle: false, messages: [stream([{ kind: "text", text: "Previous answer" }])] }, null, "connected", false), "working");
+});
+
+test("the clock lifetime survives live content but stops on terminal and waiting states", () => {
+  const busy = { ...session, idle: false };
+  const live = stream([{ kind: "text", text: "An answer in progress" }]);
+  assert.equal(conversationIsWorking(session, null, "connected", true), true);
+  assert.equal(conversationIsWorking(busy, live, "connected", false), true);
+  assert.equal(conversationActivity(busy, live, "connected", false), null);
+  assert.equal(conversationIsWorking(session, null, "connected", false), false);
+  assert.equal(conversationIsWorking(busy, null, "disconnected", false), false);
+  assert.equal(conversationIsWorking(busy, { ...live, error: "Failed" }, "connected", false), false);
+  const interaction = { requestId: "request", sessionId: session.sessionId, pluginId: "example", kind: "confirm", data: {} };
+  assert.equal(conversationIsWorking({ ...busy, interactions: [interaction] }, null, "connected", false), false);
 });
 
 test("completion, pause, errors, disconnection, and human-input waits do not animate", () => {

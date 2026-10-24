@@ -13,7 +13,8 @@ import type { CommandOption, ModelOption } from "./pi-bridge.ts";
 import { PiMarkdown } from "./PiMarkdown.tsx";
 import { ReasoningRow } from "../../../web/src/ui/chat/ReasoningRow.tsx";
 import { AgentActivity } from "../../../web/src/ui/chat/AgentActivity.tsx";
-import { conversationActivity } from "./conversation-activity.ts";
+import { conversationActivity, conversationIsWorking } from "./conversation-activity.ts";
+import { useActivityElapsed } from "./use-activity-elapsed.ts";
 import { ToolRow, TurnActions, TurnProcess } from "../../../web/src/ui/chat/ProcessRow.tsx";
 import { conversationTurns, toolResults, toolViewCalls, type ConversationTurn } from "./conversation-turns.ts";
 import { PiTrajectory } from "../../../web/src/ui/trajectory/PiTrajectory.tsx";
@@ -456,6 +457,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     localFiles: optimistic.files,
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
+  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId);
   const empty = session === null || (session.messages.length === 0 && streaming === null && pending === null && activity === null);
   const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
     if (!session) return;
@@ -509,7 +511,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
               {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? [])} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
-              {activity && <AgentActivity state={activity} />}
+              {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
           <div ref={composer} className={conversationCss.composerSeat} data-composer-seat="">
