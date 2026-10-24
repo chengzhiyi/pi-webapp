@@ -102,7 +102,8 @@ certify full application behavior or browser/desktop integration.
 
 - Connect the implemented installer/manager/registry/update policy to bootstrap,
   host-linked updater and frontend/session integration; finish signed source
-  identity policy and reference-aware version/snapshot collection.
+  identity policy. Reference-aware version/snapshot collection is implemented;
+  see [GC retention and recovery](hosted-plugin-gc.md).
 - Official offline catalog card and management UI.
 - Wire optional authenticated hosted routes and capability-qualified resources
   to real retained scopes, SDK/TUI tool-policy adapters, batch boundaries and tombstones.
@@ -113,9 +114,9 @@ certify full application behavior or browser/desktop integration.
 - Runtime/transaction locks are never auto-stolen by PID. Unclean exits require
   an explicit recovery path after stopping all owners. The lock-recovery UX and
   crash-stage tests remain release gates.
-- State snapshots are not garbage-collected by this primitive; the integration
-  must retain required rollback/active references and bound old snapshot growth.
-  The 50-cycle test deliberately does not claim filesystem GC or heap SLOs.
+- State/code GC retains current/previous and additional live references; see
+  [GC retention and recovery](hosted-plugin-gc.md). The new 50-replacement test
+  checks filesystem retention and offline edits; it does not claim heap SLOs.
 - Electron packaging/child bootstrap and macOS/Windows/Linux, browser realm
   lifecycle, real provider concurrency and reference-machine performance.
 - No built-in registration, drawing root dependency or fallback removal until

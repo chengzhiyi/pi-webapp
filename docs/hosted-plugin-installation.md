@@ -136,8 +136,9 @@ These are not a live bootstrap/full Electron acceptance claim.
 - Cross-schema migration/rollback still fails explicitly. Crash runtime/transaction
   locks are not auto-stolen; operator recovery UX and crash-stage matrix remain.
 - Installer cleanup leaves uncommitted immutable orphan code inert for retry.
-  Version retention is bounded at 16, not the desired current+previous default;
-  reference-aware GC for versions and state snapshots remains to implement.
+  [Reference-aware GC](hosted-plugin-gc.md) now keeps normal current+previous
+  code/state versions, with explicit exceptions for pending/pinned/live references.
+  Unknown journals refuse cleanup; operator recovery UX remains a release gate.
 - Reconciliation policy exists but is not yet called by the host update/startup
   path; disabled intent survives, and registry failures leave current code/data.
 - Complete A01–A25 including real browser/Agent/desktop platform matrix and SLOs.

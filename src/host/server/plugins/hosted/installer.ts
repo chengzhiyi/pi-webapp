@@ -6,7 +6,7 @@ import { extractHostedArchive, MAX_ARCHIVE_BYTES } from "./archive.ts";
 import { HostedPluginError, isMissing } from "./errors.ts";
 import { compatibleRelease, officialPlugin, OFFICIAL_PLUGINS, selectRelease, type OfficialPlugin, type RegistryRelease } from "./official-catalog.ts";
 import { sha256, validateHostedPackage, type HostedPackage } from "./resources.ts";
-import { atomicJson, privateDirectory, readJson, withStorageLock } from "./storage.ts";
+import { atomicJson, boundedRead, privateDirectory, readJson, readJournal, withStorageLock } from "./storage.ts";
 import { satisfiesHost, stableVersion } from "./versions.ts";
 
 export interface InstalledHostedVersion { version: string; digest: string; integrity: string; directory: string; installedAt: string }
@@ -37,7 +37,10 @@ export class HostedPluginInstaller {
   }
   private async index(): Promise<InstallationIndex> {
     const index = await readJson<InstallationIndex>(join(this.root, "installed.json"));
-    if (!index) return { schema: 1, revision: 0, versions: {} };
+    if (!index) {
+      if (await boundedRead(join(this.root, "installed.json"), 2 * 1024 * 1024)) throw new HostedPluginError("invalid_storage", "Null installation index; restore metadata before cleanup");
+      return { schema: 1, revision: 0, versions: {} };
+    }
     if (index.schema !== 1 || !Number.isSafeInteger(index.revision) || index.revision < 0 || !index.versions || typeof index.versions !== "object" || Array.isArray(index.versions)) throw new HostedPluginError("invalid_storage", "Invalid plugin installation index");
     for (const [id, versions] of Object.entries(index.versions)) {
       officialPlugin(id, this.catalog);
@@ -51,9 +54,9 @@ export class HostedPluginInstaller {
   }
   private path(record: InstalledHostedVersion): string { return join(this.root, "versions", record.directory); }
   private async recoverLocked(): Promise<InstallationIndex> {
-    const index = await this.index(), journal = await readJson<InstallJournal>(join(this.root, "install-journal.json"));
+    const index = await this.index(), journal = await readJournal<InstallJournal>(join(this.root, "install-journal.json"));
     if (journal) {
-      if (journal.schema !== 1) throw new HostedPluginError("invalid_storage", "Invalid install journal");
+      if (journal.schema !== 1 || Object.keys(journal).some(k => !["schema", "pluginId", "next"].includes(k))) throw new HostedPluginError("invalid_storage", "Invalid install journal");
       officialPlugin(journal.pluginId, this.catalog); this.validateRecord(journal.pluginId, journal.next);
       // Index is the only installed source of truth. A renamed but uncommitted package is an orphan,
       // not permission to start code after a crash. Keep it for validation/retry, never execute it.
@@ -61,6 +64,7 @@ export class HostedPluginInstaller {
       if (referenced && referenced.digest !== journal.next.digest) throw new HostedPluginError("invalid_storage", "Conflicting installation journal");
       await rm(join(this.root, "install-journal.json"));
     }
+    await this.recoverCollection(index);
     // No concurrent installer can own a stage while holding this root lock.
     const staging = join(this.root, "staging"); await privateDirectory(staging);
     for (const name of await readdir(staging)) {
@@ -68,6 +72,48 @@ export class HostedPluginInstaller {
       await rm(join(staging, name), { recursive: true });
     }
     return index;
+  }
+  private async recoverCollection(index: InstallationIndex): Promise<void> {
+    const path = join(this.root, "gc-journal.json");
+    const journal = await readJournal<{ schema: number; pluginId: string; records: InstalledHostedVersion[] }>(path);
+    if (!journal) return;
+    if (journal.schema !== 1 || Object.keys(journal).some(k => !["schema", "pluginId", "records"].includes(k)) || !Array.isArray(journal.records) || !journal.records.length) throw new HostedPluginError("gc_recovery_required", "Invalid gc-journal.json; stop all owners and inspect it before cleanup");
+    officialPlugin(journal.pluginId, this.catalog);
+    for (const record of journal.records) this.validateRecord(journal.pluginId, record);
+    const referenced = journal.records.filter(record => index.versions[journal.pluginId]?.some(v => v.directory === record.directory));
+    if (referenced.length && referenced.length !== journal.records.length) throw new HostedPluginError("gc_recovery_required", "Conflicting GC journal/index; restore installation metadata before cleanup");
+    if (!referenced.length) {
+      await privateDirectory(join(this.root, "versions"));
+      await privateDirectory(join(this.root, "versions", sha256(journal.pluginId)));
+      for (const record of journal.records) await rm(this.path(record), { recursive: true, force: true });
+    }
+    // All referenced means the index commit never happened; abort this GC without deleting code.
+    await rm(path);
+  }
+  /** References are sampled UNDER the installer lock, not from an earlier inventory.
+   * The manager additionally owns its operation fence and broker lock.
+   */
+  async collect(id: string, references: () => Promise<readonly string[]>): Promise<string[]> {
+    officialPlugin(id, this.catalog);
+    return withStorageLock(this.root, async () => {
+      const index = await this.recoverLocked(), versions = index.versions[id] ?? [];
+      const keep = new Set(await references());
+      // Keep the latest accepted installation as well (install is deliberately separate from enable).
+      const latest = versions.at(-1); if (latest) keep.add(latest.version);
+      const remove = versions.filter(v => !keep.has(v.version));
+      await this.removeLocked(id, index, remove);
+      return remove.map(v => v.version);
+    });
+  }
+  private async removeLocked(id: string, index: InstallationIndex, remove: InstalledHostedVersion[]): Promise<void> {
+    if (!remove.length) return;
+    await privateDirectory(join(this.root, "versions"));
+    await privateDirectory(join(this.root, "versions", sha256(id)));
+    await atomicJson(join(this.root, "gc-journal.json"), { schema: 1, pluginId: id, records: remove });
+    index.versions[id] = (index.versions[id] ?? []).filter(v => !remove.some(r => r.directory === v.directory)); index.revision++;
+    // Deregister first. Recovery deletes only if the entire atomic removal committed.
+    await atomicJson(join(this.root, "installed.json"), index);
+    await this.recoverCollection(index);
   }
   async inventory(): Promise<{ revision: number; versions: Record<string, InstalledHostedVersion[]> }> {
     return withStorageLock(this.root, async () => { const index = await this.recoverLocked(); return { revision: index.revision, versions: structuredClone(index.versions) }; });
@@ -165,10 +211,7 @@ export class HostedPluginInstaller {
     await withStorageLock(this.root, async () => {
       const index = await this.recoverLocked(), old = index.versions[id] ?? [];
       const remove = old.filter(v => removable.includes(v.version));
-      index.versions[id] = old.filter(v => !removable.includes(v.version)); index.revision++;
-      // Deregister before cleanup: crash can leave inert code, never an installed missing package.
-      await atomicJson(join(this.root, "installed.json"), index);
-      for (const record of remove) await rm(this.path(record), { recursive: true, force: true });
+      await this.removeLocked(id, index, remove);
     });
   }
 }

@@ -29,6 +29,16 @@ export async function readJson<T>(path: string, maxBytes = 2 * 1024 * 1024): Pro
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T; }
   catch { throw new HostedPluginError("invalid_storage", "Invalid JSON storage record; original bytes preserved"); }
 }
+/** Journals must be objects: JSON null/false is corruption, never absence or recovery consent. */
+export async function readJournal<T>(path: string): Promise<T | null> {
+  const bytes = await boundedRead(path, 2 * 1024 * 1024);
+  if (bytes === null) return null;
+  let value: unknown;
+  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+  catch { throw new HostedPluginError("gc_recovery_required", `Invalid journal ${path}; stop all owners and inspect original bytes`); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new HostedPluginError("gc_recovery_required", `Invalid journal ${path}; original bytes preserved`);
+  return value as T;
+}
 export async function atomicJson(path: string, value: unknown): Promise<void> {
   const temp = `${path}.${randomUUID()}.tmp`;
   const file = await open(temp, "wx", 0o600);
