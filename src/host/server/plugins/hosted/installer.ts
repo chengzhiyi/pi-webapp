@@ -195,13 +195,13 @@ export class HostedPluginInstaller {
     }, 10_000);
   }
   async load(id: string, version: string): Promise<HostedPackage> {
-    officialPlugin(id, this.catalog);
+    const plugin = officialPlugin(id, this.catalog);
     return withStorageLock(this.root, async () => {
       const index = await this.recoverLocked(), record = index.versions[id]?.find(v => v.version === version);
       if (!record) throw new HostedPluginError("not_installed", "Plugin version is not installed");
       const pkg = await validateHostedPackage(this.path(record), id);
       if (pkg.digest !== record.digest) throw new HostedPluginError("resource_changed", "Installed package integrity changed");
-      if (!satisfiesHost(this.hostVersion, pkg.manifest.hostRange)) throw new HostedPluginError("incompatible_plugin", "Installed plugin is incompatible with this host");
+      if (!satisfiesHost(this.hostVersion, pkg.manifest.hostRange) || !plugin.requiredCapabilities.every(c => pkg.manifest.capabilities.includes(c))) throw new HostedPluginError("incompatible_plugin", "Installed plugin range/capabilities are incompatible with this host");
       return pkg;
     });
   }

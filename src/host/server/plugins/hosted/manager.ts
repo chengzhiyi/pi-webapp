@@ -272,14 +272,49 @@ export class HostedPluginManager {
     let succeeded = true;
     for (const plugin of this.installer.catalog) {
       const versions = inventory.versions[plugin.id]; if (!versions?.length) continue;
-      if (policies[plugin.id]?.updatePolicy === "pinned") continue;
-      try { await this.manage(plugin.id, policies[plugin.id]?.updatePolicy === "automatic" ? "update" : "check"); }
+      try {
+        const policy = policies[plugin.id];
+        if (policy?.updatePolicy === "pinned") {
+          await this.installer.load(plugin.id, policy.pinnedVersion!);
+          await this.recordCheck(plugin.id, { status: "up-to-date", version: policy.pinnedVersion,
+            message: "Pinned version retained; change the pin to participate in host-linked updates" });
+          continue;
+        }
+        // Independent notification policy does not opt out of the host/plugin pairing contract.
+        const result = await this.manage(plugin.id, "update");
+        if (result && typeof result === "object" && "pending" in result && result.pending) succeeded = false;
+      }
       catch (error) {
-        succeeded = false; this.errors.set(plugin.id, failure(error));
-        await this.recordCheck(plugin.id, { status: "failed", message: failure(error).message });
+        succeeded = false;
+        const detail = failure(error);
+        if (policies[plugin.id]?.updatePolicy === "pinned") detail.message += "; pinned version requires action: change the pin or retain a compatible host";
+        this.errors.set(plugin.id, detail);
+        await this.recordCheck(plugin.id, { status: "failed", message: detail.message });
       }
     }
     return succeeded;
+  }
+  /** Conservative pre-selection gate: no registry/install/activation against a future host.
+   * A pair needing migration must be prepared by a full paired updater, not guessed here.
+   */
+  async validateHostUpdate(hostVersion: string): Promise<boolean> {
+    const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog });
+    const inventory = await this.installer.inventory(), policies = await this.policies();
+    let installed = false;
+    for (const plugin of this.installer.catalog) {
+      const versions = inventory.versions[plugin.id];
+      if (!versions?.length) continue;
+      installed = true;
+      const active = await this.supervisor(plugin.id).broker.active();
+      const latest = versions.map(v => v.version).sort((a, b) => compareVersions(b, a))[0]!;
+      const selected = new Set([latest, ...(active ? [active.version] : []), ...(policies[plugin.id]?.pinnedVersion ? [policies[plugin.id]!.pinnedVersion!] : []),
+        ...(this.supervisor(plugin.id).pendingVersion ? [this.supervisor(plugin.id).pendingVersion!] : [])]);
+      for (const version of selected) {
+        try { await target.load(plugin.id, version); }
+        catch (error) { throw new HostedPluginError("host_pair_required", `Host update blocked for ${plugin.id}@${version}: ${failure(error).message}. Prepare a compatible pair or change the pin explicitly; installed code/data retained`); }
+      }
+    }
+    return installed;
   }
   async shutdown(): Promise<void> {
     this.closing = true;

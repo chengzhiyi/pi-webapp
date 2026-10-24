@@ -25,7 +25,7 @@ async function worker(root: string) {
   return outfile;
 }
 
-test("notify never downloads; automatic preserves disabled/absent; pin is explicit and diagnostics survive restart", async t => {
+test("independent notify never downloads; default host-linked preserves disabled/absent and pin intent", async t => {
   const root = await temporary(t), first = integrationFixture(), next = integrationFixture("0.2.0");
   let registry = 0, downloads = 0;
   const options = { root, hostVersion: "0.1.29", workerEntry: "unused", hooks, fetch: (async url => {
@@ -35,7 +35,7 @@ test("notify never downloads; automatic preserves disabled/absent; pin is explic
   let manager = new HostedPluginManager(options);
   assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(registry, 0);
   await manager.installer.installArchive(id, first.bytes, integrity(first.bytes), "0.1.0");
-  assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(registry, 1); assert.equal(downloads, 0);
+  await manager.manage(id, "check"); assert.equal(registry, 1); assert.equal(downloads, 0);
   assert.equal((await manager.inventory()).plugins[0]!.availableVersion, "0.2.0");
   manager = new HostedPluginManager(options);
   assert.equal((await manager.inventory()).plugins[0]!.updateDiagnostic?.status, "available");
@@ -43,7 +43,8 @@ test("notify never downloads; automatic preserves disabled/absent; pin is explic
   await manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
   await manager.reconcileHostUpgrade(); assert.equal(registry, 1);
   await assert.rejects(manager.manage(id, "enable", "0.2.0"), /pin/i);
-  await manager.setPolicy(id, { updatePolicy: "automatic" });
+  assert.match((await manager.inventory()).plugins[0]!.updateDiagnostic!.message, /Pinned version retained/);
+  await manager.setPolicy(id, { updatePolicy: "notify" });
   assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(downloads, 1);
   const card = (await manager.inventory()).plugins[0]!;
   assert.equal(card.installed, true); assert.equal(card.enabled, false); assert.equal(card.activeVersion, null);

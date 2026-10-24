@@ -89,8 +89,12 @@ and requires fresh authenticated registration, so old clients cannot edit withou
 re-handshake. Host-version reconciliation is recorded atomically in
 `host-version.json` once per host version. It only considers installed plugins,
 preserves disabled intent and pin choices, and leaves compatible installed code on
-registry failure. Failed offline reconciliation is not automatically retried every
-startup; explicit management/check is available.
+registry failure. Failed offline reconciliation retries on the next process startup (not in a busy
+loop); successful unchanged host versions do not repeat the registry check.
+Host-linked startup synchronizes installed stable compatible versions even with
+independent `notify` policy. Pins are validated and retained with visible required
+action on incompatibility; pending editor activation does not mark reconciliation
+complete. See [host-linked update scope](hosted-linked-update.md).
 
 Quit drains all retained Agent batches and frame barriers before worker shutdown;
 enabled installed intent remains persisted. Dirty/disconnected frames can refuse
@@ -131,7 +135,7 @@ worker debug-ID proxy's missing default-export warning. Current default/package
 results supersede the older milestone counts above; see the migration report.
 
 Not claimed: full management browser/TUI interaction, real-provider concurrency,
-Electron/OS packaging matrix, final Excalidraw parity or release acceptance. The
-manager's host-upgrade method currently attempts updates for non-pinned installed
-items (including notify policy); policy UX and signed catalog/recovery/GC limits
-remain parent-owned acceptance findings, not silently fixed in bootstrap.
+Electron/OS packaging matrix, final Excalidraw parity or release acceptance. ORI-36
+supersedes the earlier policy behavior: host-linked synchronization and independent
+notification are explicitly separated in the UI. Signed catalog, full native
+paired updates and recovery/GC release limits remain explicit gates.
