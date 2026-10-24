@@ -90,7 +90,9 @@ test("notification is independent of host-linked default", () => {
 
 test("exact external 0.1.0 archive remains compatible across stable host startup and offline linked retry", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async t => {
   const options = await fixture(t), bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "6eee13fe4dab6d68b20d17a0fe68741eba79dc085097149e609678b667c09f31");
+  // Default pins this integrated source's independently built archive; other exact
+  // builds must supply their recorded digest rather than bypass integrity checks.
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), process.env.HOSTED_EXCALIDRAW_SHA256 ?? "9a9b92631e5a534c1fda83e7bbeb5743d1de20be91bda39f6984a01bb1e71a68");
   let calls = 0, online = false, actualManifest: unknown;
   const opts = { ...options, hostVersion: "0.1.29", ownerId: "local", resolveSession: () => null, fetch: (async url => {
     assert.equal(String(url).endsWith(".tgz"), false); calls++;

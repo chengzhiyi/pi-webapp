@@ -12,16 +12,23 @@ test("A06: 100 grouped elements and native viewport survive generation switch wi
     const canvas = editor.locator("canvas.interactive");
     await canvas.click(); await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.press("ArrowRight"); await page.keyboard.press("Escape");
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements[0].x).not.toBe(0);
+    const moved = await h.action("get", { id: created.id });
     await page.keyboard.press("ControlOrMeta+-");
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.appState.zoom?.value).toBeLessThan(moved.scene.appState.zoom.value);
+    const zoomed = await h.action("get", { id: created.id });
     // Native panning, not an injected scene or a fabricated flush acknowledgement.
     const bounds = (await canvas.boundingBox())!;
     await page.keyboard.down("Space"); await page.mouse.move(bounds.x + 200, bounds.y + 400); await page.mouse.down(); await page.mouse.move(bounds.x + 240, bounds.y + 440, { steps: 5 }); await page.mouse.up(); await page.keyboard.up("Space");
+    // A06 requires a synchronized scene. Reading before the native debounce completes
+    // compares an older viewport with the correctly flushed migration checkpoint.
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.appState.scrollX).not.toBe(zoomed.scene.appState.scrollX);
     const before = await h.action("get", { id: created.id });
     expect(before.scene.elements).toHaveLength(100); expect(before.scene.elements.every((e: any) => e.groupIds.length === 1)).toBe(true);
     const boot = await page.evaluate(() => ((window as any).__parityBoot = crypto.randomUUID()));
     const generation = (await h.card()).generation!;
     h.upgrade(); await h.manage("update", { reopenEditors: true });
     await expect.poll(async () => (await h.card()).generation).toBe(generation + 1);
+    await expect(page.locator('iframe[title="Excalidraw editor"]')).toHaveAttribute("src", new RegExp(`generation=${generation + 1}(?:&|$)`));
     await expect(canvas).toBeVisible();
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene).toEqual(before.scene);
     expect((await h.action("get", { id: created.id })).revision).toBe(before.revision);
@@ -65,6 +72,10 @@ test("A09: candidate reject/apply and stale hand-edit protection through actual 
     const drawing = boxes(); drawing.elements = JSON.stringify(JSON.parse(drawing.elements).map((e: any) => ({ ...e, label: { text: "保留标签" } })));
     const created = await h.tool("excalidraw_create_view", drawing); await page.goto(h.bridge.url); let editor = await h.open();
     const get = () => h.action("get", { id: created.id });
+    // Native initial-fit now persists its viewport through the same revision CAS.
+    // Start proposal tests only after that real first sync, not an arbitrary sleep.
+    await expect.poll(async () => (await get()).scene.appState.zoom?.value).toBe(1);
+    await expect.poll(async () => (await get()).scene.appState.scrollX ?? 0).not.toBe(0);
     // Trusted tool invocation reaches the actual supervisor/worker. Reuse the original
     // chat card for review; repeated SDK result frames have a separate contention test.
     const propose = async (x: number) => {
@@ -97,6 +108,8 @@ test("A09: patching an unlabeled native shape must render a review rather than c
   const h = await hostedParity(page);
   try {
     const created = await h.tool("excalidraw_create_view", boxes()); await page.goto(h.bridge.url); await h.open();
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.appState.zoom?.value).toBe(1);
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.appState.scrollX ?? 0).not.toBe(0);
     const draft = await h.action("get", { id: created.id });
     await h.tool("diagram_patch", { id: created.id, baseRevision: draft.revision, patch: { updateElements: [{ id: "box-0", x: 222 }] } });
     const review = page.frameLocator('iframe[title="Excalidraw tool"]').last();
