@@ -303,6 +303,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   shared.hosted ??= new HostedPluginIntegration({
     root: join(getAgentDir(), "pi-web", "hosted"),
     hostVersion: (JSON.parse(readFileSync(resolve(webRoot, "../../package.json"), "utf8")) as { version: string }).version,
+    packageRoot: resolve(webRoot, "../.."),
     workerEntry: resolve(webRoot, "../../dist/hosted-worker.js"),
     ownerId: `local:${process.getuid?.() ?? "host"}:${createHash("sha256").update(getAgentDir()).digest("hex")}`,
     resolveSession: id => {
@@ -499,7 +500,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
-              validateHostedPair: (version, packageRoot) => shared.hosted!.validateHostUpdate(version, packageRoot) }),
+              hostedPair: shared.hosted!.manager.hostPair }),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);

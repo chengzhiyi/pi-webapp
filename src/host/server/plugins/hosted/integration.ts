@@ -161,7 +161,9 @@ export class HostedPluginIntegration {
       if (this.recovery) throw new HostedPluginError("reconnect_required", "Startup publication failed; explicit recovery required", { status: 503 });
       const marker = join(this.options.root, "host-version.json");
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
-        if (await this.manager.reconcileHostUpgrade()) {
+        // Controlled selection already staged/admitted this exact combination offline.
+        // Do not immediately replace it with a second registry-derived startup selection.
+        if (this.manager.pairAdmitted || await this.manager.reconcileHostUpgrade()) {
           await privateDirectory(this.options.root);
           await atomicJson(marker, { version: this.options.hostVersion });
         } // Failed registry/install checks retry on the next startup, never claim reconciliation.
@@ -169,7 +171,8 @@ export class HostedPluginIntegration {
     });
     this.started = true;
   }
-  /** Refuse known incompatible selected host/plugin combinations before updater pointer writes. */
+  /** Legacy conservative compatibility check, NOT a paired updater. Production SelfUpdater
+   * uses manager.hostPair to stage and fence the complete selection/restart transaction. */
   async validateHostUpdate(version: string, packageRoot: string): Promise<void> {
     await this.enqueue(async () => {
       if (await this.manager.validateHostUpdate(version)) {

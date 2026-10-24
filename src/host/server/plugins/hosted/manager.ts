@@ -9,6 +9,8 @@ import { HostedPluginSupervisor, type HostedSwitchHooks } from "./supervisor.ts"
 import { hostedAsset, type HostedPackage } from "./resources.ts";
 import { atomicJson, boundedRead, readJson, withStorageLock } from "./storage.ts";
 import { compareVersions } from "./versions.ts";
+import { readFile } from "node:fs/promises";
+import { assertPairIdle, candidateHost, fingerprint, pairRoot, pairTransaction, pendingPair, readPair, type PairSelection } from "../../updates/hosted-pair.ts";
 
 interface Policy { updatePolicy: UpdatePolicy; pinnedVersion?: string }
 export interface UpdateDiagnostic {
@@ -18,6 +20,8 @@ export interface UpdateDiagnostic {
 export interface HostedManagerOptions {
   root: string;
   hostVersion: string;
+  /** Current application package root, supplied by production bootstrap for full startup identity. */
+  packageRoot?: string;
   workerEntry: string;
   catalog?: readonly OfficialPlugin[];
   fetch?: typeof globalThis.fetch;
@@ -45,6 +49,8 @@ export class HostedPluginManager {
   private readonly available = new Map<string, RegistryRelease>();
   private readonly assetLeases = new Map<string, Map<string, number>>();
   private closing = false;
+  private pairAdmittedValue = false;
+  get pairAdmitted(): boolean { return this.pairAdmittedValue; }
   constructor(options: HostedManagerOptions) {
     this.options = options;
     this.installer = new HostedPluginInstaller({ root: join(options.root, "packages"), hostVersion: options.hostVersion, catalog: options.catalog, fetch: options.fetch });
@@ -75,7 +81,8 @@ export class HostedPluginManager {
   private serialize<T>(id: string, run: () => Promise<T>): Promise<T> {
     this.supervisor(id);
     if (this.closing) return Promise.reject(new HostedPluginError("manager_closed", "Plugin manager is shutting down"));
-    const result = (this.operations.get(id) ?? Promise.resolve()).then(run, run);
+    const fenced = () => withStorageLock(pairRoot(this.options.root), async () => { await assertPairIdle(this.options.root); return run(); });
+    const result = (this.operations.get(id) ?? Promise.resolve()).then(fenced, fenced);
     this.operations.set(id, result);
     void result.then(() => this.errors.delete(id), error => { this.errors.set(id, failure(error)); }).finally(() => { if (this.operations.get(id) === result) this.operations.delete(id); });
     return result;
@@ -122,22 +129,57 @@ export class HostedPluginManager {
   async setPolicy(id: string, policy: Policy): Promise<void> {
     this.supervisor(id);
     if (!["notify", "automatic", "pinned"].includes(policy.updatePolicy) || policy.updatePolicy === "pinned" && !policy.pinnedVersion || policy.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(policy.pinnedVersion)) throw new HostedPluginError("invalid_input", "Invalid plugin update policy");
-    await withStorageLock(join(this.options.root, "policies"), async () => {
-      const policies = await this.policies(); policies[id] = { updatePolicy: policy.updatePolicy, ...(policy.updatePolicy === "pinned" ? { pinnedVersion: policy.pinnedVersion } : {}) };
-      await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
+    await withStorageLock(pairRoot(this.options.root), async () => {
+      await assertPairIdle(this.options.root);
+      await withStorageLock(join(this.options.root, "policies"), async () => {
+        const policies = await this.policies(); policies[id] = { updatePolicy: policy.updatePolicy, ...(policy.updatePolicy === "pinned" ? { pinnedVersion: policy.pinnedVersion } : {}) };
+        await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
+      });
     });
   }
   /** Offline startup: catalog absence never downloads editor code; failures remain visible. */
   async start(): Promise<void> {
+    await withStorageLock(pairRoot(this.options.root), () => this.startLocked());
+  }
+  private async startLocked(): Promise<void> {
+    const intent = await readPair(this.options.root);
+    let recovering = pendingPair(intent);
+    if (recovering && intent) {
+      try {
+        await this.validatePairPackages(intent.version, intent.selections);
+        if (intent.version !== this.options.hostVersion || intent.hostDigest !== await candidateHost(intent.version, intent.packageRoot) ||
+            this.options.packageRoot && intent.hostDigest !== await candidateHost(this.options.hostVersion, this.options.packageRoot) ||
+            !Buffer.from(await readFile(this.options.workerEntry)).equals(await readFile(join(intent.packageRoot, "dist", "hosted-worker.js")))) throw new Error("Running host differs from selected pair");
+      } catch (error) {
+        const message = `Required action: restart the selected compatible host or inspect host-pair/intent.json with all owners stopped. ${failure(error).message}; data retained`;
+        for (const plugin of this.installer.catalog) this.errors.set(plugin.id, failure(new HostedPluginError("host_pair_required", message)));
+        await atomicJson(join(pairRoot(this.options.root), "intent.json"), { ...intent, phase: "required-action", message });
+        // A failed/pre-pointer attempt must not make the still-compatible old host unusable.
+        // Load ONLY its current state below, never the future selection on this runtime.
+        recovering = false;
+      }
+    }
     await this.installer.inventory();
+    const startupFingerprint = fingerprint(await this.pairSnapshot());
     for (const plugin of this.installer.catalog) {
       const s = this.supervisor(plugin.id), active = await s.broker.active();
       if (!active?.enabled) continue;
       try {
-        const pkg = await this.installer.load(plugin.id, active.version);
+        const selected = recovering ? intent?.selections.find(p => p.id === plugin.id) : undefined;
+        // Never replay an old plan over a newer accepted generation/pin/disable. A crash after
+        // activation simply loads the now-current compatible version on the next startup.
+        const unchanged = selected && fingerprint(active) === fingerprint(selected.before) &&
+          intent?.fingerprint === startupFingerprint;
+        const pkg = await this.installer.load(plugin.id, unchanged ? selected.version : active.version);
+        if (unchanged && pkg.digest !== selected.digest) throw new Error("Staged plugin digest changed");
         await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
-        await this.collect(plugin.id);
-      } catch (error) { this.errors.set(plugin.id, failure(error)); }
+        if (!pendingPair(intent)) await this.collectSettled(plugin.id);
+      } catch (error) { this.errors.set(plugin.id, failure(new HostedPluginError("host_pair_required", `Required action: choose a compatible host/plugin or change pin; data retained. ${failure(error).message}`))); }
+    }
+    if (recovering && intent) {
+      await atomicJson(join(pairRoot(this.options.root), "intent.json"), { ...intent,
+        phase: this.errors.size ? "required-action" : "reconciled", message: this.errors.size ? "Startup could not admit selected combination; preserve data and inspect plugin diagnostics" : "Current compatible state admitted; no previous state restored" });
+      this.pairAdmittedValue = !this.errors.size;
     }
   }
   async inventory(): Promise<{ plugins: ManagedHostedPlugin[]; errors: string[] }> {
@@ -293,6 +335,41 @@ export class HostedPluginManager {
       }
     }
     return succeeded;
+  }
+  async pairSnapshot(): Promise<unknown> {
+    return { policies: await this.policies(), active: await Promise.all(this.installer.catalog.map(async p => [p.id, await this.supervisor(p.id).broker.active()])) };
+  }
+  get hostPair() { return pairTransaction(this.options.root, version => this.prepareHostPair(version), () => this.pairSnapshot(), (version, selections) => this.validatePairPackages(version, selections)); }
+  private async validatePairPackages(hostVersion: string, selections: PairSelection[]): Promise<void> {
+    const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog });
+    for (const selection of selections) {
+      const pkg = await target.load(selection.id, selection.version);
+      if (pkg.digest !== selection.digest) throw new HostedPluginError("host_pair_changed", "Staged plugin digest changed; selection refused");
+    }
+  }
+  private async prepareHostPair(hostVersion: string): Promise<PairSelection[]> {
+    const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog, fetch: this.options.fetch });
+    const inventory = await this.installer.inventory(), policies = await this.policies();
+    const selections: PairSelection[] = [];
+    for (const plugin of this.installer.catalog) {
+      const versions = inventory.versions[plugin.id]; if (!versions?.length) continue;
+      const active = await this.supervisor(plugin.id).broker.active();
+      if (this.supervisor(plugin.id).pendingVersion) throw new HostedPluginError("host_pair_required", "Settle pending plugin activation before host update");
+      const latest = versions.map(v => v.version).sort((a, b) => compareVersions(b, a))[0]!;
+      const policy = policies[plugin.id];
+      let pkg: HostedPackage;
+      if (policy?.updatePolicy === "pinned") pkg = await target.load(plugin.id, policy.pinnedVersion!);
+      else {
+        // Compatible local combination works offline. Fetch only when a required upgrade is missing.
+        try { pkg = await target.load(plugin.id, latest); }
+        catch {
+          const release = await target.check(plugin.id, latest);
+          pkg = await target.install(plugin.id, release);
+        }
+      }
+      selections.push({ id: plugin.id, version: pkg.version, digest: pkg.digest, before: active });
+    }
+    return selections;
   }
   /** Conservative pre-selection gate: no registry/install/activation against a future host.
    * A pair needing migration must be prepared by a full paired updater, not guessed here.
