@@ -22,7 +22,7 @@ for (const width of [1440, 390]) test(`agent tool → directly editable drawing 
   const errors: string[] = [], external: string[] = [];
   page.on("pageerror", e => errors.push(e.message));
   page.on("request", r => { if (/^https?:/.test(r.url()) && !r.url().startsWith(url.origin)) external.push(r.url()); });
-  await page.setViewportSize({ width, height: 1000 }); await page.addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
+  await page.setViewportSize({ width, height: 1000 }); await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); Reflect.deleteProperty(window, "showSaveFilePicker"); Reflect.deleteProperty(window, "showOpenFilePicker"); });
   try {
     const created = await bridge.runPluginTool(DIAGRAM_PLUGIN, cwd, "terminal-a", "view", diagramReference.elementsExample) as { id: string };
     publishDrawing(host, bridge, created, "登录流程", "excalidraw_create_view", diagramReference.elementsExample);
@@ -89,8 +89,12 @@ for (const width of [1440, 390]) test(`agent tool → directly editable drawing 
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.reload();
     await page.getByRole("button", { name: "Edit Excalidraw", exact: true }).click();
-    await nativeMenu(page, "Open workspace diagram");
-    const open = page.getByRole("dialog", { name: "Open diagram", exact: true }); await open.getByRole("textbox", { name: "Workspace path", exact: true }).fill("diagrams/login.excalidraw"); await open.getByRole("button", { name: "Open", exact: true }).click();
+    // Opening a local source uses the native file picker, not a workspace-path prompt.
+    const chooser = page.waitForEvent("filechooser"); await nativeMenu(page, "Import source");
+    await (await chooser).setFiles(join(cwd, "diagrams/login.excalidraw"));
+    await expect.poll(async () => (await get(created.id)).scene.elements.some(e => e.id === "success")).toBe(true);
+    // Official Open replaces the current scene, it does not import another diagram identity.
+    expect((await action<DiagramDraft[]>("list", {})).length).toBe(1);
     await expect(panel.locator(".excalidraw canvas.interactive")).toBeVisible();
     expect(errors).toEqual([]); expect(external).toEqual([]);
   } finally { await page.close(); await bridge.close(); await rm(cwd, { recursive: true, force: true }); }

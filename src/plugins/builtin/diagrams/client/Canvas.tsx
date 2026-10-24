@@ -1,24 +1,26 @@
 import "./canvas-env.ts";
 import { useEffect, useRef, useState } from "react";
 import { CaptureUpdateAction, Excalidraw, MainMenu, exportToBlob, exportToSvg, restoreElements } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI, NormalizedZoomValue } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement, OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import { validateScene, type DiagramScene } from "../contract/diagrams.ts";
 export { materialize } from "./scene-adapter.ts";
 
+import { useDiagramTheme } from "./theme.ts";
+
 function native(scene: DiagramScene) { return restoreElements(scene.elements as unknown as ExcalidrawElement[], null); }
-export async function thumbnail(scene: DiagramScene) {
+export async function thumbnail(scene: DiagramScene, dark = false) {
   await document.fonts.ready;
-  const svg = await exportToSvg({ elements: native(scene).filter(e => !e.isDeleted), appState: { ...scene.appState, exportBackground: true, exportWithDarkMode: false }, files: {}, exportPadding: 32, embedFonts: true });
+  const svg = await exportToSvg({ elements: native(scene).filter(e => !e.isDeleted), appState: { ...scene.appState, exportBackground: true, exportWithDarkMode: dark }, files: {}, exportPadding: 32, embedFonts: true });
   return new Blob([svg.outerHTML], { type: "image/svg+xml" });
 }
 export async function png(scene: DiagramScene, transparent: boolean) {
   await document.fonts.ready;
   return exportToBlob({ elements: native(scene).filter(e => !e.isDeleted), appState: { ...scene.appState, exportBackground: !transparent, exportWithDarkMode: false }, files: {}, mimeType: "image/png", maxWidthOrHeight: 4096 });
 }
-export default function Canvas({ scene, readOnly, locale, onChange, onError, onSave, onOpen, onImport, onRecover, onExport, onDownload, saveStatus }: { scene: DiagramScene; readOnly: boolean; locale: "zh" | "en"; onChange(scene: DiagramScene): void; onError(message: string): void; onSave(): void; onOpen(): void; onImport(): void; onRecover(): void; saveStatus: string; onExport(transparent: boolean): void; onDownload(): void }) {
-  const t = (zh: string, en: string) => locale === "zh" ? zh : en;
+export default function Canvas({ scene, readOnly, locale, onChange, onError }: { scene: DiagramScene; readOnly: boolean; locale: "zh" | "en"; onChange(scene: DiagramScene): void; onError(message: string): void }) {
+  const theme = useDiagramTheme();
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const last = useRef(JSON.stringify(scene));
   const lastValid = useRef(scene);
@@ -40,9 +42,11 @@ export default function Canvas({ scene, readOnly, locale, onChange, onError, onS
     }
   }, [api, scene]);
   useEffect(() => {
-    if (!api) return;
+    // Fitting an empty canvas zooms to the native maximum. Start blank drawings at
+    // 100%; only fit existing content, without magnifying small drawings above 100%.
+    if (!api || !scene.elements.some(e => !e.isDeleted)) return;
     let second = 0;
-    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => api.scrollToContent(native(scene), { fitToViewport: true })); });
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => api.scrollToContent(native(scene), { fitToViewport: true, maxZoom: 1 })); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [api]);
   const change = (elements: readonly OrderedExcalidrawElement[], background: string) => {
@@ -54,26 +58,25 @@ export default function Canvas({ scene, readOnly, locale, onChange, onError, onS
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
       // Unsupported drops/shortcuts must not leave a different, unsaveable picture on screen.
-      queueMicrotask(() => api?.updateScene({ elements: native(lastValid.current), appState: lastValid.current.appState, captureUpdate: CaptureUpdateAction.NEVER }));
+      queueMicrotask(() => api?.updateScene({ elements: native(lastValid.current), appState: { ...lastValid.current.appState, fileHandle: null }, captureUpdate: CaptureUpdateAction.NEVER }));
     }
   };
-  return <Excalidraw excalidrawAPI={setApi} initialData={{ elements: native(scene), appState: { ...scene.appState, currentItemFontFamily: 5 }, scrollToContent: true }}
-    langCode={locale === "zh" ? "zh-CN" : "en"} viewModeEnabled={readOnly} aiEnabled={false} validateEmbeddable={false} handleKeyboardGlobally={false}
+  return <Excalidraw excalidrawAPI={setApi} initialData={{ elements: native(scene), appState: { ...scene.appState, currentItemFontFamily: 5, zoom: { value: 1 as NormalizedZoomValue } }, scrollToContent: false }}
+    langCode={locale === "zh" ? "zh-CN" : "en"} theme={theme} viewModeEnabled={readOnly} aiEnabled={false} validateEmbeddable={false} handleKeyboardGlobally={false}
     onLinkOpen={(_e, event) => event.preventDefault()} onPaste={() => false}
-    UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false } }}
+    UIOptions={{ canvasActions: { export: { saveFileToDisk: true }, toggleTheme: false }, tools: { image: false } }}
     onChange={(elements, state) => change(elements, state.viewBackgroundColor)}>
     <MainMenu>
-      <MainMenu.Item disabled>{saveStatus}</MainMenu.Item>
-      <MainMenu.Item onSelect={onOpen}>{t("打开工作区图稿", "Open workspace diagram")}</MainMenu.Item>
-      <MainMenu.Item onSelect={onImport}>{t("导入源文件", "Import source")}</MainMenu.Item>
-      <MainMenu.Item onSelect={onRecover}>{t("恢复本地备份", "Recover local backup")}</MainMenu.Item>
-      <MainMenu.Item onSelect={onSave}>{t("保存 / 另存到工作区", "Save / Save as to workspace")}</MainMenu.Item>
-      <MainMenu.Item onSelect={onDownload}>{t("下载源文件", "Download source")}</MainMenu.Item>
+      <MainMenu.DefaultItems.LoadScene />
+      <MainMenu.DefaultItems.SaveToActiveFile />
+      <MainMenu.DefaultItems.Export />
+      <MainMenu.DefaultItems.SaveAsImage />
+      <MainMenu.DefaultItems.SearchMenu />
+      <MainMenu.DefaultItems.CommandPalette />
+      <MainMenu.DefaultItems.Help />
+      <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
-      <MainMenu.Item onSelect={() => onExport(false)}>{t("导出 PNG", "Export PNG")}</MainMenu.Item>
-      <MainMenu.Item onSelect={() => onExport(true)}>{t("导出透明底 PNG", "Export transparent PNG")}</MainMenu.Item>
-      <MainMenu.Separator />
-      <MainMenu.DefaultItems.ToggleTheme /><MainMenu.DefaultItems.ChangeCanvasBackground />
+      <MainMenu.DefaultItems.ChangeCanvasBackground />
     </MainMenu>
   </Excalidraw>;
 }

@@ -11,6 +11,21 @@ test("raw drawing accepts inert compact elements and rejects external, malformed
   assert.deepEqual(partialDrawing("not an array"), []);
 });
 
+test("compact drawing groups accept normal IDs without weakening group validation", async () => {
+  for (const groupIds of [[], ["group-entry"], ["Layer_2", "outer-group-123"], ["a".repeat(80)], ["核心层-1", "数据_2", "a".repeat(100)], Array.from({ length: 10 }, (_, i) => `layer-${i}`)]) {
+    const grouped = [{ ...elements[0], groupIds }];
+    assert.deepEqual(validateDrawing(grouped), grouped);
+    assert.deepEqual(validateDrawing(JSON.stringify(grouped)), grouped);
+    const store = new DiagramStore();
+    const result = store.tool("/cwd", "session", "view", { elements: JSON.stringify(grouped) }) as { id: string };
+    const draft = await store.action("/cwd", "session", "get", { id: result.id }, () => {}) as DiagramDraft;
+    assert.deepEqual(draft.candidate?.elements?.[0]?.groupIds, groupIds);
+  }
+  for (const groupIds of [null, "group", [null], [42], [""], ["a".repeat(101)], ["a/b"], ["a.b"], ["a b"], ["\\\\"], ["a\nb"], Array(11).fill("group")]) {
+    assert.throws(() => validateDrawing([{ ...elements[0], groupIds }]), /元素分组无效/);
+  }
+});
+
 test("new view initializes automatically only once; edited drawings always keep review and revision protection", async () => {
   const store = new DiagramStore(), guard = () => {};
   const result = store.tool("/cwd", "session", "view", { elements: JSON.stringify(elements), title: "图" }) as { id: string; status: string };

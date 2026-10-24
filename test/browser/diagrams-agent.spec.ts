@@ -41,7 +41,7 @@ test("main chat drives SDK tools and the native editor; next prompt waits for ma
     const host: BridgeHost = { ...template, snapshot: () => sessions.snapshot(), models: () => [{ provider: model.provider, id: model.id, name: model.name }],
       send: (_id, text, images, correlation, delivery) => { sent++; return sessions.send(text, images, correlation, delivery); }, abort: () => sessions.stop() };
     bridge = await startBridge(host, new URL("../../web/dist/", import.meta.url).pathname);
-    await page.addInitScript(() => localStorage.setItem("pi-web-locale", "en")); await page.goto(bridge.url);
+    await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); Reflect.deleteProperty(window, "showSaveFilePicker"); Reflect.deleteProperty(window, "showOpenFilePicker"); }); await page.goto(bridge.url);
     const composer = page.getByRole("textbox", { name: "Send a message to the current Pi session", exact: true });
     await composer.fill("请画一个中文验证码登录流程"); await composer.press("Enter");
     const artifact = page.getByRole("article", { name: "Diagram: 登录流程", exact: true });

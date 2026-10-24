@@ -14,7 +14,7 @@ export interface DiagramScene { type: "excalidraw"; version: 2; source: string; 
 export interface Candidate { id: string; baseRevision: number; graph?: DiagramGraph; patch?: DiagramPatch; elements?: Record<string, unknown>[] }
 export interface DiagramDraft { id: string; title: string; revision: number; scene: DiagramScene; path: string | null; diskHash: string | null; savedRevision: number | null; candidate: Candidate | null }
 export type DiagramSummary = Pick<DiagramDraft, "id" | "title" | "revision" | "path" | "savedRevision"> & { pending: boolean };
-export class DiagramError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.name = "DiagramError"; this.status = status; } }
+export class DiagramError extends Error { status: number; readonly reason?: string; constructor(message: string, status = 400, reason?: string) { super(message); this.name = "DiagramError"; this.status = status; this.reason = reason; } }
 export function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
 function fail(message: string): never { throw new DiagramError(message); }
 export function identifier(value: unknown): string { return typeof value === "string" && /^[\w-]{1,80}$/.test(value) ? value : fail("图形 ID 无效"); }
@@ -153,7 +153,7 @@ export function validateDrawing(value: unknown): Record<string, unknown>[] {
       if (!record(binding) || Object.keys(binding).some(k => k !== "id")) fail("端点绑定无效");
       identifier(binding.id);
     }
-    if (item.groupIds !== undefined && (!Array.isArray(item.groupIds) || item.groupIds.length > 10 || item.groupIds.some(id => typeof id !== "string" || !/^[\\w-]{1,80}$/.test(id)))) fail("元素分组无效");
+    if (item.groupIds !== undefined && (!Array.isArray(item.groupIds) || item.groupIds.length > 10 || item.groupIds.some(id => typeof id !== "string" || id.length > 100 || !/^[\p{L}\p{N}_-]{1,100}$/u.test(id)))) fail("元素分组无效：groupIds 须为最多 10 个非空文字/数字/下划线/连字符 ID，每个不超过 100 字符");
     if (["arrow", "line"].includes(String(item.type)) && (!Array.isArray(item.points) || item.points.length < 2 || item.points.length > 100 || item.points.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 100000)))) fail("路径坐标无效");
     return structuredClone(result);
   });
@@ -186,7 +186,7 @@ export function validateScene(value: unknown): DiagramScene {
   const elements = value.elements as SceneElement[];
   const ids: string[] = [];
   for (const e of elements) {
-    if (!record(e) || typeof e.id !== "string" || !e.id || e.id.length > 100 || !["rectangle", "ellipse", "diamond", "text", "line", "arrow", "freedraw"].includes(e.type as string)) fail("场景包含不支持的元素");
+    if (!record(e) || typeof e.id !== "string" || !e.id || e.id.length > 100 || !["rectangle", "ellipse", "diamond", "text", "line", "arrow", "freedraw", "frame"].includes(e.type as string)) fail("场景包含不支持的元素");
     ids.push(e.id);
     for (const key of ["x", "y", "width", "height", "angle", "fontSize", "strokeWidth"] as const) if (e[key] !== undefined && (typeof e[key] !== "number" || !Number.isFinite(e[key]) || Math.abs(e[key] as number) > 100000)) fail("图形数值无效");
     for (const key of ["x", "y", "width", "height"] as const) if (typeof e[key] !== "number") fail("图形尺寸缺失");
@@ -200,6 +200,8 @@ export function validateScene(value: unknown): DiagramScene {
       if (!record(b) || typeof b.elementId !== "string" || ["focus", "gap"].some(k => typeof b[k] !== "number" || !Number.isFinite(b[k]))) fail("连线绑定无效");
     }
     if (e.containerId != null && typeof e.containerId !== "string") fail("文本绑定无效");
+    if (e.frameId != null && (typeof e.frameId !== "string" || !elements.some(frame => frame.id === e.frameId && frame.type === "frame"))) fail("画框引用无效");
+    if (e.type === "frame" && e.name != null && (typeof e.name !== "string" || e.name.length > 2000)) fail("画框名称无效");
     if (e.fontFamily !== undefined && (typeof e.fontFamily !== "number" || !Number.isInteger(e.fontFamily) || e.fontFamily < 1 || e.fontFamily > 1000)) fail("字体无效");
     for (const key of ["strokeColor", "backgroundColor", "fillStyle", "strokeStyle"] as const) if (e[key] !== undefined && (typeof e[key] !== "string" || e[key].length > 100)) fail("图形样式无效");
     if (e.points !== undefined && (!Array.isArray(e.points) || e.points.length > 2000 || e.points.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 100000)))) fail("路径坐标无效");

@@ -13,7 +13,7 @@ import type { CommandOption, ModelOption } from "./pi-bridge.ts";
 import { PiMarkdown } from "./PiMarkdown.tsx";
 import { ReasoningRow } from "../../../web/src/ui/chat/ReasoningRow.tsx";
 import { ToolRow, TurnActions, TurnProcess } from "../../../web/src/ui/chat/ProcessRow.tsx";
-import { conversationTurns, toolResults, type ConversationTurn } from "./conversation-turns.ts";
+import { conversationTurns, toolResults, toolViewCalls, type ConversationTurn } from "./conversation-turns.ts";
 import { PiTrajectory } from "../../../web/src/ui/trajectory/PiTrajectory.tsx";
 import { PiModelSelect } from "../../../web/src/ui/conversation/PiModelSelect.tsx";
 import { PiAttachmentItem } from "../../../web/src/ui/conversation/PiAttachmentItem.tsx";
@@ -123,7 +123,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
         {process.map(({ message, block, index }) => <PiMessage key={`${message.id}-${index}`} message={{ ...message, blocks: [block] }} results={results} loadImage={loadImage} running={message.id === "stream"} cwd={cwd} onInspect={onInspect} />)}
       </div>}
     </>}
-    {turn.messages.filter(message => message.role === "assistant").flatMap(message => message.blocks.filter(block => block.kind === "toolCall" && viewTools.includes(block.toolName ?? "")).map((call, index) => <div key={call.toolCallId ?? `${message.id}-${index}`} data-tool-view={call.toolName}>{renderToolView?.(call, call.toolCallId ? results.get(call.toolCallId) : undefined, running && !results.has(call.toolCallId ?? ""))}</div>))}
+    {toolViewCalls(turn.messages, viewTools).map(({ key, call }) => <div key={key} data-tool-view={call.toolName}>{renderToolView?.(call, call.toolCallId ? results.get(call.toolCallId) : undefined, running && !results.has(call.toolCallId ?? ""))}</div>)}
     {answerBlocks.length > 0 && lastAssistant && <PiMessage message={{ ...lastAssistant, blocks: answerBlocks }} results={results} loadImage={loadImage} running={lastAssistant.id === "stream"} />}
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
     {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>{t("模型请求失败", "Model request failed")}</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}

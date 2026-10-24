@@ -1,4 +1,4 @@
-import type { ViewMessage, ViewUsage } from "./pi-bridge.ts";
+import type { ViewBlock, ViewMessage, ViewUsage } from "./pi-bridge.ts";
 
 export interface ConversationTurn {
   id: string;
@@ -30,6 +30,22 @@ export function conversationTurns(messages: ViewMessage[]): ConversationTurn[] {
     }
   }
   return turns;
+}
+
+/** A stream snapshot can briefly overlap its committed message. Tool identity, not
+ * identical arguments or tool name, owns the view. Separate calls remain separate. */
+export function toolViewCalls(messages: ViewMessage[], tools: readonly string[]): { key: string; call: ViewBlock }[] {
+  const calls = new Map<string, { key: string; call: ViewBlock; streaming: boolean }>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    message.blocks.forEach((call, index) => {
+      if (call.kind !== "toolCall" || !tools.includes(call.toolName ?? "")) return;
+      const key = call.toolCallId ?? `${message.id}-${index}`;
+      const prior = calls.get(key), streaming = message.id === "stream";
+      if (!prior || prior.streaming || !streaming) calls.set(key, { key, call, streaming });
+    });
+  }
+  return [...calls.values()].map(({ key, call }) => ({ key, call }));
 }
 
 export function toolResults(messages: ViewMessage[]): Map<string, ViewMessage> {

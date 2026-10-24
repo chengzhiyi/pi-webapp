@@ -1,26 +1,57 @@
-.editor { position: relative; height: 100%; min-height: 0; overflow: hidden; background: white; }
-.canvas { height: 100%; width: 100%; min-height: 180px; background: white; }
+.editor, .artifact { --diagram-bg: var(--dsw-alias-bg-layer-1, #fff); --diagram-fg: var(--dsw-alias-label-primary, #1e1e1e); --diagram-muted: var(--dsw-alias-label-secondary, #64748b); --diagram-border: var(--dsw-alias-border-l2, #dce0e7); color: var(--diagram-fg); background: var(--diagram-bg); }
+.editor { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+.canvas { height: 100%; width: 100%; min-height: 180px; }
 .canvas :global(.excalidraw) { height: 100%; }
 /* Local-only editing: no remote libraries, uploads, embedded web pages or external assets. */
-.canvas :global(.default-sidebar-trigger), .canvas :global(.library-button), .canvas :global([data-testid='toolbar-embeddable']), .canvas :global([data-testid='toolbar-image']) { display: none !important; }
-.hidden { display: none; }
-.artifact { margin: 14px 0; width: 100%; min-width: 0; border: 1px solid var(--border-color, #dce0e7); border-radius: 12px; overflow: hidden; background: white; }
-.toolHeader { display: flex; align-items: center; gap: 9px; padding: 12px 14px; color: var(--text-secondary, #64748b); border-bottom: 1px solid var(--border-color, #eceef2); font-size: 13px; }
-.toolHeader > span { color: #50b95a; }
-.previewViewport { position: relative; max-height: 540px; min-height: 180px; overflow: auto; background: white; }
+.canvas :global(.default-sidebar-trigger), .canvas :global(.library-button), .canvas :global(.App-toolbar__extra-tools-dropdown [data-testid='toolbar-frame'] + [data-testid='toolbar-embeddable']), .canvas :global([data-testid='toolbar-image']) { display: none !important; }
+/* Mermaid shares toolbar-embeddable with web embeds in pinned 0.18.1.
+   Only hide the web-embed item immediately after Frame, not both shared IDs. Keep the host-requested help icon hidden;
+   native Help remains available in the main menu. */
+.canvas :global(.App-toolbar__extra-tools-dropdown .dropdown-menu-container > div:not([class])), .canvas :global(.help-icon) { display: none !important; }
+.artifact { margin: 14px 0; width: 100%; min-width: 0; border: 1px solid var(--diagram-border); border-radius: 12px; overflow: hidden; }
+.toolHeader { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--diagram-muted); border-bottom: 1px solid var(--diagram-border); font-size: 12px; }
+.toolHeader button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 6px; border-radius: 6px; }
+.toolHeader button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.toolHeader button:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+.toolHeader .previewToggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left; color: var(--diagram-fg); }
+.previewToggle > svg { flex-shrink: 0; }
+.toolTitle { font-weight: 500; white-space: nowrap; }
+.toolStatus { font-size: 11px; color: var(--diagram-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.previewChevron { margin-left: auto; transition: transform .15s ease; }
+.previewChevron[data-collapsed='true'] { transform: rotate(-90deg); }
+.toolHeader .parametersButton { flex-shrink: 0; border: 1px solid var(--diagram-border); padding: 5px 9px; color: var(--diagram-fg); }
+.parametersDialog { width: min(760px, 100%); max-height: min(720px, calc(100dvh - 48px)); }
+.parametersContent { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.toolDetails { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 12px; }
+.toolDetails h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
+.toolDetails pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 18px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); user-select: text; }
+.toolDetails pre:last-child { margin-bottom: 0; }
+.toolDetails pre:focus-visible { outline: 2px solid #818cf8; outline-offset: -2px; }
+.artifact > [hidden] { display: none; }
+.previewViewport { position: relative; max-height: 540px; min-height: 180px; overflow: auto; background: var(--diagram-bg); }
 .previewViewport img, .streamImage { display: block; width: 100%; height: auto; }
-.previewPlaceholder { display: grid; place-items: center; min-height: 180px; padding: 20px; font-size: 12px; color: #64748b; }
+.previewPlaceholder { display: grid; place-items: center; min-height: 180px; padding: 20px; font-size: 12px; color: var(--diagram-muted); }
 .editButton { position: absolute; top: 12px; right: 12px; box-shadow: 0 1px 4px #0001; }
-.editButton, .review button, .dialog button, .recovery button, .error button { padding: 7px 11px; border: 1px solid #dce0e7; border-radius: 7px; color: #1e1e1e; background: white; cursor: pointer; font: inherit; font-size: 12px; }
+.editButton, .review button, .dialog button, .recovery button, .error button { padding: 7px 11px; border: 1px solid var(--diagram-border); border-radius: 7px; color: var(--diagram-fg); background: var(--diagram-bg); cursor: pointer; font: inherit; font-size: 12px; }
 .editButton:focus-visible, .review button:focus-visible, .dialog button:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
-.review { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #eceef2; color: #64748b; font-size: 12px; }
+.review { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--diagram-border); color: var(--diagram-muted); font-size: 12px; }
 .review > span { flex: 1; }
 .review button:disabled { opacity: .5; cursor: default; }
 .modalBackdrop { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; padding: 18px; background: #0003; }
-.dialog { box-sizing: border-box; width: min(440px, 100%); padding: 22px; border-radius: 12px; color: #1e1e1e; background: white; box-shadow: 0 8px 40px #0002; font-size: 14px; }
+.dialog { box-sizing: border-box; width: min(440px, 100%); padding: 22px; border-radius: 12px; color: var(--diagram-fg); background: var(--diagram-bg); box-shadow: 0 8px 40px #0002; font-size: 14px; }
 .dialog label { display: flex; flex-direction: column; gap: 8px; }
-.dialog input { padding: 10px; min-width: 0; border: 1px solid #dce0e7; border-radius: 7px; font: inherit; }
+.dialog input { padding: 10px; min-width: 0; border: 1px solid var(--diagram-border); border-radius: 7px; font: inherit; background: var(--diagram-bg); color: var(--diagram-fg); }
 .dialog > div { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
-.dialog p, .inlineError { color: #a52020; font-size: 12px; padding: 8px; overflow-wrap: anywhere; }
-.error, .recovery { position: absolute; z-index: 5; bottom: 56px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; color: #713f12; font-size: 12px; }
-@media (max-width: 600px) { .previewViewport { max-height: 380px; } .toolHeader { padding: 10px; } }
+.dialog p, .inlineError { color: var(--dsw-alias-label-primary); font-size: 12px; padding: 8px; overflow-wrap: anywhere; }
+.error, .recovery { position: absolute; z-index: 5; bottom: 56px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1px solid var(--diagram-border, #dce0e7); border-radius: 8px; background: var(--diagram-bg, var(--dsw-alias-bg-layer-1)); color: var(--diagram-fg, var(--dsw-alias-label-primary)); font-size: 12px; }
+/* A tool error is part of the conversation flow, not an overlay at the page bottom. */
+.toolError { position: static; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); white-space: pre-wrap; }
+@media (max-width: 600px) {
+  .previewViewport { max-height: 380px; }
+  .toolHeader { padding: 8px; }
+  .toolHeader .previewToggle { display: grid; grid-template-columns: 18px minmax(0, 1fr) 14px; gap: 4px; padding: 4px; }
+  .toolHeader .parametersButton { font-size: 11px; padding: 5px 7px; }
+  .toolTitle { overflow: hidden; text-overflow: ellipsis; }
+  .toolStatus { grid-column: 2 / 4; white-space: normal; overflow: visible; }
+  .previewChevron { grid-column: 3; grid-row: 1; }
+}

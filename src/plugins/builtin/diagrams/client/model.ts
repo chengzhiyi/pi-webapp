@@ -2,10 +2,13 @@ import { validateScene, type DiagramDraft, type DiagramScene } from "../contract
 import { HttpError } from "../../../../host/client/http-error.ts";
 import { diagramAction } from "./api.ts";
 const backupKey = (session: string, id: string) => `pi-diagram:${session}:${id}`;
-export interface DiagramState { draft: DiagramDraft | null; scene: DiagramScene | null; unsynced: boolean; busy: boolean; error: string; recovered: DiagramScene | null }
+export interface DiagramState { draft: DiagramDraft | null; scene: DiagramScene | null; unsynced: boolean; busy: boolean; error: string; recovered: DiagramScene | null; unavailable: boolean }
+function unavailable(error: unknown) {
+  return error instanceof HttpError && error.status === 404 && (error.reason === "diagram_unavailable" || (!error.reason && error.message === "图稿不属于当前会话或服务已重启，请重新打开已保存文件"));
+}
 /** Native scene is authoritative. Sync is serialized; old responses never replace newer hand edits. */
 export class DiagramModel {
-  private state: DiagramState = { draft: null, scene: null, unsynced: false, busy: false, error: "", recovered: null };
+  private state: DiagramState = { draft: null, scene: null, unsynced: false, busy: false, error: "", recovered: null, unavailable: false };
   private listeners = new Set<() => void>();
   private timer?: ReturnType<typeof setTimeout>;
   private queue: Promise<unknown> = Promise.resolve();
@@ -22,7 +25,17 @@ export class DiagramModel {
     try { localStorage.setItem(backupKey(this.sessionId, this.id), JSON.stringify(scene)); }
     catch { this.set({ error: "浏览器草稿备份失败，请尽快保存或下载源文件。" }); }
   }
+  /** Recovery is explicit and always imports into a new ID; never overwrite the unavailable draft. */
+  recoveryScene(): DiagramScene | null {
+    if (this.state.scene) return this.state.scene;
+    try { const raw = localStorage.getItem(backupKey(this.sessionId, this.id)); return raw ? validateScene(JSON.parse(raw)) : null; }
+    catch { return null; }
+  }
+  private failure(error: unknown) {
+    this.set({ error: error instanceof Error ? error.message : String(error), ...(unavailable(error) ? { unavailable: true } : {}) });
+  }
   async refresh(signal?: AbortSignal) {
+    if (this.state.unavailable) return;
     const version = this.version;
     try {
       const draft = await diagramAction<DiagramDraft>(this.sessionId, "get", { id: this.id }, signal);
@@ -35,7 +48,7 @@ export class DiagramModel {
       } else if (draft.revision !== this.state.draft.revision) {
         this.set({ error: "另一画布已更新此图稿；请下载本地草稿后重新载入，避免覆盖。" });
       } else this.set({ draft });
-    } catch (error) { if (!signal?.aborted) this.set({ error: error instanceof Error ? error.message : String(error) }); }
+    } catch (error) { if (!signal?.aborted) this.failure(error); }
   }
   change(scene: DiagramScene) {
     try {
@@ -51,7 +64,7 @@ export class DiagramModel {
     await this.queue.catch(() => {});
     const draft = await diagramAction<DiagramDraft>(this.sessionId, "get", { id: this.id });
     this.version++; this.fingerprint = JSON.stringify(draft.scene);
-    this.set({ draft, scene: draft.scene, unsynced: false, error: "", recovered: null });
+    this.set({ draft, scene: draft.scene, unsynced: false, error: "", recovered: null, unavailable: false });
   }
   restore() { if (this.state.recovered) { const scene = this.state.recovered; this.set({ recovered: null }); this.change(scene); } }
   dismissRecovery() { this.set({ recovered: null }); }
@@ -68,10 +81,10 @@ export class DiagramModel {
       this.set({ draft: next, unsynced: this.version !== version });
     }
   }
-  flush() { clearTimeout(this.timer); return this.serial(async () => { try { await this.sync(); } catch (e) { this.set({ error: String(e instanceof Error ? e.message : e) }); throw e; } }); }
+  flush() { clearTimeout(this.timer); return this.serial(async () => { try { await this.sync(); } catch (e) { this.failure(e); throw e; } }); }
   async initialize(materialize: (scene: DiagramScene, candidate: NonNullable<DiagramDraft["candidate"]>) => DiagramScene) {
     const { draft, recovered, unsynced, busy } = this.state;
-    if (this.initializing || !draft?.candidate || draft.revision !== 0 || draft.scene.elements.length || draft.candidate.patch || recovered || unsynced || busy) return;
+    if (this.state.unavailable || this.initializing || !draft?.candidate || draft.revision !== 0 || draft.scene.elements.length || draft.candidate.patch || recovered || unsynced || busy) return;
     this.initializing = true;
     try { await this.mutate("initialize", { scene: materialize(draft.scene, draft.candidate) }); }
     catch (error) {
@@ -94,16 +107,16 @@ export class DiagramModel {
         this.set({ draft: next });
         if ((action === "accept" || action === "initialize") && this.state.scene) this.backup(this.state.scene);
         if (action === "save" && !this.state.unsynced) localStorage.removeItem(backupKey(this.sessionId, this.id));
-      } catch (error) { this.set({ error: error instanceof Error ? error.message : String(error) }); throw error; }
+      } catch (error) { this.failure(error); throw error; }
       finally { this.set({ busy: false }); }
     });
   }
   /** Keep the data model after tab close; its small native snapshot is also backed up locally. */
-  suspend() { clearTimeout(this.timer); if (this.state.unsynced) void this.flush().catch(() => {}); }
+  suspend() { clearTimeout(this.timer); if (this.state.unsynced && !this.state.unavailable) void this.flush().catch(() => {}); }
 }
-/** Flush hand edits before the next main-chat prompt reaches the agent. */
+/** Flush live hand edits before sending. Unavailable drafts retain their backup for explicit recovery. */
 export async function flushDiagramModels(sessionId: string) {
-  await Promise.all([...models.values()].filter(m => m.sessionId === sessionId && m.getSnapshot().unsynced).map(m => m.flush()));
+  await Promise.all([...models.values()].filter(m => m.sessionId === sessionId && m.getSnapshot().unsynced && !m.getSnapshot().unavailable).map(m => m.flush()));
 }
 const models = new Map<string, DiagramModel>();
 export function diagramModel(session: string, id: string) {

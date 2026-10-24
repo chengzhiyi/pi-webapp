@@ -33,6 +33,14 @@ test("diagram wire validation rejects duplicate IDs, missing endpoints, executab
   assert.throws(() => validatePatch({ removeIds: ["missing"] }, scene()), /不存在/);
 });
 
+test("native frames round-trip without permitting web embeds or invalid frame references", () => {
+  const framed = { ...scene(), elements: [{ id: "frame", type: "frame", x: 0, y: 0, width: 500, height: 500, name: "核心层" }, ...scene().elements.map(e => ({ ...e, frameId: "frame" }))] };
+  assert.deepEqual(validateScene(framed).elements, framed.elements);
+  assert.throws(() => validateScene({ ...framed, elements: [{ ...scene().elements[0], frameId: "missing" }] }), /画框引用/);
+  assert.throws(() => validateScene({ ...framed, elements: [{ ...framed.elements[0], name: {} }] }), /画框名称/);
+  assert.throws(() => validateScene({ ...framed, elements: [{ ...framed.elements[0], type: "embeddable" }] }), /不支持/);
+});
+
 test("rich composition preserves safe styling, grouping, paths and targeted edits", () => {
   const graph = validateGraph(architectureExample);
   assert.equal(graph.nodes.filter(n => n.kind === "group").length, 4);
@@ -127,6 +135,10 @@ test("diagram HTTP and agent operations share real plugin enablement gates, auth
   assert.deepEqual(tools.map(t => t.name), ["excalidraw_read_me", "excalidraw_create_view", "diagram_reference", "diagram_create", "diagram_read", "diagram_patch"]);
   const created = await bridge.runPluginTool(DIAGRAM_PLUGIN, cwd, "terminal-a", "create", { title: "中文图稿", graph }) as { id: string };
   const loaded = await (await post("/api/diagrams/get", { id: created.id })).json(); assert.equal(loaded.title, "中文图稿");
+  const missing = await post("/api/diagrams/get", { id: "expired" });
+  assert.equal(missing.status, 404); assert.equal((await missing.json()).reason, "diagram_unavailable");
+  const invalid = await post("/api/diagrams/get", { id: "../invalid" });
+  assert.equal(invalid.status, 400); assert.equal((await invalid.json()).reason, undefined);
   const big = { ...emptyScene(), elements: Array.from({ length: 100 }, (_, i) => ({ id: `n${i}`, type: "text", text: "文".repeat(400), x: 0, y: i * 50, width: 100, height: 30 })) };
   assert.ok(Buffer.byteLength(JSON.stringify(big)) > 64 * 1024);
   assert.equal((await post("/api/diagrams/import", { scene: big })).status, 200);

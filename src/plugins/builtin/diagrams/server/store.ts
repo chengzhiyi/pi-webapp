@@ -4,11 +4,18 @@ import { DiagramError, emptyScene, identifier, label, record, validateDrawing, v
 import { readDiagram, saveDiagram } from "./files.ts";
 import { diagramReference } from "../contract/reference.ts";
 
-/** One store per running bridge. Drafts are session-owned; saved files are the durable interchange. */
+/** Session-owned domain model. The plugin persists checkpoints around each operation. */
 export class DiagramStore {
   private readonly scopes = new Map<string, Map<string, DiagramDraft>>();
   private readonly saving = new Set<string>();
   private readonly focused = new Map<string, string>();
+  checkpoint(cwd: string, sessionId: string) {
+    return structuredClone({ drafts: [...this.scope(cwd, sessionId).values()], focused: this.focused.get(this.scopeKey(cwd, sessionId)) ?? null });
+  }
+  restoreCheckpoint(cwd: string, sessionId: string, state: { drafts: DiagramDraft[]; focused: string | null }) {
+    this.scopes.set(this.scopeKey(cwd, sessionId), new Map(state.drafts.map(draft => [draft.id, draft])));
+    if (state.focused) this.focused.set(this.scopeKey(cwd, sessionId), state.focused);
+  }
   private scopeKey(cwd: string, sessionId: string) { return JSON.stringify([cwd, sessionId]); }
   private scope(cwd: string, sessionId: string) {
     const key = JSON.stringify([cwd, sessionId]);
@@ -17,7 +24,7 @@ export class DiagramStore {
   }
   private draft(cwd: string, sessionId: string, id: unknown) {
     const draft = this.scope(cwd, sessionId).get(identifier(id));
-    if (!draft) throw new DiagramError("图稿不属于当前会话或服务已重启，请重新打开已保存文件", 404);
+    if (!draft) throw new DiagramError("图稿不属于当前会话或服务已重启，请重新打开已保存文件", 404, "diagram_unavailable");
     return draft;
   }
   private expected(draft: DiagramDraft, revision: unknown) {
