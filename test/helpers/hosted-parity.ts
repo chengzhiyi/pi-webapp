@@ -100,7 +100,7 @@ export async function hostedParity(page: Page, options: { width?: number; locale
     for (const [i, p] of (page.context().browser()?.contexts().flatMap(c => c.pages()) ?? page.context().pages()).entries()) {
       await p.screenshot({ path: test.info().outputPath(`last-page-${i}.png`) }).catch(() => {});
       const diagnostic = test.info().outputPath(`frame-diagnostics-${i}.json`);
-      await writeFile(diagnostic, JSON.stringify({ actions, frames: await Promise.all(p.frames().map(async f => ({ url: f.url().split('#')[0].replace(/(\/hosted-plugins\/).*?(\/dist\/)/, '$1[archive]$2'), text: await f.locator('body').innerText().catch(() => '') }))) }, null, 2));
+      await writeFile(diagnostic, JSON.stringify({ actions, frames: await Promise.all(p.frames().map(async f => ({ url: f.url().split('#')[0].replace(/(\/hosted-plugins\/).*?(\/dist\/)/, '$1[archive]$2'), timing: await f.evaluate(() => performance.getEntriesByType("resource").filter(e => e.name.includes("/api/hosted-plugins/")).map(e => { const r = e as PerformanceResourceTiming; return { name: new URL(r.name).pathname, start: r.startTime, queued: r.requestStart - r.fetchStart, response: r.responseStart - r.requestStart, duration: r.duration }; })).catch(() => []), text: await f.locator('body').innerText().catch(() => '') }))) }, null, 2));
       await test.info().attach(`frame-diagnostics-${i}`, { path: diagnostic, contentType: "application/json" });
     }
     try { await integration.shutdown(); } catch (error) {

@@ -78,7 +78,8 @@ export class HostedViewCoordinator {
       case "poll": {
         if (!Number.isSafeInteger(input.after) || input.after < 0 || input.after > this.sequence) throw fail("Invalid poll cursor");
         if (view.waiter) throw fail("Only one poll per view is allowed");
-        if (!view.commands.some(command => command.id > input.after)) await new Promise<void>(resolve => {
+        if (input.immediate !== undefined && typeof input.immediate !== "boolean") throw fail("Invalid poll mode");
+        if (!input.immediate && !view.commands.some(command => command.id > input.after)) await new Promise<void>(resolve => {
           const timer = setTimeout(done, Math.min(25_000, Math.max(50, this.pollMs)));
           function done() { clearTimeout(timer); view!.waiter = undefined; resolve(); }
           view.waiter = done;

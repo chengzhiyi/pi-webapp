@@ -117,11 +117,18 @@ test("A09: actual hosted tool frame paints progressive arguments before any fina
     h.bridge.publish({ type: "snapshot", session: { ...h.sessions.snapshot(), idle: false, messages: [{ id: "stream-user", role: "user", timestamp, blocks: [{ kind: "text", text: "Draw progressively" }] }], streaming: stream("[" + JSON.stringify(elements[0]) + ",{") } });
     const frame = page.frameLocator('iframe[title="Excalidraw tool"]'), preview = frame.locator("[data-stream-preview]");
     await expect(preview).toBeVisible(); const first = await preview.getAttribute("src");
+    const frameIdentity = await page.locator('iframe[title="Excalidraw tool"]').getAttribute("src");
     expect(await h.action("list")).toEqual([]);
     await expect(page.locator('iframe[title="Excalidraw editor"]')).toHaveCount(0);
     h.bridge.publish({ type: "stream", message: stream(drawing.elements) });
     await expect.poll(() => preview.getAttribute("src")).not.toBe(first);
     await page.screenshot({ path: info.outputPath("before-result.png") });
+    // Atomic stream-to-history projection retains call identity even if provisional
+    // parent message IDs change. Verify the realm itself, not merely its pixels.
+    h.bridge.publish({ type: "snapshot", session: { ...h.sessions.snapshot(), idle: false, messages: [{ id: "committed-user", role: "user", timestamp, blocks: [{ kind: "text", text: "Draw progressively (committed)" }] }, { ...stream(drawing.elements), id: "committed-assistant" }], streaming: null } });
+    await expect(page.getByText("Draw progressively (committed)", { exact: true })).toBeVisible();
+    await expect(page.locator('[data-tool-view]')).toHaveCount(1);
+    await expect.poll(() => page.locator('iframe[title="Excalidraw tool"]').getAttribute("src")).toBe(frameIdentity);
     const created = await h.tool("excalidraw_create_view", drawing);
     await expect(preview).toHaveCount(0); await expect(frame.getByRole("img")).toBeVisible();
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements.length).toBe(2);
