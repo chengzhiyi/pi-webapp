@@ -1,0 +1,167 @@
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> pi-webapp@0.1.29 desktop:prepare
+> npm run build && node scripts/prepare-desktop.mjs
+
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> pi-webapp@0.1.29 build
+> node scripts/build.mjs
+
+vite v6.4.3 building for production...
+transforming...
+✓ 981 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/index.html                                  0.92 kB │ gzip:   0.65 kB
+../dist/assets/KaTeX_Size3-Regular.woff             4.42 kB
+../dist/assets/KaTeX_Size4-Regular.woff2            4.93 kB
+../dist/assets/KaTeX_Size2-Regular.woff2            5.21 kB
+../dist/assets/KaTeX_Size1-Regular.woff2            5.47 kB
+../dist/assets/KaTeX_Size4-Regular.woff             5.98 kB
+../dist/assets/KaTeX_Size2-Regular.woff             6.19 kB
+../dist/assets/KaTeX_Size1-Regular.woff             6.50 kB
+../dist/assets/KaTeX_Caligraphic-Regular.woff2      6.91 kB
+../dist/assets/KaTeX_Caligraphic-Bold.woff2         6.91 kB
+../dist/assets/KaTeX_Size3-Regular.ttf              7.59 kB
+../dist/assets/KaTeX_Caligraphic-Regular.woff       7.66 kB
+../dist/assets/KaTeX_Caligraphic-Bold.woff          7.72 kB
+../dist/assets/KaTeX_Script-Regular.woff2           9.64 kB
+../dist/assets/KaTeX_SansSerif-Regular.woff2       10.34 kB
+../dist/assets/KaTeX_Size4-Regular.ttf             10.36 kB
+../dist/assets/KaTeX_Script-Regular.woff           10.59 kB
+../dist/assets/KaTeX_Fraktur-Regular.woff2         11.32 kB
+../dist/assets/KaTeX_Fraktur-Bold.woff2            11.35 kB
+../dist/assets/KaTeX_Size2-Regular.ttf             11.51 kB
+../dist/assets/KaTeX_SansSerif-Italic.woff2        12.03 kB
+../dist/assets/KaTeX_SansSerif-Bold.woff2          12.22 kB
+../dist/assets/KaTeX_Size1-Regular.ttf             12.23 kB
+../dist/assets/KaTeX_SansSerif-Regular.woff        12.32 kB
+../dist/assets/KaTeX_Caligraphic-Regular.ttf       12.34 kB
+../dist/assets/KaTeX_Caligraphic-Bold.ttf          12.37 kB
+../dist/assets/KaTeX_Fraktur-Regular.woff          13.21 kB
+../dist/assets/KaTeX_Fraktur-Bold.woff             13.30 kB
+../dist/assets/KaTeX_Typewriter-Regular.woff2      13.57 kB
+../dist/assets/KaTeX_SansSerif-Italic.woff         14.11 kB
+../dist/assets/KaTeX_SansSerif-Bold.woff           14.41 kB
+../dist/assets/KaTeX_Typewriter-Regular.woff       16.03 kB
+../dist/assets/KaTeX_Math-BoldItalic.woff2         16.40 kB
+../dist/assets/KaTeX_Math-Italic.woff2             16.44 kB
+../dist/assets/KaTeX_Script-Regular.ttf            16.65 kB
+../dist/assets/KaTeX_Main-BoldItalic.woff2         16.78 kB
+../dist/assets/KaTeX_Main-Italic.woff2             16.99 kB
+../dist/assets/KaTeX_Math-BoldItalic.woff          18.67 kB
+../dist/assets/KaTeX_Math-Italic.woff              18.75 kB
+../dist/assets/KaTeX_Main-BoldItalic.woff          19.41 kB
+../dist/assets/KaTeX_SansSerif-Regular.ttf         19.44 kB
+../dist/assets/KaTeX_Fraktur-Regular.ttf           19.57 kB
+../dist/assets/KaTeX_Fraktur-Bold.ttf              19.58 kB
+../dist/assets/KaTeX_Main-Italic.woff              19.68 kB
+../dist/assets/KaTeX_SansSerif-Italic.ttf          22.36 kB
+../dist/assets/KaTeX_SansSerif-Bold.ttf            24.50 kB
+../dist/assets/KaTeX_Main-Bold.woff2               25.32 kB
+../dist/assets/KaTeX_Main-Regular.woff2            26.27 kB
+../dist/assets/KaTeX_Typewriter-Regular.ttf        27.56 kB
+../dist/assets/KaTeX_AMS-Regular.woff2             28.08 kB
+../dist/assets/KaTeX_Main-Bold.woff                29.91 kB
+../dist/assets/KaTeX_Main-Regular.woff             30.77 kB
+../dist/assets/KaTeX_Math-BoldItalic.ttf           31.20 kB
+../dist/assets/KaTeX_Math-Italic.ttf               31.31 kB
+../dist/assets/KaTeX_Main-BoldItalic.ttf           32.97 kB
+../dist/assets/KaTeX_AMS-Regular.woff              33.52 kB
+../dist/assets/KaTeX_Main-Italic.ttf               33.58 kB
+../dist/.vite/manifest.json                        35.83 kB │ gzip:   3.25 kB
+../dist/assets/KaTeX_Main-Bold.ttf                 51.34 kB
+../dist/assets/KaTeX_Main-Regular.ttf              53.58 kB
+../dist/assets/KaTeX_AMS-Regular.ttf               63.63 kB
+../dist/assets/plugin.css                           5.62 kB │ gzip:   2.08 kB
+../dist/assets/plugin2.css                         15.71 kB │ gzip:   3.18 kB
+../dist/assets/app.css                            307.29 kB │ gzip:  50.83 kB
+../dist/assets/html-derivative-C2Epw9Yg.js          1.23 kB │ gzip:   0.63 kB │ map:      1.41 kB
+../dist/assets/csv-DFLln536.js                      1.54 kB │ gzip:   0.55 kB │ map:      1.98 kB
+../dist/assets/ini-DuzuNcum.js                      1.92 kB │ gzip:   0.68 kB │ map:      2.45 kB
+../dist/assets/dotenv-CIz2XDph.js                   2.15 kB │ gzip:   0.80 kB │ map:      3.03 kB
+../dist/assets/diff-Br1ISN9_.js                     2.96 kB │ gzip:   0.87 kB │ map:      3.84 kB
+../dist/assets/log-ljR8DmTe.js                      3.25 kB │ gzip:   1.08 kB │ map:      4.59 kB
+../dist/assets/http-COhjhVl2.js                     4.85 kB │ gzip:   1.26 kB │ map:      6.67 kB
+../dist/assets/bibtex-D13O2Wvh.js                   5.19 kB │ gzip:   1.02 kB │ map:      7.26 kB
+../dist/assets/xml-DCBoxqhY.js                      5.78 kB │ gzip:   1.40 kB │ map:      7.82 kB
+../dist/assets/vb-CT8kYl35.js                       6.47 kB │ gzip:   2.51 kB │ map:      8.00 kB
+../dist/assets/verilog-CRrcH6Pt.js                  6.80 kB │ gzip:   2.11 kB │ map:      8.54 kB
+../dist/assets/clojure-CiHGeAtp.js                  6.81 kB │ gzip:   1.60 kB │ map:      9.52 kB
+../dist/assets/toml-D4Tpftfr.js                     6.82 kB │ gzip:   1.46 kB │ map:      9.73 kB
+../dist/assets/proto-BIjSd36w.js                    6.94 kB │ gzip:   1.60 kB │ map:     10.15 kB
+../dist/assets/r-CJzV5ecV.js                        7.13 kB │ gzip:   2.02 kB │ map:     10.63 kB
+../dist/assets/plugin-C7oIelz7.js                   8.76 kB │ gzip:   3.68 kB │ map:     25.96 kB
+../dist/assets/dart-CafiI-9_.js                     9.01 kB │ gzip:   2.19 kB │ map:     12.88 kB
+../dist/assets/kotlin-BSbocnsc.js                   9.18 kB │ gzip:   2.32 kB │ map:     13.02 kB
+../dist/assets/make-D75dUjYA.js                     9.36 kB │ gzip:   1.96 kB │ map:     13.11 kB
+../dist/assets/cmake-DmzJtVCe.js                   10.25 kB │ gzip:   3.58 kB │ map:     11.52 kB
+../dist/assets/hcl-RKiXyu-a.js                     10.45 kB │ gzip:   2.11 kB │ map:     14.78 kB
+../dist/assets/yaml-jmrW97Mk.js                    10.90 kB │ gzip:   2.46 kB │ map:     14.88 kB
+../dist/assets/rst-DGfDwLZ2.js                     10.92 kB │ gzip:   2.54 kB │ map:     15.54 kB
+../dist/assets/bat-CIKKTCO7.js                     13.29 kB │ gzip:   3.43 kB │ map:     17.39 kB
+../dist/assets/fish-ByHW6pZw.js                    13.43 kB │ gzip:   1.92 kB │ map:     17.10 kB
+../dist/assets/app.js                              15.15 kB │ gzip:   6.60 kB │ map:     35.83 kB
+../dist/assets/rust-DSBpfBj6.js                    15.56 kB │ gzip:   2.91 kB │ map:     21.85 kB
+../dist/assets/nix-CipIrdNI.js                     15.91 kB │ gzip:   2.67 kB │ map:     23.08 kB
+../dist/assets/lua-DyIUvKwX.js                     15.93 kB │ gzip:   3.34 kB │ map:     22.10 kB
+../dist/assets/elixir-R3IvWmT5.js                  16.72 kB │ gzip:   2.98 kB │ map:     23.12 kB
+../dist/assets/groovy-zjY2ZfG0.js                  19.57 kB │ gzip:   3.79 kB │ map:     27.76 kB
+../dist/assets/powershell-jgDnaG9I.js              20.55 kB │ gzip:   4.26 kB │ map:     26.84 kB
+../dist/assets/sql-B8q9hRYB.js                     24.07 kB │ gzip:   7.68 kB │ map:     28.52 kB
+../dist/assets/svelte-fNpeQjRI.js                  25.02 kB │ gzip:   4.96 kB │ map:     34.67 kB
+../dist/assets/vue-CjWxI2As.js                     25.35 kB │ gzip:   3.23 kB │ map:     37.17 kB
+../dist/assets/fsharp-BOBx9XdV.js                  25.70 kB │ gzip:   4.32 kB │ map:     35.84 kB
+../dist/assets/system-verilog-DeQRavVp.js          26.95 kB │ gzip:   5.07 kB │ map:     36.73 kB
+../dist/assets/scss-Ce0Xtdy1.js                    27.60 kB │ gzip:   4.39 kB │ map:     38.31 kB
+../dist/assets/java-K8yEFi64.js                    27.61 kB │ gzip:   4.46 kB │ map:     38.87 kB
+../dist/assets/scala-C5J7wQ_u.js                   29.28 kB │ gzip:   4.12 kB │ map:     40.37 kB
+../dist/assets/julia-yApUWuwQ.js                   31.63 kB │ gzip:   4.54 kB │ map:     40.85 kB
+../dist/assets/erlang-NGps-vi9.js                  37.88 kB │ gzip:   4.62 kB │ map:     51.53 kB
+../dist/assets/haskell-CMvfT32Y.js                 41.89 kB │ gzip:   6.66 kB │ map:     57.83 kB
+../dist/assets/plugin-D-u0GgNv.js                  42.03 kB │ gzip:  14.18 kB │ map:    108.52 kB
+../dist/assets/perl-CpGQZpC_.js                    43.56 kB │ gzip:   4.90 kB │ map:     60.72 kB
+../dist/assets/go-BeHf35-M.js                      47.21 kB │ gzip:   5.40 kB │ map:     66.59 kB
+../dist/assets/css-D-q0lhfR.js                     53.76 kB │ gzip:  12.67 kB │ map:     66.42 kB
+../dist/assets/ruby-BNCnDRFN.js                    55.16 kB │ gzip:   7.40 kB │ map:     78.38 kB
+../dist/assets/html-COcRjUs1.js                    57.65 kB │ gzip:  11.93 kB │ map:     72.97 kB
+../dist/assets/markdown-CW047eNb.js                59.73 kB │ gzip:   5.87 kB │ map:     82.56 kB
+../dist/assets/telemetry-client-CBQBug9X.js        60.55 kB │ gzip:  20.82 kB │ map:    808.55 kB
+../dist/assets/python-D7_Ztkaq.js                  70.35 kB │ gzip:   9.35 kB │ map:     95.47 kB
+../dist/assets/c-BxgHfdNM.js                       72.51 kB │ gzip:  10.72 kB │ map:     95.61 kB
+../dist/assets/latex-B2rh6wcV.js                   83.25 kB │ gzip:   9.72 kB │ map:    113.67 kB
+../dist/assets/swift-BYyWkiAC.js                   87.63 kB │ gzip:  15.06 kB │ map:    115.27 kB
+../dist/assets/csharp-BusYHIEz.js                  91.84 kB │ gzip:  11.07 kB │ map:    128.13 kB
+../dist/assets/less-DrDudO82.js                    98.03 kB │ gzip:  14.93 kB │ map:    131.84 kB
+../dist/assets/php-BWQWU4YY.js                    113.55 kB │ gzip:  28.97 kB │ map:    142.08 kB
+../dist/assets/asciidoc-fDuF7HNn.js               136.45 kB │ gzip:   9.73 kB │ map:    195.20 kB
+../dist/assets/mdx-XsqTTZB4.js                    136.51 kB │ gzip:  23.58 kB │ map:    176.95 kB
+../dist/assets/javascript-D_ijBMSX.js             175.22 kB │ gzip:  16.73 kB │ map:    236.30 kB
+../dist/assets/plugin-dbpx-NPQ.js                 343.70 kB │ gzip:  88.62 kB │ map:    718.57 kB
+../dist/assets/graphql-Ctqc-dEq.js                371.62 kB │ gzip:  34.69 kB │ map:    500.86 kB
+../dist/assets/cpp-WTsyTmWk.js                    797.36 kB │ gzip:  55.82 kB │ map:  1,034.29 kB
+../dist/assets/app-Dg-JJD-W.js                  1,714.01 kB │ gzip: 509.20 kB │ map: 10,813.52 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#[REDACTED]
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.27s
+▲ [WARNING] Import "default" will always be undefined because there is no matching export in "src/host/server/plugins/hosted/worker-entry.ts" [import-is-undefined]
+
+    src/host/server/plugins/hosted/worker-entry.ts?sentryDebugIdProxy=true:4:44:
+      4 │               export default OriginalModule.default;
+        ╵                                             ~~~~~~~
+
+▲ [WARNING] Import "default" will always be undefined because there is no matching export in "scripts/hosted-stopped-recovery.ts" [import-is-undefined]
+
+    scripts/hosted-stopped-recovery.ts?sentryDebugIdProxy=true:4:44:
+      4 │               export default OriginalModule.default;
+        ╵                                             ~~~~~~~
+
+Built pi-webapp@0.1.29+42059e262d3dd5aa50a6; private source maps: .sentry-artifacts/42059e262d3dd5aa50a6
+Preparing standalone Node 22.23.3 for darwin-arm64…
+Desktop runtime ready: /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/.desktop/runtime

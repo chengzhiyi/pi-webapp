@@ -1,0 +1,7 @@
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+Running 1 test using 1 worker
+
+[1/1] [firefox] › test/browser/hosted-platform-fonts.spec.ts:4:1 › A23: actual hosted iframe loads packaged font faces without external font access
+  1 passed (5.8s)

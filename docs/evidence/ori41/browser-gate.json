@@ -1,0 +1,33 @@
+{
+  "bodyPassed": 6,
+  "cleanPassed": 6,
+  "diagnosticSkipped": 2,
+  "failures": [
+    "A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation: failed, skipped, incomplete or retried body",
+    "A09: actual hosted tool frame paints progressive arguments before any final result: shutdown was not acknowledged",
+    "A11: same-profile second window must remain responsive with existing editor long polls: failed, skipped, incomplete or retried body",
+    "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px: failed, skipped, incomplete or retried body",
+    "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px: failed, skipped, incomplete or retried body",
+    "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery: failed, skipped, incomplete or retried body",
+    "A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation: failed, skipped, incomplete or retried body",
+    "A07: composition and held native drag reject send, preserve composer and then reach a real safe point: failed, skipped, incomplete or retried body",
+    "A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames: failed, skipped, incomplete or retried body",
+    "A09: patching an unlabeled native shape must render a review rather than crash materialization: failed, skipped, incomplete or retried body",
+    "A09: actual hosted tool frame paints progressive arguments before any final result: failed, skipped, incomplete or retried body",
+    "removed tool close network failure retains the original realm and exposes retry recovery: failed, skipped, incomplete or retried body",
+    "A11: same-profile second window must remain responsive with existing editor long polls: failed, skipped, incomplete or retried body",
+    "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px: failed, skipped, incomplete or retried body",
+    "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px: failed, skipped, incomplete or retried body",
+    "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery: failed, skipped, incomplete or retried body",
+    "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px: failed, skipped, incomplete or retried body",
+    "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px: failed, skipped, incomplete or retried body",
+    "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px: failed, skipped, incomplete or retried body",
+    "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px: failed, skipped, incomplete or retried body",
+    "aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive: failed, skipped, incomplete or retried body",
+    "aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive: failed, skipped, incomplete or retried body",
+    "visible policy control separates independent notify from default linked synchronization and honors pin: failed, skipped, incomplete or retried body",
+    "ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation: failed, skipped, incomplete or retried body",
+    "ORI-34: unlabeled shape x-only candidate applies without phantom bound text: failed, skipped, incomplete or retried body",
+    "ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation: failed, skipped, incomplete or retried body"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "issue": "ORI-41",
+  "hostBase": "683a4a3",
+  "pluginBase": "b8f74b1",
+  "archiveSha256": "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5",
+  "acceptance": "partial-failed-not-release-approved",
+  "requiredHumanInput": [
+    "Existing native GUI runner access through approved tooling, or verifiable checklist receipts, for Windows x64, Linux x64 and macOS x64",
+    "Human OS-Chinese-IME and native open/save/cancel/overwrite dialog session/receipt on each native platform including local macOS arm64",
+    "Working WebKit runner or actual identified Safari execution receipt (current official MiniBrowser crashes before page creation)"
+  ],
+  "failuresToContinue": [
+    { "target": "firefox-155-macos-arm64", "results": "6 pass / 10 fail / 1 diagnostic skip; additional font case 1 pass", "evidence": "browser-results.json", "action": "Investigate native keyboard geometry, downloads, multiview transport/CAS and actual progressive frame shutdown. Preserve all assertions." },
+    { "target": "webkit-2359-macos-arm64", "results": "16 pre-page runtime failures / 1 diagnostic skip", "action": "Use a functioning official engine runtime/target; record runtime repair separately from product acceptance." },
+    { "target": "electron-44.9.0-macos-arm64", "results": "baseline undo failed; independent draw/focus/fail-closed checks passed; reconnect switch returned 409", "evidence": ["desktop-extended.log", "desktop-platform.log"], "action": "Investigate keyboard routing/undo checkpoint and genuine recovery readiness; rerun baseline plus independent probe without dropping assertions." }
+  ],
+  "runnerEntry": "scripts/run-hosted-platform-matrix.mjs",
+  "checklist": "docs/hosted-platform-acceptance-ori41.md",
+  "inertCiTemplate": "docs/ci/ori41-native-matrix.yml",
+  "prohibited": ["push", "CI dispatch", "publication", "cross-build claimed as native", "synthetic IME claimed as OS IME", "fabricated ack", "TTL clear", "automatic Restore", "signature/CSP/sandbox weakening"]
+}

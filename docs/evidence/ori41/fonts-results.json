@@ -1,0 +1,179 @@
+{
+  "config": {
+    "argv": [
+      "/Users/chengcheng/.nvm/versions/node/v24.21.0/bin/node",
+      "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "playwright.hosted-matrix.config.ts",
+      "--project=firefox",
+      "hosted-platform-fonts",
+      "--output=artifacts/ori41/fonts-test-results",
+      "--reporter=line,json"
+    ],
+    "configFile": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/playwright.hosted-matrix.config.ts",
+    "rootDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/artifacts/ori41/fonts-test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts",
+          "hosted-platform-fonts.spec.ts"
+        ],
+        "timeout": 20000
+      },
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/artifacts/ori41/fonts-test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts",
+          "hosted-platform-fonts.spec.ts"
+        ],
+        "timeout": 20000
+      },
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/artifacts/ori41/fonts-test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts",
+          "hosted-platform-fonts.spec.ts"
+        ],
+        "timeout": 20000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "hosted-platform-fonts.spec.ts",
+      "file": "hosted-platform-fonts.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A23: actual hosted iframe loads packaged font faces without external font access",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3275,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:42:17.967Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "actual-font-faces",
+                      "contentType": "application/json",
+                      "body": "eyJmb250cyI6W3siZmFtaWx5IjoiQXNzaXN0YW50Iiwic3RhdHVzIjoibG9hZGVkIn0seyJmYW1pbHkiOiJBc3Npc3RhbnQiLCJzdGF0dXMiOiJsb2FkZWQifSx7ImZhbWlseSI6IkFzc2lzdGFudCIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJBc3Npc3RhbnQiLCJzdGF0dXMiOiJsb2FkZWQifSx7ImZhbWlseSI6IkNhc2NhZGlhIiwic3RhdHVzIjoibG9hZGVkIn0seyJmYW1pbHkiOiJDb21pYyBTaGFubnMiLCJzdGF0dXMiOiJsb2FkZWQifSx7ImZhbWlseSI6IkNvbWljIFNoYW5ucyIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJDb21pYyBTaGFubnMiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiQ29taWMgU2hhbm5zIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IkV4Y2FsaWZvbnQiLCJzdGF0dXMiOiJsb2FkZWQifSx7ImZhbWlseSI6IkV4Y2FsaWZvbnQiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiRXhjYWxpZm9udCIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJFeGNhbGlmb250Iiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IkV4Y2FsaWZvbnQiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiRXhjYWxpZm9udCIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJFeGNhbGlmb250Iiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IkxpYmVyYXRpb24gU2FucyIsInN0YXR1cyI6ImxvYWRlZCJ9LHsiZmFtaWx5IjoiTGlsaXRhIE9uZSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJMaWxpdGEgT25lIiwic3RhdHVzIjoibG9hZGVkIn0seyJmYW1pbHkiOiJOdW5pdG8iLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiTnVuaXRvIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6Ik51bml0byIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJOdW5pdG8iLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiTnVuaXRvIiwic3RhdHVzIjoibG9hZGVkIn0seyJmYW1pbHkiOiJWaXJnaWwiLCJzdGF0dXMiOiJsb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6ImxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9LHsiZmFtaWx5IjoiWGlhb2xhaSIsInN0YXR1cyI6InVubG9hZGVkIn0seyJmYW1pbHkiOiJYaWFvbGFpIiwic3RhdHVzIjoidW5sb2FkZWQifSx7ImZhbWlseSI6IlhpYW9sYWkiLCJzdGF0dXMiOiJ1bmxvYWRlZCJ9XSwiZm9udFJlc3BvbnNlcyI6W3sidXJsIjoiL2hvc3RlZC1wbHVnaW5zLyU0MGNoZW5nemhpeWklMkZwaS1leGNhbGlkcmF3L2RZTXVhajI3MzFJMEp0WFVmcmlLX29Wci0ySVZZUmY5LzA0ZmQ0MzMxOTlhYWVhMDMzZjM0ODlhMzQ1ZmNhNzI4MDFmMzRhYTFlYTEyZGY2M2ZmYzI2ODVjNDczNmY4NjMvZGlzdC9hc3NldC1QTEYyWE9HVy53b2ZmMiIsInN0YXR1cyI6MjAwfSx7InVybCI6Ii9ob3N0ZWQtcGx1Z2lucy8lNDBjaGVuZ3poaXlpJTJGcGktZXhjYWxpZHJhdy9kWU11YWoyNzMxSTBKdFhVZnJpS19vVnItMklWWVJmOS8wNGZkNDMzMTk5YWFlYTAzM2YzNDg5YTM0NWZjYTcyODAxZjM0YWExZWExMmRmNjNmZmMyNjg1YzQ3MzZmODYzL2Rpc3QvYXNzZXQtWkRaWjZKSEEud29mZjIiLCJzdGF0dXMiOjIwMH0seyJ1cmwiOiIvaG9zdGVkLXBsdWdpbnMvJTQwY2hlbmd6aGl5aSUyRnBpLWV4Y2FsaWRyYXcvZFlNdWFqMjczMUkwSnRYVWZyaUtfb1ZyLTJJVllSZjkvMDRmZDQzMzE5OWFhZWEwMzNmMzQ4OWEzNDVmY2E3MjgwMWYzNGFhMWVhMTJkZjYzZmZjMjY4NWM0NzM2Zjg2My9kaXN0L2Fzc2V0LURaMjVSWlUzLndvZmYyIiwic3RhdHVzIjoyMDB9LHsidXJsIjoiL2hvc3RlZC1wbHVnaW5zLyU0MGNoZW5nemhpeWklMkZwaS1leGNhbGlkcmF3L2RZTXVhajI3MzFJMEp0WFVmcmlLX29Wci0ySVZZUmY5LzA0ZmQ0MzMxOTlhYWVhMDMzZjM0ODlhMzQ1ZmNhNzI4MDFmMzRhYTFlYTEyZGY2M2ZmYzI2ODVjNDczNmY4NjMvZGlzdC9mb250cy9DYXNjYWRpYS9DYXNjYWRpYUNvZGUtUmVndWxhci53b2ZmMiIsInN0YXR1cyI6MjAwfSx7InVybCI6Ii9ob3N0ZWQtcGx1Z2lucy8lNDBjaGVuZ3poaXlpJTJGcGktZXhjYWxpZHJhdy9kWU11YWoyNzMxSTBKdFhVZnJpS19vVnItMklWWVJmOS8wNGZkNDMzMTk5YWFlYTAzM2YzNDg5YTM0NWZjYTcyODAxZjM0YWExZWExMmRmNjNmZmMyNjg1YzQ3MzZmODYzL2Rpc3QvZm9udHMvQ29taWNTaGFubnMvQ29taWNTaGFubnMtUmVndWxhci0yNzlhN2IzMTdkMTJlYjg4ZGUwNjE2N2JkNjcyYjRiNC53b2ZmMiIsInN0YXR1cyI6MjAwfSx7InVybCI6Ii9ob3N0ZWQtcGx1Z2lucy8lNDBjaGVuZ3poaXlpJTJGcGktZXhjYWxpZHJhdy9kWU11YWoyNzMxSTBKdFhVZnJpS19vVnItMklWWVJmOS8wNGZkNDMzMTk5YWFlYTAzM2YzNDg5YTM0NWZjYTcyODAxZjM0YWExZWExMmRmNjNmZmMyNjg1YzQ3MzZmODYzL2Rpc3QvZm9udHMvRXhjYWxpZm9udC9FeGNhbGlmb250LVJlZ3VsYXItYTg4YjcyYTI0ZmI1NGM5Zjk0ZTNiNWZkYWE3NDgxYzkud29mZjIiLCJzdGF0dXMiOjIwMH0seyJ1cmwiOiIvaG9zdGVkLXBsdWdpbnMvJTQwY2hlbmd6aGl5aSUyRnBpLWV4Y2FsaWRyYXcvZFlNdWFqMjczMUkwSnRYVWZyaUtfb1ZyLTJJVllSZjkvMDRmZDQzMzE5OWFhZWEwMzNmMzQ4OWEzNDVmY2E3MjgwMWYzNGFhMWVhMTJkZjYzZmZjMjY4NWM0NzM2Zjg2My9kaXN0L2ZvbnRzL0xpYmVyYXRpb24vTGliZXJhdGlvblNhbnMtUmVndWxhci53b2ZmMiIsInN0YXR1cyI6MjAwfSx7InVybCI6Ii9ob3N0ZWQtcGx1Z2lucy8lNDBjaGVuZ3poaXlpJTJGcGktZXhjYWxpZHJhdy9kWU11YWoyNzMxSTBKdFhVZnJpS19vVnItMklWWVJmOS8wNGZkNDMzMTk5YWFlYTAzM2YzNDg5YTM0NWZjYTcyODAxZjM0YWExZWExMmRmNjNmZmMyNjg1YzQ3MzZmODYzL2Rpc3QvZm9udHMvTGlsaXRhL0xpbGl0YS1SZWd1bGFyLWk3ZFBJRlo5WnotV0J0UnRlZERiWUVGOFJYaTRFd1Eud29mZjIiLCJzdGF0dXMiOjIwMH0seyJ1cmwiOiIvaG9zdGVkLXBsdWdpbnMvJTQwY2hlbmd6aGl5aSUyRnBpLWV4Y2FsaWRyYXcvZFlNdWFqMjczMUkwSnRYVWZyaUtfb1ZyLTJJVllSZjkvMDRmZDQzMzE5OWFhZWEwMzNmMzQ4OWEzNDVmY2E3MjgwMWYzNGFhMWVhMTJkZjYzZmZjMjY4NWM0NzM2Zjg2My9kaXN0L2ZvbnRzL051bml0by9OdW5pdG8tUmVndWxhci1YUlhJM0k2TGkwMUJLb2ZpT2M1d3RsWjJkaThIRElraGRUUTNqNnpiWFdqZ2VnLndvZmYyIiwic3RhdHVzIjoyMDB9LHsidXJsIjoiL2hvc3RlZC1wbHVnaW5zLyU0MGNoZW5nemhpeWklMkZwaS1leGNhbGlkcmF3L2RZTXVhajI3MzFJMEp0WFVmcmlLX29Wci0ySVZZUmY5LzA0ZmQ0MzMxOTlhYWVhMDMzZjM0ODlhMzQ1ZmNhNzI4MDFmMzRhYTFlYTEyZGY2M2ZmYzI2ODVjNDczNmY4NjMvZGlzdC9mb250cy9WaXJnaWwvVmlyZ2lsLVJlZ3VsYXIud29mZjIiLCJzdGF0dXMiOjIwMH0seyJ1cmwiOiIvaG9zdGVkLXBsdWdpbnMvJTQwY2hlbmd6aGl5aSUyRnBpLWV4Y2FsaWRyYXcvZFlNdWFqMjczMUkwSnRYVWZyaUtfb1ZyLTJJVllSZjkvMDRmZDQzMzE5OWFhZWEwMzNmMzQ4OWEzNDVmY2E3MjgwMWYzNGFhMWVhMTJkZjYzZmZjMjY4NWM0NzM2Zjg2My9kaXN0L2ZvbnRzL1hpYW9sYWkvWGlhb2xhaS1SZWd1bGFyLTE0NWFhMDJjZGQ5MTk0NmU2N2RjOTM0ZTFhY2ZmZTc1LndvZmYyIiwic3RhdHVzIjoyMDB9XX0="
+                    },
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/artifacts/ori41/fonts-test-results/hosted-platform-fonts-A23--3d197-ithout-external-font-access-firefox/attachments/frame-diagnostics-0-02f6a03cd9ef85c7ef41d8ddea9be6dcef4bb9b8.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "cce28678a37f39e967ed-5e23e9caf174c9afe206",
+          "file": "hosted-platform-fonts.spec.ts",
+          "line": 4,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-24T18:42:16.461Z",
+    "duration": 5839.9980000000005,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
