@@ -45,7 +45,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
   const integration = new HostedPluginIntegration({ root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local-test-principal",
     resolveSession: sessionId => { const retained = sessions?.hostedScope(sessionId); return retained ? scope(retained.cwd, sessionId) : null; },
-    changed: () => bridge?.publish({ type: "snapshot", session: sessions.snapshot() }),
+    changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
     fetch: (async (url: string | URL | Request) => {
       if (String(url).endsWith(".tgz")) { downloads++; return new Response(selected); }
       return new Response(JSON.stringify({ versions: { [version]: { ...integrationFixture().release, version, dist: { tarball: `https://registry.npmjs.org/local-${version}.tgz`, integrity: "sha512-" + createHash("sha512").update(selected).digest("base64") } } } }));

@@ -312,7 +312,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       return retained ? trustedScope(retained.cwd, id) : null;
     },
     legacy: () => legacyCheckpointLoader(join(getAgentDir(), "pi-web", "diagrams")),
-    changed: () => shared.bridge?.publish({ type: "plugins_changed" }),
+    changed: () => shared.bridge?.publish({ type: "hosted_plugins_changed" }),
   });
   shared.offHostedThaw?.();
   shared.offHostedThaw = shared.hosted?.adapter.onThaw(scheduleTuiQueue);

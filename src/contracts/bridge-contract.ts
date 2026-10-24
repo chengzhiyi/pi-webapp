@@ -129,6 +129,7 @@ export interface WebPluginCatalogView { plugins: WebPluginView[]; errors: string
 export type BridgeEvent =
   | { type: "shutdown"; reconnect?: boolean }
   | { type: "plugins_changed" }
+  | { type: "hosted_plugins_changed" }
   | { type: "plugin_state"; disabled: string[] }
   | { type: "snapshot"; session: SessionView }
   | { type: "stream"; message: ViewMessage | null }
