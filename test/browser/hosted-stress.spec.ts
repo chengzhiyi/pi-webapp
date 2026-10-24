@@ -53,9 +53,9 @@ test("100-element local switch: 20 warmups + 50 complete-host controller/worker 
       const response = await fetch(address.origin + "/api/hosted-plugins/action", { method: "POST", headers, body: JSON.stringify({ pluginId: id, generation: (await broker.active())!.generation, sessionId, action, input }) });
       expect(response.status).toBe(200); return response.json();
     };
-    // Request native shapes/Chinese/viewport, then compare the validated persisted checkpoint
-    // byte-for-byte after every switch. This does NOT assert import/viewport fidelity; the
-    // separate red A06 native gesture test owns that gate (current schema strips viewport).
+    // Request native shapes/Chinese/viewport, verify validated import fidelity, then
+    // compare the full persisted checkpoint after every switch. Native gesture/render
+    // fidelity is covered separately by the synchronized A06 canvas-pixel regression.
     const scene = { type: "excalidraw", version: 2, source: "pi-webapp", files: {},
       appState: { viewBackgroundColor: "#ffffff", scrollX: 31, scrollY: 47, zoom: { value: 0.75 } },
       elements: Array.from({ length: 100 }, (_, i) => ({ id: "element-" + i, type: i === 99 ? "text" : "rectangle", x: i % 10 * 120, y: Math.floor(i / 10) * 80, width: 100, height: 60,
@@ -64,6 +64,8 @@ test("100-element local switch: 20 warmups + 50 complete-host controller/worker 
         ...(i === 99 ? { text: "中文基准", originalText: "中文基准", fontSize: 20, fontFamily: 5, textAlign: "left", verticalAlign: "top", containerId: null, autoResize: true, lineHeight: 1.25 } : {}) })) };
     const draft = await action("import", { title: "100 elements / 中文", scene });
     const before = await action("get", { id: draft.id }); const expectedHash = hash(before);
+    expect(before.scene.appState).toEqual(scene.appState);
+    expect(before.scene.elements.at(-1).text).toBe("中文基准");
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== address.origin) external.push(request.url()); });
     await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); });
@@ -121,7 +123,7 @@ test("100-element local switch: 20 warmups + 50 complete-host controller/worker 
       parentRssBytes: { min: Math.min(...hostRss), max: Math.max(...hostRss), last: hostRss.at(-1) },
       browserPostGcHeapBytes: { firstMedian: first, lastMedian: last, growth: last - first, samples: heaps },
       oldWorkerPidsConfirmedExited: observedPids.size, generation: active.generation, activeFrames: 1, activeTools: 6, retainedStateSnapshots: 2, externalRequests: external.length, pageErrors: errors.length,
-      limitations: ["Same-version local reactivation, not different-version installation", "Hash covers validated persisted checkpoint, not native viewport/import fidelity; separate A06 regression remains", "No editor gesture, frame ports/timers direct census, child CPU/RSS or Electron/other-platform certification", "Browser heap budget is smoke-only; not an exhaustive leak proof"] };
+      limitations: ["Same-version local reactivation, not different-version installation", "Import viewport/Chinese and full checkpoint hash are checked; native gesture/render fidelity is tested separately", "No editor gesture, frame ports/timers direct census, child CPU/RSS or Electron/other-platform certification", "Browser heap budget is smoke-only; not an exhaustive leak proof"] };
     expect(observedPids.size).toBe(70);
     await info.attach("reference-measurement.json", { body: JSON.stringify(report, null, 2), contentType: "application/json" });
     console.log(JSON.stringify(report, null, 2));

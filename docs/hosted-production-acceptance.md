@@ -1,90 +1,80 @@
 # Hosted Excalidraw: current implementation acceptance
 
-This is an implementation checkpoint, **not A01–A25 release approval**. User authorization covers engineering work, not npm publication, push or release-branch merge. Shared alpha was not changed. Earlier builtin/CSP failures are historical; the optional-default migration is now integrated.
+Engineering checkpoint, **not A01–A25 release approval**. Authorization covers implementation, not npm publication, push or release-branch merge. Shared alpha was not edited. Historical results below are not represented as reruns of the latest source.
 
-## Current implementation
+## Integrated implementation
 
-- Host `aa86769` includes ORI-31 migration (`5450e4b`), production notification/desktop corrections (`43e0383`), red parity tests (`9e33a8a`) and ORI-33 update/offline-recovery work. ORI-31 delivers: no builtin drawing implementation, tools/API, root editor/converter dependencies, drawing fonts or dedicated build hook. A tiny official catalog/icon and honest old-history recovery remain. Plugin source `5b772fd` includes migration regressions; its runtime tgz is byte-identical to `c54e0b6`.
-- The exact prebuilt development archive has 426 declared resources. It retains native Excalidraw, candidates, revision CAS, workspace hash/no-replace saves, opaque legacy migration, Chinese/fonts, local backups and unchanged strict CSP. No registry publication or online provider acceptance is inferred.
-- Final physical package/offline consumer tests inspect both Node/browser output and installed transitive closure. Official card is visible absent; startup sends no plugin/font or external requests. KaTeX math fonts and SDK `grok-mermaid` are not Excalidraw dependencies.
-- Reference-aware GC preserves current/previous/pending/pin/asset and transaction references; 50 actual different-version process/CAS/directory cycles pass. Unknown recovery references fail closed.
+- Optional-default extraction remains: no builtin drawing implementation/API/tools, root Excalidraw dependencies, drawing fonts or drawing-specific host build. Offline official catalog and explicit historical-data recovery remain.
+- Host integrates ORI-34 focused tests, ORI-35 aggregate multiview transport and ORI-36 host-linked updates (`4c0ebbd`), plus synchronization/hash test corrections (`aef2c31`). Plugin source **`6108c6b`** integrates bounded viewport persistence/restoration and safe absent/empty/deleted labels. Groups and arrow bindings remain covered.
+- Independently rebuilt exact development archive: SHA-256 **`9a9b92631e5a534c1fda83e7bbeb5743d1de20be91bda39f6984a01bb1e71a68`**, **15,665,065 bytes**, 426 declared resources. Guard validates archive paths, every resource hash/size, entrypoints, licenses and no workspace/file/link dependency leakage. This is a local development artifact, not a published npm release.
+- Same-profile starvation was demonstrated by ORI-35 using 44 Chromium max-sockets-per-group stalls and a controlled connection-release intervention. Browser views now use bounded authenticated aggregate reads, not per-frame held HTTP/1.1 polls. Per-view scope/generation/capability and real flush/ack remain enforced.
+- Host startup synchronizes already-installed compatible official plugins even with independent `notify`, preserving absent/disabled/pin/no-downgrade intent. Open-editor pending is not marked complete; failures preserve compatible runtime and retry next startup. Offline incompatible runtime cannot publish tools/assets. Business-package updater's local-pair preflight remains conservative, **not a staged atomic paired update**.
+- Production uses `hosted_plugins_changed`, not v1's page-reloading event. Desktop download permission remains limited to trusted same-origin blob PNG/SVG/JSON/Excalidraw exports; remote/foreign/executable downloads are denied. CSP unchanged.
 
-## Production-path defect found by the packaged test
+## Latest executed verification
 
-Earlier complete-App fixtures supplied their own `changed` callback, publishing a snapshot. **Actual `pi-host` still published legacy `plugins_changed`, whose client handler reloads the page.** Thus earlier tests did not certify that exact bootstrap notification path.
+- Host check/build PASS. Full Node **391 pass / 1 Windows-only skip** plus desktop **92 pass**: **483 pass / 1 skip**. New acceptance-reporter tests are included. Plugin check/build and **17/17** tests PASS. Exact archive integration/actual-bootstrap event tests ran, not skipped.
+- Complete-App Chromium suite against the independently built archive: **15 passed bodies / 0 failed bodies / 1 skipped legacy-only diagnostic**. The original 1440/390 production lifecycle files are unchanged and pass cleanly. Same-profile second window, repeated SDK cards, native exports/theme, composition/drag safe point, labeled candidate reject/apply/stale protection, bare-shape candidate apply and native viewport restoration all reach their assertions.
+- **Three of those 15 green bodies still have shutdown-failed-closed annotations. Only 12 are clean body + teardown passes.** A09 bare review, streaming subtree removal and dirty losing-window reload leave old uncertain registrations. This is an unresolved product lifecycle gate, not harmless logging. `scripts/verify-hosted-browser-results.mjs` explicitly exits **1** on this final JSON report. It also rejects missing production sizes, skipped product tests, retries, global errors and incomplete results; only the named obsolete transport diagnostic may skip.
+- Initial integrated A06/A09 failures were read-before-sync races introduced by now-persisted native viewport. Test synchronization now waits for actual initial native fit/zoom/pan persistence and a new-generation editor, without weakening full-scene/revision/CAS assertions. Focused A06 additionally proves **byte-identical native canvas PNGs** before/after the real generation switch, unchanged scene/revision, retained SDK/parent boot and stale-generation 409. No backend echo is substituted for rendered pixels.
+- New reference run: M1 Pro/16 GiB/macOS arm64, Node 24.21.0, Chromium 153.0.8010.12. **20 warmups + 50 measured** staged same-version controller/worker replacements; 100 elements/groups/Chinese plus explicit imported viewport fidelity and full checkpoint hash verified. P50 **1,067ms**, P95 **1,241ms**, max **1,366ms** (target P95 <=2s); 70 old worker PIDs confirmed exited, six unique tools, one controller frame, two state snapshots. Local archive integrity/extraction ~1,833ms under concurrent local test load, **not network installation time**. Post-GC browser median growth ~1,033,280 bytes meets the bounded smoke budget, **not proof of no continuous heap growth**. No active editor, direct port/timer/listener census or child CPU/RSS certification.
+- Earlier source's actual macOS arm64 packaged app-directory smoke passed native drawing/undo-redo/Chinese save/PNG/generation reopen/disable-reenable with host PID and parent boot retained. This latest wave did **not** rebuild/rerun that packaged application. Earlier cached runtime reuse, ad-hoc signature checks and fixture-selected download destination do not certify a DMG install, notarization, native dialogs or OS IME.
 
-The production bootstrap now publishes a distinct typed `hosted_plugins_changed` event. Parser/client refresh hosted catalogs through the existing generation mechanism without navigation or Agent reconstruction. Legacy v1 `plugins_changed` retains its existing behavior. A real bootstrap + installed exact tgz + authenticated HTTP + event stream regression asserts activation emits the hosted event, never the reload event. Complete-App fixtures now use that same event.
+## Unresolved implementation gates and real continuation
 
-The desktop shell also rejected **all** downloads, preventing native PNG export. It now allows only PNG/SVG/JSON/Excalidraw blob exports from the current trusted app document and same backend origin, with exact blob URL/name/MIME checks and a native destination/overwrite dialog. Remote/redirected/foreign document/file/data/executable downloads remain denied. This adds no renderer IPC or general filesystem permission.
+**ORI-37** owns normal removed-view flush-before-destruction and dirty-reload reconciliation. A newer server CAS revision, a replacement clean frame, localStorage, elapsed time or lost socket is not proof that an old realm had no newer draft. No TTL/registry clearing/fabricated ack or automatic Restore was added. Preserve losing geometry rescue/download and explicit Restore. Lost/unconfirmed views must continue to fail closed until a real identity-bound safe handoff or explicit audited reconciliation exists.
 
-## Executed verification
+**ORI-38** owns staged controlled host/plugin combination updates and the preflight→selection→restart consistency gap. ORI-36's worker-exists/local-compatibility callback does not attest a future host protocol implementation or stage a necessary new plugin release. Manual native-shell replacement is not inherently transactional; startup compatibility validation must retain data and visibly refuse an incompatible runtime. Native installer atomicity, publisher provenance and full OS updates are not claimed.
 
-- Type checks/build pass after integrating ORI-33. Full host Node **375 pass / 1 Windows-only skip**, desktop Node **92 pass** (including download allow/deny tests). Total **467 pass / 1 skip**. Exact archive and actual-bootstrap notification subtest were supplied, not skipped.
-- Chromium complete-App + authenticated HTTP + real worker/tgz + exact retained SDK object at **1440/390px: 2 pass**, under unchanged CSP. Includes absent card, install disabled, enable, real SDK drawing, hand edit/native undo-redo/PNG, Chinese workspace save, pending update, explicit undo warning/reopen, disable/uninstall/reinstall, zero page errors/external requests and stable parent boot identity.
-- New complete-host reference test: **20 warmups + 50 measured staged same-version replacements**, real controller realm and worker, 100 elements/groups/Chinese validated checkpoint data preserved by full hash (not viewport fidelity; see the red parity result below), 70 old worker PIDs confirmed exited, six unique tools, one current frame, two state snapshots. Reference M1 Pro/16 GiB/macOS arm64/Node 24.21.0/Chromium 153.0.8010.12: local switch P50 **764ms**, P95 **903ms**, max **994ms**, satisfying the scoped <=2s design target. Archive 15,644,138 bytes; local integrity/extraction ~247ms (not network install time). Host CPU/RSS and all samples are in the task evidence. Post-GC browser medians grew ~768 KiB; this passes an explicit bounded-growth smoke budget, **not proof of zero continuous heap growth**. Active editor gestures, direct port/listener/timer census and child CPU/RSS are not measured here.
-- Local **packaged macOS arm64 app-directory** launches with strict ad-hoc signature verification and sandboxed renderer. Cached standalone Node 22.23.3/dependencies were reused after archive-SHA and exact dependency-manifest checks; all host payloads were refreshed. This is not a new network prepare, DMG installation, publisher signature or notarization.
-- Baseline packaged smoke passes standalone runtime/PTY/files/shared-browser/update protection/shutdown. Dedicated exact-plugin packaged smoke passes real activation/worker, native drawing/undo-redo, Chinese text insertion and Chinese-path save, PNG completion, generation reopen, disable/reenable with scene/file/host PID/parent boot invariants. Plugin archive is pre-staged by the real installer and host-version marker deliberately fixes offline discovery. Native save destination is fixture-selected, while production download trust checks still execute. It does not inspect an SDK object across process boundaries or certify native OS IME/file dialogs.
+Both are actual assigned child tasks; parent integrates and verifies their commits. Existing implementation authorization remains sufficient. No repeated implementation approval is requested.
 
-## Integrated parity findings — currently RED
+## A01–A25 matrix — scope not silently reduced
 
-ORI-32's new real hosted suite was integrated and rerun with the production hosted event and ORI-33. **8 body tests pass / 3 fail / 0 skip** across nine new parity cases and the two existing production lifecycle tests. Some green bodies additionally report fail-closed shutdown rejection; they are not clean lifecycle passes.
-
-- A06 fails: native zoom/pan are stripped from checkpoints and reset on editor mount. The reference performance test compares the **validated persisted** checkpoint, so it does not prove that unsupported viewport fields survived the original import.
-- A09 fails: an x-only patch on an unlabeled rectangle crashes bound-text materialization; original geometry is retained.
-- A11 fails: a second same-profile window's preview stalls. Per-view HTTP/1.1 long polls exhausting origin connections is a hypothesis under investigation, not yet a certified cause.
-- Streaming subtree replacement and abrupt losing-window reload leave uncertain registrations; shutdown correctly refuses missing acknowledgements. No registrations are silently expired or cleared to manufacture a pass.
-
-Assigned fixes: ORI-34 owns plugin viewport/unlabeled candidates; ORI-35 owns responsive multiview transport/safe view lifecycle. ORI-36 owns host-linked plugin updates: ORI-33's default notify currently checks only on host changes, which does **not yet satisfy** the user's requirement to synchronize installed official plugins on host upgrades. Independent notification policy and host-linked synchronization must be distinguished without changing absent/disabled/pin intent.
-
-ORI-33 adds persistent update diagnostics/pin enforcement and a fingerprint-bound **offline** stopped-owner CLI, with real SIGKILL health/fork/prepare/commit/cleanup tests. It does not prove owners stopped from PID data and does not auto-steal locks or roll back latest accepted writes. Its bounds remain in [update/recovery](hosted-update-recovery.md).
-
-## Remaining matrix (scope is not silently reduced)
-
-| Item | Evidence / remaining gate |
+| Item | Current evidence / remaining gate |
 | --- | --- |
-| A01 | Clean npm-shaped tgz/offline installed closure and actual installed `/web` startup pass; desktop package-directory baseline also runs. Formal all-target release artifacts remain. |
-| A02 | Chromium same-object SDK/boot lifecycle and real packaged macOS host/boot PID checks pass. |
-| A03 | SDK/TUI direct/nested/codemode/tombstone negatives pass; keep product scope. |
-| A04 | Plan/allowlist tests pass; real v1 plan-mode package UI interaction remains. |
-| A05 | Retained/background batch drain tests pass; long-provider-stream/multiwindow product matrix remains. |
-| A06 | Validated 100-element checkpoint hash survives 70 replacements; native viewport parity is RED and assigned ORI-34. |
-| A07 | Real pointer-drag plus synthetic composition blocks send and retains composer text, then release dispatches; native OS IME remains. |
-| A08 | Pending default, explicit undo-reset warning and native undo/redo pass; multiwindow repetitions remain. |
-| A09 | Labeled candidates apply/reject/stale protection pass; unlabeled patch preview is RED; streaming body passes but uncertain-view shutdown remains. |
-| A10 | Chromium native source/Open/SVG/transparent PNG/backup/theme passes at English-light1440 and Chinese-dark390; packaged macOS drawing/save/PNG passes. Full Mermaid/OS dialogs still unverified. |
-| A11 | Independent profiles exercise real CAS loser/download/explicit restore; same-profile responsiveness RED; uncertain registration reconciliation remains. |
-| A12 | Installer/manager negatives pass; broader cancellation/disk-full/network fault matrix delegated. |
-| A13 | Archive/resource negatives and strict CSP pass; desktop remote/executable download denial tests added. |
-| A14 | Broker/runtime fence actual state/file writes; stale callback E2E expansion remains. |
-| A15 | Precommit failure retains old data; unsupported cross-schema migration refuses; generalized schema rollback not certified. |
-| A16 | Real health/fork/prepare/commit/cleanup SIGKILL plus explicit fingerprinted offline recovery pass bounded tests; external isolation/power-loss/OS/workspace uncertain-save gates remain. |
-| A17 | Stable compatibility/no-downgrade/pin/retry/persisted diagnostic tests pass; policy UI compiled, comprehensive interaction remains. |
-| A18 | Failed startup retries and success marker tested; default host-linked synchronization is not yet correct, assigned ORI-36; full paired updater remains. |
-| A19 | Full archive/browser uninstall/reinstall preserves native files and drafts; packaged disable/reenable also preserves bytes. |
-| A20 | 50 different-version backend GC cycles and 70 complete-host same-version controller/worker cycles pass bounded checks; long heap/port/timer proof remains. |
-| A21 | Real SDK/TUI factories/retained sessions and installed `/web` exercised; broader interactive terminal matrix remains. |
-| A22 | Packaged macOS arm64 bounded drawing test now passes. Windows/Linux/macOS x64, native file dialogs and OS IME **NOT RUN**. |
-| A23 | Chromium and Electron tested; Firefox/WebKit/other claimed supported browsers **NOT RUN**. |
-| A24 | Opaque checkpoint/ID/focus/history/localStorage regressions and absence of dual builtin registration pass bounded tests; comprehensive old-history browser recovery remains delegated. |
-| A25 | Specified local staged-switch reference and baseline samples recorded; network install, child CPU/RSS and all-platform SLO matrix **NOT RUN**. |
-
-Current follow-ups are actual assigned children ORI-34 (plugin red cases), ORI-35 (multiview/uncertain-view lifecycle) and ORI-36 (host-linked updates), not requests for repeated implementation permission. Parent integrates their commits and owns final acceptance. No full release pass or publication is claimed.
+| A01 | Prior clean tgz/offline installed closure and actual installed `/web` startup pass; no editor/font in host. All-target release artifacts not certified. |
+| A02 | Current Chromium same-object SDK/boot install/edit/update/disable/uninstall lifecycle passes. Prior packaged macOS PID/boot check only. |
+| A03 | SDK/TUI direct/nested/codemode/tombstone negatives pass. |
+| A04 | Plan/allowlist tests pass; actual v1 plan-mode package UI interaction remains. |
+| A05 | Retained/background batch drain pass; real long-provider-stream/multiwindow combinations remain. |
+| A06 | Native synchronized zoom/pan and byte-identical rendered pixels now pass; 100 grouped shapes and imported Chinese checkpoint preserved. Broader native freehand/arrow/text matrix remains. |
+| A07 | Real held drag + synthetic composition retains prompt and blocks send until safe. OS-native IME not run. |
+| A08 | Pending default, explicit undo-reset warning and same-generation native undo/redo pass. |
+| A09 | Labeled/bare candidates, apply/reject/stale protection and progressive preview bodies pass; bare-review/removed-stream teardown remains RED (ORI-37). |
+| A10 | Native source/Open/SVG/transparent PNG/backups/themes pass at English-light1440 and Chinese-dark390. Prior packaged macOS save/PNG only; OS dialogs not certified. |
+| A11 | Same-profile windows/repeated cards now pass; actual CAS loser/download/reload/explicit Restore body passes, old unknown-view reconciliation remains RED (ORI-37). |
+| A12 | Installer/manager interruption/integrity/failure negatives pass; comprehensive disk-full/cancellation product matrix incomplete. |
+| A13 | Archive/resource negatives and strict CSP pass; desktop trust-bound download allow/deny tests pass. |
+| A14 | Broker/runtime fence real state/file writes; current native switch rejects stale generation. Wider stale callback matrix remains. |
+| A15 | Precommit failure preserves old data; unsupported cross-schema migration refuses. Generalized reverse migration/rollback not certified. |
+| A16 | Prior real health/fork/prepare/commit/cleanup SIGKILL and fingerprint-bound offline recovery tests pass bounded scope. External isolation/power loss/OS uncertain-save gates remain. |
+| A17 | Stable compatibility/no-downgrade/pin/retry/persisted diagnostic tests and real policy UI interactions pass. No periodic independent scheduler claimed. |
+| A18 | Default host-linked installed-plugin synchronization now passes (including disabled/pin/absent/offline retry). Full controlled paired selection/restart remains ORI-38. |
+| A19 | Current browser uninstall/reinstall retains files/drafts; prior packaged disable-reenable retains bytes. |
+| A20 | 50 different-version backend GC + 70 current controller/worker cycles pass bounded checks. Direct port/timer census and long-term heap proof remain. |
+| A21 | Real SDK/TUI factories/retained sessions and prior installed `/web` exercised; wider terminal interactions remain. |
+| A22 | Prior packaged macOS arm64 bounded drawing only. Latest packaged wave, Windows/Linux/macOS x64, OS IME/native dialogs NOT RUN. |
+| A23 | Current Chromium complete-App suite has three unresolved lifecycle failures; Electron prior bounded test only. Firefox/WebKit not installed/run. |
+| A24 | Opaque checkpoint/ID/focus/history/localStorage migration regressions and no dual builtin registration pass bounded tests; comprehensive old-history browser recovery remains. |
+| A25 | Current specified staged-switch reference meets P95 target; network install/child CPU/RSS/active-editor/all-platform performance NOT RUN. |
 
 ## Reproduction
 
 ```sh
 npm run check
 npm run build
-HOSTED_EXCALIDRAW_TGZ=/absolute/plugin.tgz npm test
-HOSTED_EXCALIDRAW_TGZ=/absolute/plugin.tgz HOSTED_STRESS=1 \
-  npx playwright test test/browser/hosted-production.spec.ts test/browser/hosted-stress.spec.ts
-# Exact published-shaped offline consumer instructions:
-# docs/hosted-excalidraw-migration.md
-# A locally prepared/signed app on the current target OS, never cross-built:
-node scripts/smoke-desktop.mjs --packaged
 HOSTED_EXCALIDRAW_TGZ=/absolute/plugin.tgz \
-PI_WEB_DESKTOP_EXECUTABLE=/absolute/pi.app/Contents/MacOS/pi \
-  node --experimental-strip-types scripts/smoke-hosted-desktop.mjs
+HOSTED_EXCALIDRAW_SHA256=<recorded-exact-sha256> npm test
+HOSTED_EXCALIDRAW_TGZ=/absolute/plugin.tgz \
+PLAYWRIGHT_JSON_OUTPUT_FILE=/absolute/playwright.json \
+  npx playwright test test/browser/hosted-parity.spec.ts \
+  test/browser/hosted-production.spec.ts test/browser/hosted-transport.spec.ts \
+  test/browser/hosted-viewport-parity-fix.spec.ts \
+  test/browser/hosted-update-policy.spec.ts --reporter=line,json
+# REQUIRED: body-green is insufficient; currently exits 1 on three real shutdown failures.
+node scripts/verify-hosted-browser-results.mjs /absolute/playwright.json
+HOSTED_EXCALIDRAW_TGZ=/absolute/plugin.tgz HOSTED_STRESS=1 \
+  npx playwright test test/browser/hosted-stress.spec.ts
 ```
 
-Normal preparation is `npm run desktop:prepare` then `npm run desktop:package -- --dir`; do not mutate shared caches, skip signature checks, relax CSP or auto-steal locks to make tests pass. Development protocol `0.2.0-dev.1` remains verification-only and its release guard is unchanged.
+Normal desktop preparation remains `npm run desktop:prepare` followed by `npm run desktop:package -- --dir` on the actual target OS. Never relax CSP, signatures or ownership locks to manufacture passes. Protocol `0.2.0-dev.1` remains verification-only; release guard unchanged. No publication, push or release merge.
