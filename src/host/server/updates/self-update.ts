@@ -44,12 +44,14 @@ export class SelfUpdater {
   private readonly desktopReleaseChannels: boolean;
   private readonly peerSpecs: typeof desktopPeerSpecs;
   private readonly verifyPackage: typeof verifyDesktopPackage;
+  private readonly validateHostedPair?: (version: string, packageRoot: string) => Promise<void>;
   private preparing = false;
   private savingPreference = false;
   private restartPending = false;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string>; desktopManaged?: boolean;
-    desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage }) {
+    desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
+    validateHostedPair?: (version: string, packageRoot: string) => Promise<void> }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
@@ -60,6 +62,7 @@ export class SelfUpdater {
     this.desktopReleaseChannels = options.desktopReleaseChannels ?? process.env.PI_WEBAPP_DESKTOP_RELEASE_CHANNELS === "1";
     this.peerSpecs = options.peerSpecs ?? desktopPeerSpecs;
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
+    this.validateHostedPair = options.validateHostedPair;
   }
 
   private async current(): Promise<string> {
@@ -164,6 +167,8 @@ export class SelfUpdater {
         if (status.downgrade && dataVersion(pkg) !== dataVersion(currentPackage)) throw new Error("数据格式不兼容，不能直接切回旧版。请先备份并按恢复指南操作。");
         const launcher = join(installed, "bin", "pi-webapp.mjs");
         await Promise.all([launcher, join(installed, "dist", "extension.js"), join(installed, "web", "dist", "index.html")].map((path) => access(path)));
+        // Both npm launcher and desktop-package selection use the same precommit gate.
+        await this.validateHostedPair?.(status.latest, installed);
         if (this.desktopManaged) {
           const selected = await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion });
           await this.verifyPackage(this.packageRoot, installed);

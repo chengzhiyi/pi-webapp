@@ -14,14 +14,18 @@ available version, persisted check outcome/time/host version and error messages.
 `notify`, `automatic`, `pinned`, plus an exact stable version for a pin. It never
 accepts storage paths or caller workspace scope.
 
-| Policy | On a changed host version | Manual actions |
-| --- | --- | --- |
-| notify (default) | Check registry only, never download or activate | Check/update explicitly |
-| automatic | Update installed plugins only; disabled stays disabled; active editors defer activation | Existing explicit update/retry controls |
-| pinned | Skip host-upgrade reconciliation, retain exact version | Change policy before selecting a different version |
+ORI-36 separates independent notifications from host-linked synchronization.
 
-There is no background interval scheduler. These policies cover startup after
-host version change, not the desktop application updater. Absent plugins never
+| Policy | On a changed host version | Independent/manual actions |
+| --- | --- | --- |
+| notify (default) | Synchronize compatible stable installed plugins; defer open editors | Check only never downloads; update/retry explicit |
+| automatic | Same host-linked synchronization | No background interval scheduler implemented |
+| pinned | Validate/retain exact local version; visible required action if incompatible | Change pin before selecting a different version |
+
+There is no background interval scheduler. The independent-policy preference is
+not an opt-out from host-linked synchronization. The selected business-package
+updater has a conservative local pairing preflight; the native OS updater does
+not yet have a full paired transaction. See [ORI-36 report](hosted-linked-update.md). Absent plugins never
 cause registry traffic or editor download at startup. Compatible local enabled
 code starts offline, without replacing the parent or AgentSession. Pin and disabled
 choices survive restart. A pin cannot be bypassed by manual enable/install with
@@ -140,7 +144,7 @@ only by the test fixture; there is no environment-variable or HTTP kill switch.
 | unknown journal vs active | Refuse without deleting journal or replacing pointer | Manual forensic restoration required |
 | active/previous referenced fork | Refuse even with confirmation | Never resolves ambiguity by rollback |
 | A15 schema differs after latest accepted writes | Explicit migration-required rejection; latest state/pointer preserved | No cross-schema migration or rollback implementation |
-| A17 notify / automatic / pinned / absent / disabled | Actual manager transport counters, persisted diagnostics, no newer release and no-compatible explanations | New UI compiles/builds; no new browser policy-control interaction run |
+| A17 independent check / linked default / automatic / pinned / absent / disabled | Actual manager transport counters, persisted diagnostics, no newer release and no-compatible explanations | New UI compiles/builds; no new browser policy-control interaction run |
 | A18 failed vs successful startup | Failure retries on next startup; success checks once per host version | Full paired application/plugin updater remains out of scope |
 
 Validation on this worktree:
@@ -163,6 +167,8 @@ HOSTED_EXCALIDRAW_TGZ=/absolute/path/to/chengzhiyi-pi-excalidraw-0.1.0.tgz \
   node --import ./test/setup-env.mjs --experimental-strip-types --test \
   --test-concurrency=4 test/hosted-*.test.ts
 ```
+
+The counts above are the historical ORI-33 milestone; see the ORI-36 report for current validation.
 
 The strict CSP, third-party font/code prohibition, generation/CAS broker,
 parent/session identity and native undo lifecycle are unchanged. No generic

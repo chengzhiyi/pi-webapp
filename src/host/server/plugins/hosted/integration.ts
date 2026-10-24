@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import type { HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
 import type { HostedActionInput, HostedContribution, HostedManageInput, HostedPluginCatalog, HostedViewInput } from "../../../../contracts/hosted-plugins.ts";
@@ -167,6 +168,15 @@ export class HostedPluginIntegration {
       }
     });
     this.started = true;
+  }
+  /** Refuse known incompatible selected host/plugin combinations before updater pointer writes. */
+  async validateHostUpdate(version: string, packageRoot: string): Promise<void> {
+    await this.enqueue(async () => {
+      if (await this.manager.validateHostUpdate(version)) {
+        try { await access(join(packageRoot, "dist", "hosted-worker.js")); }
+        catch { throw new HostedPluginError("host_pair_required", "Selected host has no hosted worker; keep current host/plugin pair"); }
+      }
+    });
   }
   async inventory(): Promise<HostedPluginCatalog> {
     const inventory = await this.manager.inventory();
