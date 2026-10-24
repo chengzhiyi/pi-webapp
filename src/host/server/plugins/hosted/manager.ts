@@ -112,9 +112,9 @@ export class HostedPluginManager {
       await atomicJson(join(this.options.root, "policies", "update-checks.json"), diagnostics);
     });
   }
-  private async check(id: string, current?: string, exact?: string): Promise<RegistryRelease> {
+  private async check(id: string, current?: string, exact?: string, signal?: AbortSignal): Promise<RegistryRelease> {
     try {
-      const release = await this.installer.check(id, current, exact);
+      const release = await this.installer.check(id, current, exact, signal);
       const newer = !current || compareVersions(release.version, current) > 0;
       if (newer) this.available.set(id, release); else this.available.delete(id);
       await this.recordCheck(id, { status: newer ? "available" : "up-to-date", version: release.version,
@@ -203,19 +203,19 @@ export class HostedPluginManager {
   get tools(): Array<{ pluginId: string; generation: number; descriptors: HostedToolDescriptor[] }> {
     return [...this.supervisors].flatMap(([pluginId, s]) => s.phase === "active" && s.generation !== null ? [{ pluginId, generation: s.generation, descriptors: s.tools }] : []);
   }
-  async manage(id: string, operation: "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry", version?: string): Promise<unknown> {
+  async manage(id: string, operation: "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry", version?: string, signal?: AbortSignal): Promise<unknown> {
     return this.serialize(id, async () => {
       const s = this.supervisor(id), installed = (await this.installer.inventory()).versions[id] ?? [];
       const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
       const result = await (async () => { switch (operation) {
         case "check": {
-          const release = await this.check(id, latest); return { version: release.version };
+          const release = await this.check(id, latest, undefined, signal); return { version: release.version };
         }
         case "install": {
           const policy = (await this.policies())[id];
           if (policy?.updatePolicy === "pinned" && version && version !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Change the pin before selecting another version");
-          const release = await this.check(id, latest, version ?? policy?.pinnedVersion);
-          const pkg = await this.installer.install(id, release); this.available.delete(id);
+          const release = await this.check(id, latest, version ?? policy?.pinnedVersion, signal);
+          const pkg = await this.installer.install(id, release, signal); this.available.delete(id);
           await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; enablement unchanged" });
           // Installation and activation are separate: downloaded code is not silently enabled.
           return { installed: true, version: pkg.version };
@@ -240,10 +240,10 @@ export class HostedPluginManager {
           if (!latest) throw new HostedPluginError("not_installed", "Only installed plugins can be updated");
           const policy = (await this.policies())[id];
           if (policy?.updatePolicy === "pinned" && version !== policy.pinnedVersion) throw new HostedPluginError("version_pinned", "Plugin version is pinned; change its policy before updating");
-          const release = await this.check(id, latest, version);
+          const release = await this.check(id, latest, version, signal);
           const active = await s.broker.active();
           if (release.version === latest && (!active?.enabled || active.version === latest) && !s.pendingVersion) return { unchanged: true, version: latest };
-          const pkg = release.version === latest ? await this.installer.load(id, latest) : await this.installer.install(id, release);
+          const pkg = release.version === latest ? await this.installer.load(id, latest) : await this.installer.install(id, release, signal);
           this.available.delete(id);
           await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; activation may wait for editors" });
           if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
@@ -255,7 +255,10 @@ export class HostedPluginManager {
           return { installed: false, dataPreserved: true };
         }
         default: throw new HostedPluginError("invalid_operation", "Unknown plugin management operation");
-      } })();
+      } })().catch(async error => {
+        if (["install", "update"].includes(operation)) await this.recordCheck(id, { status: "failed", message: error instanceof Error ? error.message : String(error) });
+        throw error;
+      });
       if (["install", "enable", "retry", "update"].includes(operation)) await this.collectSettled(id);
       return result;
     });

@@ -196,8 +196,20 @@ export class HostedPluginIntegration {
       } : {}),
     })) };
   }
+  private readonly downloads = new Map<string, { id: string; abort: AbortController }>();
   async manage(input: HostedManageInput): Promise<HostedPluginCatalog> {
-    await this.enqueue(async () => {
+    if (input.operation === "cancel-download") {
+      const pending = this.downloads.get(input.pluginId);
+      if (!pending || pending.id !== input.downloadId) throw new HostedPluginError("download_not_pending", "This download is no longer pending; refresh to verify its outcome", { status: 409 });
+      pending.abort.abort(new HostedPluginError("download_cancelled", "Download cancellation requested; already committed installations are retained", { status: 409 }));
+      return this.inventory();
+    }
+    const download = input.downloadId && ["install", "update", "check"].includes(input.operation) ? { id: input.downloadId, abort: new AbortController() } : undefined;
+    if (download) {
+      if (this.downloads.has(input.pluginId)) throw new HostedPluginError("download_pending", "Another download is pending", { status: 409 });
+      this.downloads.set(input.pluginId, download);
+    }
+    try { await this.enqueue(async () => {
       const view = this.coordinator(input.pluginId);
       // Explicit disable/uninstall closes editors after flush; it is not an automatic update.
       view.allowImmediateReopen(input.reopenEditors === true || input.operation === "disable" || input.operation === "uninstall");
@@ -207,12 +219,13 @@ export class HostedPluginIntegration {
           await this.manager.setPolicy(input.pluginId, { updatePolicy: input.updatePolicy, ...(input.updatePolicy === "pinned" ? { pinnedVersion: input.version } : {}) });
           return;
         }
-        const result = await this.manager.manage(input.pluginId, input.operation, input.version);
+        const result = await this.manager.manage(input.pluginId, input.operation as Exclude<HostedManageInput["operation"], "policy" | "cancel-download">, input.version, download?.abort.signal);
         if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
       } finally { view.allowImmediateReopen(false); }
     });
     this.options.changed?.();
     return this.inventory();
+    } finally { if (download && this.downloads.get(input.pluginId) === download) this.downloads.delete(input.pluginId); }
   }
   private async action(input: HostedActionInput): Promise<unknown> {
     const scope = this.scope(input.sessionId);
