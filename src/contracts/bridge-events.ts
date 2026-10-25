@@ -79,6 +79,7 @@ export function parseBridgeEvent(value: unknown): BridgeEvent {
       if (optional(value, "reconnect", boolean)) return { type: "shutdown", ...(value.reconnect === undefined ? {} : { reconnect: value.reconnect as boolean }) };
       break;
     case "plugins_changed": return { type: "plugins_changed" };
+    case "hosted_plugins_changed": return { type: "hosted_plugins_changed" };
     case "plugin_state":
       if (Array.isArray(value.disabled) && value.disabled.every(id => typeof id === "string" && id.length <= 200)) return { type: "plugin_state", disabled: value.disabled };
       break;

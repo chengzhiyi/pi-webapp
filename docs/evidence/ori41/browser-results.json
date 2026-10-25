@@ -1,0 +1,2121 @@
+{
+  "config": {
+    "argv": [
+      "/Users/chengcheng/.nvm/versions/node/v24.21.0/bin/node",
+      "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "playwright.hosted-matrix.config.ts",
+      "--project=firefox",
+      "--project=webkit",
+      "--reporter=line,json"
+    ],
+    "configFile": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/playwright.hosted-matrix.config.ts",
+    "rootDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts"
+        ],
+        "timeout": 20000
+      },
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts"
+        ],
+        "timeout": 20000
+      },
+      {
+        "outputDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "hosted-parity.spec.ts",
+          "hosted-production.spec.ts",
+          "hosted-transport.spec.ts",
+          "hosted-viewport-parity-fix.spec.ts",
+          "hosted-update-policy.spec.ts"
+        ],
+        "timeout": 20000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "hosted-parity.spec.ts",
+      "file": "hosted-parity.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 8567,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:14:104",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                      "column": 104,
+                      "line": 14
+                    },
+                    "snippet": "  12 |     const canvas = editor.locator(\"canvas.interactive\");\n  13 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 14 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.elements[0].x).not.toBe(0);\n     |                                                                                                        ^\n  15 |     const moved = await h.action(\"get\", { id: created.id });\n  16 |     await page.keyboard.press(\"ControlOrMeta+-\");\n  17 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.appState.zoom?.value).toBeLessThan(moved.scene.appState.zoom.value);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                        "column": 104,
+                        "line": 14
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  12 |     const canvas = editor.locator(\"canvas.interactive\");\n  13 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 14 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.elements[0].x).not.toBe(0);\n     |                                                                                                        ^\n  15 |     const moved = await h.action(\"get\", { id: created.id });\n  16 |     await page.keyboard.press(\"ControlOrMeta+-\");\n  17 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.appState.zoom?.value).toBeLessThan(moved.scene.appState.zoom.value);\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:14:104"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:17.391Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A06-100-grou-d19a8-t-parent-session-recreation-firefox/attachments/frame-diagnostics-0-db4af36f497001d17ed3646db5cb5aa0c3e72f91.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A06-100-grou-d19a8-t-parent-session-recreation-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A06-100-grou-d19a8-t-parent-session-recreation-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                    "column": 104,
+                    "line": 14
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-43b28704ad497b0dd643",
+          "file": "hosted-parity.spec.ts",
+          "line": 7,
+          "column": 1
+        },
+        {
+          "title": "A07: composition and held native drag reject send, preserve composer and then reach a real safe point",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3543,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:30.074Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "safe-point",
+                      "contentType": "application/json",
+                      "body": "eyJpZCI6ImMxYzE0YmQ4LWQyNTYtNDE5Zi1hMmY0LTRiMDVmMmVmY2RiNyIsInRpdGxlIjoi5Lit5paH5YiG57uE55S75biDIiwic2NlbmUiOnsidHlwZSI6ImV4Y2FsaWRyYXciLCJ2ZXJzaW9uIjoyLCJzb3VyY2UiOiJwaS13ZWJhcHAiLCJlbGVtZW50cyI6W3siaWQiOiJib3gtMCIsInR5cGUiOiJyZWN0YW5nbGUiLCJ4IjowLCJ5IjowLCJ3aWR0aCI6MTIwLCJoZWlnaHQiOjcwLCJhbmdsZSI6MCwic3Ryb2tlQ29sb3IiOiIjMWUxZTFlIiwiYmFja2dyb3VuZENvbG9yIjoidHJhbnNwYXJlbnQiLCJmaWxsU3R5bGUiOiJzb2xpZCIsInN0cm9rZVdpZHRoIjoyLCJzdHJva2VTdHlsZSI6InNvbGlkIiwicm91Z2huZXNzIjoxLCJvcGFjaXR5IjoxMDAsImdyb3VwSWRzIjpbImdyb3VwLTAiXSwiZnJhbWVJZCI6bnVsbCwiaW5kZXgiOiJhMCIsInJvdW5kbmVzcyI6bnVsbCwic2VlZCI6MjAxOTUzMjgyMywidmVyc2lvbiI6MiwidmVyc2lvbk5vbmNlIjoxOTk2MTgxNzIxLCJpc0RlbGV0ZWQiOmZhbHNlLCJib3VuZEVsZW1lbnRzIjpbXSwidXBkYXRlZCI6MTc5Mjg2NjgxMjcwMSwibGluayI6bnVsbCwibG9ja2VkIjpmYWxzZX0seyJpZCI6IjNxZmZFWDB1bVowZC10X29pY29WQiIsInR5cGUiOiJyZWN0YW5nbGUiLCJ4Ijo1OS41LCJ5IjotNDYsIndpZHRoIjo4MCwiaGVpZ2h0Ijo3MCwiYW5nbGUiOjAsInN0cm9rZUNvbG9yIjoiIzFlMWUxZSIsImJhY2tncm91bmRDb2xvciI6InRyYW5zcGFyZW50IiwiZmlsbFN0eWxlIjoic29saWQiLCJzdHJva2VXaWR0aCI6Miwic3Ryb2tlU3R5bGUiOiJzb2xpZCIsInJvdWdobmVzcyI6MSwib3BhY2l0eSI6MTAwLCJncm91cElkcyI6W10sImZyYW1lSWQiOm51bGwsImluZGV4IjoiYTEiLCJyb3VuZG5lc3MiOnsidHlwZSI6M30sInNlZWQiOjc5MTM4NDA1MCwidmVyc2lvbiI6NywidmVyc2lvbk5vbmNlIjoxMjUzMTU2NTkwLCJpc0RlbGV0ZWQiOmZhbHNlLCJib3VuZEVsZW1lbnRzIjpudWxsLCJ1cGRhdGVkIjoxNzkyODY2ODEzNDg1LCJsaW5rIjpudWxsLCJsb2NrZWQiOmZhbHNlfV0sImFwcFN0YXRlIjp7InZpZXdCYWNrZ3JvdW5kQ29sb3IiOiIjZmZmZmZmIiwiem9vbSI6eyJ2YWx1ZSI6MX0sInNjcm9sbFgiOjI2My41LCJzY3JvbGxZIjo0NDZ9LCJmaWxlcyI6e319LCJyZXZpc2lvbiI6Miwic2F2ZWRSZXZpc2lvbiI6bnVsbCwicGF0aCI6bnVsbCwiZGlza0hhc2giOm51bGwsImNhbmRpZGF0ZSI6bnVsbH0="
+                    },
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A07-composit-44c2c-hen-reach-a-real-safe-point-firefox/attachments/frame-diagnostics-0-553aa7c4c7b2191032d04452c586544f521d792f.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-18b5b08b6e146d108335",
+          "file": "hosted-parity.spec.ts",
+          "line": 43,
+          "column": 1
+        },
+        {
+          "title": "A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7650,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:34.245Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-candidat-85d8c-tual-tool-and-review-frames-firefox/attachments/frame-diagnostics-0-395d16d14a8832f0392c8005024356ae7e575c6a.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-43a44d6d281e731d3c87",
+          "file": "hosted-parity.spec.ts",
+          "line": 69,
+          "column": 1
+        },
+        {
+          "title": "A09: patching an unlabeled native shape must render a review rather than crash materialization",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3041,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:41.903Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-patching-16f28--than-crash-materialization-firefox/attachments/frame-diagnostics-0-e528c26e23485221ac90ae0e873ec138821ed2b3.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-d4784854e025ce4ada8e",
+          "file": "hosted-parity.spec.ts",
+          "line": 107,
+          "column": 1
+        },
+        {
+          "title": "A09: actual hosted tool frame paints progressive arguments before any final result",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [
+                {
+                  "type": "shutdown-failed-closed",
+                  "description": "Error: Close editors before updating; old version retained\n    at fail (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)\n    at HostedViewCoordinator.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)\n    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)\n    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)\n    at file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2247,
+                  "error": {
+                    "message": "Error: Close editors before updating; old version retained",
+                    "stack": "Error: Close editors before updating; old version retained\n    at fail (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)\n    at HostedViewCoordinator.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)\n    at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)\n    at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts",
+                      "column": 49,
+                      "line": 13
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39m../../src/host/server/plugins/hosted/views.ts:13\n\n  11 | }\n  12 | interface Barrier { id: number; pending: Set<string>; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }\n> 13 | const fail = (message: string) => Object.assign(new Error(message), { status: 409, code: \"view_barrier\" });\n     |                                                 ^\n  14 | /** One coordinator per plugin. No dirty-view TTL: lost clients require explicit recovery, not silent success. */\n  15 | export class HostedViewCoordinator {\n  16 |   private views = new Map<string, View>();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts",
+                        "column": 49,
+                        "line": 13
+                      },
+                      "message": "Error: Close editors before updating; old version retained\n\n   at ../../src/host/server/plugins/hosted/views.ts:13\n\n  11 | }\n  12 | interface Barrier { id: number; pending: Set<string>; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }\n> 13 | const fail = (message: string) => Object.assign(new Error(message), { status: 409, code: \"view_barrier\" });\n     |                                                 ^\n  14 | /** One coordinator per plugin. No dirty-view TTL: lost clients require explicit recovery, not silent success. */\n  15 | export class HostedViewCoordinator {\n  16 |   private views = new Map<string, View>();\n    at fail (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)\n    at HostedViewCoordinator.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)\n    at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)\n    at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": "TEARDOWN (not a successful flush): Error: Close editors before updating; old version retained\n    at fail \u001b[90m(file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/\u001b[39msrc/host/server/plugins/hosted/views.ts:13:49\u001b[90m)\u001b[39m\n    at HostedViewCoordinator.freeze \u001b[90m(file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/\u001b[39msrc/host/server/plugins/hosted/views.ts:109:34\u001b[90m)\u001b[39m\n    at Object.freeze \u001b[90m(file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/\u001b[39msrc/host/server/plugins/hosted/integration.ts:74:36\u001b[90m)\u001b[39m\n    at Object.freeze \u001b[90m(file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/\u001b[39msrc/host/server/plugins/hosted/manager.ts:63:29\u001b[90m)\u001b[39m\n    at \u001b[90mfile:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/\u001b[39msrc/host/server/plugins/hosted/supervisor.ts:160:26 {\n  status: \u001b[33m409\u001b[39m,\n  code: \u001b[32m'view_barrier'\u001b[39m\n}\n"
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:44.955Z",
+                  "annotations": [
+                    {
+                      "type": "shutdown-failed-closed",
+                      "description": "Error: Close editors before updating; old version retained\n    at fail (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)\n    at HostedViewCoordinator.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)\n    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)\n    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)\n    at file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26"
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-firefox/attachments/frame-diagnostics-0-ace0851f5acd239c9acf0335a344b6ab165ea593.json"
+                    },
+                    {
+                      "name": "shutdown-failed-closed",
+                      "contentType": "text/plain",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-firefox/attachments/shutdown-failed-closed-521fe084e946b433e06a44c8cfee3ccbb6b4a427.txt"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts",
+                    "column": 49,
+                    "line": 13
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-8ee9f3d111e209cbcdd8",
+          "file": "hosted-parity.spec.ts",
+          "line": 122,
+          "column": 1
+        },
+        {
+          "title": "removed tool close network failure retains the original realm and exposes retry recovery",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2719,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:48.584Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-removed-tool-affa0--and-exposes-retry-recovery-firefox/attachments/frame-diagnostics-0-676c292c99e7b3db94c195d35f983b2623b300df.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-115f5d3cde9b4a900701",
+          "file": "hosted-parity.spec.ts",
+          "line": 168,
+          "column": 1
+        },
+        {
+          "title": "A11: same-profile second window must remain responsive with existing editor long polls",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7657,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n\n    at Object.open (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts:92:77)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:198:46",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                      "column": 77,
+                      "line": 92
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39m../helpers/hosted-parity.ts:92\n\n  90 |   };\n  91 |   const open = async (target = page) => {\n> 92 |     await expect(target.locator('iframe[title=\"Excalidraw tool\"]').first()).toBeAttached();\n     |                                                                             ^\n  93 |     const preview = target.frameLocator('iframe[title=\"Excalidraw tool\"]').first();\n  94 |     await expect(preview.getByRole(\"img\")).toBeVisible({ timeout: 15_000 });\n  95 |     await preview.getByRole(\"button\", { name: options.locale === \"zh\" ? \"编辑 Excalidraw\" : \"Edit Excalidraw\", exact: true }).click();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                        "column": 77,
+                        "line": 92
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n\n\n   at ../helpers/hosted-parity.ts:92\n\n  90 |   };\n  91 |   const open = async (target = page) => {\n> 92 |     await expect(target.locator('iframe[title=\"Excalidraw tool\"]').first()).toBeAttached();\n     |                                                                             ^\n  93 |     const preview = target.frameLocator('iframe[title=\"Excalidraw tool\"]').first();\n  94 |     await expect(preview.getByRole(\"img\")).toBeVisible({ timeout: 15_000 });\n  95 |     await preview.getByRole(\"button\", { name: options.locale === \"zh\" ? \"编辑 Excalidraw\" : \"Edit Excalidraw\", exact: true }).click();\n    at Object.open (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts:92:77)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:198:46"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:33:51.896Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-firefox/attachments/frame-diagnostics-0-9957ff3e3e8661773e6b3aa0e0eb1fd9defe6e6b.json"
+                    },
+                    {
+                      "name": "frame-diagnostics-1",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-firefox/attachments/frame-diagnostics-1-e557e21d2016f0f53f94581e8f3ce10de4d371a6.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                    "column": 77,
+                    "line": 92
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-eff8ee84beed64414ab1",
+          "file": "hosted-parity.spec.ts",
+          "line": 193,
+          "column": 1
+        },
+        {
+          "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 15803,
+                  "error": {
+                    "message": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================",
+                    "stack": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:216:46",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                      "column": 46,
+                      "line": 216
+                    },
+                    "snippet": "  214 |     for (const format of [\"SVG\", \"PNG\"]) {\n  215 |       const button = dialog.getByRole(\"button\", { name: width === 390 ? `导出为 ${format}` : `Export to ${format}`, exact: true });\n> 216 |       const [file] = await Promise.all([page.waitForEvent(\"download\"), button.click()]); const bytes = await readFile((await file.path())!);\n      |                                              ^\n  217 |       await file.saveAs(info.outputPath(`native-${width}.${format.toLowerCase()}`));\n  218 |       if (format === \"SVG\") expect(bytes.toString()).toContain(\"<svg\");\n  219 |       else {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                        "column": 46,
+                        "line": 216
+                      },
+                      "message": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================\n\n  214 |     for (const format of [\"SVG\", \"PNG\"]) {\n  215 |       const button = dialog.getByRole(\"button\", { name: width === 390 ? `导出为 ${format}` : `Export to ${format}`, exact: true });\n> 216 |       const [file] = await Promise.all([page.waitForEvent(\"download\"), button.click()]); const bytes = await readFile((await file.path())!);\n      |                                              ^\n  217 |       await file.saveAs(info.outputPath(`native-${width}.${format.toLowerCase()}`));\n  218 |       if (format === \"SVG\") expect(bytes.toString()).toContain(\"<svg\");\n  219 |       else {\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:216:46"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:34:00.570Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-35ea9--and-themed-menus-at-1440px-firefox/attachments/frame-diagnostics-0-f412d6be4f0816abe9be51b65ea0844256233a39.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-35ea9--and-themed-menus-at-1440px-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-35ea9--and-themed-menus-at-1440px-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                    "column": 46,
+                    "line": 216
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-2764c49d6332205f2c3b",
+          "file": "hosted-parity.spec.ts",
+          "line": 202,
+          "column": 34
+        },
+        {
+          "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 15707,
+                  "error": {
+                    "message": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================",
+                    "stack": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:216:46",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                      "column": 46,
+                      "line": 216
+                    },
+                    "snippet": "  214 |     for (const format of [\"SVG\", \"PNG\"]) {\n  215 |       const button = dialog.getByRole(\"button\", { name: width === 390 ? `导出为 ${format}` : `Export to ${format}`, exact: true });\n> 216 |       const [file] = await Promise.all([page.waitForEvent(\"download\"), button.click()]); const bytes = await readFile((await file.path())!);\n      |                                              ^\n  217 |       await file.saveAs(info.outputPath(`native-${width}.${format.toLowerCase()}`));\n  218 |       if (format === \"SVG\") expect(bytes.toString()).toContain(\"<svg\");\n  219 |       else {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                        "column": 46,
+                        "line": 216
+                      },
+                      "message": "TimeoutError: page.waitForEvent: Timeout 12000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================\n\n  214 |     for (const format of [\"SVG\", \"PNG\"]) {\n  215 |       const button = dialog.getByRole(\"button\", { name: width === 390 ? `导出为 ${format}` : `Export to ${format}`, exact: true });\n> 216 |       const [file] = await Promise.all([page.waitForEvent(\"download\"), button.click()]); const bytes = await readFile((await file.path())!);\n      |                                              ^\n  217 |       await file.saveAs(info.outputPath(`native-${width}.${format.toLowerCase()}`));\n  218 |       if (format === \"SVG\") expect(bytes.toString()).toContain(\"<svg\");\n  219 |       else {\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:216:46"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:34:18.473Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-bbfc8-p-and-themed-menus-at-390px-firefox/attachments/frame-diagnostics-0-0bd9e06b32899f5af139a868aebabf35d2584912.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-bbfc8-p-and-themed-menus-at-390px-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-bbfc8-p-and-themed-menus-at-390px-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                    "column": 46,
+                    "line": 216
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-002614ae721c6f96ae98",
+          "file": "hosted-parity.spec.ts",
+          "line": 202,
+          "column": 34
+        },
+        {
+          "title": "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 9164,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:259:231",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                      "column": 231,
+                      "line": 259
+                    },
+                    "snippet": "  257 |     await secondPage.route(\"**/api/hosted-plugins/action\", async route => { if (route.request().postDataJSON()?.action === \"sync\") { blocked = true; await gate; } await route.continue(); });\n  258 |     const before = await h.action(\"get\", { id: created.id });\n> 259 |     await second.locator(\"canvas.interactive\").click(); await secondPage.keyboard.press(\"ControlOrMeta+a\"); await secondPage.keyboard.press(\"ArrowLeft\"); await secondPage.keyboard.press(\"Escape\"); await expect.poll(() => blocked).toBe(true);\n      |                                                                                                                                                                                                                                       ^\n  260 |     await first.locator(\"canvas.interactive\").click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n  261 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).revision).toBeGreaterThan(before.revision);\n  262 |     const winner = await h.action(\"get\", { id: created.id }); release!();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                        "column": 231,
+                        "line": 259
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  257 |     await secondPage.route(\"**/api/hosted-plugins/action\", async route => { if (route.request().postDataJSON()?.action === \"sync\") { blocked = true; await gate; } await route.continue(); });\n  258 |     const before = await h.action(\"get\", { id: created.id });\n> 259 |     await second.locator(\"canvas.interactive\").click(); await secondPage.keyboard.press(\"ControlOrMeta+a\"); await secondPage.keyboard.press(\"ArrowLeft\"); await secondPage.keyboard.press(\"Escape\"); await expect.poll(() => blocked).toBe(true);\n      |                                                                                                                                                                                                                                       ^\n  260 |     await first.locator(\"canvas.interactive\").click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n  261 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).revision).toBeGreaterThan(before.revision);\n  262 |     const winner = await h.action(\"get\", { id: created.id }); release!();\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts:259:231"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:34:35.792Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-firefox/attachments/frame-diagnostics-0-ad8d4a40c3c324dca7e6af919a21a2f7843192ce.json"
+                    },
+                    {
+                      "name": "frame-diagnostics-1",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-firefox/attachments/frame-diagnostics-1-78c43b8cae92937df37c8ffa710b1523d80acc2e.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-parity.spec.ts",
+                    "column": 231,
+                    "line": 259
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-0023c43cdca8b9321556",
+          "file": "hosted-parity.spec.ts",
+          "line": 245,
+          "column": 1
+        },
+        {
+          "title": "A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 10,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 241,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50539\n[pid=50539][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50549 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50539\n[pid=50539][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50549 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50539\n[pid=50539][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50549 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:34.258Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A06-100-grou-d19a8-t-parent-session-recreation-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A06-100-grou-d19a8-t-parent-session-recreation-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-0d398670eb8fb46d2c6d",
+          "file": "hosted-parity.spec.ts",
+          "line": 7,
+          "column": 1
+        },
+        {
+          "title": "A07: composition and held native drag reject send, preserve composer and then reach a real safe point",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 11,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 83,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50658\n[pid=50658][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50663 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50658\n[pid=50658][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50663 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50658\n[pid=50658][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50663 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:43.038Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A07-composit-44c2c-hen-reach-a-real-safe-point-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A07-composit-44c2c-hen-reach-a-real-safe-point-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-792fd8ca316fba9b88bc",
+          "file": "hosted-parity.spec.ts",
+          "line": 43,
+          "column": 1
+        },
+        {
+          "title": "A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 12,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 88,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50672\n[pid=50672][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50677 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50672\n[pid=50672][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50677 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50672\n[pid=50672][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50677 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:44.037Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-candidat-85d8c-tual-tool-and-review-frames-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-candidat-85d8c-tual-tool-and-review-frames-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-8878178dc82dfbec116b",
+          "file": "hosted-parity.spec.ts",
+          "line": 69,
+          "column": 1
+        },
+        {
+          "title": "A09: patching an unlabeled native shape must render a review rather than crash materialization",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 93,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50686\n[pid=50686][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50691 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50686\n[pid=50686][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50691 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50686\n[pid=50686][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50691 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:45.050Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-patching-16f28--than-crash-materialization-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-patching-16f28--than-crash-materialization-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-74b93e084451a852e7d4",
+          "file": "hosted-parity.spec.ts",
+          "line": 107,
+          "column": 1
+        },
+        {
+          "title": "A09: actual hosted tool frame paints progressive arguments before any final result",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 14,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 94,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50701\n[pid=50701][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50706 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50701\n[pid=50701][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50706 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50701\n[pid=50701][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50706 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:46.090Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A09-actual-h-08355-nts-before-any-final-result-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-c6db06565c92f96aab7d",
+          "file": "hosted-parity.spec.ts",
+          "line": 122,
+          "column": 1
+        },
+        {
+          "title": "removed tool close network failure retains the original realm and exposes retry recovery",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 15,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 89,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50712\n[pid=50712][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50717 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50712\n[pid=50712][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50717 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50712\n[pid=50712][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50717 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:47.120Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-removed-tool-affa0--and-exposes-retry-recovery-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-removed-tool-affa0--and-exposes-retry-recovery-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-92c18741a6492a76dfd0",
+          "file": "hosted-parity.spec.ts",
+          "line": 168,
+          "column": 1
+        },
+        {
+          "title": "A11: same-profile second window must remain responsive with existing editor long polls",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 16,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 103,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50722\n[pid=50722][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50727 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50722\n[pid=50722][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50727 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50722\n[pid=50722][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50727 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:48.081Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-same-pro-b6e7d--existing-editor-long-polls-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-0486c1f0ccecc2404b38",
+          "file": "hosted-parity.spec.ts",
+          "line": 193,
+          "column": 1
+        },
+        {
+          "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 17,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 93,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50735\n[pid=50735][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50740 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50735\n[pid=50735][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50740 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50735\n[pid=50735][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50740 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:49.186Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-35ea9--and-themed-menus-at-1440px-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-35ea9--and-themed-menus-at-1440px-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-36f5a68d38ef3917418d",
+          "file": "hosted-parity.spec.ts",
+          "line": 202,
+          "column": 34
+        },
+        {
+          "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 18,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 91,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50746\n[pid=50746][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50751 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50746\n[pid=50746][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50751 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50746\n[pid=50746][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50751 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:50.144Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-bbfc8-p-and-themed-menus-at-390px-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A10-native-s-bbfc8-p-and-themed-menus-at-390px-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-bb4fae9ed614e4389ec6",
+          "file": "hosted-parity.spec.ts",
+          "line": 202,
+          "column": 34
+        },
+        {
+          "title": "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 19,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 97,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50759\n[pid=50759][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50764 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50759\n[pid=50759][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50764 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50759\n[pid=50759][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50764 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:51.080Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-parity-A11-competin-33cea-explicit-reconnect-recovery-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c6ecd2b2a688d2eb0025-567a005795dc96b6cea9",
+          "file": "hosted-parity.spec.ts",
+          "line": 245,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "hosted-production.spec.ts",
+      "file": "hosted-production.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 9096,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts:112:142",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                      "column": 142,
+                      "line": 112
+                    },
+                    "snippet": "  110 |     const canvas = editor.locator(\".excalidraw canvas.interactive\"); await expect(canvas).toBeVisible();\n  111 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 112 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).not.toBe(0);\n      |                                                                                                                                              ^\n  113 |     const moved = (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\").x;\n  114 |     await page.keyboard.press(\"ControlOrMeta+z\");\n  115 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).toBe(0);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                        "column": 142,
+                        "line": 112
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  110 |     const canvas = editor.locator(\".excalidraw canvas.interactive\"); await expect(canvas).toBeVisible();\n  111 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 112 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).not.toBe(0);\n      |                                                                                                                                              ^\n  113 |     const moved = (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\").x;\n  114 |     await page.keyboard.press(\"ControlOrMeta+z\");\n  115 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).toBe(0);\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts:112:142"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:34:47.178Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-2e591-SDK-hot-lifecycle-at-1440px-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-2e591-SDK-hot-lifecycle-at-1440px-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                    "column": 142,
+                    "line": 112
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4391fb0f469560ea1c36-6a3d1c99ba82e3cdd734",
+          "file": "hosted-production.spec.ts",
+          "line": 35,
+          "column": 34
+        },
+        {
+          "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 9233,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts:112:142",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                      "column": 142,
+                      "line": 112
+                    },
+                    "snippet": "  110 |     const canvas = editor.locator(\".excalidraw canvas.interactive\"); await expect(canvas).toBeVisible();\n  111 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 112 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).not.toBe(0);\n      |                                                                                                                                              ^\n  113 |     const moved = (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\").x;\n  114 |     await page.keyboard.press(\"ControlOrMeta+z\");\n  115 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).toBe(0);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                        "column": 142,
+                        "line": 112
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mnot\u001b[2m.\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: not \u001b[32m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  110 |     const canvas = editor.locator(\".excalidraw canvas.interactive\"); await expect(canvas).toBeVisible();\n  111 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+a\"); await page.keyboard.press(\"ArrowRight\"); await page.keyboard.press(\"Escape\");\n> 112 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).not.toBe(0);\n      |                                                                                                                                              ^\n  113 |     const moved = (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\").x;\n  114 |     await page.keyboard.press(\"ControlOrMeta+z\");\n  115 |     await expect.poll(async () => (await action(\"get\", { id: draftId })).scene.elements.find((element: any) => element.id === \"box\")?.x).toBe(0);\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts:112:142"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:34:57.812Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-ca32e--SDK-hot-lifecycle-at-390px-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-ca32e--SDK-hot-lifecycle-at-390px-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-production.spec.ts",
+                    "column": 142,
+                    "line": 112
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4391fb0f469560ea1c36-2771979d333e0a39dc0d",
+          "file": "hosted-production.spec.ts",
+          "line": 35,
+          "column": 34
+        },
+        {
+          "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 20,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 89,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50768\n[pid=50768][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50773 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50768\n[pid=50768][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50773 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50768\n[pid=50768][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50773 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:52.179Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-2e591-SDK-hot-lifecycle-at-1440px-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-2e591-SDK-hot-lifecycle-at-1440px-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4391fb0f469560ea1c36-443ad44b9b68430ad335",
+          "file": "hosted-production.spec.ts",
+          "line": 35,
+          "column": 34
+        },
+        {
+          "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 21,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 84,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50782\n[pid=50782][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50787 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50782\n[pid=50782][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50787 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50782\n[pid=50782][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50787 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:53.124Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-ca32e--SDK-hot-lifecycle-at-390px-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-production-real-hos-ca32e--SDK-hot-lifecycle-at-390px-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4391fb0f469560ea1c36-b2a3212159aee69e8c28",
+          "file": "hosted-production.spec.ts",
+          "line": 35,
+          "column": 34
+        }
+      ]
+    },
+    {
+      "title": "hosted-transport.spec.ts",
+      "file": "hosted-transport.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Explicit baseline diagnostic only",
+                  "location": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts",
+                    "line": 6,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:08.794Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Explicit baseline diagnostic only",
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "c4498837a98ca0fab116-98b705556963ecc21b12",
+          "file": "hosted-transport.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 8353,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n\n    at Object.open (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts:92:77)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts:35:93",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                      "column": 77,
+                      "line": 92
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39m../helpers/hosted-parity.ts:92\n\n  90 |   };\n  91 |   const open = async (target = page) => {\n> 92 |     await expect(target.locator('iframe[title=\"Excalidraw tool\"]').first()).toBeAttached();\n     |                                                                             ^\n  93 |     const preview = target.frameLocator('iframe[title=\"Excalidraw tool\"]').first();\n  94 |     await expect(preview.getByRole(\"img\")).toBeVisible({ timeout: 15_000 });\n  95 |     await preview.getByRole(\"button\", { name: options.locale === \"zh\" ? \"编辑 Excalidraw\" : \"Edit Excalidraw\", exact: true }).click();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                        "column": 77,
+                        "line": 92
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeAttached\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('iframe[title=\"Excalidraw tool\"]').first()\nExpected: attached\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeAttached\" locator('iframe[title=\"Excalidraw tool\"]').first() with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').first()\u001b[22m\n\n\n   at ../helpers/hosted-parity.ts:92\n\n  90 |   };\n  91 |   const open = async (target = page) => {\n> 92 |     await expect(target.locator('iframe[title=\"Excalidraw tool\"]').first()).toBeAttached();\n     |                                                                             ^\n  93 |     const preview = target.frameLocator('iframe[title=\"Excalidraw tool\"]').first();\n  94 |     await expect(preview.getByRole(\"img\")).toBeVisible({ timeout: 15_000 });\n  95 |     await preview.getByRole(\"button\", { name: options.locale === \"zh\" ? \"编辑 Excalidraw\" : \"Edit Excalidraw\", exact: true }).click();\n    at Object.open (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts:92:77)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts:35:93"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:08.819Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-firefox/attachments/frame-diagnostics-0-011db3cfd51c8b3a3e03f6e40f096ac64317c484.json"
+                    },
+                    {
+                      "name": "frame-diagnostics-1",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-firefox/attachments/frame-diagnostics-1-bed1a0e2957131c495478abafd4d298f3efcac71.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/helpers/hosted-parity.ts",
+                    "column": 77,
+                    "line": 92
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c4498837a98ca0fab116-95d441e0fbd45b4f56f3",
+          "file": "hosted-transport.spec.ts",
+          "line": 30,
+          "column": 1
+        },
+        {
+          "title": "diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Explicit baseline diagnostic only",
+                  "location": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts",
+                    "line": 6,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 22,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:54.046Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Explicit baseline diagnostic only",
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-transport.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "c4498837a98ca0fab116-46069e73397b735b8cba",
+          "file": "hosted-transport.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 22,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 83,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50796\n[pid=50796][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50801 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50796\n[pid=50796][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50801 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50796\n[pid=50796][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50801 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:54.065Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-transport-aggregate-9e874-ol-result-frames-responsive-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c4498837a98ca0fab116-706aacd7cd98afc94615",
+          "file": "hosted-transport.spec.ts",
+          "line": 30,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "hosted-update-policy.spec.ts",
+      "file": "hosted-update-policy.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "visible policy control separates independent notify from default linked synchronization and honors pin",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 9,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1751,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:18.806Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ff37bd6cc261411f5194-dc9282c9661c2da0b37c",
+          "file": "hosted-update-policy.spec.ts",
+          "line": 12,
+          "column": 1
+        },
+        {
+          "title": "visible policy control separates independent notify from default linked synchronization and honors pin",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 23,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 92,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50811\n[pid=50811][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50816 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50811\n[pid=50811][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50816 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50811\n[pid=50811][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50816 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:54.957Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-update-policy-visib-a7e20-chronization-and-honors-pin-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-update-policy-visib-a7e20-chronization-and-honors-pin-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ff37bd6cc261411f5194-b07afed365ff6eb01e2e",
+          "file": "hosted-update-policy.spec.ts",
+          "line": 12,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "hosted-viewport-parity-fix.spec.ts",
+      "file": "hosted-viewport-parity-fix.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "ORI-34: unlabeled shape x-only candidate applies without phantom bound text",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 9,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3631,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:21.137Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/attachments/frame-diagnostics-0-c0bdd292aac09a8c01fb8cd38f799a89306cf8a1.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0024706ce466fba3399f-42bd0605897cf7b49dff",
+          "file": "hosted-viewport-parity-fix.spec.ts",
+          "line": 4,
+          "column": 1
+        },
+        {
+          "title": "ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [
+                {
+                  "workerIndex": 9,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7832,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: < \u001b[32m0.4\u001b[39m\nReceived:   \u001b[31m0.4\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: < \u001b[32m0.4\u001b[39m\nReceived:   \u001b[31m0.4\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-viewport-parity-fix.spec.ts:40:106",
+                    "location": {
+                      "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-viewport-parity-fix.spec.ts",
+                      "column": 106,
+                      "line": 40
+                    },
+                    "snippet": "  38 |     const initial = await h.action(\"get\", { id: created.id });\n  39 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+-\");\n> 40 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.appState.zoom.value).toBeLessThan(initial.scene.appState.zoom.value);\n     |                                                                                                          ^\n  41 |     const zoomed = await h.action(\"get\", { id: created.id });\n  42 |     const bounds = (await canvas.boundingBox())!;\n  43 |     await page.keyboard.down(\"Space\"); await page.mouse.move(bounds.x + 200, bounds.y + 400);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-viewport-parity-fix.spec.ts",
+                        "column": 106,
+                        "line": 40
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: < \u001b[32m0.4\u001b[39m\nReceived:   \u001b[31m0.4\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  38 |     const initial = await h.action(\"get\", { id: created.id });\n  39 |     await canvas.click(); await page.keyboard.press(\"ControlOrMeta+-\");\n> 40 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene.appState.zoom.value).toBeLessThan(initial.scene.appState.zoom.value);\n     |                                                                                                          ^\n  41 |     const zoomed = await h.action(\"get\", { id: created.id });\n  42 |     const bounds = (await canvas.boundingBox())!;\n  43 |     await page.keyboard.down(\"Space\"); await page.mouse.move(bounds.x + 200, bounds.y + 400);\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-viewport-parity-fix.spec.ts:40:106"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:24.776Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "frame-diagnostics-0",
+                      "contentType": "application/json",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-b3fb8-as-pixels-across-generation-firefox/attachments/frame-diagnostics-0-d6905efdd3500138a56831b026415895a6a6a096.json"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-b3fb8-as-pixels-across-generation-firefox/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-b3fb8-as-pixels-across-generation-firefox/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test/browser/hosted-viewport-parity-fix.spec.ts",
+                    "column": 106,
+                    "line": 40
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "0024706ce466fba3399f-8c1fb399447d5713cde0",
+          "file": "hosted-viewport-parity-fix.spec.ts",
+          "line": 28,
+          "column": 1
+        },
+        {
+          "title": "ORI-34: unlabeled shape x-only candidate applies without phantom bound text",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 24,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 92,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50821\n[pid=50821][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50826 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50821\n[pid=50821][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50826 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50821\n[pid=50821][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50826 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:55.890Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "0024706ce466fba3399f-81b1b684dc037aca8ade",
+          "file": "hosted-viewport-parity-fix.spec.ts",
+          "line": 4,
+          "column": 1
+        },
+        {
+          "title": "ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 20000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 25,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 105,
+                  "error": {
+                    "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50833\n[pid=50833][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50838 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\"",
+                    "stack": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50833\n[pid=50833][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50838 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: browserContext.newPage: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window\n<launched> pid=50833\n[pid=50833][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：50838 Segmentation fault: 11  DYLD_FRAMEWORK_PATH=\"$DYLIB_PATH\" DYLD_LIBRARY_PATH=\"$DYLIB_PATH\" \"$PLAYWRIGHT\" \"$@\""
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T18:35:56.828Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-b3fb8-as-pixels-across-generation-webkit/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/test-results/hosted-viewport-parity-fix-b3fb8-as-pixels-across-generation-webkit/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "0024706ce466fba3399f-5641072b5e00846fb90e",
+          "file": "hosted-viewport-parity-fix.spec.ts",
+          "line": 28,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-24T18:33:15.258Z",
+    "duration": 161913.995,
+    "expected": 6,
+    "skipped": 2,
+    "unexpected": 26,
+    "flaky": 0
+  }
+}

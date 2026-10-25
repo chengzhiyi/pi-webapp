@@ -74,6 +74,9 @@ export function usePiBridge() {
           setConnection("connecting");
           const followed = await bridgeFetch("/api/events", {
             headers: { Authorization: `Bearer ${token}` },
+            // Firefox serializes concurrent cacheable GETs for an identical URL
+            // until the first response completes. This NDJSON stream never does.
+            cache: "no-store",
             signal: controller.signal,
           });
           const { response } = followed;
@@ -133,7 +136,8 @@ export function usePiBridge() {
                   if (!event.errorId && !event.errorReported && event.errorCode !== "validation_error") reportError(new Error("Agent response failed"), { stage: "agent", code: "agent_failed", requestId: event.requestId, operationId: event.operationId });
                   breadcrumb("agent_error", { errorId: event.errorId, requestId: event.requestId, operationId: event.operationId });
                 }
-                if (event.type === "plugins_changed") window.location.reload();
+                if (event.type === "plugins_changed") window.location.reload(); // Legacy v1 resource changes only.
+                if (event.type === "hosted_plugins_changed") setPluginGeneration(value => value + 1);
                 if (event.type === "plugin_state") { setDisabledPlugins(event.disabled); setPluginGeneration(value => value + 1); }
               }
               end = pending.indexOf("\n");

@@ -1,10 +1,12 @@
 import { tmpdir } from "node:os";
+import { emptyHosted } from "./empty-hosted.ts";
 import type { BridgeHost } from "../../src/host/server/transport/bridge.ts";
 import type { SessionView } from "../../src/host/server/sessions/view.ts";
 
 export function terminalHost(cwd = tmpdir()) {
   let session: SessionView = { schemaVersion: 1, sessionId: "terminal-a", cwd, name: "Terminal A", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
   const host: BridgeHost = {
+    hosted: emptyHosted,
     snapshot: () => session, models: () => [{ provider: "example", id: "model", name: "Example" }], send() {}, abort() {}, async newSession() {}, async setModel() {}, async setThinkingLevel() {},
     config: () => ({ projectTrusted: false, global: { packages: [], extensions: [], skills: [] }, project: { packages: [], extensions: [], skills: [] }, installed: { packages: [], extensions: [], skills: [] } }),
     async updateConfig() { return this.config(); }, async workspaces() { return { items: [], activeId: null, sessions: [] }; },

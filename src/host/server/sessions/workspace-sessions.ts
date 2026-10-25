@@ -15,6 +15,13 @@ import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 
+import type { HostedAgentAdapter } from "../plugins/hosted/agent-adapter.ts";
+import type { HostedScope } from "@chengzhiyi/pi-web-protocol";
+
+export interface HostedWorkspaceOptions {
+  adapter: HostedAgentAdapter;
+  scope(cwd: string, sessionId: string): HostedScope;
+}
 type HostEvent = BridgeEvent;
 interface WorkspaceRuntime {
   session: AgentSession;
@@ -24,6 +31,7 @@ interface WorkspaceRuntime {
   interactions: WebInteractionHost;
   detach: () => void;
   releasePaths: () => Promise<void>;
+  releaseHosted?: () => void;
   generation: number;
   closing: boolean;
   waitController: AbortController;
@@ -57,11 +65,15 @@ export class WorkspaceSessions {
   private readonly telemetry: WorkspaceTelemetry;
   private readonly onSessionsChanged: () => void;
   private readonly customTools: ToolDefinition[];
+  private readonly offHosted?: () => void;
+  private readonly hosted?: HostedWorkspaceOptions;
 
-  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}, customTools: ToolDefinition[] = []) {
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}, customTools: ToolDefinition[] = [], hosted?: HostedWorkspaceOptions) {
+    this.hosted = hosted;
     this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted; this.reportError = reportError;
     this.onSessionsChanged = onSessionsChanged;
     this.customTools = customTools;
+    this.offHosted = hosted?.adapter.onThaw(() => { for (const runtime of this.runtimes.values()) this.scheduleQueued(runtime); });
     this.telemetry = {
       enabled: () => { try { return telemetry.enabled(); } catch { return false; } },
       breadcrumb: (category, context) => { try { if (telemetry.enabled()) telemetry.breadcrumb(category, context); } catch { /* Failed instrumentation cannot break a session. */ } },
@@ -113,6 +125,11 @@ export class WorkspaceSessions {
   private ensureAvailable() {
     if (this.disposed) throw new Error("工作区服务已关闭");
   }
+  /** Authenticated hosted routes may access retained/background sessions, never disk-only IDs. */
+  hostedScope(id: string): { cwd: string; sessionId: string } | null {
+    const runtime = this.runtimes.get(id);
+    return !this.disposed && runtime && !runtime.closing ? { cwd: runtime.cwd, sessionId: id } : null;
+  }
   hasSession(cwd: string, id: string): boolean { return this.runtimes.get(id)?.cwd === cwd; }
   hasWorkspace(cwd: string): boolean { return this.selectedByWorkspace.has(cwd); }
   retainedSessions() {
@@ -145,7 +162,9 @@ export class WorkspaceSessions {
     const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
     const bus = createEventBus();
     const runtimePaths = await pluginRuntimePaths(cwd, catalog.extensionRoots);
-    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus });
+    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus,
+      extensionFactories: this.hosted ? [this.hosted.adapter.extension(this.hosted.scope(cwd, manager.getSessionId()))] : [],
+    });
     let candidate: WorkspaceRuntime | null = null;
     try {
       await resourceLoader.reload();
@@ -197,6 +216,7 @@ export class WorkspaceSessions {
         }
       });
       runtime.detach = () => { offChanged(); offEvents(); };
+      runtime.releaseHosted = this.hosted?.adapter.attach(session);
       const startupErrors: string[] = [];
       let initializing = true;
       await session.bindExtensions({ mode: "print", shutdownHandler: () => {}, onError: error => {
@@ -213,6 +233,7 @@ export class WorkspaceSessions {
       candidate = null;
       this.activate(runtime);
     } catch (error) {
+      this.hosted?.adapter.releasePending(manager.getSessionId());
       if (candidate) await this.close(candidate, "quit"); else { bus.clear(); await runtimePaths.release(); }
       throw error;
     }
@@ -224,6 +245,7 @@ export class WorkspaceSessions {
     runtime.waitController.abort();
     runtime.interactions.dispose();
     await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.detach(); runtime.bus.clear(); });
+    runtime.releaseHosted?.();
     await runtime.releasePaths();
   }
   private snapshotOf(runtime: WorkspaceRuntime): SessionView {
@@ -277,6 +299,7 @@ export class WorkspaceSessions {
 
   private async prompt(runtime: WorkspaceRuntime, text: string, images: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): Promise<void> {
     if (this.disposed || runtime.closing) throw new Error("Pi 会话不可用");
+    this.hosted?.adapter.assertAdmission();
     assertPromptDelivery({ ...this.snapshotOf(runtime), idle: runtime.session.isIdle }, text, delivery);
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
@@ -301,7 +324,7 @@ export class WorkspaceSessions {
   }
 
   private queueReady(runtime: WorkspaceRuntime): boolean {
-    return !this.disposed && !runtime.closing && runtime.session.isIdle && !runtime.agentErrorReported
+    return !this.hosted?.adapter.isFrozen && !this.disposed && !runtime.closing && runtime.session.isIdle && !runtime.agentErrorReported
       && !sessionPaused(runtime.session.sessionManager.getBranch())
       && runtime.interactions.pending(runtime.session.sessionManager.getSessionId()).length === 0;
   }
@@ -328,6 +351,7 @@ export class WorkspaceSessions {
   async resume(correlation?: ErrorCorrelation): Promise<void> {
     const runtime = this.active;
     if (this.disposed || !runtime || runtime.closing) throw new Error('Pi 会话不可用');
+    this.hosted?.adapter.assertAdmission();
     const session = runtime.session;
     if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
     if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');
@@ -366,6 +390,7 @@ export class WorkspaceSessions {
 
   dispose(): Promise<void> {
     this.disposed = true;
+    this.offHosted?.();
     // disposed stops publication immediately, before queued cleanup starts.
     return this.queue.run(async () => {
       const runtimes = [...this.runtimes.values()];

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { emptyHosted } from "../helpers/empty-hosted.ts";
 import { fileURLToPath } from "node:url";
 import { startBridge, type Bridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
 import type { SessionView } from "../../src/host/server/sessions/view.ts";
@@ -23,6 +24,7 @@ async function fixture(page: Page, showcase = false) {
     model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] });
   const publish = () => { bridge.publish({ type: "snapshot", session: snapshot() }); bridge.publish({ type: "workspaces", value: listing() }); };
   const host: BridgeHost = {
+    hosted: emptyHosted,
     snapshot, models: () => [{ provider: "example", id: "model", name: "Model" }], commands: () => [], send(sessionId, text) { sent.push({ sessionId, text }); }, abort() {},
     async newSession() { await this.newSessionInWorkspace(activeId); },
     async newSessionInWorkspace(id) {
@@ -163,7 +165,10 @@ test("pending navigation disables duplicate entry points and failures leave navi
     const globalNew = page.getByRole("button", { name: /^(新会话|New session)$/ });
     for (const button of await globalNew.all()) await expect(button).toBeDisabled();
     release();
-    await expect(page.getByRole("alert").filter({ hasText: "Switch failed" })).toBeVisible();
+    // Navigation failures are surfaced both in the sidebar and conversation.
+    const alerts = page.getByRole("alert").filter({ hasText: "Switch failed" });
+    await expect(alerts).toHaveCount(2);
+    for (const alert of await alerts.all()) await expect(alert).toBeVisible();
     await expect(workspace(page, "Chat A")).toHaveAttribute("aria-current", "page");
     for (const button of await globalNew.all()) await expect(button).toBeEnabled();
   } finally { release(); await f.bridge.close(); }

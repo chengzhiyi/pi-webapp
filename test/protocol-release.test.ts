@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 // The release helper is plain JavaScript so it can run before npm ci.
@@ -21,11 +22,39 @@ test('CI replaces the local protocol link with the exact published version befor
   assert(args.includes('@chengzhiyi/pi-web-protocol@0.1.3'));
 });
 
+test('published exact protocol pins are verified without following a newer latest or mutating the lock', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'pi-protocol-pin-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, 'package.json'), JSON.stringify({ devDependencies: { '@chengzhiyi/pi-web-protocol': '0.1.1' } }));
+  const run = () => assert.fail('an exact published pin must not change');
+  assert.equal(await syncProtocolDependency({ root, request: async (url: string) => {
+    assert(url.endsWith('/0.1.1')); return Response.json({ version: '0.1.1' });
+  }, run }), '0.1.1');
+  await assert.rejects(syncProtocolDependency({ root, request: async () => Response.json({ version: '0.1.2' }), run }), /expected pinned/);
+});
+
 test('missing, unavailable, or prerelease protocol metadata stops CI before any mutation', async () => {
   for (const response of [new Response('', { status: 404 }), new Response('', { status: 503 }), Response.json({ version: '0.2.0-beta.1' })]) {
     await assert.rejects(syncProtocolDependency({ root: '/does-not-exist', request: async () => response,
       run: () => assert.fail('unexpected npm install') }), /protocol|stable/i);
   }
+});
+
+test('locked v2 development snapshots survive verification but never authorize release or network downgrade', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'pi-protocol-snapshot-')); t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'vendor'));
+  const specifier = 'file:vendor/protocol-0.2.0-dev.0.tgz', bytes = Buffer.from('immutable-package-fixture');
+  await writeFile(join(root, 'vendor/protocol-0.2.0-dev.0.tgz'), bytes);
+  await writeFile(join(root, 'package.json'), JSON.stringify({ devDependencies: { '@chengzhiyi/pi-web-protocol': specifier } }));
+  await writeFile(join(root, 'package-lock.json'), JSON.stringify({ packages: { 'node_modules/@chengzhiyi/pi-web-protocol': {
+    version: '0.2.0-dev.0', resolved: specifier, integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+  } } }));
+  const request = () => assert.fail('snapshot verification must not resolve registry latest');
+  const run = () => assert.fail('snapshot verification must not mutate the pinned dependency');
+  assert.equal(await syncProtocolDependency({ root, source: '.ci/protocol', request, run }), specifier);
+  await assert.rejects(syncProtocolDependency({ root, request, run }), /verification-only/);
+  await writeFile(join(root, 'vendor/protocol-0.2.0-dev.0.tgz'), 'tampered');
+  await assert.rejects(syncProtocolDependency({ root, source: '.ci/protocol', request, run }), /integrity/);
 });
 
 test('unpublished protocol can use a built pinned checkout for verification only', async t => {

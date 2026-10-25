@@ -32,13 +32,13 @@ function roundtrip(event: BridgeEvent): BridgeEvent {
   return parseBridgeEvent(JSON.parse(JSON.stringify(event)));
 }
 
-test("shared contract accepts all six existing wire event variants", () => {
+test("shared contract accepts legacy and hot hosted wire event variants", () => {
   const events: BridgeEvent[] = [
     { type: "snapshot", session }, { type: "stream", message }, { type: "stream", message: null },
     { type: "workspaces", value: { items: [{ id: "ws", path: "/workspace", title: "Workspace" }], activeId: null,
       sessions: [{ id: "session-1", workspaceId: "ws", path: null, name: "Chat", modified: "now" }] } },
     { type: "error", message: "Failed", errorId: "error-1", requestId: "request-1", operationId: "operation-1", errorCode: "validation_error", errorReported: true },
-    { type: "shutdown" }, { type: "shutdown", reconnect: true }, { type: "plugins_changed" },
+    { type: "shutdown" }, { type: "shutdown", reconnect: true }, { type: "plugins_changed" }, { type: "hosted_plugins_changed" },
   ];
   for (const event of events) assert.deepEqual(roundtrip(event), event);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { DockController, DockLayout, getPane, getTab, dockPaneIds, findTabPane, activeDockPaneId, type PaneId, type TabId } from "../../../web/src/ui/shared/dockkit/index.ts";
 import { PanelChrome } from "../../../web/src/ui/shared/sidebar/PanelChrome.tsx";
 import { dockLabels } from "../../../web/src/ui/shared/sidebar/labels.ts";
@@ -13,6 +13,7 @@ import { localize } from "../../../web/src/ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
 import type { TabResource, WorkbenchPanelProps } from "../../contracts/workbench.ts";
 import filesCss from "../../../web/src/ui/workbench/WorkspacePanel.module.css";
+import { hostedFrames } from "./hosted/frame-adapter.ts";
 
 interface SessionDock { controller: DockController; resources: Map<string, TabResource>; owners: Map<string, string> }
 /** Generic tab ownership: a capability supplies its model, cleanup and activation hooks. */
@@ -71,6 +72,24 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
 }) {
   const { controller, snapshot, openContent: open } = panel;
   const { state } = snapshot;
+  const [closeError, setCloseError] = useState("");
+  const closing = useRef(false);
+  const intents = useMemo(() => new Proxy(controller, { get(target, key) {
+    if (key === "closeTab") return (id: TabId) => {
+      if (closing.current) return;
+      closing.current = true;
+      const sessionId = props.session?.sessionId ?? "";
+      void hostedFrames.flush(sessionId).then(async () => {
+        const content = document.querySelector(`[data-dockkit-content="${CSS.escape(id)}"]`);
+        if (content) await hostedFrames.retireWithin(sessionId, content);
+        setCloseError(""); target.closeTab(id);
+      })
+        .catch(error => setCloseError(error instanceof Error ? error.message : String(error)))
+        .finally(() => { closing.current = false; });
+    };
+    const value = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } }), [controller, props.session?.sessionId]);
   const fullscreen = narrow || state.mode === "fullscreen";
   const dictionary: Record<string, string> = props.locale === "zh" ? zh : en;
   const t = (key: string) => dictionary[key] ?? key;
@@ -80,8 +99,8 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
   const panelWidth = narrow ? "100vw" : width;
   return <div className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
     data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : focus ? "focus" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
-    <div className={css.panelBody}><DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
-      intents={controller} labels={dockLabels(t)} active keepMounted={() => true}
+    <div className={css.panelBody}>{closeError && <p role="alert">{closeError}</p>}<DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
+      intents={intents} labels={dockLabels(t)} active keepMounted={() => true}
       renderTab={tab => {
         const paneId = findTabPane(state, tab.id).id;
         const visible = state.expanded && getPane(state, paneId).activeTabId === tab.id;

@@ -1,0 +1,34 @@
+.root {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 0;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  animation: agent-activity-spin 1.8s linear infinite;
+}
+
+/* Override turnStatus's standalone top alignment, regardless of CSS order. */
+.root > .copy {
+  align-self: center;
+  height: auto;
+  white-space: normal;
+  flex-wrap: wrap;
+}
+
+.copy > span { white-space: nowrap; }
+
+@keyframes agent-activity-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon { animation: none; }
+}

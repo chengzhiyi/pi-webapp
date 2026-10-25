@@ -1,0 +1,20 @@
+PASS packaged-native-pointer-draw
+PASS composer-shortcuts-do-not-mutate-drawing
+PASS actual-freeze-ack-loss-fails-closed-retains-realm-scene-generation
+PASS reconnected-real-generation-switch-scene-session-pids-retained
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "archiveSha256": "d000ae308936b60e6bfeff05a988e6fce8df05df8f649efd6a1900587cf16088",
+  "completed": [
+    "packaged-native-pointer-draw",
+    "composer-shortcuts-do-not-mutate-drawing",
+    "actual-freeze-ack-loss-fails-closed-retains-realm-scene-generation",
+    "reconnected-real-generation-switch-scene-session-pids-retained"
+  ],
+  "errors": [],
+  "limitations": [
+    "Not native IME/dialogs/undo acceptance",
+    "503 fault injection, not OS network outage"
+  ]
+}

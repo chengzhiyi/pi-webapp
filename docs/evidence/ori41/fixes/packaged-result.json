@@ -1,0 +1,22 @@
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "version": "0.1.29",
+  "scope": "Locally packaged app directory, cached verified Node/dependency runtime, pre-staged exact plugin tgz; actual sandboxed Electron renderer, standalone Node host and plugin worker",
+  "archiveSha256": "d000ae308936b60e6bfeff05a988e6fce8df05df8f649efd6a1900587cf16088",
+  "checks": [
+    "enable-and-native-draw",
+    "native-undo-redo",
+    "Chinese-text-keyboard-insertion-not-OS-IME",
+    "Chinese-workspace-save",
+    "native-PNG-download",
+    "same-version-reopen",
+    "disable-reenable-preserves-scene-file-and-host-identities"
+  ],
+  "limitations": [
+    "No registry install/version update, native file dialog, OS IME, app restart recovery or cross-platform acceptance",
+    "No retained SDK object inspection across backend process; backend PID/session ID invariants only"
+  ],
+  "pageErrors": [],
+  "externalRequests": []
+}

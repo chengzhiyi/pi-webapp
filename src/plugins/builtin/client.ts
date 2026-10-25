@@ -2,7 +2,6 @@ import type { WorkbenchPluginDefinition } from "../../contracts/workbench.ts";
 
 /** Lazy module adapters use the same validation/activation path as external protocol-v1 plugins. */
 const modules: Record<string, () => Promise<{ default: WorkbenchPluginDefinition }>> = {
-  "builtin:@pi-webapp/diagrams": () => import("./diagrams/client/plugin.tsx"),
   "builtin:@pi-webapp/files": () => import("./files/client/plugin.tsx"),
   "builtin:@pi-webapp/terminal": () => import("./terminal/client/plugin.tsx"),
   "builtin:@pi-webapp/git": () => import("./git/client/plugin.tsx"),

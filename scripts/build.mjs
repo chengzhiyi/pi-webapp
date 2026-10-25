@@ -38,8 +38,10 @@ if (side !== "node") {
 if (side !== "browser") {
   try {
     await esbuild({
-      entryPoints: [resolve(root, "src/adapters/pi/extension.ts")], bundle: true, platform: "node", format: "esm", target: "node22", packages: "external", minify: true,
-      outfile: resolve(root, "dist/extension.js"), sourcemap: "external",
+      // The worker is a separate ESM entry; plugins are never imported into the host realm.
+      entryPoints: { extension: resolve(root, "src/adapters/pi/extension.ts"), "hosted-worker": resolve(root, "src/host/server/plugins/hosted/worker-entry.ts"), "hosted-recovery": resolve(root, "scripts/hosted-stopped-recovery.ts") },
+      bundle: true, platform: "node", format: "esm", target: "node22", packages: "external", minify: true,
+      outdir: resolve(root, "dist"), sourcemap: "external",
       define: { __PI_WEB_RELEASE__: JSON.stringify(info.release), __PI_WEB_BUILD_ID__: JSON.stringify(info.buildId) },
       plugins: [{ name: "bundle-local-protocol", setup(builder) {
         builder.onResolve({ filter: /^@chengzhiyi\/pi-web-protocol$/ }, () => ({ path: fileURLToPath(import.meta.resolve("@chengzhiyi/pi-web-protocol")) }));

@@ -1,3 +1,4 @@
+import { emptyHosted } from "../helpers/empty-hosted.ts";
 import { test, expect } from "@playwright/test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +36,7 @@ for (const width of [1440, 390, 320]) test(`DSH send → queue → edit/delete/s
     let fail = true, failQueue = false, holdEdit = false;
     let releaseEdit: (() => void) | undefined;
     const host: BridgeHost = {
+      hosted: emptyHosted,
       snapshot: () => sessions.snapshot(), models: () => [{ provider: session.model!.provider, id: session.model!.id, name: session.model!.name }], commands: () => [],
       send: (_id, text, images, correlation, delivery) => {
         if (fail) throw new Error("Fixture send failed");

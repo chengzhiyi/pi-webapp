@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { DesktopBackend, externalAddress, localAddress, sameDocument } from "./backend.mjs";
 import { connectBackend } from "./connect.mjs";
 import { DesktopUpdater } from "./updater.mjs";
+import { configureLocalExport } from "./downloads.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -133,10 +134,12 @@ else {
   void app.whenReady().then(async () => {
   // Packaged macOS uses the bundle's ICNS; development otherwise inherits Electron's Dock icon.
   if (!app.isPackaged && process.platform === "darwin") app.dock.setIcon(iconPath);
-  // No permissions, device capture, downloads or child windows are needed by the shared UI.
+  // Device permissions remain denied; only current trusted local export blobs may download.
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
-  session.defaultSession.on("will-download", event => event.preventDefault());
+  session.defaultSession.on("will-download", (event, item, contents) => configureLocalExport(event, item, contents, {
+    expectedContents: window?.webContents, backendUrl, downloadsPath: app.getPath("downloads"),
+  }));
   updater = new DesktopUpdater({ current: { version: app.getVersion(), build: release.buildNumber },
     packaged: app.isPackaged, appPath: resolve(dirname(app.getPath("exe")), "../.."), cachePath: app.getPath("temp"),
     autoUpdater, showMessageBox: options => dialog.showMessageBox(options),

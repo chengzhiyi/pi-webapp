@@ -1,0 +1,42 @@
+# INERT TEMPLATE: not installed under .github/workflows, not dispatched or pushed.
+# Runner operator must first stage the exact development tgz at ORI41_TGZ.
+# Interactive native IME/dialog checklist is a separate required receipt.
+name: hosted-native-acceptance
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { labels: [self-hosted, macOS, ARM64], os: darwin, arch: arm64, executable: desktop-release/mac-arm64/pi.app/Contents/MacOS/pi }
+          - { labels: [self-hosted, macOS, X64], os: darwin, arch: x64, executable: desktop-release/mac/pi.app/Contents/MacOS/pi }
+          - { labels: [self-hosted, Windows, X64], os: win32, arch: x64, executable: desktop-release/win-unpacked/pi.exe }
+          - { labels: [self-hosted, Linux, X64], os: linux, arch: x64, executable: desktop-release/linux-unpacked/pi }
+    runs-on: ${{ matrix.labels }}
+    timeout-minutes: 45
+    env:
+      ORI41_TARGET_OS: ${{ matrix.os }}
+      ORI41_TARGET_ARCH: ${{ matrix.arch }}
+      HOSTED_EXCALIDRAW_TGZ: ${{ vars.ORI41_TGZ }}
+      PI_WEB_DESKTOP_EXECUTABLE: ${{ matrix.executable }}
+    steps:
+      # Operator must pin approved action SHAs before enabling this template.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm ci
+      - run: node scripts/run-hosted-platform-matrix.mjs desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hosted-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            artifacts/ori41
+            artifacts/hosted-desktop
+# Browser runners use the same OS/arch guards and ORI41_BROWSER=firefox|webkit|chromium:
+# node scripts/run-hosted-platform-matrix.mjs browser
+# Preserve failure traces in test-results and the JSON strict-lifecycle gate output.
+# Do not substitute cross-compilation, --no-sandbox, mocked dialogs or synthetic IME.
