@@ -7,9 +7,9 @@ export interface HostedContribution {
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
-  phase: string; error?: string;
+  phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
-  updateDiagnostic?: { hostVersion: string; checkedAt: string; status: "available" | "up-to-date" | "failed"; version?: string; message: string };
+  updateDiagnostic?: { hostVersion: string; checkedAt: string; status: "available" | "up-to-date" | "failed"; version?: string; message: string; code?: string };
   /** Manifest-only, integrity-qualified served documents, never arbitrary package paths. */
   documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
 }

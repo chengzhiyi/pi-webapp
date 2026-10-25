@@ -32,8 +32,8 @@ for (const fault of ["cancel", "interrupt"] as const) test(`actual management UI
       await expect.poll(() => cancelled).toBe(true);
     } else stream.error(new Error("connection reset during archive"));
     await expect(manager.getByRole("alert").first()).toContainText(fault === "cancel" ? /cancel/i : /connection reset/);
-    await expect(manager.getByRole("button", { name: "Refresh / retry connection", exact: true })).toBeEnabled();
-    await manager.getByRole("button", { name: "Refresh / retry connection", exact: true }).click();
+    await expect(manager.getByRole("button", { name: "Reload status", exact: true })).toBeEnabled();
+    await manager.getByRole("button", { name: "Reload status", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled");
     await expect(manager).toContainText("0.1.0");
     expect((await installer.load(id, "0.1.0")).digest).toBe(old.digest);

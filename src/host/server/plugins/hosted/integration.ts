@@ -163,7 +163,10 @@ export class HostedPluginIntegration {
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
         // Controlled selection already staged/admitted this exact combination offline.
         // Do not immediately replace it with a second registry-derived startup selection.
-        if (this.manager.pairAdmitted || await this.manager.reconcileHostUpgrade()) {
+        const synchronized = this.manager.pairAdmitted
+          ? !(await this.manager.inventory()).plugins.some(plugin => plugin.updateDiagnostic?.status === "failed")
+          : await this.manager.reconcileHostUpgrade();
+        if (synchronized) {
           await privateDirectory(this.options.root);
           await atomicJson(marker, { version: this.options.hostVersion });
         } // Failed registry/install checks retry on the next startup, never claim reconciliation.
@@ -190,7 +193,7 @@ export class HostedPluginIntegration {
       ...(p.activeVersion ?? p.version ? { version: (p.activeVersion ?? p.version)! } : {}),
       ...(p.availableVersion ? { availableVersion: p.availableVersion } : {}), ...(p.pendingVersion ? { pendingVersion: p.pendingVersion } : {}),
       ...(p.generation !== null ? { generation: p.generation } : {}),
-      ...(this.recovery || p.error ? { error: this.recovery instanceof Error ? this.recovery.message : p.error?.message ?? "Recovery required" } : {}),
+      ...(this.recovery || p.error ? { error: this.recovery instanceof Error ? this.recovery.message : p.error?.message ?? "Recovery required", errorCode: this.recovery ? "reconnect_required" : p.error?.code } : {}),
       ...(p.enabled && p.assetBase && this.documents.has(p.id) && p.id === ID ? {
         documentUrl: p.assetBase + this.documents.get(p.id)!.document, controllerUrl: p.assetBase + this.documents.get(p.id)!.controller, contribution: structuredClone(contribution),
       } : {}),

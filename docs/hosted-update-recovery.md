@@ -6,40 +6,33 @@ A01–A25 release acceptance. See [runtime](hosted-plugin-runtime.md),
 [installation](hosted-plugin-installation.md), [GC](hosted-plugin-gc.md) and the
 [historical production matrix](hosted-production-acceptance.md).
 
-## Update policy: actual behavior
+## Software-linked updates (supersedes ORI-33 policy UI in ORI-42)
 
-The authenticated official-plugin card now exposes policy and pin, compatible
-available version, persisted check outcome/time/host version and error messages.
-`policy` is an additive management operation; its wire parser accepts only
-`notify`, `automatic`, `pinned`, plus an exact stable version for a pin. It never
-accepts storage paths or caller workspace scope.
+Installed official plugins follow software updates without a strategy setting.
+Legacy `notify`, `automatic`, and `pinned` records are validated and normalized to
+`notify` (manual independent checks; fixed software-linked updates). Startup
+persists that migration under the policy lock. Old pins no longer block install,
+manual update, pending retry or controlled host/plugin combination selection.
+The legacy policy endpoint remains parser-compatible but cannot reinstate a pin.
 
-ORI-36 separates independent notifications from host-linked synchronization.
+Absent plugins are not installed; disabled plugins remain disabled. Compatible
+higher versions are not downgraded. Open editors defer activation; after closing
+editors, use Apply pending update, or explicitly accept the reopen/undo reset
+confirmation. No page reload, fake close acknowledgement or TTL is used.
 
-| Policy | On a changed host version | Independent/manual actions |
-| --- | --- | --- |
-| notify (default) | Synchronize compatible stable installed plugins; defer open editors | Check only never downloads; update/retry explicit |
-| automatic | Same host-linked synchronization | No background interval scheduler implemented |
-| pinned | Validate/retain exact local version; visible required action if incompatible | Change pin before selecting a different version |
+Independent check never downloads a tarball. Manual update remains available.
+The paired business-package updater checks for newer compatible official code
+as well as required upgrades. Offline/download failure retains compatible local
+code; incompatible combinations fail before host selection. Native OS updater
+coverage is not expanded by this change.
 
-There is no background interval scheduler. The independent-policy preference is
-not an opt-out from host-linked synchronization. The selected business-package
-updater has a conservative local pairing preflight; the native OS updater does
-not yet have a full paired transaction. See [ORI-36 report](hosted-linked-update.md). Absent plugins never
-cause registry traffic or editor download at startup. Compatible local enabled
-code starts offline, without replacing the parent or AgentSession. Pin and disabled
-choices survive restart. A pin cannot be bypassed by manual enable/install with
-another version, nor by retrying a newer release that became pending before the
-pin was selected. Non-pinned policy writes discard stale pin fields.
-
-Successful checks are recorded in `policies/update-checks.json`. An equal release
-means **no newer compatible stable release**, not an available upgrade. An empty
-compatible selection explicitly explains that installed code/data were preserved.
-Registry and reconciliation failures are persisted. `host-version.json` is written
-only when reconciliation succeeds for all installed non-pinned plugins. A failed
-startup check is not looped in that host process: a subsequent startup retries;
-a successful unchanged host version does not check again. Manual check remains
-available. Pending activation is safe deferral, not a promise of completed activation.
+Checks and structured failure codes persist in `policies/update-checks.json`.
+An equal release is not an available upgrade. `host-version.json` is written only
+when synchronization succeeds. A controlled pair admitted using offline fallback
+does not mark synchronization complete: the next startup retries. No background
+interval or repeated mutation retry runs. Diagnostics are collapsed in the UI;
+metadata 404, missing tarball, no compatible release and network failure remain
+distinct. See [ORI-42 evidence and reproduction](hosted-ori42-management.md).
 
 ## Offline operator recovery — no automatic stealing
 

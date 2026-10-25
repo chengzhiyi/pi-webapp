@@ -86,6 +86,16 @@ export class FrameRegistry {
   private incarnations = new Map<string, number>();
   incarnation(sessionId: string, callId: string | undefined) { return this.incarnations.get(`${sessionId}/${callId}`) ?? 0; }
   add(item: RegisteredFrame) { this.frames.add(item); return () => this.frames.delete(item); }
+  /** Retire only the realms in a tab while their DOM/MessagePorts are still alive.
+   * A preflush is not permission to fabricate a close after React destroys the frame. */
+  async retireWithin(sessionId: string, root: Element) {
+    const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId && root.contains(frame.adapter.frame));
+    await Promise.all(frames.map(async frame => {
+      await frame.ready;
+      if (!frame.retire) throw new Error("View cannot retire safely");
+      await frame.retire();
+    }));
+  }
   async retireTools(sessionId: string, callIds: readonly string[]) {
     const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId && frame.toolCallId && callIds.includes(frame.toolCallId));
     await Promise.all(frames.map(async frame => { await frame.ready; if (!frame.retire) throw new Error("View cannot retire safely"); await frame.retire(); }));

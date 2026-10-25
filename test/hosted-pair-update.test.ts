@@ -42,7 +42,7 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   t.after(async () => { await manager.shutdown(); await rm(root, { recursive: true, force: true }); });
   return { root, storage, worker, workerEntry, oldHost, nextHost, old, next, options, get manager() { return manager; },
     restart: async (version = "0.2.0") => { await manager.shutdown(); manager = new HostedPluginManager({ ...options, packageRoot: version === "0.1.29" ? oldHost : nextHost, hostVersion: version }); await manager.start(); return manager; },
-    offline: () => { offline = true; }, calls: () => ({ downloads, registry }) };
+    offline: () => { offline = true; }, online: () => { offline = false; }, calls: () => ({ downloads, registry }) };
 }
 
 test("npm and desktop business-package updater stage required pair, keep old runtime until restart and reconcile offline", async t => {
@@ -90,6 +90,45 @@ test("npm and desktop business-package updater stage required pair, keep old run
   });
 });
 
+test("paired software update selects newer release even when local code is already compatible", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.2.0");
+  assert.deepEqual(f.calls(), { downloads: 1, registry: 1 });
+  await f.restart();
+  assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.2.0");
+  assert.equal((await f.manager.inventory()).plugins[0]!.enabled, false);
+});
+
+test("paired software update offline retains compatible local code and visible retry diagnostic", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  f.offline(); await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.1.0");
+  assert.equal((await f.manager.inventory()).plugins[0]!.updateDiagnostic!.code, "registry_unreachable");
+  await f.restart();
+  assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.1.0");
+});
+
+test("offline prepared pair leaves startup retry pending until the next online startup", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  f.offline(); await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {}); await f.manager.shutdown();
+  const options = { ...f.options, packageRoot: f.nextHost, hostVersion: "0.2.0", ownerId: "test", resolveSession: () => null };
+  let integration = new HostedPluginIntegration(options);
+  await integration.start();
+  assert.equal((await integration.inventory()).plugins[0]!.version, "0.1.0");
+  await assert.rejects(readFile(join(f.storage, "host-version.json")), { code: "ENOENT" });
+  await integration.shutdown(); f.online();
+  integration = new HostedPluginIntegration(options);
+  try {
+    await integration.start();
+    assert.equal((await integration.inventory()).plugins[0]!.version, "0.2.0");
+    assert.equal(JSON.parse(await readFile(join(f.storage, "host-version.json"), "utf8")).version, "0.2.0");
+  } finally { await integration.shutdown(); }
+});
+
 test("production integration consumes controlled combination offline without a second registry selection", async t => {
   const f = await fixture(t);
   await f.manager.installer.installArchive(id, f.old.bytes, integrity(f.old.bytes), "0.1.0"); await f.manager.manage(id, "enable");
@@ -114,16 +153,20 @@ test("required upgrade offline failure writes no host pointer; old combination r
   await f.restart("0.1.29"); assert.equal(f.manager.tools.length, 1);
 });
 
-test("absent never downloads; disabled stays disabled; pinned incompatibility blocks; no downgrade", async t => {
+test("absent never downloads; disabled stays disabled; legacy pin joins pair update; no downgrade", async t => {
   const absent = await fixture(t); absent.offline(); await absent.manager.hostPair.select("0.2.0", absent.nextHost, async () => {});
   assert.deepEqual((await readPair(absent.storage))!.selections, []); assert.deepEqual(absent.calls(), { downloads: 0, registry: 0 });
   const disabled = await fixture(t); await disabled.manager.installer.installArchive(id, disabled.old.bytes, integrity(disabled.old.bytes), "0.1.0");
   await disabled.manager.hostPair.select("0.2.0", disabled.nextHost, async () => {}); await disabled.restart();
   assert.equal((await disabled.manager.inventory()).plugins[0]!.enabled, false); assert.equal(disabled.manager.tools.length, 0);
   const pinned = await fixture(t); await pinned.manager.installer.installArchive(id, pinned.old.bytes, integrity(pinned.old.bytes), "0.1.0");
-  await pinned.manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
-  await assert.rejects(pinned.manager.hostPair.select("0.2.0", pinned.nextHost, async () => assert.fail("pointer")), /incompatible/);
-  assert.deepEqual(pinned.calls(), { downloads: 0, registry: 0 });
+  await mkdir(join(pinned.storage, "policies"), { recursive: true });
+  await atomicJson(join(pinned.storage, "policies/policies.json"), { [id]: { updatePolicy: "pinned", pinnedVersion: "0.1.0" } });
+  await pinned.manager.hostPair.select("0.2.0", pinned.nextHost, async () => {});
+  assert.deepEqual(pinned.calls(), { downloads: 1, registry: 1 });
+  await pinned.restart();
+  assert.equal((await pinned.manager.inventory()).plugins[0]!.version, "0.2.0");
+  assert.deepEqual(JSON.parse(await readFile(join(pinned.storage, "policies/policies.json"), "utf8")), { [id]: { updatePolicy: "notify" } });
   const newer = integrationFixture("0.3.0", false, ">=0.1.0 <0.2.0");
   const downgrade = await fixture(t); await downgrade.manager.installer.installArchive(id, newer.bytes, integrity(newer.bytes), "0.3.0");
   await assert.rejects(downgrade.manager.hostPair.select("0.2.0", downgrade.nextHost, async () => assert.fail("pointer")), /No compatible/);
