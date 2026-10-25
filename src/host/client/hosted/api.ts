@@ -1,8 +1,9 @@
 import { accessToken } from "../access-token.ts";
+import { bridgeFetch } from "../telemetry-fetch.ts";
 import type { HostedActionInput, HostedManageInput, HostedPluginCatalog, HostedViewInput, HostedViewReply } from "../../../contracts/hosted-plugins.ts";
 export async function hostedRequest<T>(path: string, input?: unknown, signal?: AbortSignal): Promise<T> {
   const token = accessToken();
-  const response = await fetch(`/api/hosted-plugins${path}`, { method: input === undefined ? "GET" : "POST", credentials: "same-origin", signal,
+  const { response } = await bridgeFetch(`/api/hosted-plugins${path}`, { method: input === undefined ? "GET" : "POST", credentials: "same-origin", signal,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(input === undefined ? {} : { "Content-Type": "application/json" }) },
     body: input === undefined ? undefined : JSON.stringify(input) });
   const value = await response.json();
