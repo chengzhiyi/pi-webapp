@@ -74,7 +74,7 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
       // Install a real prior public version through the authenticated production route.
       // No registry metadata rewriting to make an old version appear latest.
       const response = await nativeFetch(address.origin + "/api/hosted-plugins/manage", { method: "POST", headers, body: JSON.stringify({ pluginId: id, operation: "install", version: upgradeFrom }) });
-      expect(response.status).toBe(200);
+      expect(response.status, await response.text()).toBe(200);
     } else await manager.getByRole("button", { name: "Install", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
     expect((await card()).version).toBe(upgradeFrom ?? version);
@@ -157,7 +157,8 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
     await writeFile(info.outputPath("npm-receipt.json"), JSON.stringify({ version, width, registry, retainedSession: true, retainedParentPage: true, errors, external, upgrades: upgradeFrom ? { from: upgradeFrom, to: version, editorOpenStaged: true, switch: width === 1440 ? "close-editor then apply" : "explicit undo-reset consent then reopen", sceneAndFileRetained: true } : "not tested in this installation-only run" }, null, 2));
   } catch (error) {
     primaryError = error;
-    await writeFile(info.outputPath("npm-failure.json"), JSON.stringify({ error: String(error), registry, errors, external }, null, 2));
+    const diagnostics = await integration.inventory().then(value => value.plugins.map(card => ({ pluginId: card.pluginId, error: card.error, updateDiagnostic: card.updateDiagnostic }))).catch(cause => ({ inventoryFailure: String(cause) }));
+    await writeFile(info.outputPath("npm-failure.json"), JSON.stringify({ error: String(error), registry, errors, external, diagnostics }, null, 2));
     await page.screenshot({ path: info.outputPath("npm-failure.png") }).catch(() => {}); throw error;
   } finally {
     let shutdownError: unknown;

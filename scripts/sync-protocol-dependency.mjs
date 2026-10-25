@@ -27,12 +27,13 @@ export async function configuredProtocolSnapshot(root = process.cwd()) {
   return specifier;
 }
 
-export async function publishedProtocolVersion(request = fetch) {
-  const response = await request(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`, { signal: AbortSignal.timeout(30000) });
+export async function publishedProtocolVersion(request = fetch, expected = 'latest') {
+  const response = await request(`https://registry.npmjs.org/${encodeURIComponent(name)}/${expected}`, { signal: AbortSignal.timeout(30000) });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Protocol registry lookup failed: HTTP ${response.status}`);
   const { version } = await response.json();
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Expected a stable protocol version, got ${version}`);
+  if (expected !== 'latest' && version !== expected) throw new Error(`Protocol registry returned ${version}, expected pinned ${expected}`);
   return version;
 }
 
@@ -44,7 +45,10 @@ export async function syncProtocolDependency({ root = process.cwd(), source, req
     console.log(`Verification preserves locked protocol snapshot ${snapshot}; release publication remains blocked`);
     return snapshot;
   }
-  let version = await publishedProtocolVersion(request);
+  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8').catch(error => { if (error.code === 'ENOENT') return '{}'; throw error; }));
+  const configured = manifest.devDependencies?.[name];
+  const pinned = typeof configured === 'string' && /^\d+\.\d+\.\d+$/.test(configured) ? configured : 'latest';
+  let version = await publishedProtocolVersion(request, pinned);
   if (version === null) {
     if (!source) throw new Error(`Publish ${name} from pi-extensions before releasing pi-webapp`);
     const directory = resolve(root, source);
@@ -56,7 +60,6 @@ export async function syncProtocolDependency({ root = process.cwd(), source, req
     version = `file:${relative(root, directory).split('\\').join('/')}`;
     console.log(`Protocol is not published yet; verification uses ${version}`);
   }
-  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   if (manifest.devDependencies?.[name] !== version) {
     run('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-dev', '--save-exact', `${name}@${version}`], { cwd: root, stdio: 'inherit' });
   }
@@ -67,7 +70,10 @@ export async function syncProtocolDependency({ root = process.cwd(), source, req
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (process.argv[2] === '--probe') {
     const snapshot = await configuredProtocolSnapshot();
-    const published = !snapshot && await publishedProtocolVersion() !== null;
+    const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+    const configured = manifest.devDependencies?.[name];
+    const pinned = typeof configured === 'string' && /^\d+\.\d+\.\d+$/.test(configured) ? configured : 'latest';
+    const published = !snapshot && await publishedProtocolVersion(fetch, pinned) !== null;
     if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `published=${published}\n`);
     if (!published) {
       const message = snapshot

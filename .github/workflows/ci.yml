@@ -13,6 +13,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       protocol_published: ${{ steps.protocol.outputs.published }}
     steps:
@@ -45,11 +46,30 @@ jobs:
       - name: Resolve the protocol dependency for verification
         run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
       - run: npm ci
+      - name: Fetch integrity-pinned published plugin fixtures
+        run: node scripts/prepare-hosted-ci-fixtures.mjs
       - run: npm run check
       - run: npm run build
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - name: Require clean hosted lifecycle and shutdown (no silent fixture skips)
+        run: |
+          mkdir -p .ci/hosted
+          npx playwright test hosted- --reporter=json > .ci/hosted/browser.json
+          node scripts/verify-hosted-browser-results.mjs .ci/hosted/browser.json
+      - name: Verify real public cross-version plugin update
+        env:
+          HOSTED_NPM_UPGRADE_FROM: '0.1.0'
+        run: npx playwright test hosted-npm --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hosted-browser-evidence
+          path: |
+            .ci/hosted
+            test-results
+          if-no-files-found: ignore
 
   platform-smoke:
     strategy:
@@ -70,6 +90,7 @@ jobs:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.verify.outputs.protocol_published == 'true'
     needs: [verify, platform-smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency:
       group: pi-webapp-npm-publish
       cancel-in-progress: false
@@ -89,6 +110,8 @@ jobs:
       - run: npm install --global npm@11
       - name: Resolve the published protocol dependency
         run: node scripts/sync-protocol-dependency.mjs
+      - name: Fetch integrity-pinned published plugin fixtures
+        run: node scripts/prepare-hosted-ci-fixtures.mjs
       - run: npm ci
       - name: Choose the next version and npm distribution tag
         run: node scripts/prepare-release.mjs

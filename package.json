@@ -83,7 +83,7 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@chengzhiyi/pi-web-protocol": "file:vendor/chengzhiyi-pi-web-protocol-0.2.0-dev.1.tgz",
+    "@chengzhiyi/pi-web-protocol": "0.1.1",
     "@earendil-works/pi-ai": "1.3.0",
     "@earendil-works/pi-coding-agent": "1.3.0",
     "@playwright/test": "1.63.0",

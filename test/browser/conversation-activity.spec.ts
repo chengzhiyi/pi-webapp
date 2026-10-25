@@ -15,6 +15,15 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
   let rejectSend = false;
   const host: BridgeHost = {
     snapshot: () => session, models: () => [{ provider: "example", id: "model", name: "Example" }], commands: () => [],
+    // This activity-only fixture has no installed plugins. Model the hosted
+    // inventory explicitly, rather than making bootstrap fail with a 503 alert.
+    hosted: {
+      inventory: async () => ({ plugins: [] }),
+      manage: async () => { throw new Error("No hosted fixture management"); },
+      action: async () => { throw new Error("No hosted fixture actions"); },
+      views: async () => { throw new Error("No hosted fixture views"); },
+      asset: async () => null,
+    },
     async send(_id, text) {
       if (rejectSend) throw new Error("Fixture send failed");
       await new Promise<void>(resolve => { releaseSend = resolve; });
