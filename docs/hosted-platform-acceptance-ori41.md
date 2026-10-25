@@ -1,5 +1,9 @@
 # ORI-41 — native/browser acceptance (partial, NOT release approval)
 
+> Historical 2026-10-24 run. Current follow-up repairs, successful reruns and
+> user-authorized environment skips are in [the follow-up report](hosted-platform-fixes-ori41.md).
+> Historical failures below are preserved; they are not the current paired-build verdict.
+
 ## Provenance and containment
 
 2026-10-24; host base `683a4a3`; isolated sibling `pi-webapp-ori41`, branch

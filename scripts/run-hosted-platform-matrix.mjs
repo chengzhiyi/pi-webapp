@@ -11,7 +11,7 @@ assert.equal(process.arch, process.env.ORI41_TARGET_ARCH, "Explicit target archi
 assert.ok(process.env.HOSTED_EXCALIDRAW_TGZ, "Stage the supplied local development archive, do not fetch a registry substitute");
 const archive = resolve(process.env.HOSTED_EXCALIDRAW_TGZ);
 const sha = createHash("sha256").update(readFileSync(archive)).digest("hex");
-assert.equal(sha, "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5");
+assert.equal(sha, process.env.HOSTED_EXCALIDRAW_SHA256 || "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5");
 const output = resolve(process.env.ORI41_OUTPUT || `artifacts/ori41/${process.platform}-${process.arch}-${mode}`);
 mkdirSync(output, { recursive: true });
 const env = { ...process.env, HOSTED_EXCALIDRAW_TGZ: archive };

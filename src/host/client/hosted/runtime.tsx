@@ -7,6 +7,7 @@ import { retainHostedCards } from "./catalog.ts";
 import { FrameAdapter, hostedFrames } from "./frame-adapter.ts";
 import { HostedReconciliation } from "./reconciliation.tsx";
 import { HostedViewClient } from "./view-client.ts";
+import { downloadDrawing } from "./download.ts";
 
 interface HostedCallbacks { current: { openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> } }
 
@@ -16,6 +17,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
 }) {
   const iframe = useRef<HTMLIFrameElement>(null);
   const adapter = useRef<FrameAdapter | null>(null);
+  const viewClient = useRef<HostedViewClient | null>(null);
   const ready = useRef<Promise<unknown>>(Promise.resolve());
   const callbacks = useRef({ open, sendMessage, reconnect, abort }); callbacks.current = { open, sendMessage, reconnect, abort };
   const [error, setError] = useState("");
@@ -37,6 +39,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
         if (typeof value?.action !== "string") throw new Error("Invalid action");
         return hostedApi.action({ sessionId: identity.sessionId, pluginId: identity.pluginId, generation: identity.generation, ...client.capability, action: value.action, input: value.input });
       }
+      if (method === "downloadDrawing" && ["editor", "workspace"].includes(mount.kind)) { downloadDrawing(input); return null; }
       if (method === "changed") return client.changed(input);
       if (method === "abort" && callbacks.current.abort) { await callbacks.current.abort(); return null; }
       if (method === "openPanel") {
@@ -47,7 +50,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       throw new Error(`Unsupported frame host method: ${method}`);
     });
     client = new HostedViewClient(identity, frame, mount, () => callbacks.current.reconnect(), report);
-    adapter.current = frame;
+    adapter.current = frame; viewClient.current = client;
     const work = (async () => {
       await client.start();
       if (!alive) throw new Error("Frame mount cancelled");
@@ -59,7 +62,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     const remove = hostedFrames.add({ identity, ready: work, adapter: frame, afterFlush: () => client.flushed(), toolCallId: (update as ToolViewProps | undefined)?.call?.toolCallId, retire: () => client.close() });
     void work.catch(report);
     return () => {
-      alive = false; remove(); adapter.current = null;
+      alive = false; remove(); adapter.current = null; viewClient.current = null;
       // Navigation/tab closure preflushes through FrameRegistry; generation changes freeze first.
       // React has removed/replaced the iframe here, so its realm/pagehide owns remote cleanup.
       // Do not issue a dispose RPC into a destroyed realm and retain a doomed timeout/port.
@@ -67,9 +70,13 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     };
   }, [card.pluginId, card.generation, card.documentUrl, card.controllerUrl, mount.sessionId, mount.kind, mount.contentId]);
   useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => setError(String(cause))); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
-  return <div hidden={mount.kind === "controller"} data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "tool" ? 240 : "100%", minHeight: 0 }}>
-    {error && <p role="alert">{error}</p>}
-    <iframe ref={iframe} title={`${card.name} ${mount.kind}`} style={{ width: "100%", height: "100%", border: 0 }} />
+  // Controller content is hidden, but its transport failure/retry must remain
+  // reachable: it participates in the same generation barrier as visible editors.
+  return <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" ? "auto" : mount.kind === "tool" ? 240 : "100%", minHeight: 0 }}>
+    {error && <p role="alert">{error} <button type="button" onClick={() => {
+      try { viewClient.current?.retry(); setError(""); } catch (cause) { setError(String(cause)); }
+    }}>Retry view connection</button></p>}
+    <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ width: "100%", height: "100%", border: 0 }} />
   </div>;
 }
 const theme = (): "light" | "dark" => document.body.hasAttribute("data-ds-dark-theme") ? "dark" : "light";

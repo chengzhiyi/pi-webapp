@@ -161,6 +161,11 @@ test("A09: actual hosted tool frame paints progressive arguments before any fina
     await expect(preview).toHaveCount(0); await expect(frame.getByRole("img")).toBeVisible();
     expect(await page.locator('iframe[title="Excalidraw tool"]').getAttribute("src")).not.toBe(frameIdentity);
     await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements.length).toBe(2);
+    // The new result realm materializes asynchronously. Its persisted scene can
+    // arrive before its genuine HTTP busy=false status. Observe that status
+    // before normal shutdown; never replace/fake the freeze ACK or hide teardown.
+    await expect.poll(() => [...(h.integration as any).views.values()].every((coordinator: any) =>
+      coordinator.views.size > 0 && [...coordinator.views.values()].every((view: any) => !view.busy)), { timeout: 10_000 }).toBe(true);
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
   } finally { await h.close(); }
 });

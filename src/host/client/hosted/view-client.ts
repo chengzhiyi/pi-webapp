@@ -39,6 +39,11 @@ export class HostedViewClient {
       accept: reply => this.receive(reply), fail: error => { if (!this.stopped) this.failed(error); },
     });
   }
+  /** Explicit user retry only: replay pending identity-bound commands, never invent an ack. */
+  retry() {
+    if (this.stopped) throw new Error("Closed view cannot reconnect");
+    this.unlisten?.(); this.unlisten = undefined; this.listen();
+  }
   private request(input: Record<string, unknown>) { return hostedApi.view({ ...this.identity, viewToken: this.token, ...input } as HostedViewInput, this.abort.signal); }
   async changed(input: unknown) {
     const status = input as { dirty?: unknown; busy?: unknown };
@@ -50,7 +55,7 @@ export class HostedViewClient {
       if (this.stopped) return;
       let error: unknown;
       try {
-        if (command.type === "freeze") { this.snapshot = await this.adapter.call("freeze"); this.frozen = true; }
+        if (command.type === "freeze" && !this.frozen) { this.snapshot = await this.adapter.call("freeze"); this.frozen = true; }
         if (command.type === "resume" && this.frozen) { await this.adapter.call("restore", this.snapshot); this.frozen = false; }
         if (command.type === "committed") {
           await this.request({ operation: "ack", commandId: command.id, ok: true });
