@@ -61,7 +61,9 @@ export class HostedPluginIntegration {
       },
     });
     this.manager = new HostedPluginManager({ ...options,
-      lifecycle: (_id, operation) => this.lifecycle(operation, this.closing),
+      // Terminal intent belongs to the operation, not the mutable closing flag:
+      // an enable still preparing when shutdown starts must not retain its freeze.
+      lifecycle: (_id, operation, shutdown) => this.lifecycle(operation, shutdown),
       hooks: id => ({
       canSwitch: () => this.coordinator(id).canSwitch(),
       validateCandidate: (descriptors: readonly HostedToolDescriptor[]) => {
