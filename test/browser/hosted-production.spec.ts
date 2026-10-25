@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "esbuild";
@@ -76,6 +76,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
     await expect(manager).toBeVisible();
   };
+  let primaryError: unknown;
   try {
     await page.goto(bridge.url);
     const bootId = await page.evaluate(() => { const value = crypto.randomUUID(); (window as any).__hostedTestBoot = value; return value; });
@@ -129,21 +130,45 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     const before = await action("get", { id: draftId }), generation = (await card()).generation!;
     version = "0.1.1"; selected = localRelease(bytes, version);
     await showManager(); await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
-    await expect(manager).toContainText("Pending version (close editors first): 0.1.1"); expect((await card()).generation).toBe(generation);
-    page.once("dialog", dialog => dialog.accept());
-    await manager.getByRole("button", { name: "Update and reopen now (clears undo history)", exact: true }).click();
+    await expect(manager).toContainText("Close editors to update to: 0.1.1"); expect((await card()).generation).toBe(generation);
+    await manager.getByRole("button", { name: "Update and reopen now", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect.poll(async () => (await card()).generation, { timeout: 20_000 }).toBe(generation + 1);
-    await expect(manager).not.toContainText("Pending version");
+    await expect(manager).not.toContainText("Close editors to update to:");
     const after = await action("get", { id: draftId }); expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision);
     expect(sessions.session).toBe(retained); expect(await page.evaluate(() => (window as any).__hostedTestBoot)).toBe(bootId);
     // New realms initially register busy until their handshake/status acknowledgement completes.
     await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${generation + 1}"]`)).toHaveCount(3);
     await expect.poll(() => [...(integration as any).views.values()].every((coordinator: any) => coordinator.views.size === 3 && [...coordinator.views.values()].every((view: any) => view.identity.generation === generation + 1 && !view.busy)), { timeout: 10_000 }).toBe(true);
-    page.once("dialog", dialog => dialog.accept()); await manager.getByRole("button", { name: "Disable", exact: true }).click();
+    if (width === 1440) {
+      // Separate default path: no explicit reopen consent and no full-page refresh.
+      const beforeClose = (await card()).generation!;
+      version = "0.1.2"; selected = localRelease(bytes, version);
+      await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+      await expect(manager).toContainText("Close editors to update to: 0.1.2");
+      expect((await card()).generation).toBe(beforeClose);
+      const editorTab = page.locator("[data-dockkit-content]").filter({ has: page.locator('iframe[title="Excalidraw editor"]') });
+      const tabId = await editorTab.getAttribute("data-dockkit-content");
+      await page.getByRole("button", { name: "Hosted test", exact: true }).click();
+      const expandRight = page.getByRole("button", { name: "Expand right sidebar", exact: true });
+      if (await expandRight.isVisible()) await expandRight.click();
+      await page.locator(`[data-dockkit-tab="${tabId}"]`).hover();
+      await page.locator(`[data-dockkit-tab-close="${tabId}"]`).click();
+      await expect(page.locator('iframe[title="Excalidraw editor"]')).toHaveCount(0);
+      // The retained controller/tool realms acknowledge the normal switch barrier.
+      await showManager();
+      await manager.getByRole("button", { name: "Apply pending update", exact: true }).click();
+      await expect.poll(async () => (await card()).generation).toBe(beforeClose + 1);
+      await expect(manager).toContainText("Installed · Enabled 0.1.2");
+      expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
+    }
+    await manager.getByRole("button", { name: "Disable", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled");
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden");
     await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
-    page.once("dialog", dialog => dialog.accept()); await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
+    await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
     await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
@@ -152,15 +177,19 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await page.screenshot({ path: info.outputPath(`hosted-lifecycle-${width}.png`) });
     expect(errors).toEqual([]); expect(external).toEqual([]);
   } catch (error) {
+    primaryError = error;
+    await writeFile(info.outputPath("primary-failure.json"), JSON.stringify({ error: String(error), views: [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()]) }, null, 2));
     await page.screenshot({ path: info.outputPath("primary-failure.png") });
     throw error;
   } finally {
     // Keep MessagePorts and the page alive until registered views acknowledge shutdown.
-    await integration.shutdown();
+    let shutdownError: unknown;
+    try { await integration.shutdown(); } catch (error) { shutdownError = error; }
     await page.close();
     await bridge.close(); await sessions.dispose();
     if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
     if (roots === undefined) delete process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS; else process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = roots;
     await rm(root, { recursive: true, force: true });
+    if (shutdownError) throw new AggregateError([...(primaryError ? [primaryError] : []), shutdownError], "Real shutdown failed");
   }
 });

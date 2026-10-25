@@ -90,8 +90,7 @@ test("pending, pinned and installed-disabled references survive; uninstall prese
   await manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
   await manager.collect(id);
   assert.deepEqual((await manager.installer.inventory()).versions[id]!.map(v => v.version), ["0.1.0", "0.1.1", "0.1.2"]);
-  setOpen(false); await assert.rejects(manager.manage(id, "retry"), code("version_pinned"));
-  await manager.setPolicy(id, { updatePolicy: "notify" }); await manager.manage(id, "retry"); await manager.collect(id);
+  setOpen(false); await manager.manage(id, "retry"); await manager.collect(id);
   assert.deepEqual((await manager.installer.inventory()).versions[id]!.map(v => v.version), ["0.1.1", "0.1.2"]);
   await manager.manage(id, "disable"); setVersion("0.1.3"); await manager.manage(id, "update");
   assert.equal((await broker.active())!.enabled, false);

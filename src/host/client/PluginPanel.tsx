@@ -78,7 +78,12 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
     if (key === "closeTab") return (id: TabId) => {
       if (closing.current) return;
       closing.current = true;
-      void hostedFrames.flush(props.session?.sessionId ?? "").then(() => { setCloseError(""); target.closeTab(id); })
+      const sessionId = props.session?.sessionId ?? "";
+      void hostedFrames.flush(sessionId).then(async () => {
+        const content = document.querySelector(`[data-dockkit-content="${CSS.escape(id)}"]`);
+        if (content) await hostedFrames.retireWithin(sessionId, content);
+        setCloseError(""); target.closeTab(id);
+      })
         .catch(error => setCloseError(error instanceof Error ? error.message : String(error)))
         .finally(() => { closing.current = false; });
     };

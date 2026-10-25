@@ -34,6 +34,18 @@ test("mount changes during flush reject rather than silently bypassing a new edi
   registry.add({ identity: identity("one"), ready: Promise.resolve(), adapter: { async call() { registry.add({ identity: identity("new"), ready: Promise.resolve(), adapter: {} as FrameAdapter }); } } as unknown as FrameAdapter });
   await assert.rejects(registry.flush("session"), /views changed/);
 });
+test("tab close retires only its still-mounted scoped frame; refusal cannot manufacture a close", async () => {
+  const registry = new FrameRegistry(), retired: string[] = [];
+  const editor = {} as HTMLIFrameElement, tool = {} as HTMLIFrameElement;
+  for (const [name, frame] of [["editor", editor], ["tool", tool]] as const) registry.add({ identity: identity(name), ready: Promise.resolve(), adapter: { frame } as FrameAdapter, retire: async () => { retired.push(name); } });
+  registry.add({ identity: { ...identity("other-session"), sessionId: "other" }, ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => { assert.fail("wrong scope"); } });
+  const root = { contains: (frame: unknown) => frame === editor } as Element;
+  await registry.retireWithin("session", root);
+  assert.deepEqual(retired, ["editor"]);
+  registry.add({ identity: identity("busy"), ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => { throw new Error("unacknowledged edits"); } });
+  await assert.rejects(registry.retireWithin("session", root), /unacknowledged edits/);
+});
+
 test("editor updates wait by default; explicit immediate mode still refuses busy views", async () => {
   const coordinator = new HostedViewCoordinator("plugin", 1, 50, 40);
   const editor = await register(coordinator, "editor", "editor");

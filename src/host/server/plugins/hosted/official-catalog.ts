@@ -52,7 +52,7 @@ export function selectRelease(metadata: unknown, plugin: OfficialPlugin, hostVer
 export type UpdatePolicy = "notify" | "automatic" | "pinned";
 export function hostUpdateDecision(input: { installed: boolean; enabled: boolean; policy: UpdatePolicy; trigger?: "independent" | "host-linked"; currentCompatible: boolean; currentVersion?: string; recommendedVersion?: string; networkAvailable: boolean }): { action: "none" | "keep" | "notify" | "update" | "disable-incompatible"; enabled: boolean } {
   if (!input.installed) return { action: "none", enabled: false };
-  if (!input.networkAvailable || input.policy === "pinned") return { action: input.currentCompatible ? "keep" : "disable-incompatible", enabled: input.currentCompatible && input.enabled };
+  if (!input.networkAvailable || input.trigger === "independent" && input.policy === "pinned") return { action: input.currentCompatible ? "keep" : "disable-incompatible", enabled: input.currentCompatible && input.enabled };
   if (!input.recommendedVersion || input.currentVersion && compareVersions(input.currentVersion, input.recommendedVersion) >= 0) return { action: input.currentCompatible ? "keep" : "disable-incompatible", enabled: input.currentCompatible && input.enabled };
   return { action: input.trigger === "independent" && input.policy === "notify" ? "notify" : "update", enabled: input.enabled };
 }

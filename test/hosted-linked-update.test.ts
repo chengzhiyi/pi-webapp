@@ -72,13 +72,13 @@ test("incompatible pinned runtime never starts after host change and keeps requi
   await seed.manage(id, "enable"); await seed.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" }); await seed.shutdown();
   let calls = 0;
   const integration = new HostedPluginIntegration({ ...options, hostVersion: "1.0.0", ownerId: "local", resolveSession: () => null,
-    fetch: (async () => { calls++; throw new Error("must not contact registry for pin"); }) as typeof fetch });
+    fetch: (async () => { calls++; throw new Error("offline registry"); }) as typeof fetch });
   t.after(async () => { await integration.shutdown(); await rm(options.root, { recursive: true, force: true }); });
   await integration.start();
   const card = (await integration.inventory()).plugins[0]!;
   assert.equal(integration.manager.tools.length, 0); assert.equal(card.documentUrl, undefined);
-  assert.equal(card.updatePolicy, "pinned"); assert.equal(card.enabled, true); // intent, not a running runtime
-  assert.match(card.error!, /incompatible/); assert.equal(card.updateDiagnostic!.status, "failed"); assert.equal(calls, 0);
+  assert.equal(card.updatePolicy, "notify"); assert.equal(card.enabled, true); // intent, not a running runtime
+  assert.match(card.error!, /offline registry/); assert.equal(card.updateDiagnostic!.status, "failed"); assert.equal(calls, 1);
   await assert.rejects(readFile(join(options.root, "host-version.json")), { code: "ENOENT" });
 });
 

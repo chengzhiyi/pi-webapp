@@ -9,7 +9,7 @@ import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 import { integrationFixture, hostedId as id, integrity } from "../helpers/hosted-integration-fixture.ts";
 
-test("visible policy control separates independent notify from default linked synchronization and honors pin", async ({ page }) => {
+test("no strategy selector; independent check and fixed software-linked synchronization preserve disablement", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "hosted-policy-browser-")), old = integrationFixture(), next = integrationFixture("0.2.0");
   const workerEntry = join(root, "worker.mjs"); let bridge: Bridge | undefined, downloads = 0;
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
@@ -25,19 +25,13 @@ test("visible policy control separates independent notify from default linked sy
     await page.goto(bridge.url);
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
     const panel = page.locator("[data-hosted-management]"); await expect(panel).toBeVisible();
-    await expect(panel).toContainText("Host upgrades synchronize installed compatible stable plugins separately");
-    const policy = panel.getByRole("combobox", { name: "Plugin update policy" });
-    await expect(policy).toHaveValue("notify");
-    await policy.selectOption("pinned");
-    await expect.poll(async () => (await integration.inventory()).plugins[0]!.updatePolicy).toBe("pinned");
-    expect(await integration.manager.reconcileHostUpgrade()).toBe(true); expect(downloads).toBe(0);
-    await policy.selectOption("notify");
-    await expect.poll(async () => (await integration.inventory()).plugins[0]!.updatePolicy).toBe("notify");
+    await expect(panel).toContainText("Installed plugins update with the app");
+    await expect(panel.getByRole("combobox")).toHaveCount(0);
     await panel.getByRole("button", { name: "Check updates", exact: true }).click();
-    await expect(panel).toContainText("Compatible release available: 0.2.0"); expect(downloads).toBe(0);
+    await expect(panel).toContainText("Available release: 0.2.0"); expect(downloads).toBe(0);
     // Drive the real startup reconciliation seam, not a mocked browser catalog response.
     expect(await integration.manager.reconcileHostUpgrade()).toBe(true); expect(downloads).toBe(1);
-    await panel.getByRole("button", { name: "Refresh / retry connection", exact: true }).click();
-    await expect(panel).toContainText("Installed · Disabled 0.2.0"); await expect(policy).toHaveValue("notify");
+    await panel.getByRole("button", { name: "Reload status", exact: true }).click();
+    await expect(panel).toContainText("Installed · Disabled 0.2.0"); await expect(panel.getByRole("combobox")).toHaveCount(0);
   } finally { await bridge?.close(); await integration.shutdown(); await rm(root, { recursive: true, force: true }); }
 });

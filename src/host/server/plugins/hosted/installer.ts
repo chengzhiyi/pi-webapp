@@ -125,10 +125,18 @@ export class HostedPluginInstaller {
     if (url.protocol !== "https:" || url.origin !== registry.origin || url.username || url.password || url.hash || url.search) throw new HostedPluginError("registry_denied", "Only the official registry origin is permitted");
     return url;
   }
-  private async download(url: URL, limit: number, signal?: AbortSignal): Promise<Buffer> {
+  private async download(url: URL, limit: number, signal?: AbortSignal, kind: "metadata" | "tarball" = "tarball"): Promise<Buffer> {
     const abort = AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]);
-    const response = await this.fetcher(url, { redirect: "error", signal: abort, headers: { Accept: "application/json, application/octet-stream" } });
-    if (!response.ok || !response.body) throw new HostedPluginError("download_failed", `Registry download failed (${response.status})`);
+    let response: Response;
+    try { response = await this.fetcher(url, { redirect: "error", signal: abort, headers: { Accept: "application/json, application/octet-stream" } }); }
+    catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      throw new HostedPluginError("registry_unreachable", error instanceof Error ? error.message : "Registry network request failed");
+    }
+    if (!response.ok || !response.body) {
+      await response.body?.cancel().catch(() => {});
+      throw new HostedPluginError(response.status === 404 ? `${kind}_not_found` : "download_failed", `Registry ${kind} request failed (${response.status})`);
+    }
     if (response.url && new URL(response.url).origin !== url.origin) throw new HostedPluginError("registry_denied", "Registry redirect is forbidden");
     const reader = response.body.getReader(), chunks: Buffer[] = []; let length = 0;
     const cancel = () => { void reader.cancel(abort.reason).catch(() => {}); };
@@ -143,6 +151,10 @@ export class HostedPluginInstaller {
         chunks.push(Buffer.from(next.value));
       }
       abort.throwIfAborted(); return Buffer.concat(chunks);
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      if (error instanceof HostedPluginError) throw error;
+      throw new HostedPluginError("registry_unreachable", error instanceof Error ? error.message : "Registry response interrupted");
     } finally { abort.removeEventListener("abort", cancel); await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
   async check(id: string, installedVersion?: string, exact?: string, signal?: AbortSignal): Promise<RegistryRelease> {
@@ -150,7 +162,7 @@ export class HostedPluginInstaller {
     if (exact && !stableVersion(exact)) throw new HostedPluginError("invalid_version", "Choose an exact stable version");
     const url = this.trustedUrl(`${plugin.registry}/${encodeURIComponent(id)}`, plugin);
     let metadata: unknown;
-    const bytes = await this.download(url, 8 * 1024 * 1024, signal);
+    const bytes = await this.download(url, 8 * 1024 * 1024, signal, "metadata");
     try { metadata = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
     catch { throw new HostedPluginError("registry_invalid", "Invalid registry metadata JSON"); }
     return selectRelease(metadata, plugin, this.hostVersion, installedVersion, exact);

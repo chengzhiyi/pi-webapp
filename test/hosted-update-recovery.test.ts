@@ -25,7 +25,7 @@ async function worker(root: string) {
   return outfile;
 }
 
-test("independent notify never downloads; default host-linked preserves disabled/absent and pin intent", async t => {
+test("independent check never downloads; host-linked migrates pins and preserves disabled/absent", async t => {
   const root = await temporary(t), first = integrationFixture(), next = integrationFixture("0.2.0");
   let registry = 0, downloads = 0;
   const options = { root, hostVersion: "0.1.29", workerEntry: "unused", hooks, fetch: (async url => {
@@ -41,10 +41,8 @@ test("independent notify never downloads; default host-linked preserves disabled
   assert.equal((await manager.inventory()).plugins[0]!.updateDiagnostic?.status, "available");
   await assert.rejects(manager.setPolicy(id, { updatePolicy: "pinned" }), /Invalid/);
   await manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
-  await manager.reconcileHostUpgrade(); assert.equal(registry, 1);
-  await assert.rejects(manager.manage(id, "enable", "0.2.0"), /pin/i);
-  assert.match((await manager.inventory()).plugins[0]!.updateDiagnostic!.message, /Pinned version retained/);
-  await manager.setPolicy(id, { updatePolicy: "notify" });
+  assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(registry, 2); assert.equal(downloads, 1);
+  assert.equal((await manager.inventory()).plugins[0]!.pinnedVersion, undefined);
   assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(downloads, 1);
   const card = (await manager.inventory()).plugins[0]!;
   assert.equal(card.installed, true); assert.equal(card.enabled, false); assert.equal(card.activeVersion, null);
@@ -222,7 +220,7 @@ test("interrupted archive and no-compatible release persist failures without rep
   assert.equal(card.version, "0.1.0"); assert.equal((await manager.installer.load(id, "0.1.0")).digest, original.digest);
 });
 
-test("changing to pinned policy fences an already pending newer release", async t => {
+test("legacy pin input cannot fence an already pending newer release", async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-pending-pin-")); let canSwitch = true;
   const manager = new HostedPluginManager({ root, hostVersion: "0.1.29", workerEntry: await worker(root), hooks: () => ({ ...hooks(), canSwitch: () => canSwitch }) });
   t.after(async () => { await manager.shutdown(); await rm(root, { recursive: true, force: true }); });
@@ -232,8 +230,9 @@ test("changing to pinned policy fences an already pending newer release", async 
   canSwitch = false; await manager.manage(id, "enable", "0.2.0");
   assert.equal((await manager.inventory()).plugins[0]!.pendingVersion, "0.2.0");
   await manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" }); canSwitch = true;
-  await assert.rejects(manager.manage(id, "retry"), /pin/i);
-  assert.deepEqual(await broker.active(), before);
+  await manager.manage(id, "retry");
+  assert.equal((await broker.active())!.version, "0.2.0");
+  assert.ok((await broker.active())!.generation > before!.generation);
 });
 
 test("referenced fork refuses offline resolution even with stopped-owner confirmation", async t => {
