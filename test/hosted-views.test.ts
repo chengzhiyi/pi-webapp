@@ -57,6 +57,24 @@ test("editor updates wait by default; explicit immediate mode still refuses busy
   await assert.rejects(editor({ operation: "close" }), /Dirty view/);
   coordinator.dispose();
 });
+test("a newly enabled realm cannot shut down before real readiness; ready still requires a freeze ack", async () => {
+  const coordinator = new HostedViewCoordinator("plugin", 1, 50, 100);
+  const base = identity("new-final-mount");
+  const { viewToken } = await coordinator.handle({ ...base, operation: "register", kind: "editor" }, scope);
+  const request = (input: object) => coordinator.handle({ ...base, viewToken, ...input } as HostedViewInput, scope);
+  coordinator.allowImmediateReopen(true); // Same editor-close permission as host exit, not readiness.
+  assert.equal(coordinator.canSwitch(), false);
+  await assert.rejects(coordinator.freeze(), /Close editors/);
+  assert.deepEqual((await request({ operation: "poll", after: 0, immediate: true })).commands, []);
+  await request({ operation: "change", dirty: false, busy: false });
+  const frozen = coordinator.freeze();
+  let completed = false; void frozen.then(() => { completed = true; });
+  const command = (await request({ operation: "poll", after: 0, immediate: true })).commands[0]!;
+  assert.equal(command.type, "freeze"); assert.equal(completed, false);
+  await request({ operation: "ack", commandId: command.id, ok: true }); await frozen;
+  assert.equal(completed, true);
+  coordinator.dispose();
+});
 test("all-window barrier requires every ack, fences generation, rejects scope and freezes new mounts", async () => {
   const coordinator = new HostedViewCoordinator("plugin", 1, 50, 100);
   const one = await register(coordinator, "window-one"); const two = await register(coordinator, "window-two");
