@@ -171,7 +171,31 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
     await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
-    await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+    // Enabled means the backend committed, not that the new browser realms are ready.
+    // Hold actual final-mount readiness requests on mobile to make that distinction deterministic.
+    let releaseReadiness!: () => void, heldReadiness = 0;
+    const readinessGate = new Promise<void>(resolve => { releaseReadiness = resolve; });
+    const viewsUrl = address.origin + "/api/hosted-plugins/views";
+    if (width === 390) await page.route(viewsUrl, async route => {
+      const input = route.request().postDataJSON();
+      if (input.operation === "change" && input.busy === false) { heldReadiness++; await readinessGate; }
+      await route.continue(); // Never synthesize a readiness status or freeze acknowledgement.
+    });
+    try {
+      await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+      if (width === 390) {
+        await expect.poll(() => heldReadiness, { message: "Final realms reached the delayed readiness boundary" }).toBeGreaterThan(0);
+        expect([...(integration as any).views.values()].some((coordinator: any) => [...coordinator.views.values()].some((view: any) => view.busy))).toBe(true);
+      }
+    } finally { releaseReadiness(); }
+    const finalGeneration = (await card()).generation!;
+    const expectedKinds = width === 1440 ? ["controller", "tool"] : ["controller", "editor", "tool"];
+    await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${finalGeneration}"]`)).toHaveCount(expectedKinds.length);
+    await expect.poll(() => [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()])
+      .map((view: any) => ({ kind: view.kind, generation: view.identity.generation, busy: view.busy }))
+      .sort((a, b) => a.kind.localeCompare(b.kind)), { timeout: 10_000, message: "Final enabled realms must actually acknowledge readiness before real shutdown" })
+      .toEqual(expectedKinds.map(kind => ({ kind, generation: finalGeneration, busy: false })));
+    if (width === 390) await page.unroute(viewsUrl);
     expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
     expect(await page.evaluate(() => (window as any).__hostedTestBoot)).toBe(bootId); expect(sessions.session).toBe(retained);
     await page.screenshot({ path: info.outputPath(`hosted-lifecycle-${width}.png`) });
@@ -184,7 +208,10 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
   } finally {
     // Keep MessagePorts and the page alive until registered views acknowledge shutdown.
     let shutdownError: unknown;
-    try { await integration.shutdown(); } catch (error) { shutdownError = error; }
+    try { await integration.shutdown(); } catch (error) {
+      shutdownError = error;
+      await writeFile(info.outputPath("shutdown-failure.json"), JSON.stringify({ error: String(error), views: [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()]) }, null, 2));
+    }
     await page.close();
     await bridge.close(); await sessions.dispose();
     if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
