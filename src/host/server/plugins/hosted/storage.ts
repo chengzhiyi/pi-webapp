@@ -16,7 +16,11 @@ export async function boundedRead(path: string, maxBytes: number): Promise<Buffe
   catch (error) { if (isMissing(error)) return null; throw error; }
   try {
     const info = await file.stat();
-    if (!info.isFile() || info.nlink !== 1 || info.size > maxBytes) throw new HostedPluginError("invalid_storage", "Invalid storage record size or type");
+    // atomicJson may replace the pathname after open but before fstat. The pinned
+    // descriptor then has nlink=0 and still contains the complete old snapshot,
+    // exactly as a replacement just after fstat would. Multiple live hard links
+    // remain forbidden; never reopen the pathname or mix bytes from two versions.
+    if (!info.isFile() || info.nlink > 1 || info.size > maxBytes) throw new HostedPluginError("invalid_storage", "Invalid storage record size or type");
     const bytes = Buffer.alloc(Math.min(info.size + 1, maxBytes + 1)); let length = 0;
     while (length < bytes.length) { const read = await file.read(bytes, length, bytes.length - length, length); if (!read.bytesRead) break; length += read.bytesRead; }
     if (length > maxBytes || length !== info.size) throw new HostedPluginError("invalid_storage", "Storage record changed during read");

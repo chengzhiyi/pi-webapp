@@ -27,7 +27,7 @@ export interface HostedManagerOptions {
   fetch?: typeof globalThis.fetch;
   hooks(id: string): HostedSwitchHooks;
   /** Enter the all-Agent settled barrier only for activation/disable, AFTER background preparation. */
-  lifecycle?<T>(pluginId: string, operation: () => Promise<T>): Promise<T>;
+  lifecycle?<T>(pluginId: string, operation: () => Promise<T>, shutdown?: boolean): Promise<T>;
   legacy?(id: string): (request: HostedInvocation) => Promise<unknown>;
 }
 export interface ManagedHostedPlugin {
@@ -87,8 +87,8 @@ export class HostedPluginManager {
     void result.then(() => this.errors.delete(id), error => { this.errors.set(id, failure(error)); }).finally(() => { if (this.operations.get(id) === result) this.operations.delete(id); });
     return result;
   }
-  private lifecycle<T>(id: string, operation: () => Promise<T>): Promise<T> {
-    return this.options.lifecycle ? this.options.lifecycle(id, operation) : operation();
+  private lifecycle<T>(id: string, operation: () => Promise<T>, shutdown = false): Promise<T> {
+    return this.options.lifecycle ? this.options.lifecycle(id, operation, shutdown) : operation();
   }
   private async policies(): Promise<Record<string, Policy>> {
     const value = await readJson<Record<string, Policy>>(join(this.options.root, "policies", "policies.json"));
@@ -399,7 +399,7 @@ export class HostedPluginManager {
   async shutdown(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.operations.values());
-    await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown())));
+    await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
     this.packages.clear(); this.assetTokens.clear();
   }
 }
