@@ -13,7 +13,7 @@ const home = join(root, "home"), agent = join(root, "agent"), hosted = join(agen
 await mkdir(home);
 const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ);
 const sha = createHash("sha256").update(bytes).digest("hex");
-assert.equal(sha, "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5");
+assert.equal(sha, process.env.HOSTED_EXCALIDRAW_SHA256 || "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url)));
 const installer = new HostedPluginInstaller({ root: join(hosted, "packages"), hostVersion: pkg.version, fetch: async () => { throw Error("Offline fixed fixture"); } });
 await installer.installArchive("@chengzhiyi/pi-excalidraw", bytes, "sha512-" + createHash("sha512").update(bytes).digest("base64"), "0.1.0");
@@ -38,11 +38,17 @@ try {
   const id = "@chengzhiyi/pi-excalidraw", sessionId = (await request("/api/session")).sessionId;
   const catalog = async () => (await request("/api/hosted-plugins")).plugins[0];
   const action = async (action, input) => request("/api/hosted-plugins/action", { pluginId: id, generation: (await catalog()).generation, sessionId, action, input });
-  const ready = new Map();
-  page.on("response", response => {
+  const ready = new Map(), resumeCommands = new Set(), resumedAcks = new Set();
+  page.on("response", async response => {
+    if (new URL(response.url()).pathname === "/api/hosted-plugins/views" && response.request().postDataJSON()?.operation === "pollMany" && response.status() === 200) {
+      const inputs = response.request().postDataJSON().views;
+      const data = await response.json().catch(() => ({}));
+      for (const [i, result] of (data.replies ?? []).entries()) for (const command of result.reply?.commands ?? []) if (command.type === "resume") resumeCommands.add(`${inputs[i].mountId}:${command.id}`);
+    }
     if (new URL(response.url()).pathname === "/api/hosted-plugins/views" && response.request().method() === "POST" && response.status() === 200) {
       const input = response.request().postDataJSON();
       if (input.operation === "change") { if (!input.busy) ready.set(input.mountId, input.generation); else ready.delete(input.mountId); }
+      if (input.operation === "ack" && input.ok && resumeCommands.has(`${input.mountId}:${input.commandId}`)) resumedAcks.add(input.mountId);
     }
   });
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
@@ -84,6 +90,15 @@ try {
     assert.deepEqual((await action("get", { id: draft })).scene, before);
     stage("actual-freeze-ack-loss-fails-closed-retains-realm-scene-generation");
   } finally { await page.unroute("**/api/hosted-plugins/views", loseAck); }
+  // A failed write is not automatically retried. Explicitly restart each failed
+  // view reader, and observe real resumed status before retrying the switch.
+  const retry = page.getByRole("button", { name: "Retry view connection", exact: true });
+  await expect(retry).not.toHaveCount(0);
+  while (await retry.count()) await retry.first().click();
+  await expect.poll(async () => page.locator('[data-hosted-plugin] > [role="alert"]').allTextContents()).toEqual([]);
+  // The resume ACK (not a delay or catalog read) proves the retained frozen realm
+  // has consumed the cancellation before another generation switch begins.
+  await expect.poll(() => resumedAcks.size).toBe(2);
   await request("/api/hosted-plugins/manage", { pluginId: id, operation: "enable", reopenEditors: true });
   assert.equal((await catalog()).generation, generation + 1);
   await expect(canvas).toBeVisible(); assert.deepEqual((await action("get", { id: draft })).scene, before);

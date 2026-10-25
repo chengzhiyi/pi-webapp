@@ -28,6 +28,32 @@ test("committed frozen view closes once without a forbidden old-generation chang
   assert.deepEqual(frameCalls, ["freeze"]); assert.deepEqual(errors, []);
 });
 
+test("explicit retry replays a lost freeze ACK and restores the retained realm without repeating freeze", async t => {
+  const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  Object.defineProperty(globalThis, "location", { configurable: true, value: new URL("http://localhost/") });
+  t.after(() => { globalThis.fetch = originalFetch; if (originalLocation) Object.defineProperty(globalThis, "location", originalLocation); else Reflect.deleteProperty(globalThis, "location"); });
+  let offline = true, failed!: () => void, resumed!: () => void;
+  const failure = new Promise<void>(resolve => { failed = resolve; });
+  const restored = new Promise<void>(resolve => { resumed = resolve; });
+  const writes: any[] = [], calls: string[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    const input = JSON.parse(init!.body as string); writes.push(input);
+    if (input.operation === "ack" && offline) return new Response(JSON.stringify({error:"offline"}), {status:503});
+    if (input.operation === "ack" && input.commandId === 2) resumed();
+    return new Response(JSON.stringify({viewToken:"retry-token",commands:[]}));
+  }) as typeof fetch;
+  const poller = new HostedViewPoller(5, async views => ({replies: views.map(view => ({reply:{viewToken:"retry-token",commands: [{id:1,type:"freeze" as const,generation:1},{id:2,type:"resume" as const,generation:1}].filter(command => command.id > view.after)}}))}));
+  const adapter = {call: async (method: string) => {calls.push(method);return {checkpoint:"retained"};}} as unknown as FrameAdapter;
+  const client = new HostedViewClient({pluginId:"official",sessionId:"retry-session",generation:1,mountId:"retry-editor"},adapter,{kind:"editor",sessionId:"retry-session",locale:"en",theme:"light"},assert.fail,failed,poller);
+  await client.start();client.connecting();client.listen();await failure;
+  assert.deepEqual(calls,["freeze"]);
+  assert.deepEqual(writes.map(input=>input.operation),["register","ack"]);
+  offline=false;client.retry();await restored;
+  assert.deepEqual(calls,["freeze","restore"]);
+  assert.deepEqual(writes.filter(input=>input.operation==="ack").map(input=>[input.commandId,input.ok]),[[1,true],[1,true],[2,true]]);
+  await client.close();assert.throws(()=>client.retry(),/Closed view/);
+});
+
 test("destroyed/dirty realm cannot fabricate a freeze ack or a clean close through aggregate transport", async t => {
   const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
   Object.defineProperty(globalThis, "location", { configurable: true, value: new URL("http://localhost/") });

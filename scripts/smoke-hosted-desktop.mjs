@@ -81,10 +81,11 @@ try {
   await expect.poll(async () => (await action("list", {})).length).toBe(1);
   const draftId = (await action("list", {}))[0].id;
   await expect.poll(async () => (await action("get", { id: draftId })).scene.elements.length).toBe(1);
+  const drawnX = (await action("get", { id: draftId })).scene.elements[0].x;
   await page.keyboard.press("v"); await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.press("ArrowRight"); await page.keyboard.press("Escape");
-  await expect.poll(async () => (await action("get", { id: draftId })).revision).toBeGreaterThan(1);
+  await expect.poll(async () => (await action("get", { id: draftId })).scene.elements[0].x).not.toBe(drawnX);
   const moved = (await action("get", { id: draftId })).scene.elements[0].x;
-  await page.keyboard.press("ControlOrMeta+z"); await expect.poll(async () => (await action("get", { id: draftId })).scene.elements[0].x).not.toBe(moved);
+  await page.keyboard.press("ControlOrMeta+z"); await expect.poll(async () => (await action("get", { id: draftId })).scene.elements[0].x).toBe(drawnX);
   await page.keyboard.press("ControlOrMeta+Shift+z"); await expect.poll(async () => (await action("get", { id: draftId })).scene.elements[0].x).toBe(moved);
   await canvas.click(); await page.keyboard.press("t"); await page.mouse.click(box.x + 220, box.y + 400); await page.keyboard.insertText("中文桌面热插拔"); await page.keyboard.press("Escape");
   await expect.poll(async () => (await action("get", { id: draftId })).scene.elements.some(element => element.text === "中文桌面热插拔")).toBe(true);

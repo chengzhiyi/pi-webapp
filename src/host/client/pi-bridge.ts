@@ -74,6 +74,9 @@ export function usePiBridge() {
           setConnection("connecting");
           const followed = await bridgeFetch("/api/events", {
             headers: { Authorization: `Bearer ${token}` },
+            // Firefox serializes concurrent cacheable GETs for an identical URL
+            // until the first response completes. This NDJSON stream never does.
+            cache: "no-store",
             signal: controller.signal,
           });
           const { response } = followed;

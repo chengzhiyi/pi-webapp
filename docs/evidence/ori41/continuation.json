@@ -1,21 +1,42 @@
 {
   "issue": "ORI-41",
+  "scopeDecisionCommentId": "039ed747-dd9b-4796-9a14-419138519404",
+  "acceptance": "revised-scope-complete-local-passes-with-explicit-environment-skips-not-full-platform-certification",
   "hostBase": "683a4a3",
+  "priorHostCommit": "9739d1b",
   "pluginBase": "b8f74b1",
-  "archiveSha256": "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5",
-  "acceptance": "partial-failed-not-release-approved",
-  "requiredHumanInput": [
-    "Existing native GUI runner access through approved tooling, or verifiable checklist receipts, for Windows x64, Linux x64 and macOS x64",
-    "Human OS-Chinese-IME and native open/save/cancel/overwrite dialog session/receipt on each native platform including local macOS arm64",
-    "Working WebKit runner or actual identified Safari execution receipt (current official MiniBrowser crashes before page creation)"
+  "pluginFixCommit": "151acee",
+  "originalArchiveSha256": "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5",
+  "testedPairedArchiveSha256": "d000ae308936b60e6bfeff05a988e6fce8df05df8f649efd6a1900587cf16088",
+  "requiredHumanInput": [],
+  "pendingInteractions": [],
+  "monitorScheduled": false,
+  "failuresToContinue": [],
+  "resolved": [
+    "Firefox native canvas keyboard focus, geometry, zoom/pan and undo/redo",
+    "Firefox downloads with unchanged CSP and native download guard",
+    "Firefox same-profile multiwindow NDJSON cache serialization",
+    "lost view ACK explicit retry, real resume acknowledgement then generation switch",
+    "asynchronous realm readiness before mandatory test shutdown"
   ],
-  "failuresToContinue": [
-    { "target": "firefox-155-macos-arm64", "results": "6 pass / 10 fail / 1 diagnostic skip; additional font case 1 pass", "evidence": "browser-results.json", "action": "Investigate native keyboard geometry, downloads, multiview transport/CAS and actual progressive frame shutdown. Preserve all assertions." },
-    { "target": "webkit-2359-macos-arm64", "results": "16 pre-page runtime failures / 1 diagnostic skip", "action": "Use a functioning official engine runtime/target; record runtime repair separately from product acceptance." },
-    { "target": "electron-44.9.0-macos-arm64", "results": "baseline undo failed; independent draw/focus/fail-closed checks passed; reconnect switch returned 409", "evidence": ["desktop-extended.log", "desktop-platform.log"], "action": "Investigate keyboard routing/undo checkpoint and genuine recovery readiness; rerun baseline plus independent probe without dropping assertions." }
+  "verification": {
+    "firefox": {"passed": 17, "legacyDiagnosticSkipped": 1, "cleanShutdownGate": true},
+    "chromium": {"passed": 17, "legacyDiagnosticSkipped": 1, "cleanShutdownGate": true},
+    "macosArm64PackagedBaseline": "PASS",
+    "macosArm64PackagedFocusRecovery": "PASS",
+    "nodeWithPinnedOriginalArchive": {"passed": 409, "windowsNativeSkipped": 1},
+    "desktopUnit": {"passed": 94},
+    "pluginUnit": {"passed": 17},
+    "checksBuildResourceSignatureAndIndependentPluginBuild": "PASS"
+  },
+  "skippedByLatestUserDirection": [
+    {"target": "Windows x64 / Linux x64 / macOS x64 packaged GUI", "reason": "No local target-native GUI runner; existing GitHub workflow only packages unrelated remote source, cannot test unpublished paired artifacts within preserved no-push/no-dispatch boundary", "verdict": "SKIPPED-NOT-CERTIFIED"},
+    {"target": "OS-native Chinese IME and native dialog witnessed interactions", "reason": "No real interactive capability/receipt; GitHub packaging cannot substitute", "verdict": "SKIPPED-NOT-CERTIFIED"},
+    {"target": "WebKit 2359 and actual Safari", "reason": "Official standalone MiniBrowser segfault before product page; no supplied Safari execution capability", "verdict": "SKIPPED-RUNTIME-UNAVAILABLE-NOT-CERTIFIED"}
   ],
+  "github": {"connectionId": "f6d8f99e-f663-47c8-b910-d71bd1eae74f", "discovery": "ready", "readOnlyCapabilityChecked": true, "usedAsAcceptanceRunner": false},
+  "report": "docs/hosted-platform-fixes-ori41.md",
   "runnerEntry": "scripts/run-hosted-platform-matrix.mjs",
-  "checklist": "docs/hosted-platform-acceptance-ori41.md",
-  "inertCiTemplate": "docs/ci/ori41-native-matrix.yml",
+  "optionalFutureContinuation": "If real native GUI/IME/dialog or functioning WebKit/Safari capability becomes available, verify actual OS/architecture/source and archive hash, then execute the original per-platform checklist. Do not inherit a pass from another OS or request duplicate environment input now.",
   "prohibited": ["push", "CI dispatch", "publication", "cross-build claimed as native", "synthetic IME claimed as OS IME", "fabricated ack", "TTL clear", "automatic Restore", "signature/CSP/sandbox weakening"]
 }

@@ -1,0 +1,46 @@
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> @chengzhiyi/pi-excalidraw@0.1.0 test
+> node --experimental-transform-types --test test/*.test.ts test/*.test.mjs
+
+(node:16486) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ v2 archive allows only enumerated resources with matching bytes/hash, rejects extra files, links and tampering (1003.997834ms)
+(node:16487) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ diagram wire validation rejects duplicate IDs, missing endpoints, executable resources and bounds (5.746958ms)
+✔ schema-1 scenes retain only finite bounded viewport fields and allow shape label removal (0.654875ms)
+✔ native frames round-trip without permitting web embeds or invalid frame references (0.245167ms)
+✔ rich composition preserves safe styling, grouping, paths and targeted edits (0.86525ms)
+(node:16488) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ raw drawing accepts inert compact elements and rejects external, malformed, oversized or dangling content (4.648375ms)
+✔ compact drawing groups accept normal IDs without weakening group validation (2.160833ms)
+✔ new view initializes automatically only once; edited drawings always keep review and revision protection (0.770542ms)
+Excalidraw CSP: embedding complete WOFF2 font partitions (glyph subsetting disabled; glyphs preserved).
+✔ full-font embedding preserves complete real WOFF2 partitions and rejects malformed headers (109.288584ms)
+(node:16491) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ clean iframe observers follow sibling edits; dirty writers retain local changes and CAS rejects stale writes (42.610834ms)
+(node:16493) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ unavailable models retain hand edits and backups, stop polling, and do not block the live drawing's chat sync (76.031292ms)
+(node:16494) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ runtime describes tools, checkpoints focus and revisions, reloads every invocation and isolates scopes (2.713542ms)
+✔ workspace broker enforces expected hash/no replace and rejects unsafe paths before IO (1.982042ms)
+✔ legacy is validated then CAS imported once; corrupt and unsupported records never clear data (0.595125ms)
+✔ legacy migration preserves exact IDs, geometry, stale candidate, focus, saved revision and disk hash across restart (2.371ms)
+✔ materialization preserves bare shapes, groups and arrow bindings without phantom labels (2431.593916ms)
+(node:16496) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ diagram store separates sessions, protects hand edits and requires explicit candidate acceptance (6.432417ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3152.822667

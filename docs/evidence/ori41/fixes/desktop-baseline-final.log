@@ -1,0 +1,5 @@
+Hosted desktop phase: enable-real-packaged-worker
+Hosted desktop phase: native-draw-keyboard-and-chinese
+Hosted desktop phase: native-save-png-and-focus
+Hosted desktop phase: same-version-generation-reopen-and-disable
+Packaged hosted editor smoke passed

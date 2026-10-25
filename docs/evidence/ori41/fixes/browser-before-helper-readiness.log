@@ -1,0 +1,92 @@
+
+Running 36 tests using 1 worker
+
+[1/36] [firefox] › test/browser/hosted-parity.spec.ts:7:1 › A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation
+[2/36] [firefox] › test/browser/hosted-parity.spec.ts:43:1 › A07: composition and held native drag reject send, preserve composer and then reach a real safe point
+[3/36] [firefox] › test/browser/hosted-parity.spec.ts:69:1 › A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames
+[4/36] [firefox] › test/browser/hosted-parity.spec.ts:107:1 › A09: patching an unlabeled native shape must render a review rather than crash materialization
+[5/36] [firefox] › test/browser/hosted-parity.spec.ts:122:1 › A09: actual hosted tool frame paints progressive arguments before any final result
+[6/36] [firefox] › test/browser/hosted-parity.spec.ts:173:1 › removed tool close network failure retains the original realm and exposes retry recovery
+[7/36] [firefox] › test/browser/hosted-parity.spec.ts:198:1 › A11: same-profile second window must remain responsive with existing editor long polls
+[8/36] [firefox] › test/browser/hosted-parity.spec.ts:207:34 › A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px
+[9/36] [firefox] › test/browser/hosted-parity.spec.ts:207:34 › A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px
+[10/36] [firefox] › test/browser/hosted-parity.spec.ts:250:1 › A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery
+[11/36] [firefox] › test/browser/hosted-platform-fonts.spec.ts:4:1 › A23: actual hosted iframe loads packaged font faces without external font access
+[12/36] [firefox] › test/browser/hosted-production.spec.ts:35:34 › real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px
+[13/36] [firefox] › test/browser/hosted-production.spec.ts:35:34 › real hosted archive + complete host UI + retained SDK hot lifecycle at 390px
+[14/36] [firefox] › test/browser/hosted-transport.spec.ts:5:1 › diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls
+[15/36] [firefox] › test/browser/hosted-transport.spec.ts:30:1 › aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive
+[16/36] [firefox] › test/browser/hosted-update-policy.spec.ts:12:1 › visible policy control separates independent notify from default linked synchronization and honors pin
+[17/36] [firefox] › test/browser/hosted-viewport-parity-fix.spec.ts:4:1 › ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+[firefox] › test/browser/hosted-viewport-parity-fix.spec.ts:4:1 › ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+TEARDOWN (not a successful flush): Error: Close editors before updating; old version retained
+    at fail (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)
+    at HostedViewCoordinator.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)
+    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)
+    at Object.freeze (file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)
+    at file:///Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26 {
+  status: 409,
+  code: 'view_barrier'
+}
+
+  1) [firefox] › test/browser/hosted-viewport-parity-fix.spec.ts:4:1 › ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+
+    Error: Close editors before updating; old version retained
+
+       at ../../src/host/server/plugins/hosted/views.ts:13
+
+      11 | }
+      12 | interface Barrier { id: number; pending: Set<string>; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+    > 13 | const fail = (message: string) => Object.assign(new Error(message), { status: 409, code: "view_barrier" });
+         |                                                 ^
+      14 | /** One coordinator per plugin. No dirty-view TTL: lost clients require explicit recovery, not silent success. */
+      15 | export class HostedViewCoordinator {
+      16 |   private views = new Map<string, View>();
+        at fail (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:13:49)
+        at HostedViewCoordinator.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/views.ts:109:34)
+        at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/integration.ts:74:36)
+        at Object.freeze (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/manager.ts:63:29)
+        at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/src/host/server/plugins/hosted/supervisor.ts:160:26
+
+    attachment #1: frame-diagnostics-0 (application/json) ──────────────────────────────────────────
+    test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/attachments/frame-diagnostics-0-c0bdd292aac09a8c01fb8cd38f799a89306cf8a1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: shutdown-failed-closed (text/plain) ─────────────────────────────────────────────
+    test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/attachments/shutdown-failed-closed-f7bd559bcce193120763c2e3c8175657265222ab.txt
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/hosted-viewport-parity-fix-f1712--without-phantom-bound-text-firefox/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[18/36] [firefox] › test/browser/hosted-viewport-parity-fix.spec.ts:28:1 › ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation
+[19/36] [chromium] › test/browser/hosted-parity.spec.ts:7:1 › A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation
+[20/36] [chromium] › test/browser/hosted-parity.spec.ts:43:1 › A07: composition and held native drag reject send, preserve composer and then reach a real safe point
+[21/36] [chromium] › test/browser/hosted-parity.spec.ts:69:1 › A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames
+[22/36] [chromium] › test/browser/hosted-parity.spec.ts:107:1 › A09: patching an unlabeled native shape must render a review rather than crash materialization
+[23/36] [chromium] › test/browser/hosted-parity.spec.ts:122:1 › A09: actual hosted tool frame paints progressive arguments before any final result
+[24/36] [chromium] › test/browser/hosted-parity.spec.ts:173:1 › removed tool close network failure retains the original realm and exposes retry recovery
+[25/36] [chromium] › test/browser/hosted-parity.spec.ts:198:1 › A11: same-profile second window must remain responsive with existing editor long polls
+[26/36] [chromium] › test/browser/hosted-parity.spec.ts:207:34 › A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px
+[27/36] [chromium] › test/browser/hosted-parity.spec.ts:207:34 › A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px
+[28/36] [chromium] › test/browser/hosted-parity.spec.ts:250:1 › A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery
+[29/36] [chromium] › test/browser/hosted-platform-fonts.spec.ts:4:1 › A23: actual hosted iframe loads packaged font faces without external font access
+[30/36] [chromium] › test/browser/hosted-production.spec.ts:35:34 › real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px
+[31/36] [chromium] › test/browser/hosted-production.spec.ts:35:34 › real hosted archive + complete host UI + retained SDK hot lifecycle at 390px
+[32/36] [chromium] › test/browser/hosted-transport.spec.ts:5:1 › diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls
+[33/36] [chromium] › test/browser/hosted-transport.spec.ts:30:1 › aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive
+[34/36] [chromium] › test/browser/hosted-update-policy.spec.ts:12:1 › visible policy control separates independent notify from default linked synchronization and honors pin
+[35/36] [chromium] › test/browser/hosted-viewport-parity-fix.spec.ts:4:1 › ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+[36/36] [chromium] › test/browser/hosted-viewport-parity-fix.spec.ts:28:1 › ORI-34: synchronized native zoom/pan restores identical canvas pixels across generation
+  1 failed
+    [firefox] › test/browser/hosted-viewport-parity-fix.spec.ts:4:1 › ORI-34: unlabeled shape x-only candidate applies without phantom bound text
+  2 skipped
+  33 passed (2.8m)

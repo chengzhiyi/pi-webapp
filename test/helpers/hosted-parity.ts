@@ -103,7 +103,16 @@ export async function hostedParity(page: Page, options: { width?: number; locale
       await writeFile(diagnostic, JSON.stringify({ actions, frames: await Promise.all(p.frames().map(async f => ({ url: f.url().split('#')[0].replace(/(\/hosted-plugins\/).*?(\/dist\/)/, '$1[archive]$2'), timing: await f.evaluate(() => performance.getEntriesByType("resource").filter(e => e.name.includes("/api/hosted-plugins/")).map(e => { const r = e as PerformanceResourceTiming; return { name: new URL(r.name).pathname, start: r.startTime, queued: r.requestStart - r.fetchStart, response: r.responseStart - r.requestStart, duration: r.duration }; })).catch(() => []), text: await f.locator('body').innerText().catch(() => '') }))) }, null, 2));
       await test.info().attach(`frame-diagnostics-${i}`, { path: diagnostic, contentType: "application/json" });
     }
-    try { await integration.shutdown(); } catch (error) {
+    try {
+      // A persisted action result precedes its realm's HTTP busy=false report.
+      // Wait for genuine initialization/mutation quiescence before requesting
+      // normal shutdown. A stuck view still fails, and shutdown/real freeze ACKs
+      // are attempted even when the readiness assertion fails.
+      try {
+        await expect.poll(() => [...(integration as any).views.values()].every((coordinator: any) =>
+          [...coordinator.views.values()].every((view: any) => !view.busy)), { timeout: 10_000, message: "All registered realms must acknowledge readiness before shutdown" }).toBe(true);
+      } finally { await integration.shutdown(); }
+    } catch (error) {
       // Preserve the primary assertion and record secondary fail-closed teardown separately.
       // This is NOT a successful flush or lifecycle pass, even when body assertions pass.
       const text = error instanceof Error ? error.stack ?? error.message : String(error);
