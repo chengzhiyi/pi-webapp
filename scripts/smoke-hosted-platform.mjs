@@ -38,7 +38,7 @@ try {
   const id = "@chengzhiyi/pi-excalidraw", sessionId = (await request("/api/session")).sessionId;
   const catalog = async () => (await request("/api/hosted-plugins")).plugins[0];
   const action = async (action, input) => request("/api/hosted-plugins/action", { pluginId: id, generation: (await catalog()).generation, sessionId, action, input });
-  const ready = new Map(), resumeCommands = new Set(), resumedAcks = new Set();
+  const ready = new Map(), resumeCommands = new Set(), successfulAcks = new Set();
   page.on("response", async response => {
     if (new URL(response.url()).pathname === "/api/hosted-plugins/views" && response.request().postDataJSON()?.operation === "pollMany" && response.status() === 200) {
       const inputs = response.request().postDataJSON().views;
@@ -48,7 +48,10 @@ try {
     if (new URL(response.url()).pathname === "/api/hosted-plugins/views" && response.request().method() === "POST" && response.status() === 200) {
       const input = response.request().postDataJSON();
       if (input.operation === "change") { if (!input.busy) ready.set(input.mountId, input.generation); else ready.delete(input.mountId); }
-      if (input.operation === "ack" && input.ok && resumeCommands.has(`${input.mountId}:${input.commandId}`)) resumedAcks.add(input.mountId);
+      // Response JSON decoding above is asynchronous: the actual ACK response can
+      // be observed before its poll body is decoded. Join by exact command/mount
+      // identity at assertion time rather than losing that legitimate receipt.
+      if (input.operation === "ack" && input.ok) successfulAcks.add(`${input.mountId}:${input.commandId}`);
     }
   });
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
@@ -98,7 +101,7 @@ try {
   await expect.poll(async () => page.locator('[data-hosted-plugin] > [role="alert"]').allTextContents()).toEqual([]);
   // The resume ACK (not a delay or catalog read) proves the retained frozen realm
   // has consumed the cancellation before another generation switch begins.
-  await expect.poll(() => resumedAcks.size).toBe(2);
+  await expect.poll(() => new Set([...resumeCommands].filter(command => successfulAcks.has(command)).map(command => command.split(":")[0])).size).toBe(2);
   await request("/api/hosted-plugins/manage", { pluginId: id, operation: "enable", reopenEditors: true });
   assert.equal((await catalog()).generation, generation + 1);
   await expect(canvas).toBeVisible(); assert.deepEqual((await action("get", { id: draft })).scene, before);

@@ -123,7 +123,10 @@ try {
     return mounts.length === 2 && mounts.every(mount => mount.generation === generation + 1 && readyViews.get(mount.mountId) === mount.generation);
   }, { timeout: 15_000 }).toBe(true);
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  page.once("dialog", dialog => dialog.accept()); await manager.getByRole("button", { name: "Disable", exact: true }).click();
+  await manager.getByRole("button", { name: "Disable", exact: true }).click();
+  const closeViews = page.getByRole("dialog", { name: "Close plugin views?", exact: true });
+  await expect(closeViews).toBeVisible();
+  await closeViews.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(manager).toContainText("Installed · Disabled"); await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
   assert.deepEqual(await readFile(join(home, "diagrams/中文桌面.excalidraw")), saved);
   await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");

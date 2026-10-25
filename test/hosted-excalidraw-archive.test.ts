@@ -38,7 +38,11 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
   const integrity = "sha512-"+createHash("sha512").update(bytes).digest("base64");
   const pkg = await manager.installer.installArchive(id,bytes,integrity,"0.1.0");
-  assert.equal(pkg.resources.size,426);
+  // The integrated download relay adds one controlled chunk. Older pinned fixtures
+  // can still be verified explicitly; never infer the expected census from the payload.
+  const expectedResources = Number(process.env.HOSTED_EXCALIDRAW_RESOURCE_COUNT ?? "427");
+  assert.ok(Number.isSafeInteger(expectedResources) && expectedResources > 0);
+  assert.equal(pkg.resources.size, expectedResources);
   assert.equal(manager.tools.length,0); assert.equal(lifecycleEntries,0); // Download/verify never freezes Agent sessions.
   await manager.manage(id,"enable"); assert.equal(manager.tools[0]!.descriptors.length,6);
   const assetView = (await manager.inventory()).plugins[0]!;
