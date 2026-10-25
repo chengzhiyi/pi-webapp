@@ -82,10 +82,16 @@ test("installs a checked npm array release before requesting a supervised restar
   const packageRoot = join(root, "source");
   const agentDir = join(root, "agent");
   const calls: string[][] = [];
+  let rejectPair = true, pairChecks = 0;
   try {
     await mkdir(packageRoot);
     await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.0" }));
-    const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", runNpm: async (args) => {
+    const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", validateHostedPair: async (version, candidate) => {
+      pairChecks++; assert.equal(version, "0.2.0");
+      assert.equal(JSON.parse(await readFile(join(candidate, "package.json"), "utf8")).version, version);
+      await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")));
+      if (rejectPair) throw new Error("injected incompatible hosted pair");
+    }, runNpm: async (args) => {
       calls.push(args);
       if (args[0] === "view") return '["0.2.0"]';
       const prefix = args[args.indexOf("--prefix") + 1];
@@ -100,9 +106,14 @@ test("installs a checked npm array release before requesting a supervised restar
       return "";
     } });
     assert.deepEqual(await updater.check(), { current: "0.1.0", channel: "stable", downgrade: false, latest: "0.2.0", available: true, canRestart: true });
+    await assert.rejects(updater.prepare(), /incompatible hosted pair/);
+    await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")));
+    await assert.rejects(readFile(join(agentDir, "pi-web", "launcher.restart")));
+    rejectPair = false;
     const prepared = await updater.prepare();
+    assert.equal(pairChecks, 2);
     assert.equal(prepared.version, "0.2.0");
-    assert.equal(calls.filter((args) => args[0] === "install").length, 1);
+    assert.equal(calls.filter((args) => args[0] === "install").length, 2);
     assert.equal(calls.find((args) => args[0] === "install")?.[1], "pi-webapp@0.2.0");
     const manifest = JSON.parse(await readFile(join(agentDir, "pi-web", "update.json"), "utf8"));
     assert.equal(manifest.version, "0.2.0");

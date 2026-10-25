@@ -1,0 +1,41 @@
+Darwin chengchengdeMacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:41:45 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T6000 arm64
+ProductName:		macOS
+ProductVersion:		26.0.1
+BuildVersion:		25A362
+v24.21.0
+11.19.0
+(
+        {
+        "Bundle ID" = "com.apple.PressAndHold";
+        InputSourceKind = "Non Keyboard Input Method";
+    },
+        {
+        InputSourceKind = "Keyboard Layout";
+        "KeyboardLayout ID" = 252;
+        "KeyboardLayout Name" = ABC;
+    }
+)
+false
+linux aarch64
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (Renderer).app
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper.app
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (GPU).app
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (Plugin).app
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper.app
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (Renderer).app
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Mantle.framework/Versions/Current/.
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (GPU).app
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/pi Helper (Plugin).app
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Mantle.framework/Versions/Current/.
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/app_shim_loader
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/app_shim_loader
+--prepared:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler
+--validated:/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
+desktop-release/mac-arm64/pi.app: valid on disk
+desktop-release/mac-arm64/pi.app: satisfies its Designated Requirement

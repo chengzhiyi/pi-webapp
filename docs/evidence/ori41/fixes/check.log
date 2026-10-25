@@ -1,0 +1,5 @@
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> pi-webapp@0.1.29 check
+> tsc --noEmit && tsc -p web/tsconfig.json

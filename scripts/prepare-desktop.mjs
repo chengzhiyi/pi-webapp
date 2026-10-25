@@ -5,6 +5,7 @@ import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { prepareNativePty } from "./desktop-native.mjs";
+import { applyRuntimePackageIdentity } from "./desktop-runtime-package.mjs";
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -79,11 +80,7 @@ for (const name of ["bin", "desktop/managed-release.mjs", "desktop/release-versi
   await cp(join(root, name), join(backend, name), { recursive: true });
 }
 // Preserve the real package name/version used by SelfUpdater and the launcher.
-manifest.name = pkg.name;
-manifest.version = pkg.version;
-manifest.type = "module";
-manifest.piWebappDesktopProtocol = pkg.piWebappDesktopProtocol;
-manifest.piWebappDataVersion = pkg.piWebappDataVersion;
+applyRuntimePackageIdentity(manifest, pkg);
 await writeFile(join(backend, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 const ptyPreparation = await prepareNativePty({ platform, arch, node, nodeRoot, nodeVersion, npmCli, backend, env, run: exec });
 // Fail before packaging when the actual runtime cannot interact with and exit a PTY.

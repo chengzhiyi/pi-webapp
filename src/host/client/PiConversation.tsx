@@ -16,7 +16,8 @@ import { AgentActivity } from "../../../web/src/ui/chat/AgentActivity.tsx";
 import { conversationActivity, conversationIsWorking } from "./conversation-activity.ts";
 import { useActivityElapsed } from "./use-activity-elapsed.ts";
 import { ToolRow, TurnActions, TurnProcess } from "../../../web/src/ui/chat/ProcessRow.tsx";
-import { conversationTurns, toolResults, toolViewCalls, type ConversationTurn } from "./conversation-turns.ts";
+import { useHostedTranscript } from "./hosted/transcript.ts";
+import { conversationTurns, toolResults, toolViewCalls, toolViewTurnKey, type ConversationTurn } from "./conversation-turns.ts";
 import { PiTrajectory } from "../../../web/src/ui/trajectory/PiTrajectory.tsx";
 import { PiModelSelect } from "../../../web/src/ui/conversation/PiModelSelect.tsx";
 import { PiAttachmentItem } from "../../../web/src/ui/conversation/PiAttachmentItem.tsx";
@@ -458,7 +459,9 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
   const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId);
-  const empty = session === null || (session.messages.length === 0 && streaming === null && pending === null && activity === null);
+  const viewTools = plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []);
+  const transcript = useHostedTranscript(session?.sessionId, [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])], viewTools);
+  const empty = session === null || (transcript.messages.length === 0 && activity === null);
   const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
     if (!session) return;
     // Queued prompts stay out of the transcript until Pi actually consumes them.
@@ -481,7 +484,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     return () => observer.disconnect();
   }, []);
   const workspace = session?.cwd.split(/[\\/]/).filter(Boolean).at(-1) || t("Pi 工作区", "Pi workspace");
-  const liveMessages = [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])];
+  const liveMessages = transcript.messages;
   const results = toolResults(liveMessages);
   const turns = conversationTurns(liveMessages);
   const heroText = (key: string) => ({
@@ -510,7 +513,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="" onScroll={onScroll} onWheel={onWheel}>
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
-              {turns.map((turn) => <PiTurn turn={turn} key={turn.id} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? [])} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
+              {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
               {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
@@ -520,6 +523,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
               {composerInteraction}
               <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
+              {transcript.error && <div className="pi-error" role="alert">{transcript.error}<button onClick={transcript.retry}>Retry view cleanup</button></div>}
               {error && <div className="pi-error" role="alert">{error}</div>}
             </div>
           </div>

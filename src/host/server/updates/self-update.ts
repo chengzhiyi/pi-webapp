@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fingerprint, type HostedPairTransaction } from "./hosted-pair.ts";
 import { promisify } from "node:util";
 import { npmCommand } from "../../../../bin/npm-command.mjs";
 import { desktopProtocolVersion, readDesktopRelease, validateDesktopRelease, writeDesktopRelease } from "../../../../desktop/managed-release.mjs";
@@ -44,12 +45,15 @@ export class SelfUpdater {
   private readonly desktopReleaseChannels: boolean;
   private readonly peerSpecs: typeof desktopPeerSpecs;
   private readonly verifyPackage: typeof verifyDesktopPackage;
+  private readonly validateHostedPair?: (version: string, packageRoot: string) => Promise<void>;
+  private readonly hostedPair?: HostedPairTransaction;
   private preparing = false;
   private savingPreference = false;
   private restartPending = false;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string>; desktopManaged?: boolean;
-    desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage }) {
+    desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
+    validateHostedPair?: (version: string, packageRoot: string) => Promise<void>; hostedPair?: HostedPairTransaction }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
@@ -60,6 +64,8 @@ export class SelfUpdater {
     this.desktopReleaseChannels = options.desktopReleaseChannels ?? process.env.PI_WEBAPP_DESKTOP_RELEASE_CHANNELS === "1";
     this.peerSpecs = options.peerSpecs ?? desktopPeerSpecs;
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
+    this.validateHostedPair = options.validateHostedPair;
+    this.hostedPair = options.hostedPair;
   }
 
   private async current(): Promise<string> {
@@ -154,6 +160,7 @@ export class SelfUpdater {
       await mkdir(releases, { recursive: true });
       // Never delete a potentially live installation selected by another process.
       const releaseDir = await mkdtemp(join(await realpath(releases), `${status.latest}-`));
+      let selectionAttempted = false;
       try {
         const peers = this.desktopManaged ? await this.peerSpecs(this.packageRoot) : [];
         await this.runNpm(["install", `pi-webapp@${status.latest}`, ...peers, "--prefix", releaseDir, "--ignore-scripts", "--no-save", "--no-audit", "--no-fund", ...(this.desktopManaged ? ["--engine-strict"] : [])]);
@@ -164,31 +171,43 @@ export class SelfUpdater {
         if (status.downgrade && dataVersion(pkg) !== dataVersion(currentPackage)) throw new Error("数据格式不兼容，不能直接切回旧版。请先备份并按恢复指南操作。");
         const launcher = join(installed, "bin", "pi-webapp.mjs");
         await Promise.all([launcher, join(installed, "dist", "extension.js"), join(installed, "web", "dist", "index.html")].map((path) => access(path)));
-        if (this.desktopManaged) {
-          const selected = await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion });
-          await this.verifyPackage(this.packageRoot, installed);
-          const saved = await readDesktopRelease(this.agentDir, status.current);
-          const previous = saved?.version === status.current ? saved : null;
-          const fallbackVersion = process.env.PI_WEBAPP_DESKTOP_VERSION ?? saved?.fallbackVersion ?? status.current;
-          await writeDesktopRelease(this.agentDir, { ...selected, ...((status.downgrade || saved?.fallbackVersion) ? { fallbackVersion } : {}), ...(previous ? { previous } : {}) });
-        } else {
-          const stateDir = join(this.agentDir, "pi-web");
-          const temporary = join(stateDir, `update.${randomUUID()}.tmp`);
-          try {
-            let saved;
-            try { saved = JSON.parse(await readFile(join(stateDir, "update.json"), "utf8")); } catch { /* First managed release. */ }
-            const baseVersion = saved?.baseVersion ?? status.current;
-            const previous = saved?.version === status.current ? saved : undefined;
-            // Keep only one rollback entry, never a recursively growing chain.
-            if (previous) delete previous.previous;
-            await writeFile(temporary, JSON.stringify({ version: status.latest, launcher, baseVersion, ...((status.downgrade || saved?.allowDowngrade === true) ? { allowDowngrade: true } : {}), ...(previous ? { previous } : {}) }), { mode: 0o600 });
-            await rename(temporary, join(stateDir, "update.json"));
-          } finally { await rm(temporary, { force: true }); }
-        }
+        // Both npm launcher and desktop-package selection use the same precommit gate.
+        await this.validateHostedPair?.(status.latest, installed);
+        const desktopSelection = this.desktopManaged ? await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion }) : null;
+        if (this.desktopManaged) await this.verifyPackage(this.packageRoot, installed);
+        const writeSelection = async () => {
+          selectionAttempted = true;
+          if (this.desktopManaged) {
+            const selected = desktopSelection!;
+            const saved = await readDesktopRelease(this.agentDir, status.current);
+            const previous = saved?.version === status.current ? saved : null;
+            const fallbackVersion = process.env.PI_WEBAPP_DESKTOP_VERSION ?? saved?.fallbackVersion ?? status.current;
+            await writeDesktopRelease(this.agentDir, { ...selected, ...((status.downgrade || saved?.fallbackVersion) ? { fallbackVersion } : {}), ...(previous ? { previous } : {}) });
+          } else {
+            const stateDir = join(this.agentDir, "pi-web");
+            const temporary = join(stateDir, `update.${randomUUID()}.tmp`);
+            try {
+              let saved;
+              try { saved = JSON.parse(await readFile(join(stateDir, "update.json"), "utf8")); } catch { /* First managed release. */ }
+              const baseVersion = saved?.baseVersion ?? status.current;
+              const previous = saved?.version === status.current ? saved : undefined;
+              // Keep only one rollback entry, never a recursively growing chain.
+              if (previous) delete previous.previous;
+              await writeFile(temporary, JSON.stringify({ version: status.latest, launcher, baseVersion, ...((status.downgrade || saved?.allowDowngrade === true) ? { allowDowngrade: true } : {}), ...(previous ? { previous } : {}) }), { mode: 0o600 });
+              await rename(temporary, join(stateDir, "update.json"));
+            } finally { await rm(temporary, { force: true }); }
+          }
+          const path = join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json");
+          return { path, digest: fingerprint((await readFile(path)).toString("base64")) };
+        };
+        if (this.hostedPair) await this.hostedPair.select(status.latest, installed, writeSelection);
+        else await writeSelection();
         this.restartPending = true;
         return { version: status.latest, launcher };
       } catch (error) {
-        await rm(releaseDir, { recursive: true, force: true });
+        // A failed write can be an acknowledged-on-disk rename. Retain potentially selected
+        // code and journal for recovery rather than leaving a dangling launcher pointer.
+        if (!selectionAttempted) await rm(releaseDir, { recursive: true, force: true });
         throw error;
       }
     } finally { this.preparing = false; }
@@ -198,7 +217,9 @@ export class SelfUpdater {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     try {
-      await writeFile(join(this.agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: this.launcherNonce, launcher: prepared.launcher }), { mode: 0o600 });
+      const writeRestart = () => writeFile(join(this.agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: this.launcherNonce, launcher: prepared.launcher }), { mode: 0o600 });
+      if (this.hostedPair) await this.hostedPair.restart(prepared.version, dirname(dirname(prepared.launcher)), writeRestart);
+      else await writeRestart();
     } catch (error) { this.restartPending = false; throw error; }
   }
 }

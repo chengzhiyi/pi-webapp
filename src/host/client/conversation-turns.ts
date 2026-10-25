@@ -48,6 +48,14 @@ export function toolViewCalls(messages: ViewMessage[], tools: readonly string[])
   return [...calls.values()].map(({ key, call }) => ({ key, call }));
 }
 
+/** Stream/provider snapshots may replace the provisional user/message IDs while
+ * retaining the same tool call. Its owning turn must keep the same React subtree,
+ * not merely the inner thumbnail key. Separate calls still own separate realms. */
+export function toolViewTurnKey(turn: ConversationTurn, tools: readonly string[]): string {
+  const first = toolViewCalls(turn.messages, tools)[0];
+  return first ? `tool:${first.key}` : `message:${turn.id}`;
+}
+
 export function toolResults(messages: ViewMessage[]): Map<string, ViewMessage> {
   const callIds = new Set(messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)));
   return new Map(messages.filter((message) => message.role === "tool" && message.toolCallId && callIds.has(message.toolCallId))

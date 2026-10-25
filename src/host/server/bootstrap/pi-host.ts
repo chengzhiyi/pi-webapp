@@ -1,5 +1,5 @@
 import { delimiter, dirname, join, resolve } from "node:path";
-import { realpathSync, watch, type FSWatcher } from "node:fs";
+import { readFileSync, realpathSync, watch, type FSWatcher } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DefaultPackageManager, getAgentDir, ModelRuntime, SessionManager, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
@@ -15,7 +15,9 @@ import { addCustomProvider, type CustomProviderInput } from "../models/custom-pr
 import { getProviderModels, updateProviderModel, type ModelChange } from "../models/provider-model-config.ts";
 import { openWebPage } from "../updates/open-web-page.ts";
 import { SelfUpdater } from "../updates/self-update.ts";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { HostedPluginIntegration } from "../plugins/hosted/integration.ts";
+import { legacyCheckpointLoader } from "../plugins/hosted/legacy-checkpoints.ts";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
@@ -25,7 +27,6 @@ import { EditablePromptQueue, PromptQueueError, type PromptImages } from "../ses
 import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
-import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
@@ -61,6 +62,10 @@ interface SharedState {
   stopChanged: (() => void) | null;
   tuiWaitController: AbortController;
   tools?: ToolDiagnostics;
+  hosted?: HostedPluginIntegration;
+  hostedMode?: boolean;
+  releaseHostedTui?: () => void;
+  offHostedThaw?: () => void;
 }
 
 const shared = ((globalThis as Record<symbol, SharedState>)[stateKey] ??= {
@@ -135,6 +140,7 @@ async function sendTui(sessionId: string, text: string, images: PromptImages, co
   const active = sameSession(sessionId);
   assertPromptDelivery({ ...tuiSnapshot(), idle: active.isIdle() }, text, delivery);
   const starting = active.isIdle();
+  if (starting) shared.hosted?.adapter.assertAdmission();
   if (starting) shared.operation = correlation;
   try {
     const content = images.length ? [{ type: "text" as const, text }, ...images] : text;
@@ -152,7 +158,7 @@ function scheduleTuiQueue() {
   const ready = () => {
     if (!id || !shared.current || shared.tuiGeneration !== generation || shared.current.sessionManager.getSessionId() !== id || shared.tuiAgentError) return false;
     const state = tuiSnapshot();
-    return shared.current.isIdle() && !state.paused && !state.interactions.length;
+    return !shared.hosted?.adapter.isFrozen && shared.current.isIdle() && !state.paused && !state.interactions.length;
   };
   shared.tuiPrompts.schedule(ready, (text, images, correlation) => sendTui(id!, text, images, correlation));
 }
@@ -286,12 +292,32 @@ async function changeConfig(change: ConfigChange): Promise<ConfigView> {
 }
 
 export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promise<boolean> = openWebPage): void {
-  shared.pi = pi;
-  const builtinTools = builtinAgentTools(async (...args) => {
-    if (!shared.bridge?.runPluginTool) throw new Error("请先打开 Web 工作台以使用绘图插件");
-    return shared.bridge.runPluginTool(...args);
+  // Hosted is the only drawing owner. The retired opt-in flag (including 0) cannot
+  // restore a second builtin implementation in retained sessions.
+  if (shared.hostedMode === false || shared.hostedMode === undefined && shared.workspaceSessions) throw new Error("Stop the older builtin host before migrating drawing ownership; reload cannot replace retained sessions");
+  shared.hostedMode = true;
+  const trustedScope = (cwd: string, sessionId: string) => {
+    const canonical = realpathSync(cwd);
+    return { cwd: canonical, sessionId, workspaceId: createHash("sha256").update(canonical).digest("hex") };
+  };
+  shared.hosted ??= new HostedPluginIntegration({
+    root: join(getAgentDir(), "pi-web", "hosted"),
+    hostVersion: (JSON.parse(readFileSync(resolve(webRoot, "../../package.json"), "utf8")) as { version: string }).version,
+    packageRoot: resolve(webRoot, "../.."),
+    workerEntry: resolve(webRoot, "../../dist/hosted-worker.js"),
+    ownerId: `local:${process.getuid?.() ?? "host"}:${createHash("sha256").update(getAgentDir()).digest("hex")}`,
+    resolveSession: id => {
+      const tui = shared.current;
+      if (tui?.sessionManager.getSessionId() === id) return trustedScope(tui.cwd, id);
+      const retained = shared.workspaceSessions?.hostedScope(id);
+      return retained ? trustedScope(retained.cwd, id) : null;
+    },
+    legacy: () => legacyCheckpointLoader(join(getAgentDir(), "pi-web", "diagrams")),
+    changed: () => shared.bridge?.publish({ type: "hosted_plugins_changed" }),
   });
-  for (const tool of builtinTools) pi.registerTool(tool);
+  shared.offHostedThaw?.();
+  shared.offHostedThaw = shared.hosted?.adapter.onThaw(scheduleTuiQueue);
+  shared.pi = pi;
   shared.tools?.clear();
   shared.tools = new ToolDiagnostics({
     enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
@@ -319,6 +345,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.tuiGeneration++;
     bindChanged();
     shared.current = ctx;
+    shared.releaseHostedTui?.();
+    shared.releaseHostedTui = shared.hosted?.adapter.mountTui(pi, trustedScope(ctx.cwd, ctx.sessionManager.getSessionId()));
+    await shared.hosted?.start();
     if (shared.tuiPromptSessionId !== ctx.sessionManager.getSessionId()) {
       shared.tuiPrompts = new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
       shared.tuiPromptSessionId = ctx.sessionManager.getSessionId();
@@ -395,8 +424,14 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.stopChanged?.();
     shared.stopChanged = null;
     shared.interactions?.cancelAll();
+    shared.releaseHostedTui?.();
+    shared.releaseHostedTui = undefined;
+    if (event.reason === "new" || event.reason === "resume" || event.reason === "fork" || event.reason === "reload") { shared.current = null; return; }
+    // Keep retained scopes available until every frame and Agent batch has drained.
+    await shared.hosted?.shutdown();
+    shared.hosted = undefined;
+    shared.offHostedThaw?.(); shared.offHostedThaw = undefined;
     shared.current = null;
-    if (event.reason === "new" || event.reason === "resume" || event.reason === "fork" || event.reason === "reload") return;
     const bridge = shared.bridge;
     const telemetry = shared.telemetry;
     shared.bridge = null;
@@ -460,10 +495,12 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
             breadcrumb: (category, context) => shared.bridge?.breadcrumb?.(category, context),
             anonymize: value => shared.telemetry?.session(value) ?? "unavailable",
-          }, () => { void publishWorkspaces(); }, builtinTools);
+          }, () => { void publishWorkspaces(); }, [], { adapter: shared.hosted!.adapter, scope: trustedScope });
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
-            selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE }),
+            hosted: shared.hosted?.handlers,
+            selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
+              hostedPair: shared.hosted!.manager.hostPair }),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
@@ -707,6 +744,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
               activeSession(sessionId);
               if (shared.selected === "sdk") { await shared.workspaceSessions!.resume(correlation); return; }
               const active = sameSession(sessionId);
+              shared.hosted?.adapter.assertAdmission();
               if (!active.isIdle()) throw new Error("Pi 正在运行，请等待当前回复结束");
               if (!active.model || !shared.pi) throw new Error("请先选择模型");
               if (!active.modelRegistry.hasConfiguredAuth(active.model)) throw new Error("请先连接当前模型");

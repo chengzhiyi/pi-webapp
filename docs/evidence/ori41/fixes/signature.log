@@ -1,0 +1,10 @@
+Executable=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64/pi.app/Contents/MacOS/pi
+Identifier=dev.pi.webapp
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=430 flags=0x10002(adhoc,runtime) hashes=3+7 location=embedded
+Signature=adhoc
+Info.plist entries=32
+TeamIdentifier=not set
+Runtime Version=26.5.0
+Sealed Resources version=2 rules=13 files=34036
+Internal requirements count=0 size=12

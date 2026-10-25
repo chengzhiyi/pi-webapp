@@ -1,0 +1,25 @@
+npm warn Unknown env config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "global-bin-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> pi-webapp@0.1.29 desktop:package
+> node scripts/package-desktop.mjs --dir
+
+  • electron-builder  version=26.15.3 os=25.0.0
+  • loaded configuration  file=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop/builder.cjs
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=darwin arch=arm64 electron=44.9.0 appOutDir=desktop-release/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop-release/mac-arm64
+  • searching for node modules  pm=npm searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop
+  • no node modules found in collection, trying next search directory  searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop attempt=0
+  • searching for node modules  pm=npm searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41
+  • searching for node modules  pm=traversal searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop
+  • using manual traversal of node_modules to build dependency tree
+  • no node modules found in collection, trying next search directory  searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41/desktop attempt=0
+  • searching for node modules  pm=traversal searchDir=/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori41
+  • using manual traversal of node_modules to build dependency tree
+  • missing optional dependencies  dependencies=["@oxc-parser/binding-android-arm64@0.152.0","@oxc-parser/binding-win32-arm64-msvc@0.152.0","@oxc-parser/binding-linux-arm64-gnu@0.152.0","@oxc-parser/binding-linux-arm64-musl@0.152.0","@oxc-parser/binding-openharmony-arm64@0.152.0","@oxc-parser/binding-android-arm-eabi@0.152.0","@oxc-parser/binding-linux-arm-gnueabihf@0.152.0","@oxc-parser/binding-linux-arm-musleabihf@0.152.0","@oxc-parser/binding-win32-ia32-msvc@0.152.0","@oxc-parser/binding-linux-ppc64-gnu@0.152.0","@oxc-parser/binding-linux-riscv64-gnu@0.152.0","@oxc-parser/binding-linux-riscv64-musl@0.152.0","@oxc-parser/binding-linux-s390x-gnu@0.152.0","@oxc-parser/binding-darwin-x64@0.152.0","@oxc-parser/binding-win32-x64-msvc@0.152.0","@oxc-parser/binding-freebsd-x64@0.152.0","@oxc-parser/binding-linux-x64-gnu@0.152.0","@oxc-parser/binding-linux-x64-musl@0.152.0"]
+  • ad-hoc signing with hardenedRuntime enabled requires the com.apple.security.cs.disable-library-validation entitlement to prevent app launch failures due to library validation. See https://electron.build/code-signing for details.
+  • signing         file=desktop-release/mac-arm64/pi.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were unable to be generated
+macOS app/archive signature integrity verified (ad-hoc); notarization is NOT claimed.
