@@ -443,13 +443,23 @@ test("invalid NDJSON is captured once without uploading the response body", asyn
   } finally { await f.bridge.close(); }
 });
 
-test("controlled launcher restart reconnects at the same address without an error report", async ({ page }) => {
+for (const assetDelay of [0, 200]) test(`controlled launcher restart reconnects at the same address without an error report (asset delay ${assetDelay}ms)`, async ({ page }) => {
+  if (assetDelay) await page.route("**/assets/*", async route => {
+    await new Promise(resolve => setTimeout(resolve, assetDelay));
+    await route.continue();
+  });
   const f = await fixture(page);
   let replacement: Bridge | undefined;
   const previousPort = process.env.PI_WEBAPP_RESTART_PORT;
   const previousToken = process.env.PI_WEBAPP_RESTART_TOKEN;
   try {
     await open(page, f.bridge); await f.sdkReady;
+    // An editable composer precedes lazy plugin/catalog initialization. Closing
+    // the server then aborts unrelated startup requests, not just the SSE stream.
+    await page.getByRole("button", { name: /^(打开右侧栏|Open right sidebar)$/ }).click();
+    const terminal = page.getByRole("button", { name: /^(打开终端|Open terminal)$/ });
+    await expect(terminal).toBeVisible();
+    expect(f.browserEvents).toEqual([]);
     const connected = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/events" && response.status() === 200);
     const url = new URL(f.bridge.url);
     await f.bridge.close({ reconnect: true });
@@ -459,6 +469,7 @@ test("controlled launcher restart reconnects at the same address without an erro
     expect(replacement.url).toBe(f.bridge.url);
     await connected;
     await expect(page.getByRole("textbox")).toBeEditable();
+    await expect(terminal).toBeVisible();
     expect(f.browserEvents).toEqual([]);
     expect(f.nodeEvents).toEqual([]);
   } finally {
