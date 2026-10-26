@@ -34,6 +34,34 @@ test("failed retries, missing results and global errors cannot manufacture an ac
   assert.equal(result.failures.length, 3); assert.equal(result.cleanPassed, 2);
 });
 
+const stressTitle = "100-element local switch: 20 warmups + 50 different-version controller/editor/worker cycles";
+const stressReport = (results: unknown[] = [{ status: "passed" }], file = "hosted-stress.spec.ts") => ({
+  suites: [{ file, specs: [{ title: stressTitle, tests: [{ results }] }] }], errors: [],
+});
+
+test("separate stress gate requires the real test to run once and pass cleanly", () => {
+  assert.deepEqual(verifyHostedBrowserResults(stressReport(), "stress"), { bodyPassed: 1, cleanPassed: 1, diagnosticSkipped: 0, failures: [] });
+  for (const results of [[], [{ status: "skipped" }], [{ status: "failed" }], [{ status: "timedOut" }], [{ status: "interrupted" }], [{ status: "failed" }, { status: "passed" }], [{ status: "passed" }, { status: "passed" }], [{ status: "passed", retry: 1 }]]) {
+    assert.ok(verifyHostedBrowserResults(stressReport(results), "stress").failures.length > 0);
+  }
+  assert.ok(verifyHostedBrowserResults(stressReport([{ status: "passed", annotations: [{ type: "shutdown-failed-closed" }] }]), "stress").failures.length > 0);
+  assert.ok(verifyHostedBrowserResults({ ...stressReport(), errors: [{ message: "runner failed" }] }, "stress").failures.length > 0);
+  assert.ok(verifyHostedBrowserResults({ suites: [] }, "stress").failures.length > 0);
+  assert.ok(verifyHostedBrowserResults(report(), "stress").failures.length > 0);
+  assert.ok(verifyHostedBrowserResults(stressReport(undefined, "fake.spec.ts"), "stress").failures.length > 0);
+  assert.ok(verifyHostedBrowserResults(stressReport(), "hosted").failures.length > 0); // Production gate not relaxed.
+  // @ts-expect-error The CLI must reject an invalid runtime group too.
+  assert.throws(() => verifyHostedBrowserResults(stressReport(), "typo"), /hosted or stress/);
+});
+
+test("stress cannot inherit the hosted-only diagnostic skip exception", () => {
+  const value = stressReport();
+  value.suites.push({ file: "hosted-transport.spec.ts", specs: [{ title: "diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls", tests: [{ results: [{ status: "skipped" }] }] }] });
+  const result = verifyHostedBrowserResults(value, "stress");
+  assert.equal(result.diagnosticSkipped, 0);
+  assert.equal(result.failures.length, 1);
+});
+
 test("empty or malformed reports and omitted production sizes are not acceptance evidence", () => {
   assert.throws(() => verifyHostedBrowserResults({}), /Playwright JSON/);
   assert.equal(verifyHostedBrowserResults({ suites: [] }).failures.length, 2);

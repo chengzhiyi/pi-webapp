@@ -67,8 +67,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [general, hosted]
-    runs-on: ubuntu-latest
+        group: [general, hosted, stress]
+    # Keep the PR Chrome preflight on the same OS as publish.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
       group: ${{ github.workflow }}-browser-${{ matrix.group }}-${{ github.event.pull_request.number || github.run_id }}
@@ -108,6 +109,10 @@ jobs:
       - run: npm ci
       - name: Fetch integrity-pinned published plugin fixtures
         run: node scripts/prepare-hosted-ci-fixtures.mjs
+      - name: Verify the runner Chrome used by release probes
+        if: matrix.group == 'general'
+        timeout-minutes: 1
+        run: node scripts/verify-ci-chrome.mjs
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       # Disjoint file groups in isolated runners, each retaining a single worker.
@@ -116,9 +121,9 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: .ci/browser/report.json
         run: npx playwright test --config=playwright.ci.config.ts --reporter=line,json
-      - name: Require clean hosted lifecycle from that same report
-        if: always() && matrix.group == 'hosted' && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
-        run: node scripts/verify-hosted-browser-results.mjs .ci/browser/report.json
+      - name: Require clean hosted lifecycle or complete stress evidence
+        if: always() && matrix.group != 'general' && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
+        run: node scripts/verify-hosted-browser-results.mjs .ci/browser/report.json "${{ matrix.group }}"
       - name: Verify real public cross-version plugin update
         if: matrix.group == 'hosted'
         env:
@@ -172,7 +177,7 @@ jobs:
   publish:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.verify.outputs.protocol_published == 'true'
     needs: [verify, platform-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
       group: pi-webapp-npm-publish
@@ -216,9 +221,15 @@ jobs:
           mkdir -p .ci/release
           npm pack --ignore-scripts --json --pack-destination .ci/release > .ci/release/pack.json
           npm run verify:package -- --pack-manifest .ci/release/pack.json
-      - run: npx playwright install --with-deps chromium
+      # Release probes need only a working browser, not the benchmark's pinned
+      # Chromium. Avoid apt mirror cold installs on the serialized publish path.
+      # Exercise the same Chrome channel in PRs before this release-only step.
+      - name: Verify the runner Chrome used by release probes
+        timeout-minutes: 1
+        run: node scripts/verify-ci-chrome.mjs
       - name: Verify real Node and browser source resolution
         env:
+          PI_WEB_TEST_CHROME: 'true'
           SENTRY_VERIFY_AUTH_TOKEN: ${{ secrets.SENTRY_VERIFY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG || 'soft' }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'pi-webapp' }}
