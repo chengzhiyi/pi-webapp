@@ -101,6 +101,23 @@ test("paired software update selects newer release even when local code is alrea
   assert.equal((await f.manager.inventory()).plugins[0]!.enabled, false);
 });
 
+test("alpha host pair preserves exact preview identity and enabled stable plugin across offline restart", async t => {
+  const f = await fixture(t), version = "0.1.31-alpha.5";
+  const compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await host(f.nextHost, version, f.worker);
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  await f.manager.manage(id, "enable");
+  f.offline();
+  await f.manager.hostPair.select(version, f.nextHost, async () => {});
+  assert.equal((await readPair(f.storage))!.version, version);
+  await f.restart(version);
+  const card = (await f.manager.inventory()).plugins[0]!;
+  assert.equal(card.enabled, true); assert.equal(card.activeVersion, "0.1.0");
+  assert.equal(f.manager.installer.hostVersion, version);
+  assert.equal((await readPair(f.storage))!.phase, "reconciled");
+  assert.equal(f.manager.tools.length, 1);
+});
+
 test("paired software update offline retains compatible local code and visible retry diagnostic", async t => {
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
