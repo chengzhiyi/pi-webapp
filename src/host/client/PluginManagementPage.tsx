@@ -4,8 +4,10 @@ import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, textFor } from "../../../web/src/ui/locale/preference.ts";
 import { Modal } from "../../../web/src/ui/primitives/Modal.tsx";
 import { FileTypeIcon } from "../../../web/src/ui/primitives/FileTypeIcon.tsx";
+import { ExcalidrawIcon } from "../../../web/src/ui/primitives/ExcalidrawIcon.tsx";
 import { IconBranchOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import css from "./PluginManagementPage.module.css";
+import { HostedPluginManagement } from "./hosted/management.tsx";
 
 interface Props {
   getPluginManagement(): Promise<PluginManagementView>;
@@ -62,7 +64,7 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, genera
     else void change(plugin);
   };
   const switchFor = (plugin: ManagedPlugin) => <button type="button" role="switch" className={css.switch} aria-label={t(`启用 ${localized(plugin.name)}`, `Enable ${localized(plugin.name)}`)} aria-checked={plugin.enabled} disabled={loading || busy !== null || !plugin.managed} title={plugin.managed ? undefined : t("请在包与扩展中管理 Pi 运行时", "Manage the Pi runtime under Packages & extensions")} onClick={() => requestChange(plugin)}><span className={css.thumb} /></button>;
-  const iconFor = (plugin: ManagedPlugin) => plugin.id === BUILTIN_IDS.git ? <IconBranchOutlineRegular size={30} /> : plugin.id === BUILTIN_IDS.terminal ? <span>›_</span> : plugin.id === BUILTIN_IDS.files ? <FileTypeIcon kind="folder" size={30} /> : <span>◇</span>;
+  const iconFor = (plugin: ManagedPlugin) => plugin.id === BUILTIN_IDS.git ? <IconBranchOutlineRegular size={30} /> : plugin.id === BUILTIN_IDS.terminal ? <span>›_</span> : plugin.id === BUILTIN_IDS.files ? <FileTypeIcon kind="folder" size={30} /> : plugin.id === BUILTIN_IDS.diagrams ? <ExcalidrawIcon size={30} /> : <span>◇</span>;
   const selectedPlugin = view?.items.find(plugin => plugin.id === selected);
   const shown = view?.items.filter(plugin => `${localized(plugin.name)} ${localized(plugin.description)} ${plugin.id}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [];
   return <section className={css.page} data-plugin-panel aria-busy={loading || busy !== null}>
@@ -95,6 +97,7 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, genera
       })}
       {!shown.length && <p className={css.scope}>{t("没有匹配的插件", "No matching plugins")}</p>}
     </>}
+    <HostedPluginManagement locale={locale} generation={generation} />
     <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={t("停用终端？", "Disable Terminal?")} closeLabel={t("关闭", "Close")} description={t("这会结束此服务所有聊天中的终端进程。未保存的 shell 工作可能丢失。", "This ends terminal processes in every chat on this service. Unsaved shell work may be lost.")} footer={<><button className={css.back} type="button" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</button><button className={css.danger} type="button" onClick={() => { if (confirm) void change(confirm); }}>{t("停用并结束终端", "Disable and stop terminals")}</button></>} />
   </section>;
 }

@@ -1,0 +1,222 @@
+import { test, expect } from "@playwright/test";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { build } from "esbuild";
+import { createHash } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
+import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
+import { HostedPluginIntegration } from "../../src/host/server/plugins/hosted/integration.ts";
+import { WorkspaceSessions } from "../../src/host/server/sessions/workspace-sessions.ts";
+import { startBridge, type Bridge } from "../../src/host/server/transport/bridge.ts";
+import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
+import { terminalHost } from "../helpers/terminal-host.ts";
+import { integrationFixture } from "../helpers/hosted-integration-fixture.ts";
+
+const id = "@chengzhiyi/pi-excalidraw";
+/** A second local test release of identical payload, NOT a published upstream version. */
+function localRelease(bytes: Buffer, version: string) {
+  const archive = gunzipSync(bytes), parts: Buffer[] = [];
+  for (let offset = 0; offset + 512 <= archive.length;) {
+    const header = Buffer.from(archive.subarray(offset, offset + 512));
+    if (header.every(byte => byte === 0)) break;
+    const name = header.toString("utf8", 0, 100).replace(/\0.*$/, "");
+    const size = parseInt(header.toString("ascii", 124, 136).replace(/\0.*$/, "").trim(), 8);
+    let data = archive.subarray(offset + 512, offset + 512 + size);
+    if (name === "package/package.json") data = Buffer.from(JSON.stringify({ ...JSON.parse(data.toString()), version }));
+    header.fill(0, 124, 136); header.write(data.length.toString(8).padStart(11, "0") + "\0", 124);
+    header.fill(32, 148, 156); header.write([...header].reduce((a, b) => a + b, 0).toString(8).padStart(6, "0") + "\0 ", 148);
+    parts.push(header, data, Buffer.alloc((512 - data.length % 512) % 512));
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  return gzipSync(Buffer.concat([...parts, Buffer.alloc(1024)]));
+}
+
+for (const width of [1440, 390]) test(`real hosted archive + complete host UI + retained SDK hot lifecycle at ${width}px`, async ({ page }, info) => {
+  test.skip(!process.env.HOSTED_EXCALIDRAW_TGZ, "Explicit cross-repo archive required");
+  test.setTimeout(100_000); page.setDefaultTimeout(12_000);
+  const root = await realpath(await mkdtemp(join(tmpdir(), "hosted-production-browser-")));
+  const prior = process.env.PI_CODING_AGENT_DIR, roots = process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS;
+  process.env.PI_CODING_AGENT_DIR = join(root, "agent"); process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = "";
+  const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
+  let selected = bytes, version = "0.1.0", downloads = 0, bridge: Bridge | undefined, sessions!: WorkspaceSessions;
+  const workerEntry = join(root, "worker.mjs");
+  await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+  const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
+  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local-test-principal",
+    resolveSession: sessionId => { const retained = sessions?.hostedScope(sessionId); return retained ? scope(retained.cwd, sessionId) : null; },
+    changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
+    fetch: (async (url: string | URL | Request) => {
+      if (String(url).endsWith(".tgz")) { downloads++; return new Response(selected); }
+      return new Response(JSON.stringify({ versions: { [version]: { ...integrationFixture().release, version, dist: { tarball: `https://registry.npmjs.org/local-${version}.tgz`, integrity: "sha512-" + createHash("sha512").update(selected).digest("base64") } } } }));
+    }) as typeof fetch,
+  });
+  sessions = new WorkspaceSessions(event => bridge?.publish(event), () => undefined, () => false, undefined, undefined, undefined, [], { adapter: integration.adapter, scope });
+  await integration.start(); await sessions.open(root, "new");
+  const retained = sessions.session!, sessionId = retained.sessionManager.getSessionId();
+  const { host } = terminalHost(root); host.hosted = integration.handlers; host.snapshot = () => sessions.snapshot();
+  host.workspaces = async () => ({ items: [{ id: "workspace", title: "Local workspace", path: root }], activeId: "workspace", sessions: [{ id: sessionId, workspaceId: "workspace", path: null, name: "Hosted test", modified: new Date().toISOString() }] });
+  host.selectSession = async () => {};
+  bridge = await startBridge(host, new URL("../../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "plugins.json") });
+  const address = new URL(bridge.url), headers = { Authorization: `Bearer ${address.hash.slice(1)}`, Origin: address.origin, "Content-Type": "application/json" };
+  const card = () => integration.inventory().then(value => value.plugins[0]!);
+  const action = async (action: string, input = {}) => {
+    const response = await fetch(address.origin + "/api/hosted-plugins/action", { method: "POST", headers, body: JSON.stringify({ pluginId: id, generation: (await card()).generation, sessionId, action, input }) });
+    expect(response.status).toBe(200); return response.json();
+  };
+  const errors: string[] = [], external: string[] = [], requests: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { requests.push(request.url()); if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== address.origin) external.push(request.url()); });
+  await page.setViewportSize({ width, height: 1000 });
+  await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); localStorage.setItem("pi-web-theme", "light"); Reflect.deleteProperty(window, "showSaveFilePicker"); });
+  const manager = page.locator("[data-hosted-management]");
+  const showManager = async () => {
+    const collapse = page.getByRole("button", { name: "Collapse right sidebar", exact: true });
+    if (width < 767 && await collapse.isVisible()) await collapse.click();
+    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await expect(manager).toBeVisible();
+  };
+  let primaryError: unknown;
+  try {
+    await page.goto(bridge.url);
+    const bootId = await page.evaluate(() => { const value = crypto.randomUUID(); (window as any).__hostedTestBoot = value; return value; });
+    await showManager(); await expect(manager).toContainText("Not installed"); expect(downloads).toBe(0);
+    expect(requests.filter(url => /\/hosted-plugins\/|Excalifont|Virgil|Xiaolai|mermaid/i.test(url))).toEqual([]);
+    expect(retained.getAllTools().some(tool => /^(diagram_|excalidraw_)/.test(tool.name))).toBe(false);
+    await manager.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(manager).toContainText("Installed · Disabled"); expect(downloads).toBe(1);
+    await manager.getByRole("button", { name: "Enable", exact: true }).click();
+    await expect(manager).toContainText("Installed · Enabled");
+    // Real SDK tool invocation, deterministic provider transport only. No external model call.
+    const model = retained.modelRuntime.getModels("openai")[0]!;
+    await retained.modelRuntime.setRuntimeApiKey("openai", "fixture-no-network"); await retained.setModel(model);
+    let stage = 0;
+    const drawing = { title: "中文热插拔", elements: JSON.stringify([{ type: "rectangle", id: "box", x: 0, y: 0, width: 200, height: 100, label: { text: "中文热插拔" } }]) };
+    retained.agent.streamFunction = async model => {
+      const first = stage++ === 0;
+      const message: AssistantMessage = { role: "assistant", api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(), content: first ? [{ type: "toolCall", id: "hosted-draw", name: "excalidraw_create_view", arguments: drawing }] : [{ type: "text", text: "Ready" }], stopReason: first ? "toolUse" : "stop", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+      const stream = createAssistantMessageEventStream(); stream.push({ type: "start", partial: message }); stream.push({ type: "done", reason: first ? "toolUse" : "stop", message }); stream.end(message); return stream;
+    };
+    await retained.prompt("Draw a local diagram");
+    const expandSidebar = page.getByRole("button", { name: "Expand sidebar", exact: true });
+    if (await expandSidebar.isVisible()) await expandSidebar.click();
+    await page.getByRole("button", { name: "Hosted test", exact: true }).click();
+    const tool = page.frameLocator('iframe[title="Excalidraw tool"]');
+    await expect(tool.getByRole("img")).toBeVisible();
+    const result = retained.messages.find(message => message.role === "toolResult" && message.toolCallId === "hosted-draw");
+    expect(result?.role === "toolResult" && !result.isError).toBeTruthy();
+    const draftId = (result as any).details.id;
+    await tool.getByRole("button", { name: "Edit Excalidraw", exact: true }).click();
+    const editor = page.frameLocator('iframe[title="Excalidraw editor"]');
+    const canvas = editor.locator(".excalidraw canvas.interactive"); await expect(canvas).toBeVisible();
+    await canvas.click(); await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.press("ArrowRight"); await page.keyboard.press("Escape");
+    await expect.poll(async () => (await action("get", { id: draftId })).scene.elements.find((element: any) => element.id === "box")?.x).not.toBe(0);
+    const moved = (await action("get", { id: draftId })).scene.elements.find((element: any) => element.id === "box").x;
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect.poll(async () => (await action("get", { id: draftId })).scene.elements.find((element: any) => element.id === "box")?.x).toBe(0);
+    await page.keyboard.press("ControlOrMeta+Shift+z");
+    await expect.poll(async () => (await action("get", { id: draftId })).scene.elements.find((element: any) => element.id === "box")?.x).toBe(moved);
+    await editor.getByTestId("main-menu-trigger").click();
+    await editor.getByText("Export image...", { exact: true }).click();
+    const imageExport = editor.getByRole("dialog"); await expect(imageExport).toBeVisible();
+    const [png] = await Promise.all([page.waitForEvent("download"), imageExport.getByRole("button", { name: "Export to PNG", exact: true }).click()]);
+    await png.saveAs(info.outputPath(`hosted-${width}.png`));
+    expect([...(await readFile((await png.path())!)).subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    await imageExport.getByRole("button", { name: "Close", exact: true }).click();
+    await canvas.click(); await page.keyboard.press("ControlOrMeta+s");
+    const save = editor.getByRole("dialog", { name: "Save diagram", exact: true });
+    await save.getByRole("textbox", { name: "Workspace path", exact: true }).fill("diagrams/中文.excalidraw"); await save.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(save).toHaveCount(0); const saved = await readFile(join(root, "diagrams/中文.excalidraw"));
+    const before = await action("get", { id: draftId }), generation = (await card()).generation!;
+    version = "0.1.1"; selected = localRelease(bytes, version);
+    await showManager(); await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+    await expect(manager).toContainText("Close editors to update to: 0.1.1"); expect((await card()).generation).toBe(generation);
+    await manager.getByRole("button", { name: "Update and reopen now", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await expect.poll(async () => (await card()).generation, { timeout: 20_000 }).toBe(generation + 1);
+    await expect(manager).not.toContainText("Close editors to update to:");
+    const after = await action("get", { id: draftId }); expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision);
+    expect(sessions.session).toBe(retained); expect(await page.evaluate(() => (window as any).__hostedTestBoot)).toBe(bootId);
+    // New realms initially register busy until their handshake/status acknowledgement completes.
+    await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${generation + 1}"]`)).toHaveCount(3);
+    await expect.poll(() => [...(integration as any).views.values()].every((coordinator: any) => coordinator.views.size === 3 && [...coordinator.views.values()].every((view: any) => view.identity.generation === generation + 1 && !view.busy)), { timeout: 10_000 }).toBe(true);
+    if (width === 1440) {
+      // Separate default path: no explicit reopen consent and no full-page refresh.
+      const beforeClose = (await card()).generation!;
+      version = "0.1.2"; selected = localRelease(bytes, version);
+      await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+      await expect(manager).toContainText("Close editors to update to: 0.1.2");
+      expect((await card()).generation).toBe(beforeClose);
+      const editorTab = page.locator("[data-dockkit-content]").filter({ has: page.locator('iframe[title="Excalidraw editor"]') });
+      const tabId = await editorTab.getAttribute("data-dockkit-content");
+      await page.getByRole("button", { name: "Hosted test", exact: true }).click();
+      const expandRight = page.getByRole("button", { name: "Expand right sidebar", exact: true });
+      if (await expandRight.isVisible()) await expandRight.click();
+      await page.locator(`[data-dockkit-tab="${tabId}"]`).hover();
+      await page.locator(`[data-dockkit-tab-close="${tabId}"]`).click();
+      await expect(page.locator('iframe[title="Excalidraw editor"]')).toHaveCount(0);
+      // The retained controller/tool realms acknowledge the normal switch barrier.
+      await showManager();
+      await manager.getByRole("button", { name: "Apply pending update", exact: true }).click();
+      await expect.poll(async () => (await card()).generation).toBe(beforeClose + 1);
+      await expect(manager).toContainText("Installed · Enabled 0.1.2");
+      expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
+    }
+    await manager.getByRole("button", { name: "Disable", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(manager).toContainText("Installed · Disabled");
+    expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden");
+    await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
+    await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
+    await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    // Enabled means the backend committed, not that the new browser realms are ready.
+    // Hold actual final-mount readiness requests on mobile to make that distinction deterministic.
+    let releaseReadiness!: () => void, heldReadiness = 0;
+    const readinessGate = new Promise<void>(resolve => { releaseReadiness = resolve; });
+    const viewsUrl = address.origin + "/api/hosted-plugins/views";
+    if (width === 390) await page.route(viewsUrl, async route => {
+      const input = route.request().postDataJSON();
+      if (input.operation === "change" && input.busy === false) { heldReadiness++; await readinessGate; }
+      await route.continue(); // Never synthesize a readiness status or freeze acknowledgement.
+    });
+    try {
+      await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+      if (width === 390) {
+        await expect.poll(() => heldReadiness, { message: "Final realms reached the delayed readiness boundary" }).toBeGreaterThan(0);
+        expect([...(integration as any).views.values()].some((coordinator: any) => [...coordinator.views.values()].some((view: any) => view.busy))).toBe(true);
+      }
+    } finally { releaseReadiness(); }
+    const finalGeneration = (await card()).generation!;
+    const expectedKinds = width === 1440 ? ["controller", "tool"] : ["controller", "editor", "tool"];
+    await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${finalGeneration}"]`)).toHaveCount(expectedKinds.length);
+    await expect.poll(() => [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()])
+      .map((view: any) => ({ kind: view.kind, generation: view.identity.generation, busy: view.busy }))
+      .sort((a, b) => a.kind.localeCompare(b.kind)), { timeout: 10_000, message: "Final enabled realms must actually acknowledge readiness before real shutdown" })
+      .toEqual(expectedKinds.map(kind => ({ kind, generation: finalGeneration, busy: false })));
+    if (width === 390) await page.unroute(viewsUrl);
+    expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
+    expect(await page.evaluate(() => (window as any).__hostedTestBoot)).toBe(bootId); expect(sessions.session).toBe(retained);
+    await page.screenshot({ path: info.outputPath(`hosted-lifecycle-${width}.png`) });
+    expect(errors).toEqual([]); expect(external).toEqual([]);
+  } catch (error) {
+    primaryError = error;
+    await writeFile(info.outputPath("primary-failure.json"), JSON.stringify({ error: String(error), views: [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()]) }, null, 2));
+    await page.screenshot({ path: info.outputPath("primary-failure.png") });
+    throw error;
+  } finally {
+    // Keep MessagePorts and the page alive until registered views acknowledge shutdown.
+    let shutdownError: unknown;
+    try { await integration.shutdown(); } catch (error) {
+      shutdownError = error;
+      await writeFile(info.outputPath("shutdown-failure.json"), JSON.stringify({ error: String(error), views: [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()]) }, null, 2));
+    }
+    await page.close();
+    await bridge.close(); await sessions.dispose();
+    if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
+    if (roots === undefined) delete process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS; else process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = roots;
+    await rm(root, { recursive: true, force: true });
+    if (shutdownError) throw new AggregateError([...(primaryError ? [primaryError] : []), shutdownError], "Real shutdown failed");
+  }
+});

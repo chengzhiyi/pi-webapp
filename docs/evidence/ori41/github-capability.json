@@ -1,0 +1,30 @@
+{
+  "kind": "normalized-read-only-capability-evidence",
+  "checkedAt": "2026-10-25",
+  "service": "github",
+  "connectionId": "f6d8f99e-f663-47c8-b910-d71bd1eae74f",
+  "connectionsSearchState": "ready",
+  "repository": "chengzhiyi/pi-webapp",
+  "commands": [
+    "gh api repos/chengzhiyi/pi-webapp/actions/workflows --jq '.workflows[] | {id,name,path,state}'",
+    "gh api repos/chengzhiyi/pi-webapp/contents/.github/workflows/desktop.yml --jq .content (base64 decoded)",
+    "gh api repos/chengzhiyi/pi-webapp/actions/permissions --jq '{enabled,allowed_actions}'"
+  ],
+  "actions": {"enabled": true, "allowed_actions": "all"},
+  "workflows": [
+    {"id": 368030667, "name": "CI and npm publish", "path": ".github/workflows/ci.yml", "state": "active"},
+    {"id": 390613284, "name": "Desktop prerelease", "path": ".github/workflows/desktop-release.yml", "state": "active"},
+    {"id": 390594265, "name": "Desktop packages (manual)", "path": ".github/workflows/desktop.yml", "state": "active"}
+  ],
+  "manualDesktopWorkflow": {
+    "trigger": "workflow_dispatch",
+    "permissions": {"contents": "read"},
+    "osMatrix": ["macos-latest", "ubuntu-latest", "windows-latest"],
+    "steps": ["actions/checkout@v4", "actions/setup-node@v4 (Node 24)", "npm ci", "npm run check", "npm run test:desktop", "npm run desktop:prepare", "npm run desktop:package", "actions/upload-artifact@v4"],
+    "nativeGuiAcceptance": false,
+    "ori41LocalHostAndPluginPairAvailable": false,
+    "imeOrNativeDialogWitness": false
+  },
+  "externalWritesPerformed": [],
+  "disposition": "Existing packaging is not native acceptance of the unpublished ORI-41 pair. No workflow installation, source push or dispatch performed. Unavailable acceptance skipped per latest user direction."
+}

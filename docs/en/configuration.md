@@ -13,9 +13,15 @@ Browser sign-in opens the provider page; follow manual-code prompts if the callb
 | Pi package | Can contain both extensions and skills. Add npm, Git, or local sources in **Settings → Packages & extensions**. |
 | Pi extension | Pi runtime capabilities; local extensions can also load individually. Loading in other workspace sessions depends on host isolation rules. |
 | Skill | Discovered task guidance. Inspect or manually configure a `SKILL.md` file/directory in **Settings → Skills**. |
-| Web plugin | Web interactions and panels. Bundled Git/Files/Terminal are managed in sidebar **Plugins**; external runtimes remain under **Packages & extensions**. |
+| Web plugin | Web interactions and panels. Bundled Git/Files/Terminal/Diagrams are managed in sidebar **Plugins**; external runtimes remain under **Packages & extensions**. |
 
 Bundled plugin switches persist globally and require all chats to be idle. Disabling closes related tabs and blocks backend requests. Disabling Terminal requires confirmation and ends all service-owned terminals. **Installing a package is not toggling a bundled plugin.** External plugins do not offer a misleading UI-only switch.
+
+## Diagrams
+
+Ask the agent to draw in the **main chat**. The drawing appears in its tool result; new drawings require no acceptance step. **Edit** opens only the native Excalidraw canvas and toolbar on the right. Request further changes in the main chat; existing-diagram AI edits use **Apply edits / Keep original** in chat, with stale-revision protection. Save/Open/Import, source download, white/transparent PNG export and backup recovery live in Excalidraw's menu. Workspace files use `.excalidraw` and remain conflict-protected. The right-workbench **Excalidraw** entry opens a blank native canvas, without a separate drawing landing page or prompt form.
+
+The editor is embedded locally, without Excalidraw cloud services. Manual editing works without a model. Browser draft backups are not a substitute for saving files. Images, links, collaboration and headless PNG rendering are not supported. See [Diagrams](../diagrams.md) for boundaries. Rebuild/restart the backend after updating; refreshing the page alone is insufficient.
 
 ## When to reload
 

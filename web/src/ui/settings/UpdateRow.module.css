@@ -17,19 +17,9 @@
 .preference {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-}
-
-.preference select {
-  padding: 6px 10px;
-  border: 1px solid var(--dsw-alias-label-tertiary);
-  border-radius: 6px;
-  background: var(--dsw-alias-bg-module-platform);
-  color: inherit;
-  font: inherit;
+  gap: 8px;
 }
 
 .title {

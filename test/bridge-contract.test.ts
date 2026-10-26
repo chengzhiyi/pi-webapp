@@ -32,13 +32,13 @@ function roundtrip(event: BridgeEvent): BridgeEvent {
   return parseBridgeEvent(JSON.parse(JSON.stringify(event)));
 }
 
-test("shared contract accepts all six existing wire event variants", () => {
+test("shared contract accepts legacy and hot hosted wire event variants", () => {
   const events: BridgeEvent[] = [
     { type: "snapshot", session }, { type: "stream", message }, { type: "stream", message: null },
     { type: "workspaces", value: { items: [{ id: "ws", path: "/workspace", title: "Workspace" }], activeId: null,
       sessions: [{ id: "session-1", workspaceId: "ws", path: null, name: "Chat", modified: "now" }] } },
     { type: "error", message: "Failed", errorId: "error-1", requestId: "request-1", operationId: "operation-1", errorCode: "validation_error", errorReported: true },
-    { type: "shutdown" }, { type: "shutdown", reconnect: true }, { type: "plugins_changed" },
+    { type: "shutdown" }, { type: "shutdown", reconnect: true }, { type: "plugins_changed" }, { type: "hosted_plugins_changed" },
   ];
   for (const event of events) assert.deepEqual(roundtrip(event), event);
 });
@@ -48,6 +48,7 @@ test("optional fields and opaque plugin payloads survive without changing the wi
     ...session, model: "provider/model", thinkingLevel: "medium", thinkingLevels: ["medium"], idle: false, paused: false,
     contextUsage: { tokens: null, contextWindow: 1000, percent: null }, streaming: message,
     promptQueue: { steering: ["guide"], followUp: ["later"] }, hasPendingPrompts: true,
+    queuedPrompts: [{ id: "pending", revision: 1, text: "editable", attachments: [{ name: "hint.png", image: true }], status: "queued" }],
     pluginEntries: [{ id: "entry", pluginId: "plugin", kind: "plan", timestamp: "now", data: { revision: 2 }, afterMessageId: "assistant-1" }],
     interactions: [{ requestId: "request", sessionId: session.sessionId, pluginId: "plugin", kind: "approval", data: ["opaque"] }],
     futureField: { supportedLater: true },
@@ -71,6 +72,8 @@ test("validates nested snapshot fields before they reach browser state", () => {
     { sessionId: 1 }, { cwd: null }, { name: [] }, { model: {} }, { thinkingLevel: 0 },
     { thinkingLevels: [false] }, { idle: "true" }, { paused: "false" }, { messages: null },
     { promptQueue: {} }, { promptQueue: { steering: [1], followUp: [] } }, { hasPendingPrompts: "yes" },
+    { queuedPrompts: [{}] }, { queuedPrompts: [{ id: "a", revision: 0, text: "b", attachments: [], status: "queued" }] },
+    { queuedPrompts: [{ id: "a", revision: 1, text: "b", attachments: [{ name: "x", image: "yes" }], status: "queued" }] },
     { messages: [{ ...message, role: "invalid" }] }, { messages: [{ ...message, blocks: [{ kind: "text" }] }] },
     { messages: [{ ...message, blocks: [{ kind: "invalid", text: "" }] }] },
     { messages: [{ ...message, usage: { ...message.usage, cost: Infinity } }] },

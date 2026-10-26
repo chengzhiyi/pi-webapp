@@ -11,8 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  verify-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only superseded PR checks may be cancelled; branch/release runs stay unique.
+    concurrency:
+      group: ${{ github.workflow }}-core-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     outputs:
       protocol_published: ${{ steps.protocol.outputs.published }}
     steps:
@@ -45,11 +50,106 @@ jobs:
       - name: Resolve the protocol dependency for verification
         run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
       - run: npm ci
+      - name: Fetch integrity-pinned published plugin fixtures
+        run: node scripts/prepare-hosted-ci-fixtures.mjs
       - run: npm run check
       - run: npm run build
       - run: npm test
+      - name: Verify actual bootstrap with an alpha host identity
+        run: |
+          original=$(mktemp)
+          cp package.json "$original"
+          trap 'cp "$original" package.json; rm -f "$original"' EXIT
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); p.version="0.1.31-alpha.5"; fs.writeFileSync("package.json", JSON.stringify(p,null,2)+"\n");'
+          node --import ./test/setup-env.mjs --experimental-strip-types --test test/auto-open.test.ts test/extension-flow.test.ts test/hosted-bootstrap.test.ts
+
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [general, hosted]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-browser-${{ matrix.group }}-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    env:
+      PI_WEB_BROWSER_GROUP: ${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      # Match core verification's pinned protocol, including the bootstrap path.
+      - name: Check protocol publication
+        id: protocol
+        run: node scripts/sync-protocol-dependency.mjs --probe
+      - name: Check out protocol source for initial verification
+        if: steps.protocol.outputs.published == 'false'
+        uses: actions/checkout@v6
+        with:
+          repository: chengzhiyi/pi-extensions
+          ref: e719070a1d407319841a9a23287e402265a63b8a
+          path: .ci/pi-extensions
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        if: steps.protocol.outputs.published == 'false'
+        with:
+          package_json_file: .ci/pi-extensions/package.json
+      - name: Build the protocol from the pinned source
+        if: steps.protocol.outputs.published == 'false'
+        working-directory: .ci/pi-extensions
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @chengzhiyi/pi-web-protocol build
+      - name: Resolve the protocol dependency for verification
+        run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
+      - run: npm ci
+      - name: Fetch integrity-pinned published plugin fixtures
+        run: node scripts/prepare-hosted-ci-fixtures.mjs
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      # Disjoint file groups in isolated runners, each retaining a single worker.
+      - name: Run browser group once and retain its report
+        id: browser
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: .ci/browser/report.json
+        run: npx playwright test --config=playwright.ci.config.ts --reporter=line,json
+      - name: Require clean hosted lifecycle from that same report
+        if: always() && matrix.group == 'hosted' && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
+        run: node scripts/verify-hosted-browser-results.mjs .ci/browser/report.json
+      - name: Verify real public cross-version plugin update
+        if: matrix.group == 'hosted'
+        env:
+          HOSTED_NPM_UPGRADE_FROM: '0.1.0'
+        run: npx playwright test hosted-npm --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence-${{ matrix.group }}
+          path: |
+            .ci/browser
+            test-results
+          if-no-files-found: ignore
+
+  # Keep the existing required check name; no failed/skipped/cancelled group may
+  # turn green merely because an upstream job did not run.
+  verify:
+    if: always()
+    needs: [verify-core, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      protocol_published: ${{ needs.verify-core.outputs.protocol_published }}
+    steps:
+      - name: Require every verification group to succeed
+        env:
+          CORE_RESULT: ${{ needs.verify-core.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: |
+          test "$CORE_RESULT" = success
+          test "$BROWSER_RESULT" = success
 
   platform-smoke:
     strategy:
@@ -57,6 +157,9 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    concurrency:
+      group: ${{ github.workflow }}-smoke-${{ matrix.os }}-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -70,6 +173,7 @@ jobs:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.verify.outputs.protocol_published == 'true'
     needs: [verify, platform-smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency:
       group: pi-webapp-npm-publish
       cancel-in-progress: false
@@ -89,6 +193,8 @@ jobs:
       - run: npm install --global npm@11
       - name: Resolve the published protocol dependency
         run: node scripts/sync-protocol-dependency.mjs
+      - name: Fetch integrity-pinned published plugin fixtures
+        run: node scripts/prepare-hosted-ci-fixtures.mjs
       - run: npm ci
       - name: Choose the next version and npm distribution tag
         run: node scripts/prepare-release.mjs

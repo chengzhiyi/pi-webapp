@@ -1,0 +1,167 @@
+{
+  "focused": {
+    "stats": {
+      "startTime": "2026-10-24T18:09:20.953Z",
+      "duration": 26224.475000000002,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "cases": [
+      {
+        "title": "A09: actual hosted tool frame paints progressive arguments before any final result",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "removed tool close network failure retains the original realm and exposes retry recovery",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      }
+    ]
+  },
+  "full": {
+    "stats": {
+      "startTime": "2026-10-24T18:11:12.679Z",
+      "duration": 59038.659,
+      "expected": 11,
+      "skipped": 1,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "cases": [
+      {
+        "title": "A06: 100 grouped elements and native viewport survive generation switch without parent/session recreation",
+        "status": "failed",
+        "annotations": [],
+        "errors": [
+          "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[33m@@ -1,12 +1,12 @@\u001b[39m\n\u001b[2m  Object {\u001b[22m\n\u001b[2m    \"appState\": Object {\u001b[22m\n\u001b[32m-     \"scrollX\": 73.75,\u001b[39m\n\u001b[32m-     \"scrollY\": 717.5,\u001b[39m\n\u001b[31m+     \"scrollX\": 476.6666666666669,\u001b[39m\n\u001b[31m+     \"scrollY\": 1251.6666666666672,\u001b[39m\n\u001b[2m      \"viewBackgroundColor\": \"#ffffff\",\u001b[22m\n\u001b[2m      \"zoom\": Object {\u001b[22m\n\u001b[32m-       \"value\": 0.4,\u001b[39m\n\u001b[31m+       \"value\": 0.3,\u001b[39m\n\u001b[2m      },\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"elements\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"angle\": 0,\u001b[22m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  24 |     await expect.poll(async () => (await h.card()).generation).toBe(generation + 1);\n  25 |     await expect(canvas).toBeVisible();\n> 26 |     await expect.poll(async () => (await h.action(\"get\", { id: created.id })).scene).toEqual(before.scene);\n     |                                                                                      ^\n  27 |     expect((await h.action(\"get\", { id: created.id })).revision).toBe(before.revision);\n  28 |     expect(h.sessions.session).toBe(h.retained); expect(await page.evaluate(() => (window as any).__parityBoot)).toBe(boot);\n  29 |     const stale = await h.rawAction(\"sync\", { id: created.id, revision: before.revision, scene: before.scene }, generation); expect(stale.status).toBe(409);\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori37/test/browser/hosted-parity.spec.ts:26:86"
+        ]
+      },
+      {
+        "title": "A07: composition and held native drag reject send, preserve composer and then reach a real safe point",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A09: candidate reject/apply and stale hand-edit protection through actual tool and review frames",
+        "status": "failed",
+        "annotations": [],
+        "errors": [
+          "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('iframe[title=\"Excalidraw tool\"]').last().contentFrame().getByRole('img')\nExpected: \u001b[32m\"\u001b[7m1\u001b[27m:772c2a0a-9b54-4b73-a00a-7af2078d372e\"\u001b[39m\nReceived: \u001b[31m\"\u001b[7m2\u001b[27m:772c2a0a-9b54-4b73-a00a-7af2078d372e\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" locator('iframe[title=\"Excalidraw tool\"]').last().contentFrame().getByRole('img') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('iframe[title=\"Excalidraw tool\"]').last().contentFrame().getByRole('img')\u001b[22m\n\u001b[2m    6 × locator resolved to <img alt=\"中文分组画布\" data-scene-revision=\"1:current\" src=\"blob:http://127.0.0.1:54189/3c6cb2c0-1cf9-441a-b70d-661773b02430\"/>\u001b[22m\n\u001b[2m      - unexpected value \"1:current\"\u001b[22m\n\u001b[2m    8 × locator resolved to <img alt=\"中文分组画布\" data-scene-revision=\"2:772c2a0a-9b54-4b73-a00a-7af2078d372e\" src=\"blob:http://127.0.0.1:54189/99fef645-0b30-4422-9b60-76ad3fc402f1\"/>\u001b[22m\n\u001b[2m      - unexpected value \"2:772c2a0a-9b54-4b73-a00a-7af2078d372e\"\u001b[22m\n\n\n  72 |       await h.integration.manager.invoke(\"@chengzhiyi/pi-excalidraw\", (await h.card()).generation!, { requestId: crypto.randomUUID(), kind: \"tool\", action: \"patch\", input: { id: created.id, baseRevision: draft.revision, patch: { updateElements: [{ id: \"box-0\", x }] } }, scope: { cwd: h.root, sessionId: h.sessionId, workspaceId: \"workspace\" } });\n  73 |       const current = await get();\n> 74 |       await expect(review.getByRole(\"img\")).toHaveAttribute(\"data-scene-revision\", `${current.revision}:${current.candidate.id}`);\n     |                                             ^\n  75 |     };\n  76 |     const review = page.frameLocator('iframe[title=\"Excalidraw tool\"]').last();\n  77 |     await propose(222); await expect(review.getByRole(\"button\", { name: \"Keep original\", exact: true })).toBeVisible();\n    at propose (/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori37/test/browser/hosted-parity.spec.ts:74:45)\n    at /Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori37/test/browser/hosted-parity.spec.ts:77:5"
+        ]
+      },
+      {
+        "title": "A09: patching an unlabeled native shape must render a review rather than crash materialization",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A09: actual hosted tool frame paints progressive arguments before any final result",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "removed tool close network failure retains the original realm and exposes retry recovery",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A11: same-profile second window must remain responsive with existing editor long polls",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 1440px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A10: native source/Open, SVG, transparent PNG, retained backup and themed menus at 390px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "A11: competing real windows fence stale CAS and preserve losing local geometry for explicit reconnect recovery",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 1440px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "real hosted archive + complete host UI + retained SDK hot lifecycle at 390px",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      },
+      {
+        "title": "diagnostic: HTTP/1.1 socket-pool evidence for the legacy per-view long polls",
+        "status": "skipped",
+        "annotations": [
+          {
+            "type": "skip",
+            "description": "Explicit baseline diagnostic only",
+            "location": {
+              "file": "/Users/chengcheng/.paperclip/instances/default/projects/b7a05f30-54e4-40d1-8623-f11907e05d5b/12c92c82-b3ab-49cf-aa82-1f8f174d1b8b/pi-webapp-ori37/test/browser/hosted-transport.spec.ts",
+              "line": 6,
+              "column": 8
+            }
+          }
+        ],
+        "errors": []
+      },
+      {
+        "title": "aggregate transport keeps same-profile windows and repeated SDK tool-result frames responsive",
+        "status": "passed",
+        "annotations": [],
+        "errors": []
+      }
+    ]
+  },
+  "node": {
+    "total": 80,
+    "passed": 77,
+    "skipped": 3,
+    "failed": 0,
+    "summary": " 80\nℹ suites 0\nℹ pass 77\nℹ fail 0\nℹ cancelled 0\nℹ skipped 3\nℹ todo 0\nℹ duration_ms 16724.099334\n"
+  },
+  "pluginNode": {
+    "total": 17,
+    "passed": 17,
+    "failed": 0
+  },
+  "pluginArchiveSHA256": "932c697f49d87855d5ddc46786c9d0d8ee7b52f64f95af266c46d18ce84d53d5"
+}

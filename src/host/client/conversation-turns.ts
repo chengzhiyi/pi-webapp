@@ -1,4 +1,4 @@
-import type { ViewMessage, ViewUsage } from "./pi-bridge.ts";
+import type { ViewBlock, ViewMessage, ViewUsage } from "./pi-bridge.ts";
 
 export interface ConversationTurn {
   id: string;
@@ -30,6 +30,30 @@ export function conversationTurns(messages: ViewMessage[]): ConversationTurn[] {
     }
   }
   return turns;
+}
+
+/** A stream snapshot can briefly overlap its committed message. Tool identity, not
+ * identical arguments or tool name, owns the view. Separate calls remain separate. */
+export function toolViewCalls(messages: ViewMessage[], tools: readonly string[]): { key: string; call: ViewBlock }[] {
+  const calls = new Map<string, { key: string; call: ViewBlock; streaming: boolean }>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    message.blocks.forEach((call, index) => {
+      if (call.kind !== "toolCall" || !tools.includes(call.toolName ?? "")) return;
+      const key = call.toolCallId ?? `${message.id}-${index}`;
+      const prior = calls.get(key), streaming = message.id === "stream";
+      if (!prior || prior.streaming || !streaming) calls.set(key, { key, call, streaming });
+    });
+  }
+  return [...calls.values()].map(({ key, call }) => ({ key, call }));
+}
+
+/** Stream/provider snapshots may replace the provisional user/message IDs while
+ * retaining the same tool call. Its owning turn must keep the same React subtree,
+ * not merely the inner thumbnail key. Separate calls still own separate realms. */
+export function toolViewTurnKey(turn: ConversationTurn, tools: readonly string[]): string {
+  const first = toolViewCalls(turn.messages, tools)[0];
+  return first ? `tool:${first.key}` : `message:${turn.id}`;
 }
 
 export function toolResults(messages: ViewMessage[]): Map<string, ViewMessage> {

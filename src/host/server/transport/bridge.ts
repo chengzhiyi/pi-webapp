@@ -21,13 +21,16 @@ import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { isExpectedError, isContentOperation, opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { VERSION } from "@earendil-works/pi-coding-agent";
 import { buildId } from "../../../contracts/build-info.ts";
-import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
+import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
+import { PromptQueueError } from "../sessions/editable-prompt-queue.ts";
+import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandlers } from "../plugins/hosted/routes.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
 
 export interface BridgeHost {
+  hosted?: HostedBridgeHandlers;
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
@@ -51,6 +54,7 @@ export interface BridgeHost {
   config(): ConfigView | Promise<ConfigView>;
   updateConfig(change: ConfigChange): Promise<ConfigView>;
   send(sessionId: string, text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): void | Promise<void>;
+  updateQueuedPrompt?(sessionId: string, id: string, revision: number, action: QueuedPromptAction): Promise<void>;
   abort(sessionId: string): void | Promise<void>;
   resume?(sessionId: string, correlation?: ErrorCorrelation): void | Promise<void>;
   newSession(sessionId: string): Promise<void>;
@@ -67,6 +71,7 @@ export interface Bridge {
   readonly buildId: string;
   readonly url: string;
   publish(event: BridgeEvent): void;
+  runPluginTool(pluginId: string, cwd: string, sessionId: string, action: string, input: unknown): Promise<unknown>;
   reportError(cause: unknown, context?: DiagnosticFields): string | undefined;
   breadcrumb(category: string, context?: DiagnosticFields): void;
   close(options?: { reconnect?: boolean }): Promise<void>;
@@ -94,13 +99,13 @@ function authorized(req: IncomingMessage, token: Buffer): boolean {
   return presented.length === token.length && timingSafeEqual(presented, token);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<unknown> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += bytes.length;
-    if (size > 64 * 1024) throw new Error("请求内容过大");
+    if (size > limit) throw new Error("请求内容过大");
     chunks.push(bytes);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -197,6 +202,17 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         }
         return;
       }
+      if (req.method === "GET" && path.startsWith("/hosted-plugins/")) {
+        try {
+          const asset = await host.hosted?.asset(path);
+          if (!asset) { json(res, 404, { error: "插件资源不存在" }); return; }
+          // Only capability-qualified local v2 documents may be framed. Parent CSP is unchanged.
+          res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'");
+          res.writeHead(200, { "Content-Type": asset.mime, "Cache-Control": "private, no-store" });
+          res.end(asset.bytes);
+        } catch { json(res, 404, { error: "插件资源不可用" }); }
+        return;
+      }
       if (req.method === "GET" && path.startsWith("/plugins/")) {
         try {
           const pluginAsset = await host.pluginAsset?.(req.url ?? path);
@@ -212,6 +228,22 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       }
       if (!authorized(req, token)) {
         json(res, 401, { error: "访问令牌无效" });
+        return;
+      }
+      if (req.method === "GET" && path === "/api/hosted-plugins") {
+        try { json(res, 200, await hostedApi(host.hosted, path, undefined)); }
+        catch (error) { const result = hostedHttpFailure(error); json(res, result.status, result.body); }
+        return;
+      }
+      if (req.method === "POST" && HOSTED_API_PATHS.includes(path)) {
+        if (req.headers.origin !== undefined && req.headers.origin !== origin) { json(res, 403, { error: "来源不匹配" }); return; }
+        if (!req.headers["content-type"]?.startsWith("application/json")) { json(res, 415, { error: "需要 JSON 请求" }); return; }
+        if (restarting) { json(res, 409, { error: "宿主正在更新，请稍后重试" }); return; }
+        let body: unknown;
+        try { body = await readJson(req, 2 * 1024 * 1024); }
+        catch (error) { json(res, error instanceof Error && error.message === "请求内容过大" ? 413 : 400, {error:"插件请求内容无效或过大"}); return; }
+        try { json(res, 200, await hostedApi(host.hosted, path, body)); }
+        catch (error) { const result = hostedHttpFailure(error); json(res, result.status, result.body); }
         return;
       }
       if (req.method === "GET" && path === "/api/telemetry/config") {
@@ -333,7 +365,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/message", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -344,7 +376,8 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         }
         try {
           let body: unknown;
-          try { body = await readJson(req); } catch (cause) {
+          try { body = await readJson(req, path === "/api/plugin-action" ? 544 * 1024 : 64 * 1024); } catch (cause) {
+            if (cause instanceof Error && cause.message === "请求内容过大") { json(res, 413, { error: cause.message }); return; }
             if (cause instanceof SyntaxError || isExpectedError(cause)) { json(res, 400, { error: "请求内容无效" }); return; }
             throw cause;
           }
@@ -526,6 +559,20 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               json(res, 400, { error: "npm 或 Git 来源请在「包」中添加；扩展和技能只接受文件或目录路径" }); return;
             }
             json(res, 200, await host.updateConfig(change as ConfigChange)); return;
+          } else if (path === "/api/prompt-queue") {
+            const input = body as Record<string, unknown>;
+            const action = input.action as Record<string, unknown> | undefined;
+            if (typeof input.id !== "string" || input.id.length > 100 || !Number.isSafeInteger(input.revision) || (input.revision as number) < 1
+              || !action || typeof action !== "object" || !["edit", "remove", "steer"].includes(action.kind as string)
+              || action.kind === "edit" && (typeof action.text !== "string" || action.text.length > 32_000)) {
+              json(res, 400, { error: "队列操作无效" }); return;
+            }
+            const state = host.snapshot();
+            if (input.sessionId !== state.sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            if (action.kind === "steer" && state.idle) { json(res, 409, { error: "当前没有可引导的执行，请先继续或发送任务" }); return; }
+            if (action.kind === "steer" && state.interactions?.length) { json(res, 409, { error: "请先完成当前交互或审批" }); return; }
+            if (!host.updateQueuedPrompt) { json(res, 409, { error: "请重载 Pi 以启用队列操作" }); return; }
+            await pluginRegistry.coordinateStart(state.cwd, async () => host.updateQueuedPrompt!(body.sessionId as string, input.id as string, input.revision as number, action as QueuedPromptAction));
           } else if (path === "/api/message") {
             const delivery = "delivery" in body ? body.delivery : undefined;
             if (delivery !== undefined && delivery !== "steer" && delivery !== "followUp") {
@@ -576,6 +623,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           }
           json(res, 202, { accepted: true });
         } catch (error) {
+          if (error instanceof PromptQueueError) { json(res, error.status, { error: error.message }); return; }
           const failure = pluginRegistry.requestFailure(error);
           if (failure) { json(res, failure.status, failure.body); return; }
           const message = error instanceof Error ? error.message : "请求失败";
@@ -597,6 +645,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   return {
     protocolVersion: 7,
     buildId,
+    runPluginTool: (id, cwd, sessionId, action, input) => pluginRegistry.runAgentAction(id, cwd, sessionId, action, input),
     reportError(cause, context) { return telemetry.capture(cause, context); },
     breadcrumb(category, context) { telemetry.breadcrumb(category, context); },
     url: `${origin}/#${tokenText}`,

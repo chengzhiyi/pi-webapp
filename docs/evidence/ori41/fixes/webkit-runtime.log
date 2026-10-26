@@ -1,0 +1,6 @@
+Error: browser.newPage: Target page, context or browser has been closed
+Browser logs:
+
+<launching> /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window
+<launched> pid=86648
+[pid=86648][err] /Users/chengcheng/Library/Caches/ms-playwright/webkit-2359/pw_run.sh: 第 7 行：86653 Segmentation fault: 11  DYLD_FRAMEWORK_PATH="$DYLIB_PATH" DYLD_LIBRARY_PATH="$DYLIB_PATH" "$PLAYWRIGHT" "$@"

@@ -29,7 +29,10 @@ test("plugin management persists real backend gates and validates auth, origin, 
   const get = () => fetch(url.origin + "/api/plugin-management", { headers }).then(response => response.json()) as Promise<PluginManagementView>;
   const post = (body: object, extra: Record<string, string> = {}) => fetch(url.origin + "/api/plugin-management", { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify({ sessionId: "terminal-a", ...body }) });
   let view = await get();
-  assert.equal(view.items.filter(item => item.kind === "builtin").length, 3);
+  assert.deepEqual(view.items.filter(item => item.kind === "builtin").map(item => item.id).sort(), [BUILTIN_IDS.files, BUILTIN_IDS.git, BUILTIN_IDS.terminal].sort());
+  assert.ok(!view.items.some(item => item.id === BUILTIN_IDS.diagrams));
+  assert.equal((await fetch(url.origin + "/api/diagrams/new", {method:"POST",headers,body:JSON.stringify({sessionId:"terminal-a"})})).status,404);
+  await assert.rejects(bridge.runPluginTool(BUILTIN_IDS.diagrams,directory,"terminal-a","create",{}));
   assert.equal(view.items.find(item => item.id === "@example/external")?.managed, false);
   const input = { id: BUILTIN_IDS.git, enabled: false, expected: view.revision };
   assert.equal((await post(input, { Authorization: "Bearer wrong" })).status, 401);

@@ -7,10 +7,11 @@ export async function readAssetManifest(root: string): Promise<Record<string, { 
     const manifest: unknown = JSON.parse(await readFile(join(root, ".vite/manifest.json"), "utf8"));
     if (!manifest || typeof manifest !== "object") return {};
     const files = new Set<string>();
-    for (const entry of Object.values(manifest)) {
+    const extra: unknown = await readFile(join(root, ".vite/static-assets.json"), "utf8").then(JSON.parse).catch(() => []);
+    for (const entry of [...Object.values(manifest), { assets: Array.isArray(extra) ? extra : [] }]) {
       if (!entry || typeof entry !== "object") continue;
       for (const value of [entry.file, ...(Array.isArray(entry.css) ? entry.css : []), ...(Array.isArray(entry.assets) ? entry.assets : [])]) {
-        if (typeof value === "string" && /^assets\/[\w.-]+\.(?:js|css|woff2?|ttf|png|jpe?g|svg|webp)$/.test(value)) files.add(value);
+        if (typeof value === "string" && /^assets\/(?:[\w-]+\/)*[\w.-]+\.(?:js|css|woff2?|ttf|png|jpe?g|svg|webp)$/.test(value)) files.add(value);
       }
     }
     const types: Record<string, string> = { js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" };

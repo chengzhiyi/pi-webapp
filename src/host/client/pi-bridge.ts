@@ -4,7 +4,7 @@ import type {
   ViewMessage as WireViewMessage, SessionView as WireSessionView, WebPluginCatalogView,
   WorkspaceListView, DirectoryListing, DirectoryPickerKind, ModelOption, CommandOption,
   AttachmentReceipt, ConfigKind, ConfigScope, ConfigView, UpdateStatus, UpdateChannel, UpdateRequest, LoginMethod,
-  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery,
+  ProviderView, ProviderModelsView, ProviderModelChange, CustomProviderInput, LoginView, BridgeEvent, PromptDelivery, QueuedPromptAction,
 } from "../../contracts/bridge-contract.ts";
 import { parseBridgeEvent } from "../../contracts/bridge-events.ts";
 export type {
@@ -74,6 +74,9 @@ export function usePiBridge() {
           setConnection("connecting");
           const followed = await bridgeFetch("/api/events", {
             headers: { Authorization: `Bearer ${token}` },
+            // Firefox serializes concurrent cacheable GETs for an identical URL
+            // until the first response completes. This NDJSON stream never does.
+            cache: "no-store",
             signal: controller.signal,
           });
           const { response } = followed;
@@ -133,7 +136,8 @@ export function usePiBridge() {
                   if (!event.errorId && !event.errorReported && event.errorCode !== "validation_error") reportError(new Error("Agent response failed"), { stage: "agent", code: "agent_failed", requestId: event.requestId, operationId: event.operationId });
                   breadcrumb("agent_error", { errorId: event.errorId, requestId: event.requestId, operationId: event.operationId });
                 }
-                if (event.type === "plugins_changed") window.location.reload();
+                if (event.type === "plugins_changed") window.location.reload(); // Legacy v1 resource changes only.
+                if (event.type === "hosted_plugins_changed") setPluginGeneration(value => value + 1);
                 if (event.type === "plugin_state") { setDisabledPlugins(event.disabled); setPluginGeneration(value => value + 1); }
               }
               end = pending.indexOf("\n");
@@ -244,6 +248,10 @@ export function usePiBridge() {
     async discardAttachment(id: string): Promise<void> {
       if (!session || connection !== "connected") return;
       await post("/api/attachment/remove", { sessionId: session.sessionId, id });
+    },
+    async updateQueuedPrompt(id: string, revision: number, action: QueuedPromptAction): Promise<void> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/prompt-queue", { sessionId: session.sessionId, id, revision, action });
     },
     async send(text: string, attachments: string[] = [], delivery?: PromptDelivery) {
       if (!session || connection !== "connected") return;

@@ -5,6 +5,17 @@ import { WebPluginRuntime } from "../src/host/client/plugin-manager.ts";
 const catalog = { plugins: [{ id: "example", client: "/example.js", style: "/example.css" }], errors: [] };
 const definition = (activate: (context: any) => void = () => {}) => ({ id: "example", apiVersion: 1, activate });
 
+test("native tool views and pre-send hooks are optional validated workbench additions", async () => {
+  const base = { apiVersion: 1, entry: { label: "Canvas", description: "Canvas", kind: "canvas", icon: () => null }, panels: [{ kind: "canvas", component: () => null }] };
+  for (const [addition, valid] of [[{}, true], [{ toolViews: [{ tools: ["create_view"], component: () => null }], beforeSend: async () => {} }, true], [{ toolViews: [{ tools: [null], component: () => null }] }, false], [{ toolViews: "invalid" }, false], [{ beforeSend: "invalid" }, false]] as const) {
+    const runtime = new WebPluginRuntime({ loadModule: async () => ({ default: { ...definition(), workbench: { ...base, ...addition } } }), loadStyle: async () => () => {}, report: () => {} });
+    await runtime.start("s", async () => catalog);
+    assert.equal(runtime.getSnapshot().plugins.length, valid ? 1 : 0);
+    if (!valid) assert.match(runtime.getSnapshot().errors.join(" "), /Invalid workbench/);
+    runtime.dispose();
+  }
+});
+
 test("activation resources abort first, dispose in reverse order, and survive a throwing cleanup", async () => {
   const calls: string[] = [];
   const runtime = new WebPluginRuntime({

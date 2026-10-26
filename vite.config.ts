@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 // @ts-ignore Build-only JavaScript helper; not included in either runtime bundle.
 import { buildInfo, sentryBuildOptions, prepareSourceMaps } from "./scripts/build-config.mjs";
+// @ts-ignore Build-only asset inventory generator.
 
 const src = fileURLToPath(new URL("./web/src/", import.meta.url));
 const output = fileURLToPath(new URL("./web/dist", import.meta.url));
@@ -21,7 +22,7 @@ export default defineConfig(async () => {
     build: {
       outDir: "../dist",
       emptyOutDir: true,
-      cssCodeSplit: false,
+      cssCodeSplit: true,
       manifest: true,
       sourcemap: "hidden",
       rollupOptions: {

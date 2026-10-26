@@ -10,13 +10,14 @@ import type { Bridge } from "../src/host/server/transport/bridge.ts";
 import type { WorkspaceRegistry } from "../src/host/server/workspaces/workspaces.ts";
 import type { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 import { controlledReply } from "./helpers/controlled-reply.ts";
+import { ExtensionHandlers } from "./helpers/extension-handlers.ts";
 
 test("web keeps a fresh Pi sender after creating a session", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "pi-web-flow-"));
   const canonicalTemporary = await realpath(temporary);
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = join(temporary, "agent");
-  const handlers = new Map<string, (event: any, ctx: any) => void>();
+  const handlers = new ExtensionHandlers();
   const delivered: string[] = [];
   const deliveryOptions: unknown[] = [];
   let busy = false;
@@ -53,15 +54,17 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     ...context("old"),
     async newSession(options?: { withSession?: (ctx: ExtensionCommandContext) => Promise<void> }) {
       oldRuntimeStale = true;
-      handlers.get("session_shutdown")?.({ reason: "new" }, initial);
+      await handlers.get("session_shutdown")?.({ reason: "new" }, initial);
       await options?.withSession?.(fresh);
-      handlers.get("session_start")?.({ type: "session_start" }, fresh);
+      await handlers.get("session_start")?.({ type: "session_start" }, fresh);
       return { cancelled: false };
     },
   } as unknown as ExtensionCommandContext;
   piWeb({
     events: createEventBus(),
-    on(event: string, handler: (event: unknown, ctx: unknown) => void) { handlers.set(event, handler); return () => {}; },
+    registerTool() {},
+    on(event: string, handler: (event: unknown, ctx: unknown) => void) { return handlers.set(event, handler); },
+    getActiveTools: () => [], setActiveTools() {}, getAllTools: () => [],
     registerCommand(name: string, definition: { handler: typeof command }) { if (name === "web") command = definition.handler; },
     getSessionName() { if (oldRuntimeStale) throw new Error("stale Pi API"); return undefined; },
     sendUserMessage() { if (oldRuntimeStale) throw new Error("stale Pi API"); },
@@ -101,11 +104,27 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
       });
       assert.equal(appended.status, 202);
     }
-    assert.deepEqual(delivered, ["hello", "steer", "followUp"]);
+    assert.deepEqual(delivered, ["hello", "steer"], "a web follow-up stays editable rather than entering Pi immediately");
+    const pending = async () => (await (await fetch(`${url.origin}/api/session`, { headers })).json()).queuedPrompts as Array<{ id: string; revision: number; text: string }>;
+    const update = async (item: { id: string; revision: number }, action: object) => fetch(`${url.origin}/api/prompt-queue`, {
+      method: "POST", headers, body: JSON.stringify({ sessionId: "new", id: item.id, revision: item.revision, action }),
+    });
+    const row = (await pending())[0]!;
+    assert.equal((await update(row, { kind: "edit", text: "edited follow-up" })).status, 202);
+    assert.equal((await update(row, { kind: "remove" })).status, 409, "stale edits cannot delete a changed TUI row");
+    const edited = (await pending())[0]!;
+    assert.equal((await update(edited, { kind: "steer" })).status, 202);
+    assert.deepEqual(delivered, ["hello", "steer", "edited follow-up"]);
     assert.deepEqual(deliveryOptions.slice(1), [
-      { expandPromptTemplates: true, deliverAs: "steer" }, { expandPromptTemplates: true, deliverAs: "followUp" },
-    ], "the replacement TUI context receives native delivery modes, not the stale Pi API");
+      { expandPromptTemplates: true, deliverAs: "steer" }, { expandPromptTemplates: true, deliverAs: "steer" },
+    ], "the replacement TUI context receives steering, not the stale Pi API");
+    for (const text of ["delete this", "automatic next"]) await fetch(`${url.origin}/api/message`, { method: "POST", headers, body: JSON.stringify({ sessionId: "new", text, delivery: "followUp" }) });
+    assert.equal((await update((await pending())[0]!, { kind: "remove" })).status, 202);
     busy = false;
+    await handlers.get("agent_settled")?.({ type: "agent_settled" }, fresh);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(delivered, ["hello", "steer", "edited follow-up", "automatic next"]);
+    assert.equal((await pending()).length, 0);
     // A deleted workspace must not turn unrelated list refreshes into Sentry errors.
     const registry = (shared as unknown as { workspaces: WorkspaceRegistry }).workspaces;
     const stalePath = join(temporary, "removed-worktree");

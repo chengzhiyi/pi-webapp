@@ -1,4 +1,4 @@
-import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, VERSION } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, type ToolDefinition, VERSION } from "@earendil-works/pi-coding-agent";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest } from "@chengzhiyi/pi-web-protocol";
 import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
@@ -8,12 +8,20 @@ import { requireWorkspaceDirectory } from "../workspaces/workspaces.ts";
 import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
 import { resumeMessage } from "./execution-control.ts";
 import { assertPromptDelivery } from "./prompt-delivery.ts";
-import type { PromptDelivery } from "../../../contracts/bridge-contract.ts";
+import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
+import { EditablePromptQueue, PromptQueueError } from "./editable-prompt-queue.ts";
 import { pluginRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
 import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 
+import type { HostedAgentAdapter } from "../plugins/hosted/agent-adapter.ts";
+import type { HostedScope } from "@chengzhiyi/pi-web-protocol";
+
+export interface HostedWorkspaceOptions {
+  adapter: HostedAgentAdapter;
+  scope(cwd: string, sessionId: string): HostedScope;
+}
 type HostEvent = BridgeEvent;
 interface WorkspaceRuntime {
   session: AgentSession;
@@ -23,6 +31,7 @@ interface WorkspaceRuntime {
   interactions: WebInteractionHost;
   detach: () => void;
   releasePaths: () => Promise<void>;
+  releaseHosted?: () => void;
   generation: number;
   closing: boolean;
   waitController: AbortController;
@@ -30,6 +39,7 @@ interface WorkspaceRuntime {
   agentErrorReported?: boolean;
   tools: ToolDiagnostics;
   streaming: ViewMessage | null;
+  prompts: EditablePromptQueue;
 }
 
 export interface WorkspaceTelemetry {
@@ -41,7 +51,7 @@ export interface WorkspaceTelemetry {
 /** Independent SDK runtimes; selection only controls the foreground view. */
 export class WorkspaceSessions {
   readonly telemetryVersion = 2;
-  readonly runtimeVersion = 2;
+  readonly runtimeVersion = 4;
   private active: WorkspaceRuntime | null = null;
   private readonly runtimes = new Map<string, WorkspaceRuntime>();
   private readonly selectedByWorkspace = new Map<string, WorkspaceRuntime>();
@@ -54,10 +64,16 @@ export class WorkspaceSessions {
   private readonly reportError: (cause: unknown, context: DiagnosticFields) => string | undefined;
   private readonly telemetry: WorkspaceTelemetry;
   private readonly onSessionsChanged: () => void;
+  private readonly customTools: ToolDefinition[];
+  private readonly offHosted?: () => void;
+  private readonly hosted?: HostedWorkspaceOptions;
 
-  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}) {
+  constructor(publish: (event: HostEvent) => void, fallbackModel: () => ExtensionContext["model"], isProjectTrusted: (cwd: string) => boolean = () => false, reportError: (cause: unknown, context: DiagnosticFields) => string | undefined = () => undefined, telemetry: WorkspaceTelemetry = { enabled: () => false, breadcrumb: () => {}, anonymize: () => "unavailable" }, onSessionsChanged: () => void = () => {}, customTools: ToolDefinition[] = [], hosted?: HostedWorkspaceOptions) {
+    this.hosted = hosted;
     this.publish = publish; this.fallbackModel = fallbackModel; this.isProjectTrusted = isProjectTrusted; this.reportError = reportError;
     this.onSessionsChanged = onSessionsChanged;
+    this.customTools = customTools;
+    this.offHosted = hosted?.adapter.onThaw(() => { for (const runtime of this.runtimes.values()) this.scheduleQueued(runtime); });
     this.telemetry = {
       enabled: () => { try { return telemetry.enabled(); } catch { return false; } },
       breadcrumb: (category, context) => { try { if (telemetry.enabled()) telemetry.breadcrumb(category, context); } catch { /* Failed instrumentation cannot break a session. */ } },
@@ -102,21 +118,26 @@ export class WorkspaceSessions {
       this.ensureAvailable();
       const current = this.active;
       if (!current) throw new Error("没有活动工作区会话");
-      if (!current.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+      if (!current.session.isIdle || current.prompts.sending) throw new Error("Pi 正在运行，请等待当前回复结束");
       await this.replace(current.cwd, current.session.sessionManager, "reload");
     });
   }
   private ensureAvailable() {
     if (this.disposed) throw new Error("工作区服务已关闭");
   }
+  /** Authenticated hosted routes may access retained/background sessions, never disk-only IDs. */
+  hostedScope(id: string): { cwd: string; sessionId: string } | null {
+    const runtime = this.runtimes.get(id);
+    return !this.disposed && runtime && !runtime.closing ? { cwd: runtime.cwd, sessionId: id } : null;
+  }
   hasSession(cwd: string, id: string): boolean { return this.runtimes.get(id)?.cwd === cwd; }
   hasWorkspace(cwd: string): boolean { return this.selectedByWorkspace.has(cwd); }
   retainedSessions() {
-    return [...this.runtimes.values()].map(({ session, cwd }) => {
+    return [...this.runtimes.values()].map(({ session, cwd, prompts }) => {
       const branch = session.sessionManager.getBranch();
       const messages = branch.flatMap(entry => { const message = projectEntry(entry); return message ? [message] : []; });
       return {
-        sessionId: session.sessionManager.getSessionId(), cwd, path: session.sessionManager.getSessionFile() ?? null, idle: session.isIdle,
+        sessionId: session.sessionManager.getSessionId(), cwd, path: session.sessionManager.getSessionFile() ?? null, idle: session.isIdle && !prompts.sending,
         name: sessionTitle(session.sessionManager.getSessionName(), messages), modified: branch.at(-1)?.timestamp ?? new Date().toISOString(),
       };
     });
@@ -141,16 +162,23 @@ export class WorkspaceSessions {
     const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
     const bus = createEventBus();
     const runtimePaths = await pluginRuntimePaths(cwd, catalog.extensionRoots);
-    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus });
+    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus,
+      extensionFactories: this.hosted ? [this.hosted.adapter.extension(this.hosted.scope(cwd, manager.getSessionId()))] : [],
+    });
     let candidate: WorkspaceRuntime | null = null;
     try {
       await resourceLoader.reload();
       const loadErrors = resourceLoader.getExtensions().errors;
       if (loadErrors.length) throw new Error(loadErrors.map(item => `${item.path}: ${item.error}`).join("; "));
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
-      const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader });
+      const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null };
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null! };
+      runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {
+        const owner = this.runtimes.get(manager.getSessionId()) ?? runtime;
+        this.publishFor(owner, { type: "snapshot", session: this.snapshotOf(owner) });
+        if (!this.disposed && !owner.closing) this.onSessionsChanged();
+      });
       candidate = runtime;
       const publish = (event: HostEvent) => this.publishFor(runtime, event);
       runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
@@ -177,6 +205,7 @@ export class WorkspaceSessions {
             publish({ type: "stream", message: runtime.streaming });
           }
         }
+        if (event.type === "agent_settled") this.scheduleQueued(runtime);
         if (["message_end", "agent_start", "agent_settled", "session_info_changed", "entry_appended", "queue_update"].includes(event.type)) {
           if ((event.type === "message_end" && event.message.role === "assistant") || event.type === "agent_settled") {
             runtime.streaming = null;
@@ -187,6 +216,7 @@ export class WorkspaceSessions {
         }
       });
       runtime.detach = () => { offChanged(); offEvents(); };
+      runtime.releaseHosted = this.hosted?.adapter.attach(session);
       const startupErrors: string[] = [];
       let initializing = true;
       await session.bindExtensions({ mode: "print", shutdownHandler: () => {}, onError: error => {
@@ -196,13 +226,14 @@ export class WorkspaceSessions {
       initializing = false;
       if (startupErrors.length) throw new Error(startupErrors.join("; "));
       this.ensureAvailable();
-      if (old && !old.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+      if (old && (!old.session.isIdle || old.prompts.sending)) throw new Error("Pi 正在运行，请等待当前回复结束");
       if (old) await this.close(old, reason);
       if (this.disposed) throw new Error("工作区服务已关闭");
       this.runtimes.set(session.sessionManager.getSessionId(), runtime);
       candidate = null;
       this.activate(runtime);
     } catch (error) {
+      this.hosted?.adapter.releasePending(manager.getSessionId());
       if (candidate) await this.close(candidate, "quit"); else { bus.clear(); await runtimePaths.release(); }
       throw error;
     }
@@ -214,6 +245,7 @@ export class WorkspaceSessions {
     runtime.waitController.abort();
     runtime.interactions.dispose();
     await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.detach(); runtime.bus.clear(); });
+    runtime.releaseHosted?.();
     await runtime.releasePaths();
   }
   private snapshotOf(runtime: WorkspaceRuntime): SessionView {
@@ -223,9 +255,10 @@ export class WorkspaceSessions {
       schemaVersion: 1, sessionId: session.sessionManager.getSessionId(), cwd,
       name: sessionTitle(session.sessionManager.getSessionName(), messages),
       model: session.model ? `${session.model.provider}/${session.model.id}` : null,
-      thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle,
+      thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle && !runtime.prompts.sending,
       paused: sessionPaused(session.sessionManager.getBranch()),
       promptQueue: { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] },
+      queuedPrompts: runtime.prompts.view(),
       contextUsage: session.getContextUsage() ?? null, messages,
       streaming: runtime.streaming,
       interactions: runtime.interactions.pending(session.sessionManager.getSessionId()),
@@ -253,11 +286,24 @@ export class WorkspaceSessions {
 
   async send(text: string, images: Array<{ type: "image"; data: string; mimeType: string }> = [], correlation?: ErrorCorrelation, delivery?: PromptDelivery): Promise<void> {
     if (this.disposed || !this.session || this.active?.closing) throw new Error("Pi 会话不可用");
+    const runtime = this.active!;
     assertPromptDelivery(this.snapshot(), text, delivery);
+    if (delivery === "followUp" && (!runtime.session.isIdle || runtime.prompts.length > 0)) {
+      runtime.prompts.enqueue(text, images, correlation);
+      this.scheduleQueued(runtime);
+      return;
+    }
+    if (runtime.session.isIdle && runtime.prompts.sending) throw new PromptQueueError("队列正在发送，请稍后重试");
+    await this.prompt(runtime, text, images, correlation, delivery);
+  }
+
+  private async prompt(runtime: WorkspaceRuntime, text: string, images: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): Promise<void> {
+    if (this.disposed || runtime.closing) throw new Error("Pi 会话不可用");
+    this.hosted?.adapter.assertAdmission();
+    assertPromptDelivery({ ...this.snapshotOf(runtime), idle: runtime.session.isIdle }, text, delivery);
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
-    const active = this.session;
-    const runtime = this.active!;
+    const active = runtime.session;
     const starting = active.isIdle;
     if (starting) { runtime.operation = correlation; runtime.agentErrorReported = false; }
     this.telemetry.breadcrumb("send", { ...correlation, piVersion: VERSION });
@@ -277,9 +323,24 @@ export class WorkspaceSessions {
     try { await preflight; } catch (cause) { if (starting) runtime.operation = undefined; throw cause; }
   }
 
+  private queueReady(runtime: WorkspaceRuntime): boolean {
+    return !this.hosted?.adapter.isFrozen && !this.disposed && !runtime.closing && runtime.session.isIdle && !runtime.agentErrorReported
+      && !sessionPaused(runtime.session.sessionManager.getBranch())
+      && runtime.interactions.pending(runtime.session.sessionManager.getSessionId()).length === 0;
+  }
+  private scheduleQueued(runtime: WorkspaceRuntime): void {
+    runtime.prompts.schedule(() => this.queueReady(runtime), (text, images, correlation) => this.prompt(runtime, text, images, correlation));
+  }
+  async updateQueuedPrompt(id: string, revision: number, action: QueuedPromptAction): Promise<void> {
+    const runtime = this.active;
+    if (this.disposed || !runtime || runtime.closing) throw new Error("会话已切换");
+    if (action.kind === "steer" && runtime.session.isIdle) throw new PromptQueueError("当前没有可引导的执行，请先继续或发送任务");
+    await runtime.prompts.update(id, revision, action, (text, images, correlation) => this.prompt(runtime, text, images, correlation, "steer"));
+  }
+
   async stop(): Promise<void> {
     const runtime = this.active;
-    if (!runtime || runtime.session.isIdle) return;
+    if (!runtime || runtime.session.isIdle && !runtime.prompts.sending) return;
     runtime.tools.cancel();
     this.telemetry.breadcrumb("cancel", { ...runtime.operation });
     runtime.session.sessionManager.appendCustomEntry(PAUSED_ENTRY);
@@ -290,6 +351,7 @@ export class WorkspaceSessions {
   async resume(correlation?: ErrorCorrelation): Promise<void> {
     const runtime = this.active;
     if (this.disposed || !runtime || runtime.closing) throw new Error('Pi 会话不可用');
+    this.hosted?.adapter.assertAdmission();
     const session = runtime.session;
     if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
     if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');
@@ -319,7 +381,7 @@ export class WorkspaceSessions {
 
   async setModel(provider: string, id: string): Promise<void> {
     const runtime = this.active;
-    if (this.disposed || !runtime || runtime.closing || !runtime.session.isIdle) throw new Error("Pi 正在运行，请等待当前回复结束");
+    if (this.disposed || !runtime || runtime.closing || !runtime.session.isIdle || runtime.prompts.sending) throw new Error("Pi 正在运行，请等待当前回复结束");
     const model = runtime.session.modelRuntime.getModel(provider, id);
     if (!model) throw new Error("模型不可用");
     await runtime.session.setModel(model);
@@ -328,6 +390,7 @@ export class WorkspaceSessions {
 
   dispose(): Promise<void> {
     this.disposed = true;
+    this.offHosted?.();
     // disposed stops publication immediately, before queued cleanup starts.
     return this.queue.run(async () => {
       const runtimes = [...this.runtimes.values()];

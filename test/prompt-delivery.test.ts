@@ -30,7 +30,14 @@ test("native SDK steering precedes follow-ups, preserves attachments and backgro
   const cwd = join(root, "workspace");
   await mkdir(cwd); await writeFile(join(cwd, "input.txt"), "tool context");
   const snapshots: SessionView[] = [];
-  const host = new WorkspaceSessions(event => { if (event.type === "snapshot") snapshots.push(event.session); }, () => undefined);
+  let whenDrained: (() => void) | undefined;
+  const host = new WorkspaceSessions(event => {
+    if (event.type === "snapshot") {
+      snapshots.push(event.session);
+      if (event.session.idle && event.session.queuedPrompts?.length === 0) whenDrained?.();
+    }
+  }, () => undefined);
+  const drain = () => new Promise<void>(resolve => { whenDrained = resolve; });
   try {
     await host.open(cwd, "new");
     const session = host.session!;
@@ -59,14 +66,23 @@ test("native SDK steering precedes follow-ups, preserves attachments and backgro
     await host.send("Later one", [], undefined, "followUp");
     await host.send("Guide now", [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }], undefined, "steer");
     await host.send("Later two", [], undefined, "followUp");
-    assert.deepEqual(host.snapshot().promptQueue, { steering: ["Guide now"], followUp: ["Later one", "Later two"] });
+    assert.deepEqual(host.snapshot().promptQueue, { steering: ["Guide now"], followUp: [] });
+    assert.deepEqual(host.snapshot().queuedPrompts?.map(item => item.text), ["Later one", "Later two"]);
+    const originalRow = host.snapshot().queuedPrompts![0]!;
+    await host.updateQueuedPrompt(originalRow.id, originalRow.revision, { kind: "edit", text: "Later one edited" });
+    await assert.rejects(host.updateQueuedPrompt(originalRow.id, originalRow.revision, { kind: "remove" }), /已变化/);
+    const deleteRow = host.snapshot().queuedPrompts![1]!;
+    await host.updateQueuedPrompt(deleteRow.id, deleteRow.revision, { kind: "remove" });
+    await host.send("Later two", [], undefined, "followUp");
+    assert.notEqual(host.snapshot().queuedPrompts![1]!.id, deleteRow.id);
     assert.equal(host.snapshot().messages.filter(message => message.role === "user").length, 1, "queued prompts are not transcript echoes");
     assert.ok(snapshots.some(snapshot => snapshot.promptQueue?.steering[0] === "Guide now"), "queue updates stream immediately");
     await host.open(cwd, "new");
     assert.deepEqual(host.snapshot().promptQueue, { steering: [], followUp: [] });
+    await assert.rejects(host.updateQueuedPrompt(originalRow.id, originalRow.revision + 1, { kind: "remove" }), /已变化/);
     await host.open(cwd, { sessionId: id });
-    assert.deepEqual(host.snapshot().promptQueue?.followUp, ["Later one", "Later two"]);
-    finishFirst(); await session.waitForIdle();
+    assert.deepEqual(host.snapshot().queuedPrompts?.map(item => item.text), ["Later one edited", "Later two"]);
+    const completed = drain(); finishFirst(); await completed;
     assert.equal(requests.length, 4);
     assert.match(requests[1]!, /Guide now/);
     assert.doesNotMatch(requests[1]!, /Later one/);
@@ -86,9 +102,11 @@ test("native SDK steering precedes follow-ups, preserves attachments and backgro
     await host.send("Work after resume", [], undefined, "followUp");
     await host.stop();
     assert.equal(host.snapshot().paused, true);
-    assert.deepEqual(host.snapshot().promptQueue?.followUp, ["Work after resume"], "pause retains native pending prompts without silently executing them");
+    assert.deepEqual(host.snapshot().queuedPrompts?.map(item => item.text), ["Work after resume"], "pause retains pending prompts without silently executing them");
+    const pausedRow = host.snapshot().queuedPrompts![0]!;
+    await assert.rejects(host.updateQueuedPrompt(pausedRow.id, pausedRow.revision, { kind: "steer" }), /没有可引导/);
     session.agent.streamFunction = automaticStream;
-    await host.resume(); await session.waitForIdle();
+    const resumed = drain(); await host.resume(); await resumed;
     assert.deepEqual(host.snapshot().promptQueue, { steering: [], followUp: [] });
     assert.equal(host.snapshot().paused, false);
   } finally {

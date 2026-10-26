@@ -4,6 +4,12 @@
   "type": "module",
   "piWebappDesktopProtocol": 1,
   "piWebappDataVersion": 1,
+  "piWebappHostedRuntime": {
+    "protocol": 2,
+    "runtimeProtocol": 1,
+    "pairJournal": 1,
+    "capabilities": ["state", "workspace", "legacy", "panels", "messages"]
+  },
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
   "repository": {
     "type": "git",
@@ -39,6 +45,8 @@
     "docs/sentry-triage.md",
     "docs/desktop.md",
     "docs/desktop-testing.md",
+    "docs/diagrams.md",
+    "docs/hosted-*.md",
     "scripts/prepare-terminal.mjs"
   ],
   "scripts": {
@@ -75,7 +83,7 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@chengzhiyi/pi-web-protocol": "0.1.0",
+    "@chengzhiyi/pi-web-protocol": "0.1.1",
     "@earendil-works/pi-ai": "1.3.0",
     "@earendil-works/pi-coding-agent": "1.3.0",
     "@playwright/test": "1.63.0",

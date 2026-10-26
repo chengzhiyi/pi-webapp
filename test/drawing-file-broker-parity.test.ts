@@ -1,0 +1,32 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp,mkdir,readFile,writeFile,symlink,rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
+
+test("migrated workspace IO keeps original file regression boundaries: locks, bounded reads, no-replace race, links and hashes",async t=>{
+ const root=await mkdtemp(join(tmpdir(),"drawing-file-broker-"));t.after(()=>rm(root,{recursive:true,force:true}));
+ const cwd=join(root,"workspace");await mkdir(cwd);const broker=new HostedStateBroker(join(root,"state"),"fixture");
+ await broker.activate(0,{version:"1.0.0",schema:1,stateRef:randomUUID(),enabled:true});
+ const call=(method:string,input:unknown)=>broker.call({requestId:randomUUID(),generation:1,scope:{cwd,sessionId:"session",workspaceId:"workspace"},kind:"action",action:"save",input:{}},method,input);
+ const save=(path:string,text="native-scene",expectedHash:string|null=null)=>call("workspace.commit",{path,text,expectedHash}) as Promise<{hash:string}>;
+ const read=(path:string)=>call("workspace.read",{path,maxBytes:512*1024}) as Promise<{text:string;hash:string}>;
+ await assert.rejects(save("missing-parent/a.excalidraw"));
+ await mkdir(join(cwd,"图稿"));
+ const a=await save("图稿/a.excalidraw");assert.equal((await read("图稿/a.excalidraw")).hash,a.hash);
+ await assert.rejects(save("图稿/a.excalidraw"));
+ const b=await save("图稿/a.excalidraw","next-native-scene",a.hash);assert.notEqual(a.hash,b.hash);
+ await writeFile(join(cwd,"图稿/a.excalidraw"),"external");await assert.rejects(save("图稿/a.excalidraw","stale",b.hash));
+ assert.equal((await read("图稿/a.excalidraw")).text,"external");
+ for(const path of ["../escape.excalidraw","/tmp/escape.excalidraw","C:\\escape.excalidraw","script.js"])await assert.rejects(save(path));
+ await symlink(join(cwd,"图稿"),join(cwd,"alias"));await assert.rejects(save("alias/b.excalidraw"));
+ await symlink(join(cwd,"图稿/a.excalidraw"),join(cwd,"link.excalidraw"));await assert.rejects(read("link.excalidraw"));
+ await mkdir(join(cwd,"dir.excalidraw"));await assert.rejects(read("dir.excalidraw"));
+ await writeFile(join(cwd,"big.excalidraw"),Buffer.alloc(513*1024));await assert.rejects(read("big.excalidraw"));
+ await assert.rejects(save("large.excalidraw","x".repeat(513*1024)));
+ await writeFile(join(cwd,"图稿/a.excalidraw.lock"),"live owner");await assert.rejects(save("图稿/a.excalidraw","no stealing",(await read("图稿/a.excalidraw")).hash));
+ assert.equal(await readFile(join(cwd,"图稿/a.excalidraw.lock"),"utf8"),"live owner");
+ const race=await Promise.allSettled([save("race.excalidraw","first"),save("race.excalidraw","second")]);assert.equal(race.filter(r=>r.status==="fulfilled").length,1);
+});

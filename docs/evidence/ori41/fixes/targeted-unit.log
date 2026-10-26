@@ -1,0 +1,16 @@
+✔ drawing relay accepts only bounded local drawing blobs and safe filenames (8.066625ms)
+✔ committed frozen view closes once without a forbidden old-generation change (16.499083ms)
+✔ explicit retry replays a lost freeze ACK and restores the retained realm without repeating freeze (8.137958ms)
+✔ destroyed/dirty realm cannot fabricate a freeze ack or a clean close through aggregate transport (2.398833ms)
+✔ aggregate route authenticates each capability, isolates failures, never holds idle sockets or admits writes (1.6135ms)
+✔ poller batches 130 views fairly in 64-member chunks, one request at a time, with idle cadence and no empty polling (153.836917ms)
+✔ one stale capability stops only its reader; network failure stops the remaining readers without implicit retries (72.44175ms)
+✔ late aggregate reply cannot operate on an unmounted view (25.671958ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 355.985375
