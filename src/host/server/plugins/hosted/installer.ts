@@ -7,7 +7,7 @@ import { HostedPluginError, isMissing } from "./errors.ts";
 import { compatibleRelease, officialPlugin, OFFICIAL_PLUGINS, selectRelease, type OfficialPlugin, type RegistryRelease } from "./official-catalog.ts";
 import { sha256, validateHostedPackage, type HostedPackage } from "./resources.ts";
 import { atomicJson, boundedRead, privateDirectory, readJson, readJournal, withStorageLock } from "./storage.ts";
-import { satisfiesHost, stableVersion } from "./versions.ts";
+import { hostVersion, satisfiesHost, stableVersion } from "./versions.ts";
 
 export interface InstalledHostedVersion { version: string; digest: string; integrity: string; directory: string; installedAt: string }
 interface InstallationIndex { schema: 1; revision: number; versions: Record<string, InstalledHostedVersion[]> }
@@ -32,7 +32,7 @@ export class HostedPluginInstaller {
   readonly catalog: readonly OfficialPlugin[];
   private readonly fetcher: typeof globalThis.fetch;
   constructor(options: InstallerOptions) {
-    if (!stableVersion(options.hostVersion)) throw new HostedPluginError("invalid_version", "Host requires an exact stable version");
+    if (!hostVersion(options.hostVersion)) throw new HostedPluginError("invalid_version", "Host requires an exact stable or alpha.N version");
     this.root = options.root; this.hostVersion = options.hostVersion; this.catalog = options.catalog ?? OFFICIAL_PLUGINS; this.fetcher = options.fetch ?? globalThis.fetch;
   }
   private async index(): Promise<InstallationIndex> {

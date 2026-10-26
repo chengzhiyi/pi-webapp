@@ -55,6 +55,8 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm test
+      - name: Verify rewritten alpha host in an isolated release candidate
+        run: node scripts/test-release-host.mjs
 
   browser:
     strategy:

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/installer.ts";
+import { archiveMembers } from "../src/host/server/plugins/hosted/archive.ts";
+import { satisfiesHost } from "../src/host/server/plugins/hosted/versions.ts";
 import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import piWeb from "../src/host/server/bootstrap/pi-host.ts";
 import { closeAgentSession } from "../src/host/server/sessions/lifecycle.ts";
@@ -16,6 +18,7 @@ test("actual pi-host defaults to offline hosted coordinator without builtin draw
   let url = "";
   const loader = new DefaultResourceLoader({ cwd, agentDir: join(cwd, "agent"), noExtensions: true, noSkills: true, noPromptTemplates: true, extensionFactories: [api => piWeb(api, async address => { url = address; return false; })] });
   await loader.reload();
+  assert.deepEqual(loader.getExtensions().errors, [], "extension factory must initialize before session binding");
   const { session } = await createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resourceLoader: loader });
   const errors: string[] = [];
   try {
@@ -23,11 +26,19 @@ test("actual pi-host defaults to offline hosted coordinator without builtin draw
     assert.deepEqual(errors, []);
     assert.ok(!session.getAllTools().some(tool => tool.name === "diagram_read"));
     const marker = JSON.parse(await readFile(join(cwd, "agent/pi-web/hosted/host-version.json"), "utf8"));
-    assert.equal(marker.version, "0.1.29");
-    await t.test("actual bootstrap sends a hot hosted event, not the legacy page-reload event", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async () => {
+    const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    assert.equal(marker.version, pkg.version, "persist the exact published host identity, including alpha suffix");
+    await t.test("published fixture is denied when incompatible, otherwise bootstrap sends a hot hosted event", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async () => {
       const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
       const installer = new HostedPluginInstaller({ root: join(cwd, "agent/pi-web/hosted/packages"), hostVersion: marker.version });
-      await installer.installArchive("@chengzhiyi/pi-excalidraw", bytes, "sha512-" + createHash("sha512").update(bytes).digest("base64"), "0.1.0");
+      const manifest = JSON.parse(archiveMembers(bytes).find(member => member.path === "package.json")!.data.toString("utf8"));
+      const install = () => installer.installArchive("@chengzhiyi/pi-excalidraw", bytes, "sha512-" + createHash("sha512").update(bytes).digest("base64"), "0.1.0");
+      if (!satisfiesHost(marker.version, manifest.piWebapp.hostRange)) {
+        await assert.rejects(install(), (error: unknown) => (error as { code?: string }).code === "incompatible_plugin");
+        assert.deepEqual((await installer.inventory()).versions, {}, "incompatible published plugin must remain uninstalled");
+        return;
+      }
+      await install();
       await session.prompt("/web"); assert.ok(url);
       const address = new URL(url), headers = { Authorization: "Bearer " + address.hash.slice(1), Origin: address.origin, "Content-Type": "application/json" };
       const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), 20_000);
