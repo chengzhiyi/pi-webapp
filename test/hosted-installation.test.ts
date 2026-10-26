@@ -54,6 +54,26 @@ test("bounded stable version selection rejects incompatible latest/prerelease an
   assert.throws(() => selectRelease(metadata, OFFICIAL_PLUGINS[0]!, "0.1.29", "0.2.0", "0.1.0"), code("no_compatible_version"));
 });
 
+test("alpha hosts retain prerelease precedence while plugin selection stays stable-only", async t => {
+  const root = await temporary(t), hostVersion = "0.1.31-alpha.5", f = fixture();
+  const installer = new HostedPluginInstaller({ root, hostVersion });
+  assert.equal(installer.hostVersion, hostVersion, "Keep the exact release identity, never coerce to stable");
+  for (const range of [">=0.1.0 <1.0.0", "^0.1.20", "~0.1.0", "<0.1.31"]) assert.equal(satisfiesHost(hostVersion, range), true, range);
+  for (const range of [">=0.1.31", "0.1.31", "^0.1.31", ">=1.0.0", "*", ">=0.1.0 || *"]) assert.equal(satisfiesHost(hostVersion, range), false, range);
+  for (const invalid of ["0.1.31-alpha.05", "0.1.31-alpha", "0.1.31-beta.1", "0.1.31-alpha.1+build", "v0.1.31", "latest", "0.1.31\n"]) {
+    assert.throws(() => new HostedPluginInstaller({ root, hostVersion: invalid }), code("invalid_version"));
+    assert.equal(satisfiesHost(invalid, ">=0.1.0 <1.0.0"), false, invalid);
+  }
+  const metadata = { versions: { "0.1.0": f.release, "0.2.0-alpha.1": fixture("0.2.0-alpha.1").release } };
+  assert.equal(selectRelease(metadata, OFFICIAL_PLUGINS[0]!, hostVersion).version, "0.1.0");
+  await installer.installArchive(id, f.bytes, sri(f.bytes), "0.1.0");
+  assert.equal((await new HostedPluginInstaller({ root, hostVersion }).load(id, "0.1.0")).version, "0.1.0");
+  await assert.rejects(installer.check(id, undefined, "0.2.0-alpha.1"), code("invalid_version"));
+  const incompatible = fixture("0.2.0"); incompatible.entries[0]!.content = incompatible.entries[0]!.content!.replace(">=0.1.0 <1.0.0", ">=0.1.31");
+  const bytes = tar(incompatible.entries);
+  await assert.rejects(installer.installArchive(id, bytes, sri(bytes), "0.2.0"), code("incompatible_plugin"));
+});
+
 test("host coordination preserves absent/disabled/pinned intent, offline compatible code and no downgrades", () => {
   const base = {installed:true,enabled:false,policy:"automatic" as const,currentCompatible:true,currentVersion:"0.1.0",recommendedVersion:"0.2.0",networkAvailable:true};
   assert.deepEqual(hostUpdateDecision(base), {action:"update",enabled:false});

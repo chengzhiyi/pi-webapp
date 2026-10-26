@@ -23,7 +23,8 @@ test("actual pi-host defaults to offline hosted coordinator without builtin draw
     assert.deepEqual(errors, []);
     assert.ok(!session.getAllTools().some(tool => tool.name === "diagram_read"));
     const marker = JSON.parse(await readFile(join(cwd, "agent/pi-web/hosted/host-version.json"), "utf8"));
-    assert.equal(marker.version, "0.1.29");
+    const hostPackage = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    assert.equal(marker.version, hostPackage.version, "Persist the actual release identity, including alpha suffix");
     await t.test("actual bootstrap sends a hot hosted event, not the legacy page-reload event", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async () => {
       const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
       const installer = new HostedPluginInstaller({ root: join(cwd, "agent/pi-web/hosted/packages"), hostVersion: marker.version });

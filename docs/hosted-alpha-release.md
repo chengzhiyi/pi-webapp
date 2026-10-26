@@ -4,6 +4,22 @@ This integrates the previously accepted optional official Excalidraw plugin runt
 with alpha's conversation activity feedback. The official editor is independently
 published as `@chengzhiyi/pi-excalidraw@0.1.1`; it is not a host dependency.
 
+## Host channel compatibility
+
+The host accepts exact stable versions and the launcher's exact `X.Y.Z-alpha.N`
+channel. The original version is retained in update journals and diagnostics.
+Alpha hosts explicitly participate in the supported host-range grammar using full
+SemVer precedence, not a stripped stable core: `0.1.31-alpha.5` satisfies
+`>=0.1.0 <1.0.0`, but **not** `>=0.1.31` or exact `0.1.31`. Caret/tilde
+upper bounds also exclude the next core's prereleases. Unsupported channels,
+malformed versions and unsupported range syntax fail closed. Plugin package
+selection and installation remain **stable-only**, with unchanged SRI, capability,
+resource, state and lifecycle checks.
+
+PR core verification boots the actual host with a temporary alpha identity and
+restores `package.json` exactly afterwards. This catches release-only bootstrap
+regressions before the separate publication job allocates its actual version.
+
 ## Distribution gates
 
 - Host development now pins the published `@chengzhiyi/pi-web-protocol@0.1.1`

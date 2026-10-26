@@ -55,6 +55,13 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm test
+      - name: Verify actual bootstrap with an alpha host identity
+        run: |
+          original=$(mktemp)
+          cp package.json "$original"
+          trap 'cp "$original" package.json; rm -f "$original"' EXIT
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); p.version="0.1.31-alpha.5"; fs.writeFileSync("package.json", JSON.stringify(p,null,2)+"\n");'
+          node --import ./test/setup-env.mjs --experimental-strip-types --test test/auto-open.test.ts test/extension-flow.test.ts test/hosted-bootstrap.test.ts
 
   browser:
     strategy:
