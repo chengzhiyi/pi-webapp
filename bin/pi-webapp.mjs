@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
 import { npmCommand } from "./npm-command.mjs";
+import { packagePiCli } from "./package-pi-cli.mjs";
 import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
@@ -366,13 +367,14 @@ async function start(args) {
   if (!nodeVersion || !compatible(nodeVersion, [22, 19, 0])) throw new Error("需要 Node.js 22.19 或更新版本。");
   if (!existsSync(extension)) throw new Error("找不到构建后的扩展。请先运行 npm run build。");
   if (args.some((arg) => ["--mode", "--print", "-p"].includes(arg))) throw new Error("后台启动不支持覆盖 Pi 的运行模式");
-  const pi = process.env.PI_WEBAPP_PI_CLI ? process.execPath : probe("pi") ?? installPi();
+  const piCli = await packagePiCli(dirname(dirname(launcher))) ?? process.env.PI_WEBAPP_PI_CLI;
+  const pi = piCli ? process.execPath : probe("pi") ?? installPi();
   await mkdir(dirname(statePath), { recursive: true });
   const logFd = openSync(logPath, "a", 0o600);
   let worker;
   try {
     worker = spawnNode(process.execPath, [launcher, "__serve", pi, ...args], {
-      detached: true, cwd: process.cwd(), env: process.env, stdio: ["ignore", logFd, logFd, "ipc"],
+      detached: true, cwd: process.cwd(), env: { ...process.env, ...(piCli ? { PI_WEBAPP_PI_CLI: piCli } : {}) }, stdio: ["ignore", logFd, logFd, "ipc"],
     });
   } finally { closeSync(logFd); }
   let ready;
