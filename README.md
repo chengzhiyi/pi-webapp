@@ -61,7 +61,7 @@ Requires **Node.js 22.19+** and npm. Run in your project directory:
 npx pi-webapp
 ```
 
-The launcher starts Pi in the background and opens your browser on a local graphical desktop. If Pi is missing, it installs the official `@earendil-works/pi-coding-agent` package. An existing Pi installation must be **0.87.1+**; older installations are not replaced automatically. Running the command again reopens the existing service. Headless sessions print the local address instead; `PI_WEBAPP_AUTO_OPEN=0` disables automatic opening.
+The launcher starts the npm package's exactly pinned, verified Pi SDK (currently **1.3.0**) in the background and opens your browser on a local graphical desktop. It neither uses nor replaces global Pi, so a global upgrade cannot silently change the business package's runtime. Running the command again reopens the existing service. Headless sessions print the local address instead; `PI_WEBAPP_AUTO_OPEN=0` disables automatic opening.
 
 1. Open **Settings → Models** to configure a provider and choose a model you have access to.
 2. Select or add a workspace, then start a conversation.

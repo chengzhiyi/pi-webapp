@@ -9,6 +9,9 @@ Finish or explicitly pause work in **all** chats and terminals before updating, 
 - Both npx and global-command launches are supported; later launches select the managed release.
 - This **does not modify the npm global installation**. The global package version may differ from the running version; check runtime information in Settings.
 - If the new version cannot start, the launcher attempts to restore the previous service. This does not guarantee recovery of active work.
+- New npm packages exactly pin the verified Pi SDK pair (currently 1.3.0); their launcher uses the package-local CLI, not global Pi. Desktop updates also retain their verified SDK pair.
+
+**Known 0.1.30 → 0.1.31-alpha.5 failure:** alpha.5's wildcard peers can install SDK 1.4.0, but the hosted adapter only admits verified SDK 1.3.0. The log reads `Hosted agent adapter requires verified SDK 1.3.0, got 1.4.0`. This is not slow loading: retrying that release or waiting longer does not help. Wait for a subsequent release containing the exact SDK dependency fix, then check for updates again. Do not delete sessions, modify managed directories, or downgrade global Pi.
 
 ### Update preference: stable / preview
 

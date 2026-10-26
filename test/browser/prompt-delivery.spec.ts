@@ -140,7 +140,10 @@ for (const width of [1440, 390, 320]) test(`DSH send → queue → edit/delete/s
     await page.screenshot({ path: testInfo.outputPath(`prompt-queue-edit-${width}.png`) });
     await inline.press("Enter");
     await expect(edit("Final queued task")).toBeFocused();
-    await editor.fill("/new"); await expect(send).toBeDisabled(); await expect(pause).toBeEnabled(); await editor.fill("");
+    await editor.fill("/new"); await expect(send).toBeDisabled(); await expect(pause).toBeEnabled();
+    // Exercise Lexical's real deletion path. fill("") uses execCommand and can
+    // race its pending selection/decorations instead of dispatching a key edit.
+    await editor.press("ControlOrMeta+A"); await editor.press("Backspace");
     await expect(editor).toHaveText("");
     // Stop keeps the editable queue; Continue drains it after the original work.
     await pause.click();
