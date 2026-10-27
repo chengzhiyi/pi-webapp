@@ -819,6 +819,22 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     description: "Open the current Pi session in a local web interface",
     handler: async (_args, ctx) => openWeb(ctx),
   });
+  // Launcher-only lifecycle handshake: EOF is not a successful flush receipt.
+  // A failure must reach the RPC caller before it decides whether to close stdin.
+  pi.registerCommand("web-prepare-stop", {
+    description: "Save hosted plugin views and release runtime ownership before stopping",
+    handler: async (args, ctx) => {
+      if (!/^prepare-stop-[a-f0-9-]{36}$/.test(args)) throw new Error("Launcher stop receipt ID required");
+      // Pi reports a successful prompt response even when an extension command
+      // throws. Send a separate, request-bound receipt instead of trusting it.
+      try {
+        await shared.hosted?.shutdown();
+        ctx.ui.notify(`pi-webapp-stop: ${JSON.stringify({ id: args, ok: true })}`, "info");
+      } catch {
+        ctx.ui.notify(`pi-webapp-stop: ${JSON.stringify({ id: args, ok: false })}`, "warning");
+      }
+    },
+  });
   pi.registerCommand("web-dev-reload", {
     description: "Reload local pi-webapp plugins during development",
     handler: async (_args, ctx) => {
