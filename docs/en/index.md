@@ -18,4 +18,4 @@ Start with [installation and a first conversation](./getting-started). Already r
 
 - Chats run independently; switching chats is not stopping them.
 - Terminals and the agent use your system permissions, not a sandbox. Git changes belong to a shared worktree.
-- Local URLs contain access tokens: do not share them. Sentry error reporting is on by default and can be disabled. See [security and privacy](./security).
+- Local URLs contain access tokens: do not share them. Sentry error reporting is off by default and requires an explicit opt-in. See [security and privacy](./security).

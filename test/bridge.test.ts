@@ -127,7 +127,7 @@ test('resume is an authenticated control action that never calls the user-messag
 
 test("telemetry config is authenticated; unexpected request errors preserve status and carry correlated Sentry IDs", async () => {
   const events: Event[] = [];
-  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   });
   const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() { throw new Error("send failed token=private"); }, abort() {}, async newSession() {} }, webRoot, telemetry);
@@ -156,7 +156,7 @@ test("telemetry config is authenticated; unexpected request errors preserve stat
 
 test("directory validation returns validation_error without Sentry events; filesystem failures remain reported", async () => {
   const events: Event[] = [];
-  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   });
   const directory = await mkdtemp(join(tmpdir(), "pi-directory-validation-"));
@@ -191,7 +191,7 @@ test("directory validation returns validation_error without Sentry events; files
 
 test("plugin execution errors never upload unquoted user input", async () => {
   const events: Event[] = [];
-  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   });
   const bridge = await startBridge({ ...capabilities, snapshot: fixture, send() {}, abort() {}, async newSession() {},

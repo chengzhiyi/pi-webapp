@@ -1,20 +1,20 @@
 # Sentry error collection
 
-Browser and extension error reporting are enabled by default with this built-in public DSN:
+**Browser and extension error reporting are disabled by default.** No reporting SDK is loaded and no Sentry events are sent unless `PI_WEB_SENTRY_ENABLED=true` is explicitly set. A DSN alone does not enable reporting, including an inherited DSN override. Opting in uses this built-in public DSN unless overridden:
 
 ```text
 https://070c0b7c5ac18d940c294e63ecfa0793@o4506663318716416.ingest.us.sentry.io/4512191040716800
 ```
 
-Start Pi and run `/web`; no environment configuration is needed. To override the default destination, set `PI_WEB_SENTRY_DSN` in the **Pi process environment**. Pi does not automatically read `.env`; `.env.example` is a configuration reference.
+Normal startup needs no telemetry configuration. To intentionally opt in, set `PI_WEB_SENTRY_ENABLED=true` in the **Pi process environment** and optionally override `PI_WEB_SENTRY_DSN`. Pi does not automatically read `.env`; `.env.example` is a configuration reference. Previously configured `PI_WEB_SENTRY_ENABLED=true` remains an explicit opt-in; remove it or set it to `false` to stop reporting.
 
 ```sh
-PI_WEB_SENTRY_DSN='https://PUBLIC_KEY@o123.ingest.sentry.io/123' pi
+PI_WEB_SENTRY_ENABLED=true PI_WEB_SENTRY_DSN='https://PUBLIC_KEY@o123.ingest.sentry.io/123' pi
 ```
 
 Replace the example with your project's public DSN. `PI_WEB_SENTRY_BROWSER_DSN` and `PI_WEB_SENTRY_NODE_DSN` override the common destination; an explicitly empty override disables that side. An explicitly empty common DSN disables both sides unless a per-side DSN overrides it. Use `PI_WEB_SENTRY_ENABLED=false` to disable both regardless of DSN overrides; disabled SDKs are not loaded and no events are sent. `PI_WEB_SENTRY_ENVIRONMENT` defaults to `production`. Restart Pi after changing runtime configuration. The host's `SENTRY_DSN` is deliberately ignored.
 
-## What is collected
+## What is collected when explicitly enabled
 
 - Browser errors, unhandled rejections, React render failures, HTTP/response parsing failures, invalid NDJSON/protocol events and unexpected connection failures.
 - Extension request/workspace/configuration failures, asynchronous Agent and tool failures, and provider-login failures. Fatal exceptions attributable to this extension are best effort; process exit can prevent delivery.
@@ -69,7 +69,9 @@ Request failures and asynchronous error events include additive `errorId`, `requ
 
 `npm run build` produces matching browser/extension release IDs and debug IDs. It archives bundles/maps in `.sentry-artifacts/<buildId>/` and removes `.map` files from `web/dist` and `dist`. Archive directories are git-ignored and excluded from the npm package. These private files contain application source; store them as access-controlled CI artifacts. Ordinary local builds do not upload or contact Sentry.
 
-For an upload-required release build, provide these **CI-only** variables:
+The current publishing workflow uses an offline, disabled-by-default release mode. It retains TypeScript/tests, private local maps, exact package comparison, release-channel/SHA checks and hash-bound verification receipts. It verifies the packaged Node default is disabled and serves the packaged browser to confirm no reporting SDK or external requests, including after synthetic errors. No Sentry upload, event ingestion or Sentry credentials are required, and no event IDs are fabricated. This does **not** claim live source-map symbolication has been verified for the release. User opt-in reporting is best effort; restoring upload/live verification requires a deliberate workflow change.
+
+For an **optional** upload-required build, provide these **CI-only** variables:
 
 ```sh
 export SENTRY_AUTH_TOKEN='YOUR_CI_TOKEN'
@@ -78,11 +80,11 @@ export SENTRY_PROJECT='YOUR_PROJECT'
 npm run build:sentry
 ```
 
-Use `SENTRY_BROWSER_PROJECT` / `SENTRY_NODE_PROJECT` for separate projects. The upload-required command fails on missing credentials or upload failure, and still removes maps from public output. Do not publish after a failed command. Auth tokens are never part of runtime configuration. The ordinary npm `prepack` rebuilds locally without uploading; use `npm pack --ignore-scripts` or `npm publish --ignore-scripts` only after checks and a successful `build:sentry` to package the exact uploaded artifacts.
+Use `SENTRY_BROWSER_PROJECT` / `SENTRY_NODE_PROJECT` for separate projects. The upload-required command fails on missing credentials or upload failure, and still removes maps from public output. Do not publish after a failed command. Auth tokens are never part of runtime configuration. The ordinary npm `prepack` rebuilds locally without uploading; use `npm pack --ignore-scripts` or `npm publish --ignore-scripts` only after checks and the appropriate local/offline or upload/live verification to package the exact checked artifacts.
 
-### Required Actions configuration
+### Optional live-verification configuration
 
-The publishing workflow now fails closed until both credentials exist:
+The current disabled release does not use these credentials. The optional `build:sentry` / `verify:sentry` path fails closed until both credentials exist:
 
 - Repository secret `SENTRY_AUTH_TOKEN`: source-map upload and release permissions.
 - Repository secret `SENTRY_VERIFY_AUTH_TOKEN`: event/project read permission (`project:read` or equivalent).
@@ -99,8 +101,10 @@ After the uploaded build, run:
 mkdir -p .ci/release
 npm pack --ignore-scripts --json --pack-destination .ci/release > .ci/release/pack.json
 npm run verify:package -- --pack-manifest .ci/release/pack.json
-# Requires SENTRY_VERIFY_AUTH_TOKEN, SENTRY_ORG and the destination project(s).
-npm run verify:sentry -- --pack-manifest .ci/release/pack.json
+# Current release: no Sentry network/credentials; verify disabled Node/browser defaults.
+node scripts/verify-sentry-release.mjs --telemetry-disabled --pack-manifest .ci/release/pack.json
+# Optional live mode instead: requires uploaded artifacts and Sentry credentials.
+# npm run verify:sentry -- --pack-manifest .ci/release/pack.json
 node scripts/publish-verified-release.mjs
 ```
 
@@ -108,7 +112,7 @@ node scripts/publish-verified-release.mjs
 
 `verify:sentry` first checks credentials and the package, then invokes the packaged Node verification entry and serves the packaged browser assets on loopback with synthetic configuration. It sends only synthetic events to the configured Sentry DSNs with `environment=sentry-verification`; normal imports and normal browser environments do not run these probes. The Node entry requires `PI_WEB_SENTRY_VERIFY_RELEASE=true` and the verification environment; the browser requires a verification-configured server and the explicit `sentry_release_probe=1` URL flag. The CLI sets up these guards itself.
 
-The verifier waits at most 120 seconds for the real events, checks release/build/side/Debug IDs, and requires original application frames to resolve to TypeScript. The synthetic exception must resolve to the exact source file and line recorded in the archived map. Browser maps give application sources stable `app:///src/` and `app:///web/src/` paths before upload. Unmapped external SDK dependencies do not invalidate resolved application frames. A successful run writes `.ci/release/verified.json` with event IDs and the tarball SHA-256. The publisher verifies that receipt and hash before publishing that tarball with lifecycle scripts disabled. Missing credentials, failed uploads, mismatched package assets, unmapped application frames, missing receipts, or changed tarballs block publication. Version synchronization to main occurs only after these checks succeed.
+The verifier waits at most 120 seconds for the real events, checks release/build/side/Debug IDs, and requires original application frames to resolve to TypeScript. The synthetic exception must resolve to the exact source file and line recorded in the archived map. Browser maps give application sources stable `app:///src/` and `app:///web/src/` paths before upload. Unmapped external SDK dependencies do not invalidate resolved application frames. A successful run writes `.ci/release/verified.json` with event IDs and the tarball SHA-256. The publisher verifies the receipt's explicit mode and tarball hash before publishing with lifecycle scripts disabled. Live mode requires real-format Node/browser event IDs; disabled mode requires successful Node/browser disabled checks and forbids event IDs. Missing receipts, unknown modes, failed checks or changed tarballs block publication. Missing credentials, failed uploads and unmapped frames additionally block the optional live path. Release versions are chosen for the artifact only; there is no version-only main commit.
 
 For mapping failures, use Sentry's event source-map debugger or its `source-map-debug` API, and inspect matching Debug IDs for application bundles. Old tool-result events without original stacks remain limited even after source maps are uploaded.
 

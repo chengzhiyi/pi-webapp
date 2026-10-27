@@ -47,7 +47,7 @@ Inspect npm's file list: docs dependencies, guides, config, tests, cache, and bu
 | src/plugins/builtin; README; docs/architecture.md | workspace-tools | Scope, shared-worktree write constraints, and terminal permissions stay explicit |
 | src/host/client/PiSettings.tsx, PiProviderSettings.tsx; docs/web-plugins.md | configuration | Sidebar Plugins, not Settings; package installation is not a runtime toggle |
 | docs/desktop.md, docs/desktop-testing.md | desktop | Bilingual user summaries; detailed/operator source remains linked, not duplicated wholesale |
-| docs/sentry.md and runtime config | security, reference | Default opt-out must stay visible; operator upload/triage details remain in GitHub |
+| docs/sentry.md and runtime config | security, reference | Default-off and explicit opt-in must stay visible; operator upload/triage details remain in GitHub |
 | docs/architecture.md, web-plugins.md, sentry-triage.md, decisions/, spec.md | resources | Existing paths/anchors preserved, excluded from site build/search |
 | Upstream Pi 0.87.1 CLI/package docs | updates | `pi update npm:pi-webapp` targets the extension; bare `pi update` updates Pi itself |
 

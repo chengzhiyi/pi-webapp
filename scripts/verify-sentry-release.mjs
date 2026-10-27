@@ -6,14 +6,16 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 import { buildInfo, root } from "./build-config.mjs";
 import { sha256, verifyPackageArtifacts, verifyResolvedEvent, releaseProbeLocation } from "./sentry-release.mjs";
+import { verifyDisabledTelemetry } from "./verify-disabled-telemetry.mjs";
 
 const args = process.argv.slice(2);
 const live = args.includes("--live");
+const disabled = args.includes("--telemetry-disabled");
 const option = name => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
 let temporary;
 
 async function run() {
-  if (!live && !args.includes("--package-only")) throw new Error("Choose --package-only or --live explicitly");
+  if ([live, disabled, args.includes("--package-only")].filter(Boolean).length !== 1) throw new Error("Choose exactly one of --package-only, --live or --telemetry-disabled");
   const token = process.env.SENTRY_VERIFY_AUTH_TOKEN;
   const org = process.env.SENTRY_ORG;
   const project = side => process.env[`SENTRY_${side.toUpperCase()}_PROJECT`] || process.env.SENTRY_PROJECT;
@@ -41,12 +43,19 @@ async function run() {
   const expected = await verifyPackageArtifacts(packageRoot, archiveRoot);
   const digest = sha256(await readFile(tarball));
   console.log(`Verified package ${expected.release}; sha256=${digest}`);
+  if (disabled) {
+    await verifyDisabledTelemetry(packageRoot, expected, chromium);
+    await writeFile(join(dirname(tarball), "verified.json"), JSON.stringify({ filename: basename(tarball), sha256: digest, release: expected.release, buildId: expected.buildId, telemetryMode: "disabled-by-default", nodeDisabled: true, browserDisabled: true }, null, 2));
+    console.log(`Verified disabled-by-default Node/browser telemetry for ${expected.release}; no Sentry events sent`);
+    return;
+  }
   if (!live) return;
   const locations = {
     node: releaseProbeLocation(JSON.parse(await readFile(join(archiveRoot, "node/extension.js.map"), "utf8")), "node"),
     browser: releaseProbeLocation(JSON.parse(await readFile(join(archiveRoot, "browser/assets/app.js.map"), "utf8")), "browser"),
   };
   const deadline = Date.now() + 120_000;
+  process.env.PI_WEB_SENTRY_ENABLED = "true";
   process.env.PI_WEB_SENTRY_VERIFY_RELEASE = "true";
   process.env.PI_WEB_SENTRY_ENVIRONMENT = "sentry-verification";
   // This exact packaged module contains both the SDK capture path and its injected Debug ID.
@@ -55,7 +64,7 @@ async function run() {
   if (node.release !== expected.release || node.buildId !== expected.buildId) throw new Error("Packaged Node probe loaded a different build");
   const browserId = await browserProbe(packageRoot, expected, deadline);
   await Promise.all([waitForEvent(node.eventId, "node"), waitForEvent(browserId, "browser")]);
-  await writeFile(join(dirname(tarball), "verified.json"), JSON.stringify({ filename: basename(tarball), sha256: digest, release: expected.release, buildId: expected.buildId, nodeEventId: node.eventId, browserEventId: browserId }, null, 2));
+  await writeFile(join(dirname(tarball), "verified.json"), JSON.stringify({ filename: basename(tarball), sha256: digest, release: expected.release, buildId: expected.buildId, telemetryMode: "sentry-live", nodeEventId: node.eventId, browserEventId: browserId }, null, 2));
   console.log(`Sentry verified both application source maps for ${expected.release}`);
 
   async function waitForEvent(eventId, side) {

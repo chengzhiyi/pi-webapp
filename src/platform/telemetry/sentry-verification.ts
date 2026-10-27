@@ -1,5 +1,18 @@
-import { NodeTelemetry } from "./telemetry.ts";
+import { NodeTelemetry, readTelemetryConfig } from "./telemetry.ts";
 import { release, buildId } from "../../contracts/build-info.ts";
+
+/** Verify the shipped default, independently of inherited CI/user environment. */
+export async function verifySentryDisabledRelease() {
+  for (const env of [{}, { PI_WEB_SENTRY_DSN: "https://public@example.com/1" }, { PI_WEB_SENTRY_ENABLED: "false" }]) {
+    const config = readTelemetryConfig(env);
+    const telemetry = new NodeTelemetry({ env, monitor: false, transport: () => { throw new Error("Disabled telemetry loaded a transport"); } });
+    try {
+      await telemetry.ready;
+      if (config.node.enabled || config.browser.enabled || telemetry.enabled || telemetry.reporter || telemetry.capture(new Error("Disabled release probe")) || await telemetry.flush()) throw new Error("Packaged Sentry is not disabled by default");
+    } finally { await telemetry.close(); }
+  }
+  return { release, buildId, browser: readTelemetryConfig({}).browser };
+}
 
 /** Explicit release-test entry; importing the extension never executes a probe. */
 export async function verifySentryNodeRelease(): Promise<{ eventId: string; release: string; buildId: string }> {

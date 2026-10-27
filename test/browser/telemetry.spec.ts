@@ -27,12 +27,12 @@ async function fixture(page: Page, enabled: boolean | "default" = true, override
     if (JSON.parse(lines[1] ?? "{}").type === "event") browserEvents.push(JSON.parse(lines[2]!));
     await route.fulfill({ status: 200, body: "{}", headers: { "Access-Control-Allow-Origin": "*" } });
   });
-  const telemetryOptions: ConstructorParameters<typeof NodeTelemetry>[0] = { env: enabled === "default" ? {} : enabled ? { PI_WEB_SENTRY_DSN: "https://public@telemetry.example/1", PI_WEB_SENTRY_ENVIRONMENT: environment } : { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false,
+  const telemetryOptions: ConstructorParameters<typeof NodeTelemetry>[0] = { env: enabled === "default" ? {} : enabled ? { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@telemetry.example/1", PI_WEB_SENTRY_ENVIRONMENT: environment } : { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") nodeEvents.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   };
   const telemetry = new NodeTelemetry(telemetryOptions);
   const bridge = await startBridge({ ...host, ...overrides }, root, telemetry);
-  const sdkReady = enabled ? page.waitForResponse((r) => r.url().includes("telemetry-client-")).catch(() => undefined) : undefined;
+  const sdkReady = enabled === true ? page.waitForResponse((r) => r.url().includes("telemetry-client-")).catch(() => undefined) : undefined;
   return { bridge, browserEvents, nodeEvents, sdkReady, newTelemetry: () => new NodeTelemetry(telemetryOptions) };
 }
 
@@ -304,13 +304,22 @@ test("when disabled the page works, SDK stays unloaded, and console stays clean"
   expect(f.browserEvents).toEqual([]);
 });
 
-test("the built-in DSN enables browser reporting without environment configuration", async ({ page }) => {
+test("default configuration loads no reporting SDK and sends no Node or browser events", async ({ page }) => {
+  const sdk: string[] = [];
+  page.on("request", request => { if (request.url().includes("telemetry-client-")) sdk.push(request.url()); });
   const f = await fixture(page, "default");
   try {
-    await open(page, f.bridge); await f.sdkReady;
-    await page.evaluate(() => { setTimeout(() => { throw new Error("Synthetic default DSN test"); }, 0); });
-    await expect.poll(() => f.browserEvents.length).toBe(1);
-    expect(f.browserEvents[0]?.contexts?.diagnostic?.stage).toBe("global");
+    const config = page.waitForResponse(response => new URL(response.url()).pathname === "/api/telemetry/config");
+    await open(page, f.bridge);
+    expect(await (await config).json()).toMatchObject({ enabled: false });
+    await page.evaluate(() => { window.dispatchEvent(new ErrorEvent("error", { error: new Error("Synthetic disabled default test") })); });
+    const telemetry = f.newTelemetry();
+    try { expect(telemetry.capture(new Error("Synthetic disabled Node test"))).toBeUndefined(); await telemetry.flush(); }
+    finally { await telemetry.close(); }
+    await page.waitForTimeout(200);
+    expect(sdk).toEqual([]);
+    expect(f.browserEvents).toEqual([]);
+    expect(f.nodeEvents).toEqual([]);
   } finally { await f.bridge.close(); }
 });
 

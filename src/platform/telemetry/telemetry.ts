@@ -11,7 +11,9 @@ export function readTelemetryConfig(env: Record<string, string | undefined> = pr
   const config = (side: "BROWSER" | "NODE"): TelemetryConfig => {
     const base = { enabled: false, environment: env.PI_WEB_SENTRY_ENVIRONMENT || "production", release, buildId };
     const dsn = env[`PI_WEB_SENTRY_${side}_DSN`] ?? env.PI_WEB_SENTRY_DSN ?? DEFAULT_SENTRY_DSN;
-    if (env.PI_WEB_SENTRY_ENABLED === "false" || !dsn) return base;
+    // Sentry is opt-in while the hosted project's ingestion quota is unavailable.
+    // A DSN alone (including an inherited override) must not enable reporting.
+    if (env.PI_WEB_SENTRY_ENABLED !== "true" || !dsn) return base;
     try {
       const url = new URL(dsn);
       if (url.protocol !== "https:" || !/^[\w-]+$/.test(url.username) || url.password || url.search || url.hash || !/\/(?:[\w-]+\/)*\d+$/.test(url.pathname)) throw new Error();

@@ -12,7 +12,7 @@
 
 ## 默认错误采集（遥测）与关闭
 
-**Web 前端和扩展端 Sentry 错误采集默认开启**，使用内置公共 DSN。默认只采集脱敏堆栈、语义操作轨迹和状态摘要，不主动采集对话、源码正文、附件、凭据、请求正文或界面录制。任意异常文本无法完美分类，不应把敏感信息放进错误消息。
+**Web 前端和扩展端 Sentry 错误采集默认关闭**，不会加载上报 SDK 或发送 Sentry 事件。只有显式设置 `PI_WEB_SENTRY_ENABLED=true` 才会开启，单独配置 DSN 不会开启。开启后只采集脱敏堆栈、语义操作轨迹和状态摘要，不主动采集对话、源码正文、附件、凭据、请求正文或界面录制。任意异常文本无法完美分类，不应把敏感信息放进错误消息。
 
 在**启动 Pi/后台启动器的进程环境**中关闭：
 
@@ -29,7 +29,7 @@ npx pi-webapp
 
 若后台已运行，先结束任务并用原方式停止，再带环境变量启动；仅重新打开已有服务不会改变它的环境。已有 Pi 中使用 `/web` 时，在启动 `pi` 前设置同一变量。Pi 不自动读取 `.env`。桌面启动也须让实际后台继承该环境；复用外部后台时要配置外部进程，不能只刷新桌面窗口。
 
-`PI_WEB_SENTRY_DSN` 可更换上报目标，独立前后端目标及采集边界见[现有 Sentry 专题](https://github.com/chengzhiyi/pi-webapp/blob/main/docs/sentry.md)。`PI_WEB_SENTRY_ENABLED=false` 优先于 DSN 配置。文档站本身仅提供本地搜索，本次未接入第三方搜索或分析服务。
+`PI_WEB_SENTRY_DSN` 可更换上报目标，独立前后端目标及采集边界见[现有 Sentry 专题](https://github.com/chengzhiyi/pi-webapp/blob/main/docs/sentry.md)。若之前已设置 `PI_WEB_SENTRY_ENABLED=true`，请移除或改为 `false` 以关闭上报；单独配置 DSN 不会开启。文档站本身仅提供本地搜索，本次未接入第三方搜索或分析服务。
 
 ## 安全反馈
 
