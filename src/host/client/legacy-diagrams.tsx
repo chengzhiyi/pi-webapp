@@ -7,7 +7,7 @@ const tools = ["excalidraw_create_view", "diagram_create", "diagram_patch"];
 export function drawingRecovery(openManagement: () => void): LoadedPlugin {
   const Recovery = ({locale}: {locale:"zh"|"en"}) => <section role="status" style={{padding:16}}>
     <h3>Excalidraw</h3>
-    <p>{locale === "zh" ? "请安装或启用官方 Excalidraw 插件以恢复旧图稿。未从历史工具参数重建图稿；原检查点、工作区文件和浏览器备份均保留。" : "Install or enable the official Excalidraw plugin to recover this drawing. Historical tool arguments are not the latest scene. Checkpoints, workspace files and browser backups are preserved."}</p>
+    <p>{locale === "zh" ? "Excalidraw 编辑器当前不可用。请在插件管理中检查安装、启用状态及运行时诊断。未从历史工具参数重建图稿；原检查点、工作区文件和浏览器备份均保留。" : "The Excalidraw editor is currently unavailable. Check installation, enablement and runtime diagnostics in plugin management. Historical tool arguments are not the latest scene. Checkpoints, workspace files and browser backups are preserved."}</p>
     <button onClick={openManagement}>{locale === "zh" ? "打开插件管理" : "Open plugin management"}</button>
   </section>;
   return {id:OFFICIAL_DRAWINGS,instanceId:"drawing-recovery",definition:{id:OFFICIAL_DRAWINGS,apiVersion:1,activate(){},artifactTools:tools,workbench:{

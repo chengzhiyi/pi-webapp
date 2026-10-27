@@ -141,6 +141,9 @@ async function serve(pi, args) {
   let killTimer;
   let stopReason;
   let forceStopRequested = false;
+  let stopCommand;
+  let stopPreflightTimer;
+  let stopPreflightId;
   const instanceId = randomUUID();
   const startedAt = performance.now();
   const lifecycle = (event, fields = {}) => {
@@ -157,11 +160,7 @@ async function serve(pi, args) {
   let devReloadTimer;
   let devReloadCount = 0;
   let devReloadCommand;
-  const shutdown = (reason) => {
-    if (stopping) return;
-    stopping = true;
-    stopReason = reason;
-    lifecycle("launcher_stop_requested", { reason });
+  const finishShutdown = (reason) => {
     child.stdin?.end();
     killTimer = setTimeout(() => {
       forceStopRequested = true;
@@ -169,6 +168,29 @@ async function serve(pi, args) {
       child.kill("SIGTERM");
     }, 5000);
     killTimer.unref();
+  };
+  const refuseShutdown = () => {
+    clearTimeout(stopPreflightTimer);
+    stopPreflightId = undefined;
+    lifecycle("launcher_stop_refused", { reason: stopReason });
+    stopping = false;
+    restartRequest = null;
+    void readFile(stopPath, "utf8").then(value => value.trim() === nonce ? unlink(stopPath) : undefined).catch(() => {});
+  };
+  const shutdown = (reason) => {
+    if (stopping) return;
+    stopping = true;
+    stopReason = reason;
+    lifecycle("launcher_stop_requested", { reason });
+    // RPC EOF can exit even when an extension's shutdown handler fails. Drain
+    // while the transport is alive and require an explicit successful response.
+    if (ready && stopCommand) {
+      stopPreflightId = `prepare-stop-${randomUUID()}`;
+      // A slow admitted batch may still be draining. A timeout is not proof it
+      // stopped: keep its receipt live and never launch a second teardown.
+      stopPreflightTimer = setTimeout(() => lifecycle("launcher_stop_pending", { reason }), 35_000);
+      child.stdin?.write(JSON.stringify({ id: stopPreflightId, type: "prompt", message: `/${stopCommand} ${stopPreflightId}` }) + "\n");
+    } else finishShutdown(reason); // Legacy runtimes have no drain command.
   };
   const fail = (message) => {
     if (failed || ready) return;
@@ -203,6 +225,20 @@ async function serve(pi, args) {
       buffer = buffer.slice(index + 1);
       let record;
       try { record = JSON.parse(line); } catch { continue; }
+      if (record?.type === "extension_ui_request" && record.method === "notify" && typeof record.message === "string" && record.message.startsWith("pi-webapp-stop: ")) {
+        let receipt;
+        try { receipt = JSON.parse(record.message.slice("pi-webapp-stop: ".length)); } catch { continue; }
+        if (!stopping || receipt.id !== stopPreflightId) continue;
+        stopPreflightId = undefined;
+        clearTimeout(stopPreflightTimer);
+        if (receipt.ok === true) finishShutdown(stopReason);
+        else refuseShutdown();
+        continue;
+      }
+      if (record?.type === "response" && record.id === stopPreflightId && record.success === false) {
+        refuseShutdown();
+        continue;
+      }
       if (record?.type === "response" && /^dev-reload-\d+$/.test(record.id ?? "")) {
         console.error(`pi-webapp: ${record.id} /${devReloadCommand ?? "web-dev-reload"}: ${record.success === true ? "reloaded" : `failed: ${record.error ?? "Unknown RPC error"}`}`);
         continue;
@@ -220,6 +256,8 @@ async function serve(pi, args) {
           fail("Pi 没有加载当前项目的 Web 扩展");
           return;
         }
+        stopCommand = record.data.commands.find((item) => item?.source === "extension"
+          && item.sourceInfo?.path === extension && /^web-prepare-stop(?::\d+)?$/.test(item.name))?.name;
         devReloadCommand = record.data.commands.find((item) => item?.source === "extension"
           && item.sourceInfo?.path === extension && /^web-dev-reload(?::\d+)?$/.test(item.name))?.name;
         startupStage("opening-web-command");
@@ -279,6 +317,7 @@ async function serve(pi, args) {
   });
   await stateWrite;
   clearTimeout(startupTimer);
+  clearTimeout(stopPreflightTimer);
   clearTimeout(devReloadTimer);
   for (const watcher of devWatchers) watcher.close();
   clearInterval(stopTimer);
@@ -412,10 +451,12 @@ async function stop() {
   if (!state) { console.log("pi-webapp 未运行"); return; }
   if (!state.nonce) throw new Error("pi-webapp 正在启动，请稍后再停止");
   await writeFile(stopPath, state.nonce, { mode: 0o600 });
-  for (let attempt = 0; attempt < 120; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     const current = await activeState();
     if (!current || current.nonce !== state.nonce) { console.log("pi-webapp 已停止"); return; }
+    try { await stat(stopPath); }
+    catch (error) { if (error?.code === "ENOENT") throw new Error("停止已取消：插件保存或释放未完成，服务及数据已保留。请处理插件诊断后重试。"); throw error; }
   }
   throw new Error(`停止超时。后台进程 PID：${state.pid}；日志：${logPath}`);
 }

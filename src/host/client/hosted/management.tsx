@@ -16,6 +16,7 @@ function problemText(problem: Problem, installed: boolean, t: (zh: string, en: s
     no_compatible_version: t("暂无适用于此软件版本的插件。稍后可重新检查。", "No compatible release for this app version. Check again later."),
     registry_unreachable: t("暂时无法访问下载服务。请检查网络后重试。", "Cannot reach the download service. Check your network and retry."),
     download_cancelled: t("下载已取消。", "Download cancelled."),
+    runtime_owned: t("插件运行时被其他宿主或遗留锁占用，当前无法打开或卸载。请停止所有宿主并校验备份后，按恢复说明处理；重新安装不会清除此锁。", "Another host or a retained ownership lock blocks this runtime, including opening and uninstalling. Stop all hosts, verify a backup and follow recovery instructions; reinstalling does not clear the lock."),
   };
   const text = messages[problem.code ?? ""] ?? t("操作未完成。请查看诊断信息后重试。", "Operation did not finish. Review diagnostics and retry.");
   return (installed && ["metadata_not_found", "tarball_not_found", "no_compatible_version", "registry_unreachable", "download_cancelled"].includes(problem.code ?? "") ? t("更新未完成，当前插件及数据已保留。", "Update did not finish; current plugin and data retained. ") : "") + text;
@@ -95,7 +96,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   }
   const name = (card: HostedPluginCard) => `${card.name}${card.official ? t("（官方）", " (Official)") : ""}`;
   const failureFor = (card: HostedPluginCard): Problem | null => operationError?.id === card.pluginId ? operationError.problem : card.error ? { code: card.errorCode, message: card.error } : card.updateDiagnostic?.status === "failed" ? card.updateDiagnostic : null;
-  const status = (card: HostedPluginCard) => !known ? t("安装状态未知 · 启用状态未知", "Installation unknown · Enablement unknown") : `${card.installed ? t("已安装", "Installed") : t("未安装", "Not installed")} · ${card.enabled ? t("已启用", "Enabled") : t("未启用", "Disabled")}${card.version ? ` ${card.version}` : ""}`;
+  const status = (card: HostedPluginCard) => !known ? t("安装状态未知 · 启用状态未知", "Installation unknown · Enablement unknown") : `${card.installed ? t("已安装", "Installed") : t("未安装", "Not installed")} · ${card.enabled ? t("已启用", "Enabled") : t("未启用", "Disabled")}${card.version ? ` ${card.version}` : ""}${card.enabled && card.phase !== "active" ? t(" · 运行时不可用", " · Runtime unavailable") : ""}`;
   const switchFor = (card: HostedPluginCard) => <button type="button" role="switch" className={rows.switch} aria-label={t(`启用 ${card.name}`, `Enable ${card.name}`)} aria-checked={known && card.enabled} disabled={unavailableControls || !card.installed} title={!known ? t("请先读取插件状态", "Read plugin status first") : !card.installed ? t("请先下载插件", "Download the plugin first") : undefined} onClick={() => request(card, card.enabled ? "disable" : "enable")}><span className={rows.thumb} /></button>;
   const downloadFor = (card: HostedPluginCard) => {
     const failure = failureFor(card);
