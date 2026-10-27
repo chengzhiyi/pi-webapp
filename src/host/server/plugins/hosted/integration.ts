@@ -41,6 +41,7 @@ export class HostedPluginIntegration {
   private recovery: unknown;
   private closing = false;
   private started = false;
+  private stopping?: Promise<void>;
   private readonly options: HostedIntegrationOptions;
   constructor(options: HostedIntegrationOptions) {
     this.options = options;
@@ -93,12 +94,13 @@ export class HostedPluginIntegration {
     }) });
     this.handlers = {
       inventory: () => this.inventory(), manage: input => this.manage(input),
-      action: input => this.action(input),
+      action: (input, options) => this.action(input, options?.checkpointOnly),
       views: async body => {
         const input = body as unknown as HostedViewInput;
         const scope = this.scope(input.sessionId);
-        // Only old identity-bound poll/ack/close can finish a committed handshake.
-        if (["register", "change"].includes(input.operation)) this.generation(input.pluginId, input.generation);
+        // Existing status/flush capabilities must survive supervisor draining;
+        // the coordinator fences CHANGE against its committed generation itself.
+        if (input.operation === "register") this.generation(input.pluginId, input.generation);
         return this.coordinator(input.pluginId).handle(input, this.viewScope(scope));
       },
       asset: path => this.manager.assetRequest(path),
@@ -146,6 +148,10 @@ export class HostedPluginIntegration {
         const result = await operation();
         if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
         return result;
+      } catch (error) {
+        // A refused pre-restart flush must leave the current host usable/retryable.
+        if (shutdown && !this.recovery) this.adapter.thaw();
+        throw error;
       }
       finally { for (const view of this.views.values()) view.allowImmediateReopen(false); if (!this.recovery && !shutdown) this.adapter.thaw(); }
     });
@@ -233,27 +239,33 @@ export class HostedPluginIntegration {
     return this.inventory();
     } finally { if (download && this.downloads.get(input.pluginId) === download) this.downloads.delete(input.pluginId); }
   }
-  private async action(input: HostedActionInput): Promise<unknown> {
+  private async action(input: HostedActionInput, checkpointOnly = false): Promise<unknown> {
     const scope = this.scope(input.sessionId);
     if (input.pluginId !== ID || !actions.has(input.action)) throw new HostedPluginError("action_denied", "Action is not reviewed by this host", { status: 403 });
     const release = this.coordinator(input.pluginId).admitAction(input, this.viewScope(scope));
     try {
       const request = { requestId: randomUUID(), scope, action: input.action, input: input.input ?? {} };
-      if (this.adapter.isFrozen) {
-        if (!this.recovery && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
+      if (this.adapter.isFrozen || checkpointOnly) {
+        if (this.adapter.isFrozen && !this.recovery && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
         throw new HostedPluginError("plugin_unavailable", "Only authenticated barrier checkpoint actions are admitted during switching", { status: 409 });
       }
       this.generation(input.pluginId, input.generation);
       return await this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
     } finally { release(); }
   }
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    // Updater drains while HTTP is alive; session_shutdown must not freeze again.
+    if (this.stopping) return this.stopping;
     this.closing = true;
-    await this.enqueue(async () => {
+    this.stopping = this.enqueue(async () => {
       // Host exit necessarily closes realms. Still require every registered view to flush/ack.
       for (const view of this.views.values()) view.allowImmediateReopen(true);
       await this.manager.shutdown();
-    }, true);
-    for (const view of this.views.values()) view.dispose();
+      for (const view of this.views.values()) view.dispose();
+    }, true).catch(error => {
+      this.closing = false; this.stopping = undefined;
+      throw error;
+    });
+    return this.stopping;
   }
 }

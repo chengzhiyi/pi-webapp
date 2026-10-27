@@ -67,7 +67,8 @@ export async function readPair(root: string): Promise<PairIntent | null> {
 }
 export const pendingPair = (intent: PairIntent | null) => intent && !["reconciled"].includes(intent.phase);
 export async function assertPairIdle(root: string): Promise<void> {
-  if (pendingPair(await readPair(root))) throw new HostedPluginError("host_pair_required", "Host pair selection pending: restart selected host, or stop all owners and inspect host-pair/intent.json; data retained");
+  const intent = await readPair(root);
+  if (intent && pendingPair(intent)) throw new HostedPluginError("host_pair_required", `Host pair selection pending (${intent.version}, ${intent.phase}): ${intent.message ?? "restart selected host, or stop all owners and inspect host-pair/intent.json"}; data retained`);
 }
 /** A disk owner fence spans preparation, revalidation and pointer selection. The journal then
  * fences management across the process exit; abandoned locks are never reclaimed by PID. */

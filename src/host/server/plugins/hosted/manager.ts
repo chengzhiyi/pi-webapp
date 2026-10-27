@@ -180,11 +180,17 @@ export class HostedPluginManager {
         if (unchanged && pkg.digest !== selected.digest) throw new Error("Staged plugin digest changed");
         await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
         if (!pendingPair(intent)) await this.collectSettled(plugin.id);
-      } catch (error) { this.errors.set(plugin.id, failure(new HostedPluginError("host_pair_required", `Required action: choose a compatible host/plugin; data retained. ${failure(error).message}`))); }
+      } catch (error) {
+        const detail = failure(error);
+        const recovery = ["runtime_owned", "storage_busy"].includes(detail.code)
+          ? "Stop all owners, verify a backup and use the offline hosted-recovery tool; do not delete the pair journal."
+          : "Choose a compatible host/plugin and inspect plugin diagnostics; do not delete the pair journal.";
+        this.errors.set(plugin.id, { ...detail, message: `Required action: plugin startup failed (${detail.code}): ${detail.message}; data retained. ${recovery}` });
+      }
     }
     if (recovering && intent) {
       await atomicJson(join(pairRoot(this.options.root), "intent.json"), { ...intent,
-        phase: this.errors.size ? "required-action" : "reconciled", message: this.errors.size ? "Startup could not admit selected combination; preserve data and inspect plugin diagnostics" : "Current compatible state admitted; no previous state restored" });
+        phase: this.errors.size ? "required-action" : "reconciled", message: this.errors.size ? [...this.errors].map(([id, detail]) => `${id}: ${detail.message}`).join("; ") : "Current compatible state admitted; no previous state restored" });
       this.pairAdmittedValue = !this.errors.size;
     }
   }
@@ -317,6 +323,9 @@ export class HostedPluginManager {
    * Registry failure never discards compatible local code. Incompatibility remains a visible error.
    */
   async reconcileHostUpgrade(): Promise<boolean> {
+    // A pending pair owns selection. Do not overwrite its actual startup failure
+    // (e.g. runtime_owned) with the generic management fence or touch the registry.
+    if (pendingPair(await readPair(this.options.root))) return false;
     const inventory = await this.installer.inventory(), policies = await this.policies();
     let succeeded = true;
     for (const plugin of this.installer.catalog) {
@@ -399,7 +408,9 @@ export class HostedPluginManager {
   async shutdown(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.operations.values());
-    await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
-    this.packages.clear(); this.assetTokens.clear();
+    try {
+      await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
+      this.packages.clear(); this.assetTokens.clear();
+    } catch (error) { this.closing = false; throw error; }
   }
 }

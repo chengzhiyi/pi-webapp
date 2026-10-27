@@ -12,7 +12,8 @@ permissions:
 
 jobs:
   verify-core:
-    runs-on: ubuntu-latest
+    # The release Chrome preflight must match the publish runner, not a container.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Only superseded PR checks may be cancelled; branch/release runs stay unique.
     concurrency:
@@ -52,6 +53,9 @@ jobs:
       - run: npm ci
       - name: Fetch integrity-pinned published plugin fixtures
         run: node scripts/prepare-hosted-ci-fixtures.mjs
+      - name: Verify the runner Chrome used by release probes
+        timeout-minutes: 1
+        run: node scripts/verify-ci-chrome.mjs
       - run: npm run check
       - run: npm run build
       - run: npm test
@@ -67,8 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [general, hosted, stress]
-    # Keep the PR Chrome preflight on the same OS as publish.
+        group: [general, workspace, hosted, stress]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
@@ -109,12 +112,16 @@ jobs:
       - run: npm ci
       - name: Fetch integrity-pinned published plugin fixtures
         run: node scripts/prepare-hosted-ci-fixtures.mjs
-      - name: Verify the runner Chrome used by release probes
-        if: matrix.group == 'general'
+      # ubuntu-24.04 already has native browser libraries and the PTY compiler.
+      # Tests use the default headless shell, not the unused full Chrome binary.
+      # Do not run --with-deps: live browser checks fail if the image loses a lib.
+      - name: Install only the lockfile-pinned headless browser (no apt)
+        timeout-minutes: 2
+        run: npx playwright install --only-shell chromium
+      - name: Require the pinned browser and runner libraries (no apt fallback)
         timeout-minutes: 1
-        run: node scripts/verify-ci-chrome.mjs
+        run: node scripts/verify-ci-playwright.mjs
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
       # Disjoint file groups in isolated runners, each retaining a single worker.
       - name: Run browser group once and retain its report
         id: browser
@@ -122,7 +129,7 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: .ci/browser/report.json
         run: npx playwright test --config=playwright.ci.config.ts --reporter=line,json
       - name: Require clean hosted lifecycle or complete stress evidence
-        if: always() && matrix.group != 'general' && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
+        if: always() && (matrix.group == 'hosted' || matrix.group == 'stress') && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
         run: node scripts/verify-hosted-browser-results.mjs .ci/browser/report.json "${{ matrix.group }}"
       - name: Verify real public cross-version plugin update
         if: matrix.group == 'hosted'

@@ -151,9 +151,11 @@ export class HostedAgentAdapter {
       const definition: ToolDefinition = {
         name: tool.name, label: tool.label, description: tool.description,
         parameters: structuredClone(tool.parameters) as ToolDefinition["parameters"], exposure,
-        execute: async (requestId, input, signal) => {
+        execute: async (_toolCallId, input, signal) => {
           if (!this.allowed(binding, id, tool)) throw new Error("Hosted tool denied by host policy");
-          return this.service.invoke(id, { requestId, scope: { ...binding.scope }, kind: "tool", action: tool.action, input }, signal);
+          // Provider call IDs are opaque (e.g. call_…|fc_…), not host lease IDs.
+          // A fresh invocation ID also isolates reused call IDs across sessions/turns.
+          return this.service.invoke(id, { requestId: randomUUID(), scope: { ...binding.scope }, kind: "tool", action: tool.action, input }, signal);
         },
       };
       binding.pi.registerTool(definition); binding.definitions.set(tool.name, definition);

@@ -500,7 +500,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
-              hostedPair: shared.hosted!.manager.hostPair }),
+              hostedPair: shared.hosted!.manager.hostPair,
+              beforeRestart: () => shared.hosted!.shutdown() }),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
