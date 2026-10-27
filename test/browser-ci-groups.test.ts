@@ -70,7 +70,9 @@ test("publish avoids apt installs but keeps Chrome and exact tarball verificatio
   assert.doesNotMatch(publish, /playwright install|continue-on-error/);
   assert.match(publish, /PI_WEB_TEST_CHROME: 'true'/);
   assert.match(publish, /ref: \$\{\{ github.sha \}\}/);
-  const stages = ["npm run build:sentry", "npm pack --ignore-scripts", "npm run verify:package", "node scripts/verify-ci-chrome.mjs", "npm run verify:sentry", "node scripts/publish-verified-release.mjs"];
+  assert.doesNotMatch(publish, /npm run build:sentry|npm run verify:sentry|SENTRY_VERIFY_AUTH_TOKEN/);
+  assert.match(browser, /scripts\/verify-sentry-release\.mjs --telemetry-disabled/);
+  const stages = ["npm run build", "npm pack --ignore-scripts", "npm run verify:package", "node scripts/verify-ci-chrome.mjs", "node scripts/verify-sentry-release.mjs --telemetry-disabled --pack-manifest .ci/release/pack.json", "node scripts/publish-verified-release.mjs"];
   let previous = -1;
   for (const stage of stages) {
     const index = publish.indexOf(stage);
