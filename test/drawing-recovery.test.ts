@@ -9,6 +9,6 @@ test("historical aliases/tools offer honest install/enable recovery without edit
   const value=module.exports.probe();
   assert.deepEqual(value.alias,{kind:"drawing-recovery",contentId:"historical",title:"Excalidraw"});assert.equal(value.invalid,null);
   assert.deepEqual(value.tools,["excalidraw_create_view","diagram_create","diagram_patch"]);
-  assert.match(value.html,/Install or enable the official/);assert.match(value.html,/Open plugin management/);assert.doesNotMatch(value.html,/stale model geometry|<canvas|<iframe/);
+  assert.match(value.html,/editor is currently unavailable/);assert.match(value.html,/runtime diagnostics/);assert.match(value.html,/Open plugin management/);assert.doesNotMatch(value.html,/stale model geometry|<canvas|<iframe/);
   assert.doesNotMatch(result.outputFiles[0]!.text,/@excalidraw\/excalidraw|ExcalidrawAutomate|mermaidAPI|Excalifont/);
 });
