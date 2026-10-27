@@ -50,10 +50,14 @@ export class SelfUpdater {
   private preparing = false;
   private savingPreference = false;
   private restartPending = false;
+  private preparedUpdate?: { update: PreparedUpdate; channel: UpdateChannel };
+  private readonly beforeRestart?: () => Promise<void>;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[]) => Promise<string>; desktopManaged?: boolean;
     desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
-    validateHostedPair?: (version: string, packageRoot: string) => Promise<void>; hostedPair?: HostedPairTransaction }) {
+    validateHostedPair?: (version: string, packageRoot: string) => Promise<void>; hostedPair?: HostedPairTransaction;
+    /** Drain hosted workers/views while authenticated HTTP is still available, before launcher EOF. */
+    beforeRestart?: () => Promise<void> }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
@@ -66,6 +70,7 @@ export class SelfUpdater {
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
     this.validateHostedPair = options.validateHostedPair;
     this.hostedPair = options.hostedPair;
+    this.beforeRestart = options.beforeRestart;
   }
 
   private async current(): Promise<string> {
@@ -149,6 +154,13 @@ export class SelfUpdater {
     if (existsSync(join(this.packageRoot, ".git"))) throw new Error("源码目录不能通过网页升级");
     if (this.restartPending) throw new Error("升级已完成，正在重启");
     if (this.preparing || this.savingPreference) throw new Error("升级或偏好保存正在进行中");
+    // A refused flush leaves the selected pair intact. Retry that exact selection,
+    // not a second download/select transaction blocked by our own pending journal.
+    if (this.preparedUpdate) {
+      if (request && (request.version !== this.preparedUpdate.update.version || request.channel !== this.preparedUpdate.channel)) throw new Error("已有待重启的更新，请先重试该版本或重启后台");
+      this.restartPending = true;
+      return { ...this.preparedUpdate.update };
+    }
     this.preparing = true;
     try {
       const status = await this.check();
@@ -203,6 +215,7 @@ export class SelfUpdater {
         if (this.hostedPair) await this.hostedPair.select(status.latest, installed, writeSelection);
         else await writeSelection();
         this.restartPending = true;
+        this.preparedUpdate = { update: { version: status.latest, launcher }, channel: status.channel ?? "stable" };
         return { version: status.latest, launcher };
       } catch (error) {
         // A failed write can be an acknowledged-on-disk rename. Retain potentially selected
@@ -217,6 +230,8 @@ export class SelfUpdater {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     try {
+      await this.beforeRestart?.();
+      // Revalidate the selected bytes/pointers AFTER the potentially long drain.
       const writeRestart = () => writeFile(join(this.agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: this.launcherNonce, launcher: prepared.launcher }), { mode: 0o600 });
       if (this.hostedPair) await this.hostedPair.restart(prepared.version, dirname(dirname(prepared.launcher)), writeRestart);
       else await writeRestart();

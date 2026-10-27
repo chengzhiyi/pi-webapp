@@ -1,21 +1,23 @@
 import { HostedPluginError, failure } from "./errors.ts";
-import type { HostedManageInput } from "../../../../contracts/hosted-plugins.ts";
+import type { HostedActionInput, HostedManageInput } from "../../../../contracts/hosted-plugins.ts";
 
 export interface HostedBridgeHandlers {
   inventory(): Promise<unknown>;
   manage(input: HostedManageInput): Promise<unknown>;
-  action(input: {sessionId: string; pluginId: string; generation: number; action: string; input: unknown; viewToken?: string; mountId?: string}): Promise<unknown>;
+  /** checkpointOnly is set by the host's restart fence, never parsed from JSON. */
+  action(input: HostedActionInput, options?: { checkpointOnly: boolean }): Promise<unknown>;
   views(input: Record<string, unknown>): Promise<unknown>;
   asset(path: string): Promise<{bytes: Buffer; mime: string} | null>;
 }
 export const HOSTED_API_PATHS = ["/api/hosted-plugins/manage", "/api/hosted-plugins/action", "/api/hosted-plugins/views"];
 /** Parse only authenticated wire DTOs. cwd/workspace from an iframe are never propagated. */
-export async function hostedApi(host: HostedBridgeHandlers | undefined, path: string, input: unknown): Promise<unknown> {
+export async function hostedApi(host: HostedBridgeHandlers | undefined, path: string, input: unknown, options?: { draining: boolean }): Promise<unknown> {
   if (!host) throw new HostedPluginError("hosted_unavailable", "Hosted plugin integration is not available in this runtime", {status: 503});
   if (path === "/api/hosted-plugins") return host.inventory();
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new HostedPluginError("invalid_input", "Expected plugin request object", {status: 400});
   const body = input as Record<string, unknown>;
   if (path === "/api/hosted-plugins/views") {
+    if (options?.draining && !["poll", "pollMany", "change", "ack", "close"].includes(String(body.operation))) throw new HostedPluginError("host_restarting", "Only existing view status/flush acknowledgements are admitted during restart", { status: 409 });
     if (body.operation !== "pollMany") return host.views(body);
     // Bounded read-only aggregation. Every member still traverses the authenticated
     // session resolver and exact generation/mount/token checks in host.views.
@@ -27,6 +29,7 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   }
   if (typeof body.pluginId !== "string" || body.pluginId.length > 214) throw new HostedPluginError("invalid_input", "Invalid plugin identity", {status: 400});
   if (path === "/api/hosted-plugins/manage") {
+    if (options?.draining) throw new HostedPluginError("host_restarting", "Host is updating; plugin management is fenced", { status: 409 });
     if (typeof body.operation !== "string" || !["install", "enable", "disable", "update", "uninstall", "check", "retry", "policy", "cancel-download"].includes(body.operation) || body.version !== undefined && (typeof body.version !== "string" || !/^\d+\.\d+\.\d+$/.test(body.version))) throw new HostedPluginError("invalid_input", "Invalid plugin management request", {status: 400});
     if (body.downloadId !== undefined && (typeof body.downloadId !== "string" || !/^[a-f0-9-]{36}$/.test(body.downloadId)) || body.operation === "cancel-download" && !body.downloadId) throw new HostedPluginError("invalid_input", "Exact download identity required", {status:400});
     if (body.reopenEditors !== undefined && typeof body.reopenEditors !== "boolean") throw new HostedPluginError("invalid_input", "Invalid editor reopen consent", {status:400});
@@ -36,7 +39,7 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   if (path === "/api/hosted-plugins/action") {
     if (typeof body.sessionId !== "string" || !body.sessionId || body.sessionId.length > 200 || !Number.isSafeInteger(body.generation) || Number(body.generation) < 1 || typeof body.action !== "string" || !/^[\w.-]{1,80}$/.test(body.action)) throw new HostedPluginError("invalid_input", "Invalid plugin action request", {status: 400});
     if (body.viewToken !== undefined && (typeof body.viewToken !== "string" || body.viewToken.length > 200) || body.mountId !== undefined && (typeof body.mountId !== "string" || body.mountId.length > 200)) throw new HostedPluginError("invalid_input", "Invalid view flush capability", {status:400});
-    return host.action({sessionId:body.sessionId,pluginId:body.pluginId,generation:Number(body.generation),action:body.action,input:body.input ?? {},...(typeof body.viewToken === "string" ? {viewToken:body.viewToken} : {}),...(typeof body.mountId === "string" ? {mountId:body.mountId} : {})});
+    return host.action({sessionId:body.sessionId,pluginId:body.pluginId,generation:Number(body.generation),action:body.action,input:body.input ?? {},...(typeof body.viewToken === "string" ? {viewToken:body.viewToken} : {}),...(typeof body.mountId === "string" ? {mountId:body.mountId} : {})}, options?.draining ? { checkpointOnly: true } : undefined);
   }
   throw new HostedPluginError("invalid_route", "Unknown hosted plugin route", {status:404});
 }

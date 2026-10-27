@@ -65,6 +65,7 @@ export class HostedViewCoordinator {
     if (!view || view.scope.ownerId !== scope.ownerId || view.scope.workspaceId !== scope.workspaceId || view.identity.sessionId !== input.sessionId || view.identity.mountId !== input.mountId || view.identity.generation !== input.generation) throw fail("Unknown or stale view capability");
     switch (input.operation) {
       case "change":
+        if (input.generation !== this.generation) throw fail("Generation changed; reconnect before publishing view status");
         if (typeof input.dirty !== "boolean" || typeof input.busy !== "boolean") throw fail("Invalid view status");
         view.dirty = input.dirty; view.busy = input.busy;
         if ((view.dirty || view.busy) && view.frozen) { view.frozen = false; this.barrier?.reject(fail("A frozen view changed")); }

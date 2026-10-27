@@ -238,11 +238,10 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       if (req.method === "POST" && HOSTED_API_PATHS.includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) { json(res, 403, { error: "来源不匹配" }); return; }
         if (!req.headers["content-type"]?.startsWith("application/json")) { json(res, 415, { error: "需要 JSON 请求" }); return; }
-        if (restarting) { json(res, 409, { error: "宿主正在更新，请稍后重试" }); return; }
         let body: unknown;
         try { body = await readJson(req, 2 * 1024 * 1024); }
         catch (error) { json(res, error instanceof Error && error.message === "请求内容过大" ? 413 : 400, {error:"插件请求内容无效或过大"}); return; }
-        try { json(res, 200, await hostedApi(host.hosted, path, body)); }
+        try { json(res, 200, await hostedApi(host.hosted, path, body, { draining: restarting })); }
         catch (error) { const result = hostedHttpFailure(error); json(res, result.status, result.body); }
         return;
       }
@@ -451,10 +450,14 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             // Lock mutations before the download starts, not after it completes.
             restarting = true;
             let prepared;
-            try { prepared = await host.selfUpdate.prepare(hasTarget ? { channel: input.channel as "stable" | "alpha", version: input.version as string, allowDowngrade: input.allowDowngrade as boolean | undefined } : undefined); }
+            try {
+              prepared = await host.selfUpdate.prepare(hasTarget ? { channel: input.channel as "stable" | "alpha", version: input.version as string, allowDowngrade: input.allowDowngrade as boolean | undefined } : undefined);
+              // Keep the page and checkpoint transport alive until views have flushed,
+              // workers exited and the validated restart marker is actually written.
+              await host.selfUpdate.requestRestart(prepared);
+            }
             catch (error) { restarting = false; throw error; }
             json(res, 202, { accepted: true, version: prepared.version });
-            setTimeout(() => { void host.selfUpdate?.requestRestart(prepared).catch((error) => { restarting = false; telemetry.capture(error, { stage: "restart" }); console.error("pi-webapp restart:", error); }); }, 500).unref();
             return;
           }
           if (path === "/api/provider/custom") {
