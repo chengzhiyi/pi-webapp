@@ -1,25 +1,46 @@
 # CI verification layout
 
-`CI and npm publish` validates PRs and pushes to `main` / `alpha`.
+See [CI verification and release browsers](ci.md) for the current environment,
+measurement methodology and local commands.
 
-- `verify-core`: protocol resolution, type checking, build, Node and desktop tests.
-- `browser (general)` and `browser (hosted)`: separate runners, each with one Playwright worker. They build the same checked-out source and use the same integrity-pinned published fixtures as core verification. The existing protocol bootstrap path is retained.
-- `verify`: the existing required-check name, now a fail-closed aggregate. It succeeds only when core and **both** browser groups succeed. Its protocol-publication output is forwarded from core.
-- `platform-smoke`: the existing macOS / Windows built-in-only checks.
-- `publish`: still requires `verify`, `platform-smoke`, a non-PR main/alpha ref and a published protocol. Exact-source checkout, release-archive/Sentry verification and non-cancelling publication concurrency are unchanged.
+`CI and npm publish` validates PRs and pushes to `main` / `alpha`:
 
-## No duplicate hosted execution
+- `verify-core`: protocol resolution, runner Chrome preflight, type checking,
+  build, Node/desktop tests and alpha bootstrap identity verification.
+- `browser (general)`, `browser (workspace)`, `browser (hosted)` and
+  `browser (stress)`: four isolated, single-worker file groups. The digest-pinned
+  official Playwright image supplies the matching Chromium/native libraries/fonts;
+  Node 24 and the lockfile remain authoritative. A mandatory live browser preflight
+  fails closed instead of repairing the environment with an online apt install.
+- `verify`: the existing required-check name; succeeds only if core and all four
+  browser jobs succeed, forwarding core's protocol-publication output.
+- `platform-smoke`: macOS / Windows built-in-only checks, without npm installation.
+- `publish`: still requires `verify`, `platform-smoke`, a non-PR main/alpha ref and
+  a published protocol. Exact-source checkout, serialized version selection,
+  checks/build/tests, exact tarball and disabled-telemetry verification remain.
 
-`playwright.ci.config.ts` extends the default config. A filename starting with `hosted-` belongs to the hosted job; all other default-discovered files belong to general. New tests automatically join exactly one group. A missing/unknown group fails immediately. Local `npm run test:browser` still discovers the entire suite unchanged.
+## No missing or duplicate tests
 
-Each group runs once with line + JSON reporters. The hosted job applies `verify-hosted-browser-results.mjs` to **that execution's report**, rather than rerunning the subset. Missing/malformed reports, global errors, non-diagnostic skips, retries and failed real shutdowns still reject acceptance. The separate public `0.1.0` → `0.1.1` update run remains because it exercises a distinct path, and the 70-cycle stress test remains enabled. Neither test counts nor stress cycles are reduced.
+`playwright.ci.config.ts` extends the default config. `workspace-*` files belong
+to workspace, `hosted-stress.*` to stress, other `hosted-*` to hosted, and all other
+files to general. New/nested files join exactly one group. A missing/unknown group
+fails immediately. Local `npm run test:browser` still discovers the full suite.
 
-Evidence artifacts are named `browser-evidence-general` and `browser-evidence-hosted`; each contains `.ci/browser/report.json` and failure traces/screenshots in `test-results`. Use the default config when investigating the full suite locally, or set `PI_WEB_BROWSER_GROUP=general|hosted` and pass `--config=playwright.ci.config.ts` to reproduce a group.
+Each group runs once with line + JSON reporters. Hosted/stress acceptance reads
+**that execution's report**, rather than rerunning a subset. Missing/malformed
+reports, global errors, non-diagnostic skips, retries and failed real shutdowns
+reject acceptance. The separate public `0.1.0` → `0.1.1` update exercises a distinct
+path. The stress measurement still includes 20 warmups plus 50 measured cycles;
+its test and resources are not parallelized with other files.
+
+Artifacts are `browser-evidence-{general,workspace,hosted,stress}`, containing
+`.ci/browser/report.json` and `test-results`. Set
+`PI_WEB_BROWSER_GROUP=general|workspace|hosted|stress` and use
+`--config=playwright.ci.config.ts` to reproduce a group.
 
 ## Cancellation and release safety
 
-Core, browser and platform-smoke jobs cancel superseded checks only for the same PR (and the same matrix group). Non-PR runs use unique run IDs, so a newer branch push cannot cancel an in-flight release verification. There is deliberately no workflow-wide cancellation and the `publish` job retains its original `cancel-in-progress: false` group. No code is merged or published merely by a PR verification run.
-
-## Performance expectations
-
-Before this change, the sampled PR8 verification took 17m44s, including 9m42s for the full browser suite and then 5m36s rerunning its hosted subset. Eliminating the duplicate execution alone removes approximately that 5m36s of browser work. Parallel disjoint groups additionally shorten the critical path, at the cost of installing/building on separate runners. Actual wall-time improvements depend on runner availability and test durations; CI measurements, not these estimates, determine the outcome.
+Core, browser and platform-smoke cancel superseded checks only for the same PR
+(and matrix group). Non-PR concurrency keys use unique run IDs. There is no
+workflow-wide cancellation, and publish retains its non-cancelling lock. A PR
+verification run neither merges code nor publishes a package.
