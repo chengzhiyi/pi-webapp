@@ -20,39 +20,40 @@ The roughly three-minute stress test remains a critical-path floor.
 
 ## Browser environment: no per-run apt installation
 
-Browser jobs use the official Playwright `v1.63.0-noble` image, pinned by its
-multi-architecture SHA-256 digest in `.github/workflows/ci.yml`. It includes the
-matching Chromium, native libraries and fonts. `actions/setup-node` selects Node
-24; `npm ci` still installs the lockfile-pinned test package and dependencies.
-The container reserves 1 GiB shared memory. No Docker socket, privileged mode,
-extra write permissions or online apt repair is required.
+Browser jobs retain `ubuntu-24.04` and its native browser libraries, fonts and
+compiler toolchain. `actions/setup-node` selects Node 24; `npm ci` installs the
+lockfile-pinned test package and compiles the required native PTY. Then
+`npx playwright install --only-shell chromium` downloads only the pinned headless
+shell and FFmpeg, not the unused full Chrome binary, and never runs apt.
+Tests already use that default headless shell; no browser channel is substituted.
 
-`node scripts/verify-ci-playwright.mjs` launches the default headless Chromium,
-checks its actual version against the installed package's `browsers.json`, renders
-a page and executes JavaScript. It logs Playwright/Chromium/revision/Node/platform
-identity. Missing or incompatible browsers/libraries fail the job; there is no
-silent download, Chrome substitution, skipped verification or `continue-on-error`.
-A regression test requires the image version, package.json, lockfile Playwright
-package and playwright-core version to agree. When upgrading Playwright, update
-**all four** plus the image digest and repeat the full browser/stress validation.
+`node scripts/verify-ci-playwright.mjs` launches it, checks the actual version
+against the installed package's `browsers.json`, renders a page and executes
+JavaScript. It logs Playwright/Chromium/revision/Node/platform identity. Missing or
+incompatible browsers/libraries fail the job; there is no silent apt repair,
+Chrome substitution, skipped verification or `continue-on-error`. The full suite
+(including packaged font tests and stress) must pass before publishing. Regression
+tests require package.json, lockfile Playwright and playwright-core versions to
+agree. Upgrade all three together and repeat the complete browser/stress validation.
 
 This removes the unstable `playwright install --with-deps chromium` operation:
 in runs 40515822039 / 40515675727 it took 257 / 461 seconds in the critical job,
 while other runners took 22–28 seconds. Logs attribute the long tail to apt
 packages (25.9 MB in 3m43s / 7m22s), not Chromium downloads or failed tests.
-The pinned image is about 912 MiB compressed for amd64, so image pull/extraction
-is not free. Track `Initialize containers` as well as test time; compare actual
-p50/p95 before choosing a smaller custom image or another environment strategy.
+An initial real-CI experiment with the official Playwright image failed because
+it lacks `make`, needed to build `node-pty`; it also pulls about 912 MiB compressed.
+The final workflow deliberately retains the normal runner instead of adding apt
+compiler installs to that image or skipping the native dependency. The failed
+experiment's aggregate correctly prevented publication (run 40520459722).
 
-The browser version remains Chromium 153.0.8010.12 (Playwright revision 1243),
-but the fixed container changes the native environment. Keep stress thresholds
-and all 70 cycles; retain environment identity with measurements and use a new
-comparable baseline rather than claiming unchanged benchmark conditions.
+The browser remains Chromium 153.0.8010.12 (Playwright revision 1243), and native
+libraries now come from the runner image rather than apt upgrades on every run.
+Keep stress thresholds and all 70 cycles; retain environment identity with
+measurements and compare full-suite behavior rather than assuming equivalence.
 
 ## Release Chrome stays on the release runner
 
-Core verification and publishing both use `ubuntu-24.04`, outside the browser
-container. `node scripts/verify-ci-chrome.mjs` runs in core (including PRs) and in
+Core verification, browser tests and publishing all use `ubuntu-24.04`. `node scripts/verify-ci-chrome.mjs` runs in core (including PRs) and in
 publish: it exercises the same runner Chrome channel used by package verification,
 before any Playwright dependency installation could mask a missing shared library.
 Missing Chrome or shared libraries fail closed; there is no apt fallback.
@@ -94,7 +95,7 @@ fixture integrities and exports the exact fixture paths and stress configuration
 Compare the union of four `--list --reporter=json` outputs against local discovery:
 every test identity must appear exactly once.
 
-After rollout, collect 10–20 samples of image initialization, dependency setup,
+After rollout, collect 10–20 samples of runner initialization, dependency setup,
 group execution, publication and total runner wall time; compare p50/p95 and flaky
 rates. Separate run-created→last-job-completed from GitHub's run timing value:
 the sampled runs have unexplained 4–5 minute differences after the final job, not

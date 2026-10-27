@@ -1,6 +1,6 @@
-// The browser jobs use a digest-pinned Playwright image. Fail closed on package /
-// image drift, a missing executable, native library or unusable browser. Never
-// repair the environment with an online install: that reintroduces apt long tails.
+// The browser jobs install only the lockfile-pinned headless shell, using the
+// ubuntu-24.04 runner's existing native libraries. Fail closed on version drift,
+// a missing executable/library or unusable browser. Never repair with online apt.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";

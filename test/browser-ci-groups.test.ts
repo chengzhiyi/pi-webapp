@@ -59,16 +59,18 @@ test("CI reuses hosted evidence, aggregates fail-closed, and only cancels obsole
   assert.match(workflow, /group: pi-webapp-npm-publish\n      cancel-in-progress: false/);
 });
 
-test("browser image matches the locked Playwright and retains isolated single-worker measurements", async () => {
+test("browser setup uses the locked headless shell without apt and retains isolated measurements", async () => {
   const workflow = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const lock = JSON.parse(await readFile(new URL("../package-lock.json", import.meta.url), "utf8"));
-  const image = workflow.match(/image: mcr\.microsoft\.com\/playwright:v([^\s]+)-noble@sha256:([a-f0-9]{64})/);
-  assert.ok(image, "Use an immutable official browser image");
-  assert.equal(image[1], pkg.devDependencies["@playwright/test"]);
-  assert.equal(image[1], lock.packages["node_modules/@playwright/test"].version);
-  assert.equal(image[1], lock.packages["node_modules/playwright-core"].version);
-  assert.match(workflow, /options: --shm-size=1g/);
+  const version = pkg.devDependencies["@playwright/test"];
+  assert.match(version, /^\d+\.\d+\.\d+$/);
+  assert.equal(version, lock.packages["node_modules/@playwright/test"].version);
+  assert.equal(version, lock.packages["node_modules/playwright-core"].version);
+  const browser = workflow.split("\n  browser:")[1]!.split("\n  verify:")[0]!;
+  assert.doesNotMatch(browser, /\n    container:/); // Native PTY needs the runner's compiler.
+  assert.match(browser, /run: npx playwright install --only-shell chromium/);
+  assert.ok(browser.indexOf("playwright install --only-shell") < browser.indexOf("node scripts/verify-ci-playwright.mjs"));
   const local = await readFile(new URL("../playwright.config.ts", import.meta.url), "utf8");
   assert.match(local, /fullyParallel: false, workers: 1/);
   const probe = await readFile(new URL("../scripts/verify-ci-playwright.mjs", import.meta.url), "utf8");
@@ -87,7 +89,7 @@ test("publish avoids apt installs but keeps Chrome and exact tarball verificatio
     assert.doesNotMatch(job, /\n    container:/);
   }
   assert.match(browser, /node scripts\/verify-ci-playwright\.mjs/);
-  assert.doesNotMatch(browser, /playwright install|apt-get|continue-on-error|PI_WEB_TEST_CHROME/);
+  assert.doesNotMatch(browser, /run:.*(?:--with-deps|apt-get)|continue-on-error|PI_WEB_TEST_CHROME/);
   assert.doesNotMatch(publish, /playwright install|continue-on-error/);
   assert.match(publish, /PI_WEB_TEST_CHROME: 'true'/);
   assert.match(publish, /ref: \$\{\{ github.sha \}\}/);

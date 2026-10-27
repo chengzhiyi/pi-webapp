@@ -8,10 +8,11 @@ measurement methodology and local commands.
 - `verify-core`: protocol resolution, runner Chrome preflight, type checking,
   build, Node/desktop tests and alpha bootstrap identity verification.
 - `browser (general)`, `browser (workspace)`, `browser (hosted)` and
-  `browser (stress)`: four isolated, single-worker file groups. The digest-pinned
-  official Playwright image supplies the matching Chromium/native libraries/fonts;
+  `browser (stress)`: four isolated, single-worker file groups on `ubuntu-24.04`.
+  The runner supplies native libraries/fonts and the PTY compiler; Playwright
+  downloads only the lockfile-pinned Chromium headless shell, without apt.
   Node 24 and the lockfile remain authoritative. A mandatory live browser preflight
-  fails closed instead of repairing the environment with an online apt install.
+  fails closed rather than repairing the environment with online apt installs.
 - `verify`: the existing required-check name; succeeds only if core and all four
   browser jobs succeed, forwarding core's protocol-publication output.
 - `platform-smoke`: macOS / Windows built-in-only checks, without npm installation.

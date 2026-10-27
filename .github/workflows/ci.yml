@@ -73,11 +73,6 @@ jobs:
       matrix:
         group: [general, workspace, hosted, stress]
     runs-on: ubuntu-24.04
-    # Matches @playwright/test 1.63.0. Pin the multi-arch image digest, not a
-    # mutable tag: browsers, fonts and native libraries need no online apt step.
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
-      options: --shm-size=1g
     timeout-minutes: 30
     concurrency:
       group: ${{ github.workflow }}-browser-${{ matrix.group }}-${{ github.event.pull_request.number || github.run_id }}
@@ -117,7 +112,13 @@ jobs:
       - run: npm ci
       - name: Fetch integrity-pinned published plugin fixtures
         run: node scripts/prepare-hosted-ci-fixtures.mjs
-      - name: Require the pinned preinstalled browser (no downloads or apt fallback)
+      # ubuntu-24.04 already has native browser libraries and the PTY compiler.
+      # Tests use the default headless shell, not the unused full Chrome binary.
+      # Do not run --with-deps: live browser checks fail if the image loses a lib.
+      - name: Install only the lockfile-pinned headless browser (no apt)
+        timeout-minutes: 2
+        run: npx playwright install --only-shell chromium
+      - name: Require the pinned browser and runner libraries (no apt fallback)
         timeout-minutes: 1
         run: node scripts/verify-ci-playwright.mjs
       - run: npm run build
