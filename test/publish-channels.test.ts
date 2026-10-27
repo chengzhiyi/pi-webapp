@@ -27,11 +27,12 @@ test("verified publishing chooses the correct npm tag and rejects stale/mismatch
   const sha = "a".repeat(40);
   const bytes = Buffer.from("verified package test bytes");
   await writeFile(join(directory, "package.tgz"), bytes);
-  await writeFile(join(directory, "verified.json"), JSON.stringify({ filename: "package.tgz", sha256: createHash("sha256").update(bytes).digest("hex"), nodeEventId: "a".repeat(32), browserEventId: "b".repeat(32) }));
   const script = fileURLToPath(new URL("../scripts/publish-verified-release.mjs", import.meta.url));
   for (const scenario of [
     { ref: "main", version: "0.2.0", channel: "stable", tag: "latest", succeeds: true },
     { ref: "alpha", version: "0.2.0-alpha.2", channel: "alpha", tag: "alpha", succeeds: true },
+    { ref: "main", version: "0.2.0", channel: "stable", tag: "latest", disabled: true, succeeds: true },
+    { ref: "alpha", version: "0.2.0-alpha.2", channel: "alpha", tag: "alpha", disabled: true, succeeds: true },
     { ref: "alpha", version: "0.2.0-alpha.2", channel: "alpha", tag: "latest", succeeds: false },
     { ref: "main", version: "0.2.0-alpha.2", channel: "stable", tag: "latest", succeeds: false },
     { ref: "feature/test", version: "0.2.0", channel: "stable", tag: "latest", succeeds: false },
@@ -39,6 +40,9 @@ test("verified publishing chooses the correct npm tag and rejects stale/mismatch
     { ref: "main", version: "0.2.0", channel: "stable", tag: "latest", head: "b".repeat(40), succeeds: false },
   ]) {
     await rm(record, { force: true });
+    await writeFile(join(directory, "verified.json"), JSON.stringify({ filename: "package.tgz", sha256: createHash("sha256").update(bytes).digest("hex"), ...(scenario.disabled
+      ? { telemetryMode: "disabled-by-default", nodeDisabled: true, browserDisabled: true }
+      : { telemetryMode: "sentry-live", nodeEventId: "a".repeat(32), browserEventId: "b".repeat(32) }) }));
     await writeFile(join(directory, "pack.json"), JSON.stringify([{ filename: "package.tgz", version: scenario.version }]));
     await writeFile(join(directory, "plan.json"), JSON.stringify({ ...scenario, sourceCommit: scenario.source ?? sha }));
     const result = spawnSync(process.execPath, [script], { cwd: root, encoding: "utf8", timeout: 10000,

@@ -79,8 +79,8 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-coding-agent": "1.3.0"
   },
   "devDependencies": {
     "@chengzhiyi/pi-web-protocol": "0.1.1",
