@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { archiveMembers } from "../src/host/server/plugins/hosted/archive.ts";
 import { HostedPluginInstaller, verifyArchiveIntegrity } from "../src/host/server/plugins/hosted/installer.ts";
 import { OFFICIAL_PLUGINS, selectRelease, hostUpdateDecision } from "../src/host/server/plugins/hosted/official-catalog.ts";
-import { compareVersions, satisfiesHost } from "../src/host/server/plugins/hosted/versions.ts";
+import { compareVersions, hostVersion, satisfiesHost, stableVersion } from "../src/host/server/plugins/hosted/versions.ts";
 import { sha256 } from "../src/host/server/plugins/hosted/resources.ts";
 import { failure } from "../src/host/server/plugins/hosted/errors.ts";
 import { legacyCheckpointLoader } from "../src/host/server/plugins/hosted/legacy-checkpoints.ts";
@@ -72,6 +72,30 @@ test("alpha hosts retain prerelease precedence while plugin selection stays stab
   const incompatible = fixture("0.2.0"); incompatible.entries[0]!.content = incompatible.entries[0]!.content!.replace(">=0.1.0 <1.0.0", ">=0.1.31");
   const bytes = tar(incompatible.entries);
   await assert.rejects(installer.installArchive(id, bytes, sri(bytes), "0.2.0"), code("incompatible_plugin"));
+});
+
+test("explicit alpha host ranges coexist with existing stable-range compatibility", async t => {
+  const alpha = "0.1.31-alpha.5", root = await temporary(t);
+  assert.deepEqual(hostVersion(alpha), { major: 0, minor: 1, patch: 31, alpha: 5 });
+  assert.equal(stableVersion(alpha), null);
+  for (const range of [alpha, ">=0.1.31-alpha.0 <0.1.31", "^0.1.31-alpha.0", "~0.1.31-alpha.0", ">=0.1.0 <1.0.0"])
+    assert.equal(satisfiesHost(alpha, range), true, range);
+  for (const range of [">=0.1.31", ">=0.1.31-alpha.6", ">=0.1.31-alpha.0 <0.1.31-alpha.4 || >=0.1.31", ">=0.1.31-alpha.0 || *", ">=0.1.31-alpha.0 garbage", ">=0.1.31-alpha.01", ">=0.1.31-beta.0", ">=0.1.31-alpha.9007199254740992"])
+    assert.equal(satisfiesHost(alpha, range), false, range);
+  assert.equal(satisfiesHost("0.1.31-alpha.10", ">0.1.31-alpha.9 <0.1.31"), true);
+  assert.equal(satisfiesHost("0.1.31", ">0.1.31-alpha.10"), true);
+  for (const range of ["^0.0.30-alpha.0", "~0.0.30-alpha.0"])
+    assert.equal(satisfiesHost(alpha, range), false, range);
+  assert.equal(hostVersion("0.1.31-alpha.9007199254740992"), null);
+  assert.throws(() => new HostedPluginInstaller({ root, hostVersion: "0.1.31-alpha.9007199254740992" }), code("invalid_version"));
+  const f = fixture(), manifest = { ...f.manifest, hostRange: ">=0.1.31-alpha.0 <0.1.31" };
+  const opted = fixture("0.1.0", { piWebapp: manifest });
+  const installer = new HostedPluginInstaller({ root, hostVersion: alpha });
+  assert.equal(selectRelease({ versions: { "0.1.0": { ...opted.release, piWebapp: manifest } } }, OFFICIAL_PLUGINS[0]!, alpha).version, "0.1.0");
+  await assert.rejects(installer.installArchive(id, opted.bytes, sri(f.bytes), "0.1.0"), code("integrity_mismatch"));
+  await installer.installArchive(id, opted.bytes, sri(opted.bytes), "0.1.0");
+  await installer.load(id, "0.1.0");
+  await assert.rejects(installer.installArchive(id, opted.bytes, sri(opted.bytes), "0.1.0-alpha.1"), code("invalid_version"));
 });
 
 test("host coordination preserves absent/disabled/pinned intent, offline compatible code and no downgrades", () => {

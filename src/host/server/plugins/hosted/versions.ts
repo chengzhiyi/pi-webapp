@@ -17,8 +17,16 @@ export function compareVersions(a: string, b: string): number {
  * remain stable-only. Alpha hosts opt into range evaluation with full SemVer
  * precedence: 0.1.31-alpha.5 is NOT 0.1.31 and cannot satisfy >=0.1.31.
  */
+export function hostVersion(value: string): (StableVersion & { alpha?: number }) | null {
+  const stable = stableVersion(value);
+  if (stable) return stable;
+  if (!isAlphaVersion(value)) return null;
+  const [core, suffix] = value.split("-alpha.");
+  const parsed = stableVersion(core!), alpha = Number(suffix);
+  return parsed && Number.isSafeInteger(alpha) ? { ...parsed, alpha } : null;
+}
 export function supportedHostVersion(value: string): boolean {
-  return !!stableVersion(value) || isAlphaVersion(value);
+  return !!hostVersion(value);
 }
 export function satisfiesHost(version: string, range: string): boolean {
   if (!supportedHostVersion(version) || typeof range !== "string" || range.length > 256) return false;
@@ -29,9 +37,10 @@ export function satisfiesHost(version: string, range: string): boolean {
     const tokens = branch.trim().split(/\s+/);
     let matches = true;
     for (const token of tokens) {
-      const m = /^(>=|<=|>|<|=|\^|~)?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/.exec(token);
-      if (!m || !stableVersion(m[2]!)) return false;
-      const target = m[2]!, c = compareSemanticVersions(version, target), v = stableVersion(target)!;
+      const m = /^(>=|<=|>|<|=|\^|~)?(.+)$/.exec(token);
+      const v = m && hostVersion(m[2]!);
+      if (!m || !v) return false;
+      const target = m[2]!, c = compareSemanticVersions(version, target);
       switch (m[1] ?? "=") {
         case "=": matches &&= c === 0; break;
         case ">=": matches &&= c >= 0; break;

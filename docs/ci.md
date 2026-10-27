@@ -22,22 +22,23 @@ rejects shutdown failures. Evidence is uploaded separately for each group.
 
 Browser regression/GC tests continue to install the lockfile-pinned Playwright
 Chromium and its dependencies. Publishing instead uses Chrome already installed
-on the `ubuntu-24.04` runner, via `PI_WEB_TEST_CHROME=true` in the live Sentry
-verification step. This avoids a serialized `playwright install --with-deps`
+on the `ubuntu-24.04` runner, via `PI_WEB_TEST_CHROME=true` in the disabled-telemetry
+package verification step. This avoids a serialized `playwright install --with-deps`
 apt download (11m24s in run 40331021569). It does not change the browser used for
 performance measurements or relax any release verification.
 
 `node scripts/verify-ci-chrome.mjs` launches the same Chrome channel, renders a
 page, executes JavaScript and logs browser/Node versions. It runs in the general
-PR job **before** Playwright installs dependencies and again before live release
+PR job **before** Playwright installs dependencies and again before package
 verification. A missing Chrome binary or shared library fails the job; there is
 no silent apt fallback, skipped verification or `continue-on-error`. A runner
 image update may change Chrome's version; inspect the preflight log when debugging.
 
 Publishing still selects its version under the existing serialized release job,
-checks/tests it, uploads source maps for the exact release build, packs without
-rebuilding, verifies that tarball against Sentry, then publishes that same tarball.
-No tests or release checks have been removed to save time.
+checks/tests it, keeps private source maps locally, packs without rebuilding,
+verifies that the packaged Node/browser telemetry stays disabled without contacting
+Sentry, then publishes that same tarball. The browser-install optimization does not
+re-enable telemetry or require Sentry credentials.
 
 ## Local checks
 
