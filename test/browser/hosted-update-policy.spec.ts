@@ -25,13 +25,14 @@ test("no strategy selector; independent check and fixed software-linked synchron
     await page.goto(bridge.url);
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
     const panel = page.locator("[data-hosted-management]"); await expect(panel).toBeVisible();
+    await panel.getByRole("button", { name: "Excalidraw (Official)", exact: true }).click();
     await expect(panel).toContainText("Installed plugins update with the app");
     await expect(panel.getByRole("combobox")).toHaveCount(0);
     await panel.getByRole("button", { name: "Check updates", exact: true }).click();
-    await expect(panel).toContainText("Available release: 0.2.0"); expect(downloads).toBe(0);
+    await expect(panel.getByText("0.2.0", { exact: true })).toBeVisible(); expect(downloads).toBe(0);
     // Drive the real startup reconciliation seam, not a mocked browser catalog response.
     expect(await integration.manager.reconcileHostUpgrade()).toBe(true); expect(downloads).toBe(1);
-    await panel.getByRole("button", { name: "Reload status", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh plugins", exact: true }).click();
     await expect(panel).toContainText("Installed · Disabled 0.2.0"); await expect(panel.getByRole("combobox")).toHaveCount(0);
   } finally { await bridge?.close(); await integration.shutdown(); await rm(root, { recursive: true, force: true }); }
 });

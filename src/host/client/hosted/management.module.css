@@ -1,18 +1,13 @@
-.section { display: flex; flex-direction: column; gap: 12px; min-width: 0; font-size: 13px; line-height: 20px; }
-.section h2 { margin: 0; font-size: 14px; font-weight: 500; }
-.cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 14px; min-width: 0; }
-.heading { display: flex; align-items: center; gap: 12px; }
-.artwork { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 10px; }
-.heading h3 { margin: 0; font-size: 14px; font-weight: 500; }
-.heading code { font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
-.card p,.section > p { margin: 0; }
-.status { color: var(--dsw-alias-label-tertiary); }
+.section { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 13px; line-height: 20px; }
+.section h2 { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
+.section h2 span { color: var(--dsw-alias-label-tertiary); font-weight: 400; padding-left: 5px; }
+.section p { margin: 0; }
 .notice { color: var(--dsw-alias-state-success-primary); }
-.error { color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; }
+.error { color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; font-size: 12px; line-height: 18px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.section button { max-width: 100%; white-space: normal; height: auto; min-height: 28px; }
-.section > button { align-self: flex-start; }
+.actions button { max-width: 100%; white-space: normal; height: auto; min-height: 28px; }
+.section > button { align-self: flex-start; max-width: 100%; white-space: normal; height: auto; min-height: 28px; }
 .section details { font-size: 12px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
 .section summary { cursor: pointer; }
-@media(max-width:600px) { .card { padding: 12px; } .heading { gap: 9px; } .heading code { font-size: 10px; } }
+.configuration { display: flex; flex-direction: column; gap: 12px; }
+@media(max-width:600px) { .rowActions { gap: 7px; } .rowActions > button:first-child { padding-inline: 8px; } }

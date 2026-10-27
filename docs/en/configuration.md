@@ -17,6 +17,14 @@ Browser sign-in opens the provider page; follow manual-code prompts if the callb
 
 Bundled plugin switches persist globally and require all chats to be idle. Disabling closes related tabs and blocks backend requests. Disabling Terminal requires confirmation and ends all service-owned terminals. **Installing a package is not toggling a bundled plugin.** External plugins do not offer a misleading UI-only switch.
 
+## Official plugins
+
+Official plugins in sidebar **Plugins** use the same enable/disable switch as built-in capabilities. Choose **Download** first, then enable the installed plugin; use **Update** for installed packages. Switches are unavailable before installation or while status is unknown, and reflect server-confirmed state only.
+
+Click a plugin row for its description, installed version, required configuration, update checks and uninstall action; **‹ Plugins** returns to the list. The page refresh button reads both built-in and official plugin status. Excalidraw requires no additional configuration.
+
+Installed plugins update with the app. Open editors delay the version switch; immediate reopening requires separate confirmation of the undo-history reset. Disabling or uninstalling saves and closes views first and stops on a failed save, retaining workspace files and plugin data. Failed downloads are not retried automatically and do not discard the current version.
+
 ## Diagrams
 
 Ask the agent to draw in the **main chat**. The drawing appears in its tool result; new drawings require no acceptance step. **Edit** opens only the native Excalidraw canvas and toolbar on the right. Request further changes in the main chat; existing-diagram AI edits use **Apply edits / Keep original** in chat, with stale-revision protection. Save/Open/Import, source download, white/transparent PNG export and backup recovery live in Excalidraw's menu. Workspace files use `.excalidraw` and remain conflict-protected. The right-workbench **Excalidraw** entry opens a blank native canvas, without a separate drawing landing page or prompt form.

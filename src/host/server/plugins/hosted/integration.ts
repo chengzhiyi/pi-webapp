@@ -192,7 +192,8 @@ export class HostedPluginIntegration {
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
       phase: this.recovery ? "reconnect-required" : p.phase,
       updatePolicy: p.updatePolicy, pinnedVersion: p.pinnedVersion, updateDiagnostic: p.updateDiagnostic,
-      ...(p.activeVersion ?? p.version ? { version: (p.activeVersion ?? p.version)! } : {}),
+      // A disabled runtime's historical active pointer is not the installed release.
+      ...(p.enabled && p.activeVersion ? { version: p.activeVersion } : p.version ? { version: p.version } : {}),
       ...(p.availableVersion ? { availableVersion: p.availableVersion } : {}), ...(p.pendingVersion ? { pendingVersion: p.pendingVersion } : {}),
       ...(p.generation !== null ? { generation: p.generation } : {}),
       ...(this.recovery || p.error ? { error: this.recovery instanceof Error ? this.recovery.message : p.error?.message ?? "Recovery required", errorCode: this.recovery ? "reconnect_required" : p.error?.code } : {}),

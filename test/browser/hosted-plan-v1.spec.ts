@@ -26,8 +26,8 @@ test("ORI-39 A04/A21: packed real v1 plan extension command, UI approval and v2 
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
     const manager = page.locator("[data-hosted-management]");
     await expect(manager).toContainText("Not installed");
-    await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
-    await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
     h.retained.setActiveToolsByName(["excalidraw_create_view", "diagram_read", "submit_plan"]);
     await h.tool("excalidraw_create_view", boxes(), true);
     expect(h.retained.getAllTools().some(tool => tool.name === "excalidraw_create_view")).toBe(true);

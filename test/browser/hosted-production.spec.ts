@@ -75,6 +75,8 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     if (width < 767 && await collapse.isVisible()) await collapse.click();
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
     await expect(manager).toBeVisible();
+    const open = manager.getByRole("button", { name: "Excalidraw (Official)", exact: true });
+    if (await open.isVisible()) await open.click();
   };
   let primaryError: unknown;
   try {
@@ -83,9 +85,9 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await showManager(); await expect(manager).toContainText("Not installed"); expect(downloads).toBe(0);
     expect(requests.filter(url => /\/hosted-plugins\/|Excalifont|Virgil|Xiaolai|mermaid/i.test(url))).toEqual([]);
     expect(retained.getAllTools().some(tool => /^(diagram_|excalidraw_)/.test(tool.name))).toBe(false);
-    await manager.getByRole("button", { name: "Install", exact: true }).click();
+    await manager.getByRole("button", { name: "Download", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled"); expect(downloads).toBe(1);
-    await manager.getByRole("button", { name: "Enable", exact: true }).click();
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click();
     await expect(manager).toContainText("Installed · Enabled");
     // Real SDK tool invocation, deterministic provider transport only. No external model call.
     const model = retained.modelRuntime.getModels("openai")[0]!;
@@ -129,7 +131,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await expect(save).toHaveCount(0); const saved = await readFile(join(root, "diagrams/中文.excalidraw"));
     const before = await action("get", { id: draftId }), generation = (await card()).generation!;
     version = "0.1.1"; selected = localRelease(bytes, version);
-    await showManager(); await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+    await showManager(); await manager.getByRole("button", { name: "Update", exact: true }).click();
     await expect(manager).toContainText("Close editors to update to: 0.1.1"); expect((await card()).generation).toBe(generation);
     await manager.getByRole("button", { name: "Update and reopen now", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
@@ -144,7 +146,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       // Separate default path: no explicit reopen consent and no full-page refresh.
       const beforeClose = (await card()).generation!;
       version = "0.1.2"; selected = localRelease(bytes, version);
-      await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+      await manager.getByRole("button", { name: "Update", exact: true }).click();
       await expect(manager).toContainText("Close editors to update to: 0.1.2");
       expect((await card()).generation).toBe(beforeClose);
       const editorTab = page.locator("[data-dockkit-content]").filter({ has: page.locator('iframe[title="Excalidraw editor"]') });
@@ -162,7 +164,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       await expect(manager).toContainText("Installed · Enabled 0.1.2");
       expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
     }
-    await manager.getByRole("button", { name: "Disable", exact: true }).click();
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled");
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden");
@@ -170,7 +172,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
     await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
-    await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     // Enabled means the backend committed, not that the new browser realms are ready.
     // Hold actual final-mount readiness requests on mobile to make that distinction deterministic.
     let releaseReadiness!: () => void, heldReadiness = 0;
@@ -182,7 +184,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       await route.continue(); // Never synthesize a readiness status or freeze acknowledgement.
     });
     try {
-      await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+      await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
       if (width === 390) {
         await expect.poll(() => heldReadiness, { message: "Final realms reached the delayed readiness boundary" }).toBeGreaterThan(0);
         expect([...(integration as any).views.values()].some((coordinator: any) => [...coordinator.views.values()].some((view: any) => view.busy))).toBe(true);

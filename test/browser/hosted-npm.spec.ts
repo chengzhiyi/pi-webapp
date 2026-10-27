@@ -63,6 +63,8 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
       const collapse = page.getByRole("button", { name: "Collapse right sidebar", exact: true });
       if (width < 767 && await collapse.isVisible()) await collapse.click();
       await page.getByRole("button", { name: "Plugins", exact: true }).click(); await expect(manager).toBeVisible();
+      const open = manager.getByRole("button", { name: "Excalidraw (Official)", exact: true });
+      if (await open.isVisible()) await open.click();
     };
     await page.goto(bridge.url);
     const bootId = await page.evaluate(() => { const value = crypto.randomUUID(); (window as any).__npmTestBoot = value; return value; });
@@ -75,12 +77,12 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
       // No registry metadata rewriting to make an old version appear latest.
       const response = await nativeFetch(address.origin + "/api/hosted-plugins/manage", { method: "POST", headers, body: JSON.stringify({ pluginId: id, operation: "install", version: upgradeFrom }) });
       expect(response.status, await response.text()).toBe(200);
-    } else await manager.getByRole("button", { name: "Install", exact: true }).click();
+    } else await manager.getByRole("button", { name: "Download", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
     expect((await card()).version).toBe(upgradeFrom ?? version);
     expect(registry.some(item => item.url.includes("registry.npmjs.org/") && !item.url.endsWith(".tgz") && item.status === 200)).toBe(true);
     expect(registry.filter(item => item.url.endsWith(".tgz"))).toEqual([{ url: `https://registry.npmjs.org/@chengzhiyi/pi-excalidraw/-/pi-excalidraw-${upgradeFrom ?? version}.tgz`, status: 200 }]);
-    await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
     const model = retained.modelRuntime.getModels("openai")[0]!;
     await retained.modelRuntime.setRuntimeApiKey("openai", "fixture-no-network"); await retained.setModel(model);
     let stage = 0;
@@ -112,7 +114,7 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
     await showManager();
     if (upgradeFrom) {
       const generation = (await card()).generation!;
-      await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+      await manager.getByRole("button", { name: "Update", exact: true }).click();
       // The public 15 MB archive downloads before a pending switch exists. Use the
       // same bounded network allowance as installation, not the 5s local-fixture default.
       await expect(manager).toContainText(`Close editors to update to: ${version}`, { timeout: 60_000 });
@@ -145,12 +147,12 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
       expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).not.toBe("hidden");
       await page.screenshot({ path: info.outputPath(`npm-upgrade-${width}.png`) });
     }
-    await manager.getByRole("button", { name: "Disable", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden"); await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
     await manager.getByRole("button", { name: "Uninstall", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click(); await expect(manager).toContainText("Not installed");
     expect(await readFile(join(root, "diagrams/npm中文.excalidraw"))).toEqual(saved);
-    await manager.getByRole("button", { name: "Install", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
-    await manager.getByRole("button", { name: "Enable", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
+    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
     expect((await action("get", { id: draftId })).scene).toEqual(before.scene); expect(sessions.session).toBe(retained);
     expect(await page.evaluate(() => (window as any).__npmTestBoot)).toBe(bootId); expect(errors).toEqual([]); expect(external).toEqual([]);
     await page.screenshot({ path: info.outputPath(`npm-lifecycle-${width}.png`) });

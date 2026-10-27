@@ -25,15 +25,17 @@ for (const fault of ["cancel", "interrupt"] as const) test(`actual management UI
     await page.goto(bridge.url); await page.getByRole("button", { name: "Plugins", exact: true }).click();
     const manager = page.locator("[data-hosted-management]");
     await expect(manager).toContainText("Installed · Disabled");
-    await manager.getByRole("button", { name: "Update (wait for editors)", exact: true }).click();
+    await manager.getByRole("button", { name: "Update", exact: true }).click();
     await expect.poll(() => started).toBe(true);
     if (fault === "cancel") {
       await manager.getByRole("button", { name: "Cancel download (no rollback after commit)", exact: true }).click();
       await expect.poll(() => cancelled).toBe(true);
     } else stream.error(new Error("connection reset during archive"));
-    await expect(manager.getByRole("alert").first()).toContainText(fault === "cancel" ? /cancel/i : /connection reset/);
-    await expect(manager.getByRole("button", { name: "Reload status", exact: true })).toBeEnabled();
-    await manager.getByRole("button", { name: "Reload status", exact: true }).click();
+    await expect(manager.getByRole("alert").first()).toContainText(fault === "cancel" ? /cancel/i : /Cannot reach/);
+    await manager.getByRole("button", { name: "Excalidraw (Official)", exact: true }).click();
+    if (fault === "interrupt") await expect(manager.getByRole("alert")).toContainText("connection reset");
+    await expect(page.getByRole("button", { name: "Refresh plugins", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Refresh plugins", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled");
     await expect(manager).toContainText("0.1.0");
     expect((await installer.load(id, "0.1.0")).digest).toBe(old.digest);
