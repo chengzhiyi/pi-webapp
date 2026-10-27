@@ -9,7 +9,7 @@ import { WorkspaceUnavailableError } from "../src/host/server/workspaces/workspa
 
 test("unavailable workspace errors are not sent to Sentry while filesystem failures remain reportable", async () => {
   const events: Event[] = [];
-  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [header, event] of envelope[1]) if (header.type === "event") events.push(event as Event); return { statusCode: 200 }; }, flush: async () => true }),
   });
   try {
@@ -22,31 +22,36 @@ test("unavailable workspace errors are not sent to Sentry while filesystem failu
   } finally { await telemetry.close(); }
 });
 
-test("DSN configuration defaults on, supports per-side overrides, and never inherits host Sentry settings", () => {
+test("Sentry defaults off even with inherited DSNs; explicit opt-in retains per-side overrides", () => {
   const dsn = "https://public@example.com/12";
-  const defaults = readTelemetryConfig({});
+  for (const env of [{}, { SENTRY_DSN: dsn }, { PI_WEB_SENTRY_DSN: dsn }, { PI_WEB_SENTRY_NODE_DSN: dsn }, { PI_WEB_SENTRY_BROWSER_DSN: dsn }, { PI_WEB_SENTRY_ENABLED: "false" }, { PI_WEB_SENTRY_ENABLED: "1" }]) {
+    const config = readTelemetryConfig(env);
+    for (const side of [config.node, config.browser]) { assert.equal(side.enabled, false); assert.equal(side.dsn, undefined); }
+  }
+  const readEnabled = (env: Record<string, string> = {}, warn?: (message: string) => void) => readTelemetryConfig({ PI_WEB_SENTRY_ENABLED: "true", ...env }, warn);
+  const defaults = readEnabled();
   assert.equal(defaults.browser.enabled, true);
   assert.equal(defaults.node.enabled, true);
   assert.equal(defaults.browser.dsn, DEFAULT_SENTRY_DSN);
   assert.equal(defaults.node.dsn, DEFAULT_SENTRY_DSN);
-  assert.equal(readTelemetryConfig({ PI_WEB_SENTRY_DSN: dsn }).browser.enabled, true);
+  assert.equal(readEnabled({ PI_WEB_SENTRY_DSN: dsn }).browser.enabled, true);
   assert.equal(readTelemetryConfig({ PI_WEB_SENTRY_DSN: dsn, PI_WEB_SENTRY_ENABLED: "false" }).node.enabled, false);
-  assert.equal(readTelemetryConfig({ SENTRY_DSN: dsn }).node.dsn, DEFAULT_SENTRY_DSN);
+  assert.equal(readEnabled({ SENTRY_DSN: dsn }).node.dsn, DEFAULT_SENTRY_DSN);
   assert.equal(readTelemetryConfig({ PI_WEB_SENTRY_ENABLED: "false" }).browser.enabled, false);
-  const blank = readTelemetryConfig({ PI_WEB_SENTRY_DSN: "" });
+  const blank = readEnabled({ PI_WEB_SENTRY_DSN: "" });
   assert.equal(blank.browser.enabled, false);
   assert.equal(blank.node.enabled, false);
-  const sideDisabled = readTelemetryConfig({ PI_WEB_SENTRY_NODE_DSN: "" });
+  const sideDisabled = readEnabled({ PI_WEB_SENTRY_NODE_DSN: "" });
   assert.equal(sideDisabled.node.enabled, false);
   assert.equal(sideDisabled.browser.dsn, DEFAULT_SENTRY_DSN);
-  const split = readTelemetryConfig({ PI_WEB_SENTRY_DSN: dsn, PI_WEB_SENTRY_NODE_DSN: "https://other@node.example.com/34" });
+  const split = readEnabled({ PI_WEB_SENTRY_DSN: dsn, PI_WEB_SENTRY_NODE_DSN: "https://other@node.example.com/34" });
   assert.equal(split.browser.dsn, dsn);
   assert.equal(split.node.dsn, "https://other@node.example.com/34");
-  const defaultOverride = readTelemetryConfig({ PI_WEB_SENTRY_BROWSER_DSN: dsn });
+  const defaultOverride = readEnabled({ PI_WEB_SENTRY_BROWSER_DSN: dsn });
   assert.equal(defaultOverride.browser.dsn, dsn);
   assert.equal(defaultOverride.node.dsn, DEFAULT_SENTRY_DSN);
   for (const invalid of ["garbage", "https://public:secret@example.com/12", "https://public@example.com/12?token=secret"]) {
-    assert.equal(readTelemetryConfig({ PI_WEB_SENTRY_DSN: invalid }, () => {}).node.enabled, false);
+    assert.equal(readEnabled({ PI_WEB_SENTRY_DSN: invalid }, () => {}).node.enabled, false);
   }
 });
 
@@ -84,7 +89,7 @@ test("rate limiting bounds distinct errors and carries repeat counts into the ne
 
 test("tool result envelopes retain warning severity and stable grouping without an observer stack", async () => {
   const events: Event[] = [];
-  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+  const telemetry = new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => { for (const [h, e] of envelope[1]) if (h.type === "event") events.push(e as Event); return { statusCode: 200 }; }, flush: async () => true }),
   });
   await telemetry.ready;
@@ -127,7 +132,7 @@ test("isolated Node capture emits sanitized correlated events and preserves the 
   const handlers = process.listeners("uncaughtException");
   const beforeExit = process.listenerCount("beforeExit");
   const telemetry = new NodeTelemetry({
-    env: { PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
+    env: { PI_WEB_SENTRY_ENABLED: "true", PI_WEB_SENTRY_DSN: "https://public@example.com/12" }, monitor: false,
     transport: () => ({ send: async (envelope) => {
       for (const [header, payload] of envelope[1]) { types.push(header.type); if (header.type === "event") events.push(payload as Event); }
       return { statusCode: 200 };
