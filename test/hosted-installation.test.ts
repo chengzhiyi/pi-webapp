@@ -100,9 +100,9 @@ test("explicit alpha host ranges coexist with existing stable-range compatibilit
 
 test("host coordination preserves absent/disabled/pinned intent, offline compatible code and no downgrades", () => {
   const base = {installed:true,enabled:false,policy:"automatic" as const,currentCompatible:true,currentVersion:"0.1.0",recommendedVersion:"0.2.0",networkAvailable:true};
-  assert.deepEqual(hostUpdateDecision(base), {action:"update",enabled:false});
+  assert.deepEqual(hostUpdateDecision(base), {action:"keep",enabled:false});
   assert.deepEqual(hostUpdateDecision({...base,installed:false}), {action:"none",enabled:false});
-  assert.equal(hostUpdateDecision({...base,policy:"pinned"}).action,"update");
+  assert.equal(hostUpdateDecision({...base,policy:"pinned"}).action,"keep");
   assert.equal(hostUpdateDecision({...base,policy:"pinned",trigger:"independent"}).action,"keep");
   assert.equal(hostUpdateDecision({...base,networkAvailable:false}).action,"keep");
   assert.deepEqual(hostUpdateDecision({...base,enabled:true,currentCompatible:false,networkAvailable:false}), {action:"disable-incompatible",enabled:false});

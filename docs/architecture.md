@@ -10,6 +10,7 @@ src/host/server/
   sessions/                 Foreground/background sessions and lifecycle
   workspaces/               Workspace registration and directory selection
   plugins/                  Catalog, preferences, request registration and teardown
+    hosted/                 Verified plugin packages, workers, state and view recovery
   models/                   Provider authentication and model configuration
   attachments/              Conversation attachment storage
   updates/                  Launcher update integration
@@ -18,7 +19,6 @@ src/plugins/builtin/
   git/{server,client,contract}/
   files/{server,client,contract}/
   terminal/{server,client,contract}/
-  diagrams/{server,client,contract}/
 src/contracts/              Host wire DTOs, event validation and workbench contributions
 src/platform/telemetry/      Shared diagnostics implementation
 web/src/                    Browser bootstrap and common UI/design primitives
@@ -30,7 +30,7 @@ Source ownership is separate from execution: `server` runs in Node and `client` 
 
 ## Contribution ownership
 
-`src/plugins/builtin/server.ts` and `client.ts` are the builtin composition roots. The local Diagrams plugin adds a lazy Excalidraw editor and session-owned agent tools; see [diagrams.md](diagrams.md) for data, persistence and asset boundaries. `builtinAgentTools` supplies tools to both the foreground extension and retained SDK sessions; execution uses the same registry's enablement/toggle coordination. Workbench artifact resolvers map plugin links to typed, owned tabs. The transport dispatches through `ServerPluginRegistry`; it does not import Git, file or terminal request implementations. Each server registration owns its request routes, domain validation and teardown. Existing `/api/workspace/*` and `/api/terminal/*` routes remain compatible aliases; bounded non-streaming operations also accept the common `/api/plugin-action` envelope with a builtin plugin ID and action name.
+`src/plugins/builtin/server.ts` and `client.ts` are the builtin composition roots. Excalidraw is an optional independently installed hosted plugin; see [diagrams.md](diagrams.md) for data and persistence and [plugin lifecycle and update recovery](plugin-update-recovery.md) for ownership. `builtinAgentTools` supplies builtin tools to both the foreground extension and retained SDK sessions. The hosted SDK adapter separately publishes capability-qualified tools; execution uses the owning plugin's permission policy. Workbench artifact resolvers map plugin links to typed, owned tabs. The transport dispatches through `ServerPluginRegistry`; it does not import Git, file or terminal request implementations. Each server registration owns its request routes, domain validation and teardown. Existing `/api/workspace/*` and `/api/terminal/*` routes remain compatible aliases; bounded non-streaming operations also accept the common `/api/plugin-action` envelope with a builtin plugin ID and action name.
 
 Builtin browser modules use `defineWebPlugin`, API v1 validation, synchronous activation and scoped cleanup just like external browser modules. The additive, host-owned `workbench.apiVersion: 1` contribution declares a guide entry, panel kinds, renderers and optional titles. `src/contracts/workbench.ts` owns the TypeScript definitions. Unsupported contribution versions and duplicate panel kinds fail that plugin's load. Existing protocol-v1 slots, actions and interactions remain supported; this does not modify the published `@chengzhiyi/pi-web-protocol` package.
 
@@ -45,6 +45,20 @@ Builtin opt-outs persist in Pi's `pi-web/plugins.json` below the agent data dire
 Disabling removes the module from the enabled browser catalog and rejects both its legacy endpoints and common action envelope. Terminal disable requires confirmation and closes the service's terminal streams and PTYs; re-enable starts no old processes. `plugin_state` NDJSON updates refresh browser plugin activations without reloading the document, preserving composer drafts. Management invalidations received during an initial read, refresh or mutation are coalesced into one subsequent authoritative read; they never replay a mutation. Idle-time toggles are not arbitrary code unloading or a sandbox. External shells/editors and independently started TUI work remain outside this host's operation coordination.
 
 External Pi Web plugins appear with their runtime ownership described. Their switches are read-only: the current external Pi protocol does not expose independently safe runtime teardown. Use Packages & extensions to add/remove those Pi packages and reload resources. Hiding their browser entry must not masquerade as disabling their tools or background runtime. This page does not manage ordinary Pi extensions that have no Web manifest.
+
+Hosted protocol-v2 packages have a separate, explicit worker/state lifecycle and
+can be independently installed, updated, disabled and uninstalled. Compatible
+plugins do not follow every host patch release. Only actual protocol/data
+conflicts participate in host pair selection. A host update owns a reversible
+worker handoff lease, while the plugin broker continues to own data. Cancellation
+restores only an exactly matched host selection pointer and retains recovery
+journals. View retention never claims an unconfirmed drawing was saved.
+
+Model requests use the model transport interface. Proxy selection and redacted
+network diagnostics do not depend on plugin update state. A plugin-local
+publication failure denies that plugin's admission and releases the shared Agent
+barrier so ordinary chats remain available. The shared barrier is held only for
+bounded registry changes and the final host handoff; failure releases it.
 
 Disabling Files or Git controls that capability's host surface, not filesystem or executable permissions. Other enabled capabilities may still perform scoped reads; agents and external terminals may still run system Git. No workspace or session files are deleted by plugin switches.
 

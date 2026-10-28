@@ -9,6 +9,7 @@ import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { PluginManagementPage } from "./PluginManagementPage.tsx";
 import { PiUpdateShortcut } from "./PiUpdateShortcut.tsx";
+import { AppUpdateProvider } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import { IconPluginPinwheelOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
 import { MarkdownText } from "../../../web/src/ui/shared/primitives/markdown/MarkdownText.tsx";
@@ -158,7 +159,7 @@ export function PiApp() {
   const renderSidebarSlot = (key: string, owner: any, options?: { fallback?: React.ReactNode }) => {
     if (key === "sidebar.brand.mark") return <PiLogo size={24} />;
     if (key === "sidebar.brand.name") return <span>pi-webapp</span>;
-    if (key === "sidebar.footer.action") return <PiUpdateShortcut wide={owner.wide} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} update={bridge.update} />;
+    if (key === "sidebar.footer.action") return <PiUpdateShortcut wide={owner.wide} hideError={settingsOpen} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} />;
     if (key === "sidebar.panellist") return <IconPluginPinwheelOutlineRegular size={owner.size} />;
     if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row ${owner.wide ? "" : "pi-settings-trigger-rail"}`}><button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label={t("Pi 设置", "Pi Settings")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>{t("Pi 设置", "Pi Settings")}</span>}</button></div>;
     if (key === "sidebar.workspaces") return <PiWorkspaceBrowser
@@ -198,11 +199,11 @@ export function PiApp() {
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}
     renderSlot={renderSlot}
     t={(name: string) => labels[name] ?? name}
-  />{pluginErrors.length > 0 && <div className="pi-plugin-errors" role="status" title={pluginErrors.join("\n")}>{t("插件加载失败", "Plugin load failed")}: {pluginErrors.length}</div>}{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</>;
+  />{pluginErrors.length > 0 && <div className="pi-plugin-errors" role="status" title={pluginErrors.join("\n")}>{t("插件加载失败", "Plugin load failed")}: {pluginErrors.length}</div>}{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</AppUpdateProvider>;
 }

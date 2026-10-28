@@ -18,7 +18,7 @@ async function fixture(_t: { after(fn: () => Promise<void>): void }) {
 }
 const hooks = () => ({ canSwitch: () => true, freeze: async () => {}, resume: async () => {}, committed: async () => {} });
 
-test("host-linked default updates live runtime; failed download preserves old generation and retries; never downgrades", async t => {
+test("compatible host startup does not update plugins; explicit update failure preserves generation and never downgrades", async t => {
   const options = await fixture(t), old = integrationFixture(), next = integrationFixture("0.2.0");
   let fail = true, olderOnly = false, downloads = 0;
   const manager = new HostedPluginManager({ ...options, hostVersion: "0.1.29", hooks, fetch: (async url => {
@@ -28,23 +28,24 @@ test("host-linked default updates live runtime; failed download preserves old ge
   t.after(async () => { await manager.shutdown(); await rm(options.root, { recursive: true, force: true }); });
   await manager.installer.installArchive(id, old.bytes, integrity(old.bytes), "0.1.0");
   await manager.manage(id, "enable"); const generation = manager.tools[0]!.generation;
-  assert.equal(await manager.reconcileHostUpgrade(), false);
+  assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(downloads, 0);
+  await assert.rejects(manager.manage(id, "update"), /injected archive interruption/);
   assert.equal(manager.tools[0]!.generation, generation);
   assert.equal((await manager.inventory()).plugins[0]!.activeVersion, "0.1.0");
-  fail = false; assert.equal(await manager.reconcileHostUpgrade(), true);
+  fail = false; await manager.manage(id, "update");
   assert.equal((await manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
   assert.equal(manager.tools[0]!.generation, generation + 1);
-  olderOnly = true; assert.equal(await manager.reconcileHostUpgrade(), false);
+  olderOnly = true; await assert.rejects(manager.manage(id, "update"), /No compatible/);
   assert.equal((await manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
   assert.equal(downloads, 2);
 });
 
-test("host-linked pending waits for editors without undo reset, and does not claim completed synchronization", async t => {
+test("independent pending update waits for editors without undo reset", async t => {
   const options = await fixture(t), old = integrationFixture(), next = integrationFixture("0.2.0"); let canSwitch = true;
   const manager = new HostedPluginManager({ ...options, hostVersion: "0.1.29", hooks: () => ({ ...hooks(), canSwitch: () => canSwitch }), fetch: (async url => String(url).endsWith(".tgz") ? new Response(new Uint8Array(next.bytes)) : Response.json({ versions: { "0.2.0": next.release } })) as typeof fetch });
   t.after(async () => { await manager.shutdown(); await rm(options.root, { recursive: true, force: true }); });
   await manager.installer.installArchive(id, old.bytes, integrity(old.bytes), "0.1.0"); await manager.manage(id, "enable");
-  canSwitch = false; assert.equal(await manager.reconcileHostUpgrade(), false);
+  canSwitch = false; assert.equal((await manager.manage(id, "update") as { pending: boolean }).pending, true);
   let card = (await manager.inventory()).plugins[0]!;
   assert.equal(card.pendingVersion, "0.2.0"); assert.equal(card.activeVersion, "0.1.0");
   canSwitch = true; await manager.manage(id, "retry");
@@ -84,11 +85,11 @@ test("incompatible pinned runtime never starts after host change and keeps requi
 
 test("notification is independent of host-linked default", () => {
   const input = { installed: true, enabled: true, policy: "notify" as const, currentCompatible: true, currentVersion: "0.1.0", recommendedVersion: "0.2.0", networkAvailable: true };
-  assert.equal(hostUpdateDecision(input).action, "update");
+  assert.equal(hostUpdateDecision(input).action, "keep");
   assert.equal(hostUpdateDecision({ ...input, trigger: "independent" }).action, "notify");
 });
 
-test("exact external 0.1.0 archive remains compatible across stable host startup and offline linked retry", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async t => {
+test("exact external 0.1.0 archive remains independent across offline and online compatible host startup", { skip: !process.env.HOSTED_EXCALIDRAW_TGZ }, async t => {
   const options = await fixture(t), bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
   // Default pins this integrated source's independently built archive; other exact
   // builds must supply their recorded digest rather than bypass integrity checks.
@@ -109,15 +110,17 @@ test("exact external 0.1.0 archive remains compatible across stable host startup
   // Actual archive metadata is authoritative: do not manufacture an unpublished successor.
   integration = new HostedPluginIntegration({ ...opts, hostVersion: "0.1.30" }); t.after(async () => { await integration.shutdown(); await rm(options.root, { recursive: true, force: true }); });
   await integration.start(); await integration.start();
-  assert.equal(calls, 1); const card = (await integration.inventory()).plugins[0]!;
+  assert.equal(calls, 0); const card = (await integration.inventory()).plugins[0]!;
   assert.equal(card.version, "0.1.0"); assert.equal(card.enabled, true);
-  assert.equal(integration.manager.tools.length, 1); assert.equal(card.updateDiagnostic!.status, "failed");
-  assert.equal(JSON.parse(await readFile(join(options.root, "host-version.json"), "utf8")).version, "0.1.29");
+  assert.equal(integration.manager.tools.length, 1); assert.equal(card.updateDiagnostic, undefined);
+  assert.equal(JSON.parse(await readFile(join(options.root, "host-version.json"), "utf8")).version, "0.1.30");
   await integration.shutdown(); online = true;
   integration = new HostedPluginIntegration({ ...opts, hostVersion: "0.1.30" }); await integration.start();
-  assert.equal(calls, 2); assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "up-to-date");
+  assert.equal(calls, 0); assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic, undefined);
+  await integration.manage({ pluginId: id, operation: "update", downloadId: crypto.randomUUID() });
+  assert.equal(calls, 1); assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "up-to-date");
   assert.equal(JSON.parse(await readFile(join(options.root, "host-version.json"), "utf8")).version, "0.1.30");
   await integration.shutdown();
   integration = new HostedPluginIntegration({ ...opts, hostVersion: "0.1.30" }); await integration.start();
-  assert.equal(calls, 2); assert.equal(integration.manager.tools.length, 1);
+  assert.equal(calls, 1); assert.equal(integration.manager.tools.length, 1);
 });

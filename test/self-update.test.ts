@@ -115,11 +115,13 @@ test("installs a checked npm array release before requesting a supervised restar
     assert.equal(prepared.version, "0.2.0");
     assert.equal(calls.filter((args) => args[0] === "install").length, 2);
     assert.equal(calls.find((args) => args[0] === "install")?.[1], "pi-webapp@0.2.0");
+    await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
+    assert.deepEqual(await updater.prepare(), prepared, "preparation is idempotent without a pointer write");
+    await updater.requestRestart(prepared);
     const manifest = JSON.parse(await readFile(join(agentDir, "pi-web", "update.json"), "utf8"));
     assert.equal(manifest.version, "0.2.0");
     assert.equal(manifest.launcher, prepared.launcher);
     await assert.rejects(updater.prepare(), /正在重启/);
-    await updater.requestRestart(prepared);
     const restart = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.restart"), "utf8"));
     assert.equal(restart.nonce, "nonce-a");
     assert.equal(restart.launcher, prepared.launcher);

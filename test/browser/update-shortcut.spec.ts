@@ -118,3 +118,31 @@ test("successful update waits for the running version then reloads and hides the
     expect(versionChecks).toBeGreaterThanOrEqual(2);
   } finally { await bridge.close(); }
 });
+
+for (const leave of ["section", "dialog"] as const) test(`settings update remains owned by the app after leaving its ${leave}`, async ({ page }) => {
+  const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
+  let ready = false, installs = 0, versionChecks = 0;
+  await page.addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
+  await page.route("**/api/update", async route => {
+    if (route.request().method() === "POST") {
+      installs++; await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ version: "0.1.18" }) });
+    } else await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...updateStatus, available: !ready }) });
+  });
+  await page.route("**/api/update/version", async route => {
+    versionChecks++; await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: ready ? "0.1.18" : "0.1.17" }) });
+  });
+  try {
+    await page.goto(bridge.url);
+    await page.getByRole("button", { name: "Pi Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Update and restart", exact: true }).click();
+    await expect(page.getByText("Restarting and waiting for the new version…", { exact: true })).toBeVisible();
+    if (leave === "section") await page.getByRole("button", { name: "Models", exact: true }).click();
+    else await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Restarting…", exact: true })).toBeDisabled();
+    await expect.poll(() => versionChecks).toBeGreaterThan(0);
+    const reload = page.waitForEvent("domcontentloaded"); ready = true;
+    await reload;
+    await expect(page.getByRole("button", { name: "Download updates", exact: true })).toHaveCount(0);
+    expect(installs).toBe(1);
+  } finally { await bridge.close(); }
+});
