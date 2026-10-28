@@ -45,9 +45,9 @@ export async function candidateHost(version: string, root: string): Promise<stri
   const pkg = JSON.parse(bytes.toString("utf8"));
   const contract = pkg.piWebappHostedRuntime;
   if (pkg.name !== "pi-webapp" || pkg.version !== version || contract?.protocol !== 2 || contract?.runtimeProtocol !== 1 ||
-      contract?.pairJournal !== 1 || !Array.isArray(contract?.capabilities) ||
+      contract?.pairJournal !== 1 || contract?.ownershipProtocol !== 2 || !Array.isArray(contract?.capabilities) ||
       !["state", "workspace", "legacy", "panels", "messages"].every(c => contract.capabilities.includes(c))) {
-    throw new HostedPluginError("host_pair_required", "Candidate host lacks explicit hosted protocol/capability/pair-journal metadata; retain current host or install a capable host");
+    throw new HostedPluginError("host_pair_required", "Candidate host lacks explicit hosted protocol/capability/pair-journal/crash-safe ownership metadata; retain current host or install a capable host");
   }
   const worker = await boundedRead(workerPath, 32 * 1024 * 1024);
   if (!worker) throw new HostedPluginError("host_pair_required", "Candidate worker missing");

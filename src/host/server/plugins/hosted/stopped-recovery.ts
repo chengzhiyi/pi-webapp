@@ -1,7 +1,7 @@
 import { lstat, readdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "./resources.ts";
-import { atomicJson, boundedRead, readJournal } from "./storage.ts";
+import { atomicJson, boundedRead, isOwnershipMarker, readJournal } from "./storage.ts";
 import { HostedStateBroker, type ActiveHostedPlugin } from "./state-broker.ts";
 import { HostedPluginError } from "./errors.ts";
 
@@ -63,7 +63,13 @@ export async function recoverStoppedLocks(root: string, expectedFingerprint: str
   if (confirmation !== STOPPED_CONFIRMATION || !/^[a-f0-9]{64}$/.test(expectedFingerprint)) throw new HostedPluginError("confirmation_required", "Explicit stopped-owner and verified-backup confirmation required");
   const report = await inspectStoppedStorage(root);
   if (report.fingerprint !== expectedFingerprint) throw new HostedPluginError("recovery_changed", "Storage changed since inspection; nothing recovered, inspect again");
-  const locks = report.files.filter(f => ["runtime.lock", "transaction.lock"].includes(f.path));
+  const locks = [];
+  for (const file of report.files.filter(f => ["runtime.lock", "transaction.lock"].includes(f.path))) {
+    const bytes = await boundedRead(join(root, file.path), 2 * 1024 * 1024);
+    // v2 markers fence legacy hosts and are reusable under kernel custody.
+    // Never rename them or their SQLite inode in the legacy repair tool.
+    if (bytes && !isOwnershipMarker(bytes)) locks.push(file);
+  }
   // Refuse overwriting prior evidence. A repeated application needs a fresh inspection.
   for (const lock of locks) {
     const target = `recovered-${expectedFingerprint}-${lock.path}.json`;
