@@ -9,13 +9,15 @@ import { WorkspaceSessions } from "../../src/host/server/sessions/workspace-sess
 import { startBridge, type Bridge } from "../../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
+import { environmentFetch } from "../../bin/http-transport.mjs";
 
 // Explicit online opt-in. No local archive, fake release/version, or registry response substitution.
 const upgradeFrom = process.env.HOSTED_NPM_UPGRADE_FROM;
 for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade from ${upgradeFrom}` : "install"} and retained-session drawing lifecycle at ${width}px`, async ({ page }, info) => {
   test.skip(process.env.HOSTED_NPM_VERIFY !== "1", "Explicit public npm verification required");
   test.setTimeout(180_000); page.setDefaultTimeout(15_000);
-  const id = "@chengzhiyi/pi-excalidraw", version = process.env.HOSTED_NPM_VERSION ?? "0.1.0";
+  const id = "@chengzhiyi/pi-excalidraw";
+  let version = process.env.HOSTED_NPM_VERSION;
   const root = await realpath(await mkdtemp(join(tmpdir(), "hosted-npm-browser-")));
   const prior = process.env.PI_CODING_AGENT_DIR, roots = process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS;
   process.env.PI_CODING_AGENT_DIR = join(root, "agent"); process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = "";
@@ -30,7 +32,9 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
     changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
     fetch: (async (...args: Parameters<typeof fetch>) => {
       try {
-        const response = await nativeFetch(...args); // Observe only; return the unmodified real response.
+        // Observe the production transport, including the user's environment
+        // proxy. Do not rewrite metadata, archives, response bytes or integrity.
+        const response = await environmentFetch(...args);
         registry.push({ url: String(args[0]), status: response.status }); return response;
       } catch (error) {
         registry.push({ url: String(args[0]), status: 0, error: `${String(error)}; cause=${String((error as Error).cause)}` });
@@ -42,7 +46,9 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
   const errors: string[] = [], external: string[] = [];
   let primaryError: unknown;
   try {
-    await integration.start(); await sessions.open(root, "new");
+    await integration.start();
+    version ??= (await integration.manager.installer.check(id)).version;
+    await sessions.open(root, "new");
     const retained = sessions.session!, sessionId = retained.sessionManager.getSessionId();
     const { host } = terminalHost(root); host.hosted = integration.handlers; host.snapshot = () => sessions.snapshot();
     host.workspaces = async () => ({ items: [{ id: "workspace", title: "Online verification", path: root }], activeId: "workspace", sessions: [{ id: sessionId, workspaceId: "workspace", path: null, name: "Published npm test", modified: new Date().toISOString() }] });

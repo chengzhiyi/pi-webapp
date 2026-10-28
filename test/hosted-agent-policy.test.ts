@@ -15,6 +15,7 @@ test("real SDK/TUI mount: direct + codemode/nested admission, plan/allowlist/dis
   let policy: HostedAgentPolicy = { enabled: true }, calls = 0;
   let pi!: ExtensionAPI, foreignPi!: ExtensionAPI;
   const adapter = new HostedAgentAdapter({ policy: () => policy, invoke: async () => { calls++; return { content: [{ type: "text", text: "allowed" }], details: undefined }; } });
+  await adapter.verifyCompatibility();
   const manager = SessionManager.inMemory(cwd);
   const scope = { cwd, workspaceId: "trusted", sessionId: manager.getSessionId() };
   const outcomes: boolean[] = [];
