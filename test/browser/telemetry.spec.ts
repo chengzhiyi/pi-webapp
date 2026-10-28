@@ -230,19 +230,19 @@ for (const failure of ["disconnected", "stale-version", "pending"] as const) {
   });
 }
 
-test("closing update settings cancels polling without a later timeout report", async ({ page }) => {
+for (const readiness of ["ready", "pending"] as const) test(`closing update settings retains app-owned readiness polling (${readiness})`, async ({ page }) => {
   const f = await fixture(page);
-  let attempts = 0;
+  let attempts = 0, cancelled = 0, reloads = 0;
   let release!: () => void;
   const pending = new Promise<void>((resolve) => { release = resolve; });
-  await page.route("**/api/update/version", async (route) => {
+  page.on("requestfailed", request => { if (new URL(request.url()).pathname === "/api/update/version") cancelled++; });
+  await page.route("**/api/update/version", async route => {
     attempts++;
     await pending;
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "0.1.10" }) }).catch(() => {});
   });
   try {
     await openUpdate(page, f.bridge); await f.sdkReady;
-    let reloads = 0;
     page.on("domcontentloaded", () => { reloads++; });
     await page.clock.install();
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
@@ -250,14 +250,27 @@ test("closing update settings cancels polling without a later timeout report", a
     await expect(page.getByText(/^(正在重启并等待新版连接…|Restarting and waiting for the new version…)$/)).toBeVisible();
     await page.clock.fastForward(1200);
     await expect.poll(() => attempts).toBe(1);
-    const cancelled = page.waitForEvent("requestfailed", (request) => new URL(request.url()).pathname === "/api/update/version");
     await page.getByRole("button", { name: /^(关闭 Pi 设置|Close Pi settings)$/ }).click();
-    await cancelled;
-    release();
-    await page.clock.fastForward(120_000);
+    await page.clock.fastForward(1200);
+    expect(cancelled).toBe(0);
+    if (readiness === "ready") {
+      const reloaded = page.waitForEvent("domcontentloaded");
+      release(); await reloaded;
+      await expect(page.getByRole("textbox")).toBeEnabled();
+      await page.clock.fastForward(120_000);
+      expect(reloads).toBe(1);
+      expect(f.browserEvents).toEqual([]);
+    } else {
+      await page.clock.fastForward(60_000);
+      await expect.poll(() => f.browserEvents.length).toBe(1);
+      expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ stage: "update_restart", code: "update_restart_timeout" });
+      await page.getByRole("button", { name: /^(Pi 设置|Pi Settings)$/ }).click();
+      await expect(page.getByRole("alert")).toContainText(/新版未能及时就绪|The new version was not ready in time/);
+      release(); await page.clock.fastForward(120_000);
+      expect(reloads).toBe(0);
+      expect(f.browserEvents).toHaveLength(1);
+    }
     expect(attempts).toBe(1);
-    expect(reloads).toBe(0);
-    expect(f.browserEvents).toEqual([]);
   } finally { release(); await f.bridge.close(); }
 });
 

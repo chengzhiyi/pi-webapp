@@ -79,6 +79,14 @@ test("lost dirty editor has a real downloadable recovery copy and explicit reten
     expect((await h.card()).generation).toBe(generation + 1);
     expect((await h.action("get", { id: drawing.id })).scene.elements).toEqual(before.scene.elements);
     expect(JSON.parse(recovered).elements).toEqual(JSON.parse(localDraft).elements);
+    // The management response commits the worker before the browser has mounted
+    // its new-generation tool preview. Wait for actual client initialization and
+    // its server-side readiness report; a still-busy view must remain protected.
+    await expect(page.locator('iframe[title="Excalidraw tool"]')).toHaveAttribute("src", new RegExp(`[?&]generation=${generation + 1}(?:&|$)`));
+    await expect(page.frameLocator('iframe[title="Excalidraw tool"]').getByRole("img")).toBeVisible();
+    await expect.poll(() => [...(h.integration as any).views.values()].every((coordinator: any) =>
+      [...coordinator.views.values()].every((view: any) =>
+        (view.kind === "controller" || view.initialized) && !view.busy && !view.activeActions))).toBe(true);
     await h.manage("disable"); await h.manage("uninstall");
     expect((await h.card()).installed).toBe(false);
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
