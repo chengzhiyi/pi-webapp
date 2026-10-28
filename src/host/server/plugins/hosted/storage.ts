@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { HostedPluginError, isMissing } from "./errors.ts";
@@ -64,6 +64,12 @@ export async function atomicJson(path: string, value: unknown): Promise<void> {
 export const OWNERSHIP_MARKER = '{"version":2,"mechanism":"sqlite-exclusive"}';
 export const isOwnershipMarker = (bytes: Buffer) => bytes.toString("utf8") === OWNERSHIP_MARKER;
 
+// Avoid hammering synchronous SQLite lock attempts against our own event loop.
+// On Windows even busy_timeout=0 can involve native lock retry sleeps. This is
+// only a contention optimization: every grant still requires kernel custody,
+// and aliases/independent processes remain protected by SQLite, not this set.
+const localCustody = new Set<string>();
+
 /** Kernel-managed custody on a LOCAL filesystem. SQLite BEGIN EXCLUSIVE is an OS
  * byte-range lock, not a PID/TTL lease. Closing/crashing releases it; no abandoned
  * pathname is deleted, renamed or replaced. The database stores no application data.
@@ -83,16 +89,21 @@ export async function acquireStorageOwnership(root: string, name: "runtime" | "t
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 1024 * 1024) throw new HostedPluginError("invalid_storage", "Ownership database must be a small, single-link regular file");
   const db = new DatabaseSync(path, { allowExtension: false });
-  const deadline = Date.now() + timeoutMs;
+  const key = resolve(path), deadline = Date.now() + timeoutMs;
+  let acquired = false;
   try {
     // busy_timeout remains zero: waiting must yield to the owner's JS event loop.
     for (;;) {
-      try { db.exec("BEGIN EXCLUSIVE"); break; }
-      catch (error) {
-        if ((error as { errcode?: number }).errcode !== 5) throw error;
-        if (Date.now() >= deadline) throw new HostedPluginError(code, "Another host owns this plugin storage; wait for it to stop before retrying");
-        await delay(10);
+      if (!localCustody.has(key)) {
+        try {
+          db.exec("BEGIN EXCLUSIVE");
+          localCustody.add(key); acquired = true; break;
+        } catch (error) {
+          if ((error as { errcode?: number }).errcode !== 5) throw error;
+        }
       }
+      if (Date.now() >= deadline) throw new HostedPluginError(code, "Another host owns this plugin storage; wait for it to stop before retrying");
+      await delay(10);
     }
     let current = await boundedRead(marker, 4096);
     if (current === null) {
@@ -107,7 +118,11 @@ export async function acquireStorageOwnership(root: string, name: "runtime" | "t
     // A legacy host can win O_EXCL before the first marker is installed. Never
     // overwrite its record, even though it does not participate in SQLite locks.
     if (current === null || !isOwnershipMarker(current)) throw legacyError();
-  } catch (error) { db.close(); throw error; }
+  } catch (error) {
+    db.close();
+    if (acquired) localCustody.delete(key);
+    throw error;
+  }
   let released = false;
   return async () => {
     if (released) return;
@@ -117,7 +132,7 @@ export async function acquireStorageOwnership(root: string, name: "runtime" | "t
     // holding the kernel lock. Legacy hosts may then win the next O_EXCL race;
     // a new host must acquire both kernel custody and the compatible marker.
     await unlink(marker);
-    db.close(); released = true;
+    db.close(); localCustody.delete(key); released = true;
   };
 }
 

@@ -43,7 +43,13 @@ heartbeat, pathname stealing, or extra npm/native addon is involved.
 - Unknown, malformed, empty, legacy live-PID and legacy dead-PID markers all refuse
   online migration. Legacy offline recovery/verified backup remains required.
 - Transactions yield between busy retries; synchronous SQLite waiting must not
-  block the owner's JS event loop. Contention timeouts never permit takeover.
+  block the owner's JS event loop. A process-local custody set suppresses native
+  lock attempts against a known local holder: Windows native lock retries can
+  otherwise stall the releasing JS event loop even with SQLite busy timeout zero.
+  This set grants no ownership; every acquisition still requires SQLite custody,
+  and path aliases/independent processes are checked by SQLite. Local timeouts
+  close only the waiting connection, never clear the holder's set entry.
+  Contention timeouts never permit takeover.
 - Activation, fork, workspace-file and pairing journals retain their existing
   validation and CAS semantics. Kernel mutex availability is not proof that an
   interrupted application transaction committed or that a journal may be deleted.
@@ -96,6 +102,16 @@ archive lifecycle at desktop/mobile sizes plus Chinese/English retained-lock
 regressions: **4 passed**. Pure ownership suite on the actual bundled desktop
 Node 22.23.3: **8 passed**. CI now requires Node 22.19.0 on Linux and includes the
 pure custody tests in both macOS/Windows smoke checks before publishing.
+
+Windows CI follow-up: the initial 30-way contention test still timed out after
+its isolated budget was raised to 10s. Do not classify that as merely runner
+slowness. The local retry suppression above removes redundant native attempts;
+the strengthened test again uses the unchanged **2s production budget**, counts
+exactly 30 native acquisitions, checks timed-out local waiters preserve independent
+process exclusion, and settles all callers before cleanup. On macOS the preceding
+implementation fails this new assertion (541 native attempts versus 30), while
+the fix passes all 8 ownership tests and TypeScript checks. Native Windows CI
+must still confirm the fix before release.
 
 Old-source control: the real-RPC SIGKILL regression was run against the preceding
 ORI-54 fix (`d21ac8b`) in an isolated source tree. Cold start produced `disabled`

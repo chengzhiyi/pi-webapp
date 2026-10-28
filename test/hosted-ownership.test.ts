@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
 import { once } from "node:events";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm, writeFile, symlink, link, open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,21 +60,36 @@ test("legacy PID locks (dead or live), unknown and partially written markers are
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("transaction contenders yield to the event loop and serialize without lost commits", { timeout: 20000 }, async () => {
+test("transaction contenders yield without native same-process retry storms or lost commits", { timeout: 15000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-transaction-custody-"));
+  const exec = DatabaseSync.prototype.exec;
+  let attempts = 0;
+  const mock = t.mock.method(DatabaseSync.prototype, "exec", function (this: DatabaseSync, sql: string) {
+    if (sql === "BEGIN EXCLUSIVE") attempts++;
+    return exec.call(this, sql);
+  });
   try {
     let count = 0;
-    // Thirty durable marker flushes can exceed the normal 2s contention budget
-    // on Windows. This stress test supplies its own bounded wait, not a changed
-    // production timeout. Settle every contender before inspecting/removing files.
+    // Use the unchanged production budget. All callers settle before cleanup.
     const results = await Promise.allSettled(Array.from({ length: 30 }, () => withStorageLock(root, async () => {
       const before = count; await new Promise(resolve => setTimeout(resolve, 2)); count = before + 1;
-    }, 10000)));
+    })));
     for (const result of results) assert.equal(result.status, "fulfilled", result.status === "rejected" ? String(result.reason) : undefined);
     assert.equal(count, 30);
+    assert.equal(attempts, 30, "local waiters must yield without issuing synchronous native lock retries");
     await assert.rejects(withStorageLock(root, async () => { throw new Error("operation failed"); }), /operation failed/);
     await withStorageLock(root, async () => {});
-  } finally { await rm(root, { recursive: true, force: true }); }
+    const release = await acquireStorageOwnership(root, "transaction");
+    try {
+      const before = attempts;
+      await assert.rejects(withStorageLock(root, async () => assert.fail("must not enter"), 20), { code: "storage_busy" });
+      assert.equal(attempts, before, "a timed-out local waiter must not attempt native custody");
+      const other = await holder(root, "transaction");
+      assert.equal(other.message.code, "storage_busy", "a timed-out waiter must not release the owner's kernel custody");
+      await other.closed;
+    } finally { await release(); }
+    await withStorageLock(root, async () => {});
+  } finally { mock.mock.restore(); await rm(root, { recursive: true, force: true }); }
 });
 
 test("a contender waits for kernel custody before reading a partially initialized marker", async t => {
