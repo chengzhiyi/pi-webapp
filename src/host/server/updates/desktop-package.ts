@@ -7,7 +7,19 @@ import { dependencyRoot } from "../../../../desktop/managed-release.mjs";
 const exec = promisify(execFile);
 const peers = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai"];
 
-/** Keep the tested SDK pair; an npm update must not silently upgrade bundled Pi. */
+/** Release metadata is a pinned dependency contract, not an instruction to
+ * follow npm latest or preserve a different host's historical SDK pair. */
+export function exactSdkPeerSpecs(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("新版 Pi SDK 必须声明经过验证的精确版本");
+  const declared = value as Record<string, unknown>;
+  return peers.map(name => {
+    const version = declared[name];
+    if (typeof version !== "string" || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error("新版 Pi SDK 必须声明经过验证的精确版本");
+    return `${name}@${version}`;
+  });
+}
+
+/** Read the SDK pair installed with this package, never global PATH's Pi. */
 export async function desktopPeerSpecs(packageRoot: string): Promise<string[]> {
   return Promise.all(peers.map(async name => {
     const root = await dependencyRoot(packageRoot, name);
@@ -21,8 +33,12 @@ export async function desktopPeerSpecs(packageRoot: string): Promise<string[]> {
  * No arbitrary npm lifecycle scripts or compiler installation runs during updates.
  */
 export async function verifyDesktopPackage(packageRoot: string, installed: string): Promise<void> {
-  const expectedPeers = await desktopPeerSpecs(packageRoot);
-  if (JSON.stringify(await desktopPeerSpecs(installed)) !== JSON.stringify(expectedPeers)) throw new Error("新版 Pi SDK 与当前桌面运行时不兼容，请更新桌面外壳");
+  const candidate = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
+  if (candidate.name !== "pi-webapp") throw new Error("新版业务包元数据无效");
+  // Old releases without a dependency contract retain their historical SDK pair.
+  // Explicitly pinned newer releases verify against their own tested contract.
+  const expectedPeers = candidate.peerDependencies === undefined ? await desktopPeerSpecs(packageRoot) : exactSdkPeerSpecs(candidate.peerDependencies);
+  if (JSON.stringify(await desktopPeerSpecs(installed)) !== JSON.stringify(expectedPeers)) throw new Error("新版 Pi SDK 安装版本与业务包声明不符，当前应用未修改");
   const source = await dependencyRoot(packageRoot, "node-pty");
   const destination = await dependencyRoot(installed, "node-pty");
   const prefix = await realpath(join(installed, "../.."));

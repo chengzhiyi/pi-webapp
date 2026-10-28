@@ -34,7 +34,7 @@ export interface BridgeHost {
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
-  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart"> & Partial<Pick<SelfUpdater, "setChannel">>;
+  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart"> & Partial<Pick<SelfUpdater, "setChannel" | "cancel">>;
   resolvePluginInteraction?(sessionId: string, pluginId: string, requestId: string, value: unknown): Promise<void>;
   snapshot(): SessionView;
   /** Canonical cwd paths of every retained running chat, including background chats. */
@@ -154,6 +154,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const remember = (session: SessionView) => telemetry.setState({ nodeVersion: process.version, platform: process.platform, session: telemetry.session(session.sessionId), idle: session.idle, model: session.model, thinkingLevel: session.thinkingLevel, messageCount: session.messages.length });
   let origin = "";
   let restarting = false;
+  let preparingUpdate = false;
   // DSH Markdown loads language grammars and KaTeX fonts lazily. Only files
   // inventoried from the compiled assets directory can be served here.
   const assets = { ...files, ...await readAssetManifest(webRoot) };
@@ -364,7 +365,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -384,7 +385,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             json(res, 400, { error: "缺少会话标识" });
             return;
           }
-          if (restarting) { json(res, 409, { error: "更新正在安装或重启，请稍后重试" }); return; }
+          if (restarting && path !== "/api/update/cancel") { json(res, 409, { error: "更新正在安装或重启，请稍后重试" }); return; }
           if (path === "/api/plugin-management") {
             const input = body as Record<string, unknown>;
             if (typeof input.id !== "string" || input.id.length > 200 || typeof input.enabled !== "boolean" || typeof input.expected !== "string") { json(res, 400, { error: "插件开关参数无效" }); return; }
@@ -438,7 +439,14 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             json(res, 200, await host.selfUpdate.setChannel(body.channel));
             return;
           }
+          if (path === "/api/update/cancel") {
+            if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
+            if (!host.selfUpdate?.cancel) { json(res, 409, { error: "当前后台不支持取消更新" }); return; }
+            await host.selfUpdate.cancel();
+            json(res, 200, { cancelled: true, dataPreserved: true }); return;
+          }
           if (path === "/api/update") {
+            if (preparingUpdate) { json(res, 409, { error: "更新下载和验证正在进行中" }); return; }
             if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
             if (!host.snapshot().idle) { json(res, 409, { error: "请等待当前回复结束后再升级" }); return; }
             if (!host.selfUpdate) { json(res, 409, { error: "当前扩展不支持在线升级" }); return; }
@@ -447,16 +455,21 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             const input = body as Record<string, unknown>;
             const hasTarget = "channel" in input || "version" in input || "allowDowngrade" in input;
             if (hasTarget && ((input.channel !== "stable" && input.channel !== "alpha") || typeof input.version !== "string" || (input.allowDowngrade !== undefined && typeof input.allowDowngrade !== "boolean"))) { json(res, 400, { error: "更新参数无效" }); return; }
-            // Lock mutations before the download starts, not after it completes.
-            restarting = true;
+            // Downloads own staged code only. Current chats and plugin management
+            // remain available until the short, reversible restart checkpoint.
+            preparingUpdate = true;
             let prepared;
             try {
               prepared = await host.selfUpdate.prepare(hasTarget ? { channel: input.channel as "stable" | "alpha", version: input.version as string, allowDowngrade: input.allowDowngrade as boolean | undefined } : undefined);
+              const changedBlocker = pluginRegistry.restartBlocker();
+              if (!host.snapshot().idle || (host.busyGitWorkspaces?.() ?? []).length || changedBlocker) throw new Error(changedBlocker ?? "下载完成；当前聊天仍在运行，请结束任务后再升级");
+              restarting = true;
               // Keep the page and checkpoint transport alive until views have flushed,
               // workers exited and the validated restart marker is actually written.
               await host.selfUpdate.requestRestart(prepared);
             }
             catch (error) { restarting = false; throw error; }
+            finally { preparingUpdate = false; }
             json(res, 202, { accepted: true, version: prepared.version });
             return;
           }

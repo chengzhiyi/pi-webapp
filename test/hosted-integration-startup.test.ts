@@ -31,9 +31,9 @@ test("offline enabled startup aligns broker/view generations; disabled intent an
   await integration.handlers.views({ ...identity, generation: card.generation, viewToken: registered.viewToken, operation: "close" });
   await integration.manage({ pluginId: id, operation: "disable" }); await integration.shutdown();
   integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
-  assert.equal((await integration.inventory()).plugins[0]!.enabled, false); assert.equal(registryCalls, 1);
+  assert.equal((await integration.inventory()).plugins[0]!.enabled, false); assert.equal(registryCalls, 0);
   await integration.shutdown(); integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.30" }); await integration.start();
-  assert.equal(registryCalls, 2, "failed offline reconciliation retries on the next startup; success alone marks the host version");
+  assert.equal(registryCalls, 0, "compatible disabled plugin remains independent across offline host startup");
 });
 
 test("older builtin session tool ownership refuses candidate before active pointer publication", async t => {

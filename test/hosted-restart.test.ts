@@ -41,11 +41,11 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   return { root, storage, oldHost, worker, options, integration, broker, registry: () => registry };
 }
 
-for (const rejectFirst of [false, true]) test(`paired HTTP update drains views before restart marker${rejectFirst ? "; rejected flush retries exact selection" : ""}`, { timeout: 30000 }, async t => {
+for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly drains views before restart marker${rejectFirst ? "; rejected flush retries exact selection" : ""}`, { timeout: 30000 }, async t => {
   const f = await fixture(t), { host } = terminalHost(f.root);
   let installs = 0;
   const updater = new SelfUpdater({ agentDir: f.root, packageRoot: f.oldHost, launcherNonce: "test-nonce", desktopManaged: false,
-    hostedPair: f.integration.manager.hostPair, beforeRestart: () => f.integration.shutdown(),
+    hostedPair: f.integration.manager.hostPair, beforeRestart: () => f.integration.prepareRestart(),
     runNpm: async args => {
       if (args[0] === "view") return '"0.1.33"';
       installs++;
@@ -100,8 +100,8 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update drains views b
       assert.deepEqual(await readFile(lock), lockBefore);
       assert.equal(f.integration.adapter.isFrozen, false);
       assert.equal((await post("hosted-plugins/action", { ...action, action: "list" })).status, 200);
-      assert.equal((await readPair(f.storage))!.phase, "selected");
-      await assert.rejects(updater.prepare({ version: "0.1.34", channel: "stable" }), /已有待重启/);
+      assert.equal((await readPair(f.storage))!.phase, "cancelled");
+      await assert.rejects(updater.prepare({ version: "0.1.34", channel: "stable" }), /目标或偏好已变化/);
     }
   }
   assert.equal(installs, 1, "retry must reuse the retained selection, never bypass or replace its journal");

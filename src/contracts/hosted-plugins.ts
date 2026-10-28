@@ -27,16 +27,26 @@ export interface HostedMount {
 }
 export interface HostedViewIdentity { sessionId: string; pluginId: string; generation: number; mountId: string }
 export type HostedViewInput = HostedViewIdentity & (
-  | { operation: "register"; kind: HostedMount["kind"] }
+  | { operation: "register"; kind: HostedMount["kind"]; /** Client persists this nonce before sending, so a lost reply is recoverable. */ viewToken?: string }
   | { operation: "poll"; viewToken: string; after: number; /** Aggregate transport never holds a socket. */ immediate?: boolean }
   | { operation: "change"; viewToken: string; dirty: boolean; busy: boolean }
   | { operation: "ack"; viewToken: string; commandId: number; ok: boolean; error?: string }
   | { operation: "close"; viewToken: string }
+  /** Inspect/reconcile an exact previous-document capability; never a save acknowledgement. */
+  | { operation: "reconcile"; viewToken: string }
+  | { operation: "recover"; viewToken: string; confirmation: "retain-unconfirmed-edits" }
+  /** A registration that never initialized cannot contain local authoring edits. */
+  | { operation: "cancel-initialization"; viewToken: string }
   /** Explicit per-capability user decision, not a clean/flush acknowledgement. */
   | { operation: "discard"; viewToken: string; confirmation: "discard-unconfirmed-edits" }
 );
 export interface HostedViewCommand { id: number; type: "freeze" | "resume" | "committed"; generation: number }
-export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[] }
+export interface HostedViewRecovery {
+  state: "active" | "unconfirmed" | "retained" | "retired" | "absent";
+  kind?: HostedMount["kind"]; dirty?: boolean; busy?: boolean;
+}
+export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: HostedViewRecovery }
+
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {
   pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true,
   installed: false, enabled: false, phase: "not-installed",

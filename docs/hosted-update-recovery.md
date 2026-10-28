@@ -6,33 +6,37 @@ A01–A25 release acceptance. See [runtime](hosted-plugin-runtime.md),
 [installation](hosted-plugin-installation.md), [GC](hosted-plugin-gc.md) and the
 [historical production matrix](hosted-production-acceptance.md).
 
-## Software-linked updates (supersedes ORI-33 policy UI in ORI-42)
+## Independent plugins and recoverable host updates (supersedes ORI-42)
 
-Installed official plugins follow software updates without a strategy setting.
-Legacy `notify`, `automatic`, and `pinned` records are validated and normalized to
-`notify` (manual independent checks; fixed software-linked updates). Startup
-persists that migration under the policy lock. Old pins no longer block install,
-manual update, pending retry or controlled host/plugin combination selection.
-The legacy policy endpoint remains parser-compatible but cannot reinstate a pin.
+Compatible plugins now evolve independently. Host startup and host update retain
+an installed plugin's exact active code without querying the registry. Only an
+actual host-range/protocol/capability conflict requires preparing a compatible
+plugin combination. Explicit Check updates and Update remain available and keep
+disabled plugins disabled; absent plugins are never installed implicitly.
 
-Absent plugins are not installed; disabled plugins remain disabled. Compatible
-higher versions are not downgraded. Open editors defer activation; after closing
-editors, use Apply pending update, or explicitly accept the reopen/undo reset
-confirmation. No page reload, fake close acknowledgement or TTL is used.
+Legacy policy records are still validated and migrated under the policy lock.
+Protocol, resource integrity, permission and data-schema checks remain required.
+Open editing realms must acknowledge a real checkpoint before activation; a
+refresh or a newer drawing is never treated as proof that unsaved edits survived.
 
-Independent check never downloads a tarball. Manual update remains available.
-The paired business-package updater checks for newer compatible official code
-as well as required upgrades. Offline/download failure retains compatible local
-code; incompatible combinations fail before host selection. Native OS updater
-coverage is not expanded by this change.
+Host package preparation downloads and validates code without selecting it.
+`update-transaction.json` records downloading, validating, prepared, selecting,
+selected, restart-requested, and committed phases. Selection follows a reversible
+view/worker suspend. Before handoff, failure restores only the pointer bytes owned
+by this transaction under the update mutex and resumes the exact old generation.
+Cancelled/failed/committed records remain in `update-history`; host-pair records
+remain on disk with a terminal cancelled/reconciled phase, never erased.
 
-Checks and structured failure codes persist in `policies/update-checks.json`.
-An equal release is not an available upgrade. `host-version.json` is written only
-when synchronization succeeds. A controlled pair admitted using offline fallback
-does not mark synchronization complete: the next startup retries. No background
-interval or repeated mutation retry runs. Diagnostics are collapsed in the UI;
-metadata 404, missing tarball, no compatible release and network failure remain
-distinct. See [ORI-42 evidence and reproduction](hosted-ori42-management.md).
+Settings exposes **Cancel unfinished update** through an authenticated same-session
+endpoint. It can recover a legacy selected transaction only when the selected
+pointer digest still matches its receipt and the current launcher is verified.
+A competing pointer is never overwritten. Plugin active state, drawings, backups,
+ownership databases and lock markers are not changed by cancellation. Once the
+launcher accepts restart, cancellation is refused until health admission or a
+verified fallback invocation establishes which host owns recovery.
+
+See [architecture and verification](plugin-update-recovery.md) for the new contract.
+The ORI-42 reports below are historical evidence, not the current update policy.
 
 ## Offline operator recovery — no automatic stealing
 

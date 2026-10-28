@@ -1,13 +1,24 @@
 import { useAppUpdate, type AppUpdateActions } from "./useAppUpdate.ts";
+import { useAppUpdateContext, type AppUpdateController } from "./AppUpdateProvider.tsx";
 import { useLocale, textFor } from "../locale/preference.ts";
 import { Button } from "../primitives/Button.tsx";
 import { SettingsSelect } from "./SettingsSelect.tsx";
 import css from "./UpdateRow.module.css";
 
 export function UpdateRow(props: AppUpdateActions) {
+  const controller = useAppUpdateContext();
+  return controller ? <UpdateRowContent {...props} controller={controller} /> : <StandaloneUpdateRow {...props} />;
+}
+
+function StandaloneUpdateRow(props: AppUpdateActions) {
+  const controller = useAppUpdate(props);
+  return <UpdateRowContent {...props} controller={controller} />;
+}
+
+function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateController }) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
-  const { status, checking, installing, targetVersion, restartTimedOut, error, check, install, changeChannel } = useAppUpdate(props);
+  const { status, checking, installing, cancelling, targetVersion, restartTimedOut, error, check, install, changeChannel, cancel } = props.controller;
 
   const summary = status
     ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("目标版本", "Target version")} ${status.latest}` : ""}`
@@ -30,6 +41,7 @@ export function UpdateRow(props: AppUpdateActions) {
       </div>
       <div className={css.actions}>
         {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <Button variant="primary" disabled={installing || checking} onClick={() => { void install(); }}>{installing ? t("正在安装…", "Installing…") : status.downgrade ? t("切换到稳定版并重启", "Switch to stable and restart") : t("升级并重启", "Update and restart")}</Button>}
+        {(status?.recovery?.canCancel || installing) && props.cancelUpdate && !targetVersion && <Button variant="outline" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? t("正在取消…", "Cancelling…") : installing ? t("取消下载", "Cancel download") : t("取消未完成的升级", "Cancel unfinished update")}</Button>}
         <Button variant="outline" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("检查中…", "Checking…") : t("检查更新", "Check for updates")}</Button>
       </div>
     </div>

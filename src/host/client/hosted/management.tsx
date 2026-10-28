@@ -121,7 +121,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       {failureView(selected, true)}
       <section className={css.configuration}><h2>{t("配置与更新", "Configuration & updates")}</h2>
         <p className={rows.scope}>{t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.")}</p>
-        <p className={rows.scope}>{t("软件更新时，已安装的插件会一起更新；打开的编辑器关闭后生效。", "Installed plugins update with the app, after open editors close.")}</p>
+        <p className={rows.scope}>{t("兼容的插件可独立更新；软件升级仅在协议不兼容时协调插件版本。", "Compatible plugins update independently. App upgrades coordinate plugins only when their protocol is incompatible.")}</p>
         <p className={rows.scope}>{t("停用或卸载前会先保存并关闭相关视图；保存失败时不会继续。", "Disabling or uninstalling first saves and closes related views; a failed save stops the operation.")}</p>
         {selected.pendingVersion && <p className={rows.scope} role="status">{t("关闭编辑器后更新至：", "Close editors to update to: ")}{selected.pendingVersion}</p>}
         {!failureFor(selected) && selected.updateDiagnostic?.status === "up-to-date" && !selected.pendingVersion && <p className={rows.scope}>{t("兼容版本检查已完成。", "Compatible release check complete.")}</p>}

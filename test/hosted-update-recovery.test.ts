@@ -25,7 +25,7 @@ async function worker(root: string) {
   return outfile;
 }
 
-test("independent check never downloads; host-linked migrates pins and preserves disabled/absent", async t => {
+test("independent check never downloads; compatible host coordination preserves disabled/absent and manual update migrates pins", async t => {
   const root = await temporary(t), first = integrationFixture(), next = integrationFixture("0.2.0");
   let registry = 0, downloads = 0;
   const options = { root, hostVersion: "0.1.29", workerEntry: "unused", hooks, fetch: (async url => {
@@ -41,7 +41,8 @@ test("independent check never downloads; host-linked migrates pins and preserves
   assert.equal((await manager.inventory()).plugins[0]!.updateDiagnostic?.status, "available");
   await assert.rejects(manager.setPolicy(id, { updatePolicy: "pinned" }), /Invalid/);
   await manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
-  assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(registry, 2); assert.equal(downloads, 1);
+  assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(registry, 1); assert.equal(downloads, 0);
+  await manager.manage(id, "update"); assert.equal(registry, 2); assert.equal(downloads, 1);
   assert.equal((await manager.inventory()).plugins[0]!.pinnedVersion, undefined);
   assert.equal(await manager.reconcileHostUpgrade(), true); assert.equal(downloads, 1);
   const card = (await manager.inventory()).plugins[0]!;
@@ -51,18 +52,21 @@ test("independent check never downloads; host-linked migrates pins and preserves
   assert.match((await manager.inventory()).plugins[0]!.updateDiagnostic!.message, /No newer compatible/);
 });
 
-test("failed host reconciliation does not mark success; next startup retries then successful version runs once", async t => {
+test("compatible offline startup is healthy; manual network failure stays visible until explicit successful update", async t => {
   const root = await temporary(t), fixture = integrationFixture(); let online = false, calls = 0;
   const options = { root, hostVersion: "0.1.29", workerEntry: "unused", ownerId: "local", resolveSession: () => null,
     fetch: (async () => { calls++; if (!online) throw new Error("offline registry"); return Response.json({ versions: { "0.1.0": fixture.release } }); }) as typeof fetch };
   let integration = new HostedPluginIntegration(options);
   await integration.manager.installer.installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
-  await integration.start(); await integration.start(); assert.equal(calls, 1);
-  await assert.rejects(readFile(join(root, "host-version.json")), { code: "ENOENT" });
-  assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "failed");
-  await integration.shutdown(); online = true;
-  integration = new HostedPluginIntegration(options); await integration.start(); assert.equal(calls, 2);
+  await integration.start(); await integration.start(); assert.equal(calls, 0);
   assert.equal(JSON.parse(await readFile(join(root, "host-version.json"), "utf8")).version, options.hostVersion);
+  await assert.rejects(integration.manage({ pluginId: id, operation: "update", downloadId: randomUUID() }), /offline registry/);
+  assert.equal(calls, 1); assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "failed");
+  await integration.shutdown(); online = true;
+  integration = new HostedPluginIntegration(options); await integration.start(); assert.equal(calls, 1, "restart does not automatically retry an independent plugin update");
+  assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "failed");
+  await integration.manage({ pluginId: id, operation: "update", downloadId: randomUUID() });
+  assert.equal(calls, 2); assert.equal((await integration.inventory()).plugins[0]!.updateDiagnostic!.status, "up-to-date");
   await integration.shutdown(); integration = new HostedPluginIntegration(options); await integration.start(); assert.equal(calls, 2);
   await integration.shutdown();
 });
@@ -223,10 +227,11 @@ test("interrupted archive and no-compatible release persist failures without rep
   await manager.installer.installArchive(id, first.bytes, integrity(first.bytes), "0.1.0");
   const original = await manager.installer.load(id, "0.1.0");
   await manager.setPolicy(id, { updatePolicy: "automatic" });
-  assert.equal(await manager.reconcileHostUpgrade(), false);
+  assert.equal(await manager.reconcileHostUpgrade(), true);
+  await assert.rejects(manager.manage(id, "update"), /network interrupted/);
   assert.match((await manager.inventory()).plugins[0]!.updateDiagnostic!.message, /network interrupted/);
   incompatible = true;
-  assert.equal(await manager.reconcileHostUpgrade(), false);
+  await assert.rejects(manager.manage(id, "update"), /No compatible stable/);
   const card = (await manager.inventory()).plugins[0]!;
   assert.match(card.updateDiagnostic!.message, /No compatible stable/); assert.equal(card.availableVersion, null);
   assert.equal(card.version, "0.1.0"); assert.equal((await manager.installer.load(id, "0.1.0")).digest, original.digest);

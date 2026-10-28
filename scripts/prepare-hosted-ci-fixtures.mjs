@@ -10,7 +10,9 @@ const fixtures = [
   ['HOSTED_EXCALIDRAW_TGZ', '@chengzhiyi/pi-excalidraw@0.1.0', 'sha512-9VRKpQT8RQqk6UBaNyZlKHy5vWLNCfYbQTRzaAhC8HMJ0DsoIu3sVs2YrNxyPaNDr9iDbetWrZT2hAJEXHdd4g=='],
   ['HOSTED_PLAN_V1_TGZ', '@chengzhiyi/pi-plan-mode@0.1.1', 'sha512-7tBJk+WTJg9xH6MInFCzx5d7Yz1u8nNAnhnSyI0ZO8jmO467et6bpomjyvFSCH1fxRnQ4aCV35C0Hih7JTDxSA=='],
 ];
-const environment = { HOSTED_STRESS: '1', HOSTED_NPM_VERIFY: '1', HOSTED_NPM_VERSION: '0.1.1' };
+// Immutable regression archives stay pinned below. The separate public UI gate
+// selects the current compatible release rather than assuming latest is 0.1.1.
+const environment = { HOSTED_STRESS: '1', HOSTED_NPM_VERIFY: '1' };
 const receipts = [];
 for (const [key, specifier, expected] of fixtures) {
   const output = execFileSync('npm', ['pack', specifier, '--ignore-scripts', '--json', '--registry=https://registry.npmjs.org', '--pack-destination', root], { encoding: 'utf8', shell: process.platform === 'win32' });

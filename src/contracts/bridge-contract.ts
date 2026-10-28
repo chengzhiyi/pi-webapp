@@ -94,7 +94,7 @@ export interface ConfigView {
 export interface ConfigChange { sessionId: string; kind: ConfigKind; scope: ConfigScope; action: "add" | "remove"; value: string }
 export type UpdateChannel = "stable" | "alpha";
 export interface UpdateRequest { channel: UpdateChannel; version: string; allowDowngrade?: boolean }
-export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; channel?: UpdateChannel; downgrade?: boolean; reason?: string; desktopShell?: { version: string; build: string } }
+export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; channel?: UpdateChannel; downgrade?: boolean; reason?: string; desktopShell?: { version: string; build: string }; recovery?: { version: string; phase: string; canCancel: boolean } }
 export type LoginMethod = "api_key" | "oauth";
 export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
 export interface ProviderModelFields { id: string; name?: string; contextWindow?: number; maxTokens?: number; input?: Array<"text" | "image"> }

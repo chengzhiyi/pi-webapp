@@ -75,3 +75,58 @@ test("destroyed/dirty realm cannot fabricate a freeze ack or a clean close throu
   assert.deepEqual(writes.map(x => x.operation), ["register", "ack"]);
   assert.equal(writes[1].ok, false);
 });
+
+test("controller close retires its control capability without requiring an editor frame flush", async t => {
+  const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  Object.defineProperty(globalThis, "location", { configurable: true, value: new URL("http://localhost/") });
+  t.after(() => { globalThis.fetch = originalFetch; if (originalLocation) Object.defineProperty(globalThis, "location", originalLocation); else Reflect.deleteProperty(globalThis, "location"); });
+  const writes: string[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    const input = JSON.parse(init!.body as string); writes.push(input.operation);
+    return Response.json({ viewToken: "controller-token", commands: [] });
+  }) as typeof fetch;
+  const adapter = { call: async () => { throw new Error("Old controller document gone"); } } as unknown as FrameAdapter;
+  const client = new HostedViewClient({ pluginId: "official", sessionId: "session", generation: 1, mountId: "controller" }, adapter, { kind: "controller", sessionId: "session", locale: "en", theme: "light" }, assert.fail, cause => assert.fail(String(cause)));
+  await client.start(); client.connecting();
+  await client.close();
+  assert.deepEqual(writes, ["register", "close"]);
+});
+
+test("a frame never started cancels initialization rather than publishing a fabricated clean status", async t => {
+  const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  Object.defineProperty(globalThis, "location", { configurable: true, value: new URL("http://localhost/") });
+  t.after(() => { globalThis.fetch = originalFetch; if (originalLocation) Object.defineProperty(globalThis, "location", originalLocation); else Reflect.deleteProperty(globalThis, "location"); });
+  const writes: string[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    const input = JSON.parse(init!.body as string); writes.push(input.operation);
+    return Response.json({ viewToken: "not-initialized", commands: [] });
+  }) as typeof fetch;
+  const client = new HostedViewClient({ pluginId: "official", sessionId: "session", generation: 1, mountId: "editor" }, {} as FrameAdapter, { kind: "editor", sessionId: "session", locale: "en", theme: "light" }, assert.fail, cause => assert.fail(String(cause)));
+  await client.start(); await client.close();
+  assert.deepEqual(writes, ["register", "cancel-initialization"]);
+});
+
+test("controller committed generation closes and reconnects without an authoring freeze or stale generation change", async t => {
+  const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  Object.defineProperty(globalThis, "location", { configurable: true, value: new URL("http://localhost/") });
+  t.after(() => { globalThis.fetch = originalFetch; if (originalLocation) Object.defineProperty(globalThis, "location", originalLocation); else Reflect.deleteProperty(globalThis, "location"); });
+  const operations: string[] = [], frameCalls: string[] = [], errors: unknown[] = [];
+  let reconnected = false, settled!: () => void;
+  const done = new Promise<void>(resolve => { settled = resolve; });
+  globalThis.fetch = (async (_url, init) => {
+    const input = JSON.parse(init!.body as string); operations.push(input.operation);
+    if (input.operation === "change") throw new Error("Committed old-generation controller may not CHANGE");
+    return Response.json({ viewToken: "controller-committed-token", commands: [], ...(input.operation === "pollMany" ? {
+      replies: [{ reply: { viewToken: "controller-committed-token", commands: [{ id: 1, type: "committed", generation: 9 }] } }],
+    } : {}) });
+  }) as typeof fetch;
+  const adapter = { call: async (method: string) => { frameCalls.push(method); throw new Error("Headless controller has no authoring flush"); } } as unknown as FrameAdapter;
+  const client = new HostedViewClient({ pluginId: "official", sessionId: "session", generation: 8, mountId: "controller-committed" }, adapter,
+    { kind: "controller", sessionId: "session", locale: "en", theme: "light" },
+    () => { reconnected = true; settled(); }, error => { errors.push(error); settled(); });
+  await client.start(); client.connecting(); client.listen(); await done;
+  await Promise.all([client.close(), client.close()]);
+  assert.equal(reconnected, true);
+  assert.deepEqual(errors, []); assert.deepEqual(frameCalls, []);
+  assert.deepEqual(operations, ["register", "pollMany", "ack", "close"]);
+});
