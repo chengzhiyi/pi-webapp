@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
@@ -17,7 +17,7 @@ import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
 
 const hooks = () => ({ canSwitch: () => true, freeze: async () => {}, resume: async () => {}, committed: async () => {} });
-const contract = { protocol: 2, runtimeProtocol: 1, pairJournal: 1, capabilities: ["state", "workspace", "legacy", "panels", "messages"] };
+const contract = { protocol: 2, runtimeProtocol: 1, pairJournal: 1, ownershipProtocol: 2, capabilities: ["state", "workspace", "legacy", "panels", "messages"] };
 async function host(root: string, version: string, worker: Buffer) {
   await Promise.all(["dist", "bin", "web/dist"].map(p => mkdir(join(root, p), { recursive: true })));
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version, piWebappDesktopProtocol: 1, piWebappHostedRuntime: contract }));
@@ -236,7 +236,7 @@ test("pointer faults before/after commit retain explanatory journal; old and sel
   });
 });
 
-test("hard process exit preserves intent and refuses abandoned-owner takeover; stopped-owner recovery admits selected pair", async t => {
+test("hard process exit releases kernel custody and reconciles selected pair without offline recovery", async t => {
   const f = await fixture(t);
   await f.manager.installer.installArchive(id, f.old.bytes, integrity(f.old.bytes), "0.1.0"); await f.manager.manage(id, "enable");
   const target = new HostedPluginInstaller({ root: f.manager.installer.root, hostVersion: "0.2.0" });
@@ -247,16 +247,26 @@ test("hard process exit preserves intent and refuses abandoned-owner takeover; s
     const manager=new HostedPluginManager({root:process.argv[1],hostVersion:"0.1.29",workerEntry:process.argv[2],hooks:()=>({}),fetch:async()=>{throw new Error("offline")}});
     await manager.hostPair.select("0.2.0",process.argv[3],async()=>{process.exit(0)});process.exit(2);`;
   await promisify(execFile)(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script, f.storage, f.workerEntry, f.nextHost], { timeout: 15000 });
-  const before = await readFile(join(pairRoot(f.storage), "intent.json"));
-  assert.equal((await readPair(f.storage))!.phase, "selecting");
-  await assert.rejects(f.restart(), /locked; stop all writers/);
-  assert.deepEqual(await readFile(join(pairRoot(f.storage), "intent.json")), before);
-  // Test-only operator recovery: child exit was observed and every other owner was stopped.
-  // Production never guesses staleness from a PID or steals another process's lock.
-  await rm(join(pairRoot(f.storage), "transaction.lock"));
+  const before = (await readPair(f.storage))!;
+  const database = join(pairRoot(f.storage), "transaction.ownership.sqlite"), inode = (await stat(database)).ino;
+  assert.equal(before.phase, "selecting");
+  // The OS, not PID inference or an operator unlink, releases custody. The
+  // existing journal must still validate the selected host and plugin package.
   f.offline(); await f.restart();
   assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
   assert.equal((await readPair(f.storage))!.phase, "reconciled");
+  assert.equal((await readPair(f.storage))!.id, before.id);
+  assert.equal((await stat(database)).ino, inode, "kernel lock inode is never replaced");
+  await assert.rejects(readFile(join(pairRoot(f.storage), "transaction.lock")), { code: "ENOENT" });
+});
+
+test("candidate without crash-safe ownership support is refused before selecting a downgrade", async t => {
+  const f = await fixture(t);
+  const path = join(f.nextHost, "package.json"), pkg = JSON.parse(await readFile(path, "utf8"));
+  delete pkg.piWebappHostedRuntime.ownershipProtocol;
+  await writeFile(path, JSON.stringify(pkg));
+  await assert.rejects(f.manager.hostPair.select("0.2.0", f.nextHost, async () => assert.fail("must not write selection")), /crash-safe ownership/);
+  assert.equal(await readPair(f.storage), null);
 });
 
 test("startup never replays pair over newer confirmed disable/state generation", async t => {

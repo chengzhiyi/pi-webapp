@@ -8,6 +8,7 @@
     "protocol": 2,
     "runtimeProtocol": 1,
     "pairJournal": 1,
+    "ownershipProtocol": 2,
     "capabilities": ["state", "workspace", "legacy", "panels", "messages"]
   },
   "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",

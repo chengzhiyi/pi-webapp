@@ -36,7 +36,14 @@ distinct. See [ORI-42 evidence and reproduction](hosted-ori42-management.md).
 
 ## Offline operator recovery — no automatic stealing
 
-`runtime.lock` and `transaction.lock` are never removed by startup, PID inference,
+The [ORI-54 crash-safe ownership follow-up](hosted-crash-safe-ownership.md)
+introduces kernel-managed v2 mutexes. Exact v2 markers are reused only under
+SQLite exclusive custody; neither their abandoned pathname nor their stable
+`*.ownership.sqlite` inode is removed by startup or this recovery tool. Normal
+owners remove their own marker on release. The following recovery procedure is
+still required for **legacy or unknown** markers; upgrading never reclaims them.
+
+Legacy `runtime.lock` and `transaction.lock` are never removed by startup, PID inference,
 heartbeat timeout, UI or an HTTP endpoint. The utility below is **offline only**.
 Its confirmation is an operator attestation, not an OS-enforced proof of dead
 ownership. Filesystem rename is NOT an online compare-and-swap primitive.

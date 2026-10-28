@@ -185,11 +185,24 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       # These tests use only Node's built-ins and can run before npm ci.
-      - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/release-channels.test.ts test/release-plan.test.ts
+      - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/release-channels.test.ts test/release-plan.test.ts test/hosted-ownership.test.ts
+
+  ownership-minimum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.19.0'
+          package-manager-cache: false
+      # The supported minimum must provide real crash-safe OS custody, not a
+      # fallback to the abandoned O_EXCL/PID design. No npm/native addon needed.
+      - run: node --experimental-strip-types --test test/hosted-ownership.test.ts
 
   publish:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.verify.outputs.protocol_published == 'true'
-    needs: [verify, platform-smoke]
+    needs: [verify, platform-smoke, ownership-minimum]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
