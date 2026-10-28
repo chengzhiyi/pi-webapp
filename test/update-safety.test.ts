@@ -7,7 +7,7 @@ import { terminalHost } from "./helpers/terminal-host.ts";
 
 const webRoot = fileURLToPath(new URL("../web/dist/", import.meta.url));
 
-test("updates protect background chats and terminals, and lock mutations during installation", async () => {
+test("updates protect background chats and terminals; downloads keep chat available and only handoff locks mutations", async () => {
   const { host } = terminalHost();
   let busy = true; let fail = false; let prepared = 0; let restarted = 0;
   let release!: () => void;
@@ -43,9 +43,11 @@ test("updates protect background chats and terminals, and lock mutations during 
     fail = false;
     const update = post("/api/update");
     await downloadStarted;
-    for (const path of ["/api/update", "/api/message", "/api/terminal/create", "/api/workspace/select"]) {
-      assert.equal((await post(path, { id, text: "must not start", cols: 80, rows: 24 })).status, 409);
-    }
+    assert.equal((await post("/api/update")).status, 409);
+    assert.equal((await post("/api/message", { text: "chat remains available during download" })).status, 202);
+    assert.equal((await post("/api/model", { provider: "example", id: "model" })).status, 202);
+    assert.equal((await post("/api/terminal/create", { id, cols: 80, rows: 24 })).status, 201);
+    await post("/api/terminal/close", { id });
     release();
     assert.equal((await update).status, 202);
     await new Promise(resolve => setTimeout(resolve, 600));
@@ -76,4 +78,29 @@ test("channel preferences require authentication, same origin, a current session
     assert.equal((await post({ sessionId: "terminal-a", channel: "alpha" })).status, 200);
     assert.equal(channel, "alpha"); assert.equal(saved, 1);
   } finally { await bridge.close(); }
+});
+
+test("download cancellation is available through authenticated same-session HTTP while current chat remains usable", async () => {
+  const { host } = terminalHost(); let started!: () => void, rejectDownload!: (error: Error) => void, cancelled = 0;
+  const began = new Promise<void>(resolve => { started = resolve; });
+  const download = new Promise<void>((_resolve, reject) => { rejectDownload = reject; });
+  host.selfUpdate = {
+    async check() { return { current: "0.1.0", latest: "0.2.0", available: true, canRestart: true }; },
+    async runningVersion() { return "0.1.0"; },
+    async prepare() { started(); await download; throw new Error("unexpected completion"); },
+    async requestRestart() { assert.fail("cancelled download cannot restart"); },
+    async cancel() { cancelled++; rejectDownload(new Error("download cancelled")); },
+  };
+  const bridge = await startBridge(host, webRoot), url = new URL(bridge.url);
+  const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, "Content-Type": "application/json", Origin: url.origin };
+  const post = (path: string, body: Record<string, unknown> = { sessionId: "terminal-a" }, override = {}) => fetch(url.origin + path, { method: "POST", headers: { ...headers, ...override }, body: JSON.stringify(body) });
+  try {
+    const update = post("/api/update"); await began;
+    assert.equal((await post("/api/update/cancel", undefined, { Authorization: "Bearer invalid" })).status, 401);
+    assert.equal((await post("/api/update/cancel", { sessionId: "stale" })).status, 409);
+    assert.equal((await post("/api/update/cancel", undefined, { Origin: "https://other.invalid" })).status, 403);
+    assert.equal((await post("/api/update/cancel")).status, 200); assert.equal(cancelled, 1);
+    assert.equal((await update).status, 400);
+    assert.equal((await post("/api/model", { sessionId: "terminal-a", provider: "example", id: "model" })).status, 202);
+  } finally { rejectDownload(new Error("cleanup")); await bridge.close(); }
 });

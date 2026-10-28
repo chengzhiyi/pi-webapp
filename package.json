@@ -138,6 +138,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.3.1",
-    "simple-icons": "^16.31.0"
+    "simple-icons": "^16.31.0",
+    "undici": "7.30.1"
   }
 }

@@ -1,6 +1,6 @@
 import type { HostedMount, HostedViewIdentity, HostedViewInput, HostedViewReply } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
-import { rememberView, forgetView } from "./view-journal.ts";
+import { rememberView, forgetView, markViewConnecting } from "./view-journal.ts";
 import { FrameAdapter } from "./frame-adapter.ts";
 import { hostedViewPoller, HostedViewPoller } from "./view-poller.ts";
 
@@ -16,8 +16,13 @@ export class HostedViewClient {
   private after = 0;
   private snapshot: unknown;
   private frozen = false;
+  private localCloseCheckpoint = false;
   private frameStarted = false;
-  connecting() { this.frameStarted = true; }
+  connecting() {
+    const recorded = markViewConnecting(this.token);
+    if (!recorded && this.mount.kind !== "controller") throw new Error("Cannot protect the editor recovery journal; download local drafts before opening another editor");
+    this.frameStarted = true;
+  }
   async flushed() { await this.changed({ dirty: false, busy: false }); }
   private identity: HostedViewIdentity;
   private adapter: FrameAdapter;
@@ -29,8 +34,16 @@ export class HostedViewClient {
     this.poller = poller; this.identity = identity; this.adapter = adapter; this.mount = mount; this.reconnect = reconnect; this.failed = failed;
   }
   async start() {
-    this.token = (await hostedApi.view({ ...this.identity, operation: "register", kind: this.mount.kind })).viewToken;
+    this.token = crypto.randomUUID();
+    // Persist before network I/O: reload can destroy this document before the
+    // registration response arrives. The next document can retire the exact nonce.
     rememberView(this.identity, this.token, this.mount);
+    const registered = await hostedApi.view({ ...this.identity, operation: "register", kind: this.mount.kind, viewToken: this.token });
+    if (registered.viewToken !== this.token) {
+      // Compatibility with an older host that still mints registration tokens.
+      forgetView(this.token); this.token = registered.viewToken;
+      rememberView(this.identity, this.token, this.mount);
+    }
   }
   listen() {
     if (this.stopped || this.unlisten) return;
@@ -41,8 +54,16 @@ export class HostedViewClient {
   }
   /** Explicit user retry only: replay pending identity-bound commands, never invent an ack. */
   retry() {
-    if (this.stopped) throw new Error("Closed view cannot reconnect");
-    this.unlisten?.(); this.unlisten = undefined; this.listen();
+    if (this.closed) throw new Error("Closed view cannot reconnect");
+    this.unlisten?.(); this.unlisten = undefined;
+    this.stopped = false; this.abort = new AbortController();
+    if (this.localCloseCheckpoint) {
+      // A failed panel close may have frozen a still-live frame outside a server
+      // barrier. Restore that exact frame before resuming ordinary polling.
+      void this.adapter.call("restore", this.snapshot).then(() => {
+        this.frozen = false; this.localCloseCheckpoint = false; this.listen();
+      }).catch(this.failed);
+    } else this.listen();
   }
   private request(input: Record<string, unknown>) { return hostedApi.view({ ...this.identity, viewToken: this.token, ...input } as HostedViewInput, this.abort.signal); }
   async changed(input: unknown) {
@@ -75,11 +96,19 @@ export class HostedViewClient {
       if (!this.token) return;
       // Use independent requests because in-flight status requests were aborted. A frozen view is
       // already checkpointed. Its old-generation capability may CLOSE, but not CHANGE.
-      if (!this.frozen) {
-        if (this.frameStarted) await this.adapter.call("freeze");
-        await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
+      if (this.mount.kind !== "controller" && !this.frameStarted) {
+        await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "cancel-initialization" });
+      } else {
+        if (this.mount.kind !== "controller" && !this.frozen) {
+          this.snapshot = await this.adapter.call("freeze");
+          this.frozen = true;
+          this.localCloseCheckpoint = true;
+        }
+        if (this.localCloseCheckpoint) {
+          await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
+        }
+        await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "close" });
       }
-      await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "close" });
       this.closed = true;
       forgetView(this.token);
     })().catch(error => { this.closing = undefined; throw error; });

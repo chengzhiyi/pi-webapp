@@ -25,7 +25,7 @@ test("packaged launcher uses its verified local SDK, not a global or inherited P
   for (const name of ["managed-release.mjs", "release-version.mjs"]) await cp(new URL(`../desktop/${name}`, import.meta.url), join(packageRoot, "desktop", name));
   await mkdir(join(packageRoot, "dist")); await writeFile(join(packageRoot, "dist", "extension.js"), "");
   await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.31-alpha.6", peerDependencies: Object.fromEntries(peers.map(name => [name, "1.3.0"])) }));
-  await symlink(resolve("node_modules/cross-spawn"), join(root, "node_modules", "cross-spawn"), process.platform === "win32" ? "junction" : "dir");
+  for (const name of ["cross-spawn", "undici"]) await symlink(resolve("node_modules", name), join(root, "node_modules", name), process.platform === "win32" ? "junction" : "dir");
   for (const name of peers) {
     const dependency = join(root, "node_modules", name);
     await mkdir(dependency, { recursive: true });

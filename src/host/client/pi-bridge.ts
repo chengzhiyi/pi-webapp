@@ -327,6 +327,10 @@ export function usePiBridge() {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/update/channel", { sessionId: session.sessionId, channel });
     },
+    async cancelUpdate(): Promise<void> {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/update/cancel", { sessionId: session.sessionId });
+    },
     async update(request?: UpdateRequest): Promise<{ version: string }> {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       return post("/api/update", { sessionId: session.sessionId, ...request });

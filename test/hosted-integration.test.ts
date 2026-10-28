@@ -22,6 +22,7 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   let sessions!: WorkspaceSessions, requests = 0, selected = integrationFixture();
+  let releaseBackground = () => {};
   let downloadGate: { entered: ReturnType<typeof latch>; release: ReturnType<typeof latch> } | undefined;
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "trusted-workspace" });
   const options = { root: join(root, "hosted"), hostVersion: "0.1.29", workerEntry, ownerId: "host-local-auth-principal",
@@ -40,6 +41,7 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   const { host } = terminalHost(root); host.hosted = integration.handlers;
   const bridge = await startBridge(host, new URL("../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "preferences.json") });
   t.after(async () => {
+    releaseBackground(); downloadGate?.release.resolve();
     integration.adapter.thaw(); await integration.shutdown(); await bridge.close(); await sessions.dispose();
     if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
     if (roots === undefined) delete process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS; else process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = roots;
@@ -70,6 +72,7 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   const model = first.modelRuntime.getModels("openai")[0]!;
   await first.modelRuntime.setRuntimeApiKey("openai", "fixture-no-network"); await first.setModel(model);
   const entered = latch(), release = latch(); let stage = 0;
+  releaseBackground = release.resolve;
   first.agent.streamFunction = async model => {
     if (++stage === 1) { entered.resolve(); await release.promise; }
     const message: AssistantMessage = { role: "assistant", api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
@@ -138,17 +141,17 @@ test("production orchestration: authenticated HTTP + actual manager/worker + ret
   assert.equal(requests, callsBeforeRestart, "host-version marker prevents repeated reconciliation");
 });
 
-test("publication failure is visible, never thaws admission or claims successful management", async t => {
+test("publication failure stays local and never claims successful plugin management", async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-publication-")), workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const integration = new HostedPluginIntegration({ root, hostVersion: "0.1.29", workerEntry, ownerId: "local", resolveSession: () => null, changed: () => { throw new Error("publication failed"); } });
+  t.after(async () => { await integration.shutdown(); await rm(root, { recursive: true, force: true }); });
   await integration.start(); const fixture = integrationFixture(); await integration.manager.installer.installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
   await assert.rejects(integration.manage({ pluginId: id, operation: "enable" }), /publication failed|recovery required/);
-  assert.equal(integration.adapter.isFrozen, true); assert.match((await integration.inventory()).plugins[0]!.error!, /publication failed/);
+  assert.equal(integration.adapter.isFrozen, false); assert.match((await integration.inventory()).plugins[0]!.error!, /publication failed/);
   assert.equal((await new HostedStateBroker(join(root, "data"), id).active())?.enabled, true, "new generation/data never silently rolled back");
-  // Recovery stays sticky for new work, but graceful shutdown must drain and release ownership.
+  // Plugin recovery stays visible while base-chat admission remains available.
   const active = await new HostedStateBroker(join(root, "data"), id).active();
   await integration.shutdown();
   assert.deepEqual(await new HostedStateBroker(join(root, "data"), id).active(), active, "shutdown never disables or rolls back committed state");
-  t.after(() => rm(root, { recursive: true, force: true }));
 });

@@ -62,6 +62,7 @@ test("stable is the persisted default; alpha preference survives a new updater a
   const prepared = await reopened.prepare({ channel: "alpha", version: "0.2.0-alpha.2" });
   assert.equal(prepared.version, "0.2.0-alpha.2");
   assert.ok(f.calls.some(args => args[1] === "pi-webapp@0.2.0-alpha.2"));
+  await reopened.requestRestart(prepared);
   await assert.rejects(reopened.setChannel("stable"), /正在进行中/);
 });
 
@@ -103,6 +104,7 @@ for (const desktop of [false, true]) {
     assert.deepEqual(await readdir(join(f.agentDir, "pi-web", "releases")), []);
     f.setDataVersion(1);
     const prepared = await f.updater.prepare(request);
+    await f.updater.requestRestart(prepared);
     const selection = JSON.parse(await readFile(join(f.agentDir, "pi-web", desktop ? "desktop-update.json" : "update.json"), "utf8"));
     assert.equal(selection.version, "0.1.29"); assert.equal(selection.launcher, prepared.launcher);
     if (desktop) {
@@ -129,4 +131,12 @@ test("preview never offers a downgrade to an older alpha", async t => {
   const f = await fixture(t, { current: "0.2.0-alpha.3" });
   await f.updater.setChannel("alpha");
   assert.equal((await f.updater.check()).available, false);
+});
+
+test("an invalid persisted preference is reported instead of silently switching to stable", async t => {
+  const f = await fixture(t);
+  await f.updater.setChannel("alpha");
+  await writeFile(join(f.agentDir, "pi-web/update-preferences.json"), JSON.stringify({ channel: "alpha-typo" }));
+  await assert.rejects(f.updater.check(), /无法读取更新偏好/);
+  assert.deepEqual(JSON.parse(await readFile(join(f.agentDir, "pi-web/update-preferences.json"), "utf8")), { channel: "alpha-typo" });
 });

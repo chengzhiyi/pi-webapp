@@ -10,6 +10,7 @@ import spawn from "cross-spawn";
 import { openWebPage } from "./open-web-page.mjs";
 import { npmCommand } from "./npm-command.mjs";
 import { packagePiCli } from "./package-pi-cli.mjs";
+import { observeStopOutcome } from "./launcher-state.mjs";
 import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
@@ -126,7 +127,7 @@ async function serve(pi, args) {
   const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
   const piPrefix = process.env.PI_WEBAPP_PI_CLI ? [resolve(process.env.PI_WEBAPP_PI_CLI)] : [];
   const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
-    cwd: process.cwd(), env: { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
+    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
   let ready = false;
@@ -337,11 +338,11 @@ async function serve(pi, args) {
   for (const watcher of devWatchers) watcher.close();
   clearInterval(stopTimer);
   clearTimeout(killTimer);
-  try { if ((await readFile(stopPath, "utf8")).trim() === nonce) await unlink(stopPath); } catch { /* Already removed. */ }
   if (claimed) {
     try { if (JSON.parse(await readFile(statePath, "utf8")).nonce === nonce) await unlink(statePath); }
     catch { /* Already removed. */ }
   }
+  try { if ((await readFile(stopPath, "utf8")).trim() === nonce) await unlink(stopPath); } catch { /* Already removed. */ }
   if (restartRequest && runningUrl) {
     await unlink(restartPath).catch(() => {});
     const oldUrl = new URL(runningUrl);
@@ -468,10 +469,9 @@ async function stop() {
   await writeFile(stopPath, state.nonce, { mode: 0o600 });
   for (let attempt = 0; attempt < 400; attempt++) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-    const current = await activeState();
-    if (!current || current.nonce !== state.nonce) { console.log("pi-webapp 已停止"); return; }
-    try { await stat(stopPath); }
-    catch (error) { if (error?.code === "ENOENT") throw new Error("停止已取消：插件保存或释放未完成，服务及数据已保留。请处理插件诊断后重试。"); throw error; }
+    const outcome = await observeStopOutcome(activeState, stopPath, state.nonce);
+    if (outcome === "stopped") { console.log("pi-webapp 已停止"); return; }
+    if (outcome === "refused") throw new Error("停止已取消：插件保存或释放未完成，服务及数据已保留。请处理插件诊断后重试。");
   }
   throw new Error(`停止超时。后台进程 PID：${state.pid}；日志：${logPath}`);
 }

@@ -109,6 +109,52 @@ export class HostedPluginSupervisor {
     if (!this.pendingPackage) return Promise.resolve({ pending: false });
     return this.replace(this.pendingPackage, timeoutMs);
   }
+  /** Reversible process handoff. The state pointer and generation do not change.
+   * A failed host selection restores the same code/state before resuming exact views.
+   */
+  suspendForRestart(timeoutMs = 30_000): Promise<() => Promise<void>> {
+    return this.serialize(async () => {
+      const old = this.worker, previous = this.phaseValue;
+      const active = await this.broker.active();
+      const restoreWorker = async () => {
+        if (!old || this.worker) return;
+        await this.ownRuntime();
+        if (JSON.stringify(await this.broker.active()) !== JSON.stringify(active)) {
+          await this.releaseOwnership?.(); this.phaseValue = "failed";
+          throw new HostedPluginError("restart_recovery_changed", "Plugin state changed during host handoff; retain data and reconnect to its current owner");
+        }
+        try {
+          this.worker = await HostedRuntimeProcess.start(old.package, old.generation, this.workerEntry, this.callBroker);
+          await this.hooks.validateCandidate?.(this.worker.tools);
+        } catch (error) {
+          await this.worker?.dispose(); this.worker = null; this.phaseValue = "failed";
+          await this.releaseOwnership?.(); throw error;
+        }
+      };
+      this.phaseValue = "draining";
+      try {
+        if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Plugin work is still draining; current host retained");
+        await this.hooks.freeze();
+        if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Checkpoint work is still draining; current host retained");
+        await old?.dispose(); this.worker = null; this.phaseValue = "disabled";
+        await this.releaseOwnership?.();
+      } catch (error) {
+        try {
+          // Releasing custody can fail after the old process has stopped. That
+          // partial suspension still owes the running host its worker back.
+          await restoreWorker(); this.phaseValue = previous; await this.hooks.resume();
+        } catch (restoreError) { this.phaseValue = "failed"; throw restoreError; }
+        throw error;
+      }
+      let resumed = false;
+      return () => this.serialize(async () => {
+        if (resumed) return;
+        await restoreWorker();
+        this.phaseValue = previous;
+        await this.hooks.resume(); resumed = true;
+      });
+    });
+  }
   disable(timeoutMs = 30_000): Promise<void> {
     return this.serialize(async () => {
       await this.ownRuntime();

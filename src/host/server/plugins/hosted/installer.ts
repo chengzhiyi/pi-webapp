@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { lstat, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { environmentFetch } from "../../../../../bin/http-transport.mjs";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
 import { extractHostedArchive, MAX_ARCHIVE_BYTES } from "./archive.ts";
 import { HostedPluginError, isMissing } from "./errors.ts";
@@ -33,7 +34,7 @@ export class HostedPluginInstaller {
   private readonly fetcher: typeof globalThis.fetch;
   constructor(options: InstallerOptions) {
     if (!supportedHostVersion(options.hostVersion)) throw new HostedPluginError("invalid_version", "Host requires an exact stable or alpha.N version");
-    this.root = options.root; this.hostVersion = options.hostVersion; this.catalog = options.catalog ?? OFFICIAL_PLUGINS; this.fetcher = options.fetch ?? globalThis.fetch;
+    this.root = options.root; this.hostVersion = options.hostVersion; this.catalog = options.catalog ?? OFFICIAL_PLUGINS; this.fetcher = options.fetch ?? environmentFetch;
   }
   private async index(): Promise<InstallationIndex> {
     const index = await readJson<InstallationIndex>(join(this.root, "installed.json"));

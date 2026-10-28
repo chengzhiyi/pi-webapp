@@ -38,7 +38,9 @@ export class HostedPluginIntegration {
   private readonly documents = new Map<string, { document: string; controller: string }>();
   private queue: Promise<unknown> = Promise.resolve();
   private switches: Promise<unknown> = Promise.resolve();
-  private recovery: unknown;
+  private readonly recovery = new Map<string, unknown>();
+  private restartPreparation?: Promise<() => Promise<void>>;
+  private restartResume?: () => Promise<void>;
   private closing = false;
   private started = false;
   private stopping?: Promise<void>;
@@ -50,7 +52,7 @@ export class HostedPluginIntegration {
         // Bindings are created by trusted SDK/TUI factories, including during construction
         // before a candidate is retained. Actual execution always revalidates retained scope.
         const policy = options.policy?.(id, scope);
-        return { ...policy, enabled: !this.recovery && this.manager.tools.some(t => t.pluginId === id) && policy?.enabled !== false };
+        return { ...policy, enabled: !this.recovery.has(id) && this.manager.tools.some(t => t.pluginId === id) && policy?.enabled !== false };
       },
       invoke: async (id, request, signal) => {
         signal?.throwIfAborted();
@@ -64,7 +66,7 @@ export class HostedPluginIntegration {
     this.manager = new HostedPluginManager({ ...options,
       // Terminal intent belongs to the operation, not the mutable closing flag:
       // an enable still preparing when shutdown starts must not retain its freeze.
-      lifecycle: (_id, operation, shutdown) => this.lifecycle(operation, shutdown),
+      lifecycle: (id, operation, shutdown) => this.lifecycle(id, operation, shutdown),
       hooks: id => ({
       canSwitch: () => this.coordinator(id).canSwitch(),
       validateCandidate: (descriptors: readonly HostedToolDescriptor[]) => {
@@ -88,7 +90,14 @@ export class HostedPluginIntegration {
           this.adapter.change(id, descriptors);
           await this.coordinator(id).committed(active);
           options.changed?.();
-        } catch (error) { this.recovery = error; throw error; }
+          this.recovery.delete(id);
+        } catch (error) {
+          this.recovery.set(id, error);
+          // The pointer already committed. Publish its generation only if all genuine
+          // view acknowledgements exist; never roll back newly accepted state.
+          await this.coordinator(id).committed(active).catch(() => {});
+          throw error;
+        }
       },
       resume: () => this.coordinator(id).resume(),
     }) });
@@ -132,41 +141,52 @@ export class HostedPluginIntegration {
   private enqueue<T>(operation: () => Promise<T>, shutdown = false): Promise<T> {
     const result = this.queue.then(async () => {
       if (this.closing && !shutdown) throw new HostedPluginError("manager_closed", "Host is shutting down");
-      if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Committed hosted publication failed; explicit recovery required", { status: 503 });
       return operation();
     });
     this.queue = result.catch(() => {});
     return result;
   }
-  private lifecycle<T>(operation: () => Promise<T>, shutdown = false): Promise<T> {
+  private lifecycle<T>(id: string, operation: () => Promise<T>, shutdown = false): Promise<T> {
     const result = this.switches.then(async () => {
       if (this.closing && !shutdown) throw new HostedPluginError("manager_closed", "Host is shutting down");
-      if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Committed hosted publication failed; retain data and restart through explicit recovery", { status: 503 });
-      // A failed publication already holds admission frozen; shutdown still drains views/worker.
-      if (!(shutdown && this.recovery && this.adapter.isFrozen)) await this.adapter.freeze(); // Old-schema batches finish on the still-ACTIVE old worker.
       try {
+        if (!this.adapter.isFrozen) await this.adapter.freeze();
         const result = await operation();
-        if (this.recovery && !shutdown) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
+        if (result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) {
+          // Manager bookkeeping may fail before our committed callback executes.
+          // The broker already owns the new generation: quarantine this plugin
+          // and publish that generation only through the genuine view barrier.
+          if (!this.recovery.has(id)) this.recovery.set(id, new Error("Committed plugin publication requires recovery"));
+          const active = await new HostedStateBroker(join(this.options.root, "data"), id).active();
+          if (active) await this.coordinator(id).committed(active).catch(() => {});
+        }
+        if (this.recovery.has(id) && !shutdown) throw new HostedPluginError("reconnect_required", "Plugin publication failed; recover this plugin without restarting chat", { status: 503 });
         return result;
-      } catch (error) {
-        // A refused pre-restart flush must leave the current host usable/retryable.
-        if (shutdown && !this.recovery) this.adapter.thaw();
-        throw error;
+      } finally {
+        for (const view of this.views.values()) view.allowImmediateReopen(false);
+        // Successful host shutdown retains the barrier until process exit. Every
+        // failed/non-terminal plugin operation releases base-chat admission.
+        if (!shutdown) this.adapter.thaw();
       }
-      finally { for (const view of this.views.values()) view.allowImmediateReopen(false); if (!this.recovery && !shutdown) this.adapter.thaw(); }
     });
     this.switches = result.catch(() => {});
-    return result;
+    return result.catch(error => { if (shutdown) this.adapter.thaw(); throw error; });
   }
   async start(): Promise<void> {
     if (this.started) return;
+    await this.adapter.verifyCompatibility();
     for (const plugin of this.options.catalog ?? OFFICIAL_PLUGINS) {
-      const active = await new HostedStateBroker(join(this.options.root, "data"), plugin.id).active();
-      this.views.set(plugin.id, new HostedViewCoordinator(plugin.id, active?.generation ?? 0));
+      try {
+        const active = await new HostedStateBroker(join(this.options.root, "data"), plugin.id).active();
+        this.views.set(plugin.id, new HostedViewCoordinator(plugin.id, active?.generation ?? 0));
+      } catch (error) {
+        this.recovery.set(plugin.id, error);
+        this.views.set(plugin.id, new HostedViewCoordinator(plugin.id, 0));
+      }
     }
     await this.enqueue(async () => {
       await this.manager.start();
-      if (this.recovery) throw new HostedPluginError("reconnect_required", "Startup publication failed; explicit recovery required", { status: 503 });
+      if (this.recovery.size) return;
       const marker = join(this.options.root, "host-version.json");
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
         // Controlled selection already staged/admitted this exact combination offline.
@@ -179,6 +199,11 @@ export class HostedPluginIntegration {
           await atomicJson(marker, { version: this.options.hostVersion });
         } // Failed registry/install checks retry on the next startup, never claim reconciliation.
       }
+    }).catch(error => {
+      // Optional plugin storage cannot own the lifetime of the base host. Keep
+      // the bytes intact and expose the diagnostic through the plugin catalog.
+      for (const plugin of this.options.catalog ?? OFFICIAL_PLUGINS) this.recovery.set(plugin.id, error);
+      this.adapter.thaw();
     });
     this.started = true;
   }
@@ -196,13 +221,13 @@ export class HostedPluginIntegration {
     const inventory = await this.manager.inventory();
     return { plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
-      phase: this.recovery ? "reconnect-required" : p.phase,
+      phase: this.recovery.has(p.id) ? "reconnect-required" : p.phase,
       updatePolicy: p.updatePolicy, pinnedVersion: p.pinnedVersion, updateDiagnostic: p.updateDiagnostic,
       // A disabled runtime's historical active pointer is not the installed release.
       ...(p.enabled && p.activeVersion ? { version: p.activeVersion } : p.version ? { version: p.version } : {}),
       ...(p.availableVersion ? { availableVersion: p.availableVersion } : {}), ...(p.pendingVersion ? { pendingVersion: p.pendingVersion } : {}),
       ...(p.generation !== null ? { generation: p.generation } : {}),
-      ...(this.recovery || p.error ? { error: this.recovery instanceof Error ? this.recovery.message : p.error?.message ?? "Recovery required", errorCode: this.recovery ? "reconnect_required" : p.error?.code } : {}),
+      ...(this.recovery.has(p.id) || p.error ? { error: this.recovery.get(p.id) instanceof Error ? (this.recovery.get(p.id) as Error).message : p.error?.message ?? "Recovery required", errorCode: this.recovery.has(p.id) ? "reconnect_required" : p.error?.code } : {}),
       ...(p.enabled && p.assetBase && this.documents.has(p.id) && p.id === ID ? {
         documentUrl: p.assetBase + this.documents.get(p.id)!.document, controllerUrl: p.assetBase + this.documents.get(p.id)!.controller, contribution: structuredClone(contribution),
       } : {}),
@@ -232,7 +257,7 @@ export class HostedPluginIntegration {
           return;
         }
         const result = await this.manager.manage(input.pluginId, input.operation as Exclude<HostedManageInput["operation"], "policy" | "cancel-download">, input.version, download?.abort.signal);
-        if (this.recovery || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
+        if (this.recovery.has(input.pluginId) || result && typeof result === "object" && "reconnectRequired" in result && result.reconnectRequired) throw new HostedPluginError("reconnect_required", "Runtime committed but publication failed; explicit recovery required", { status: 503 });
       } finally { view.allowImmediateReopen(false); }
     });
     this.options.changed?.();
@@ -246,24 +271,59 @@ export class HostedPluginIntegration {
     try {
       const request = { requestId: randomUUID(), scope, action: input.action, input: input.input ?? {} };
       if (this.adapter.isFrozen || checkpointOnly) {
-        if (this.adapter.isFrozen && !this.recovery && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
+        if (this.adapter.isFrozen && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
         throw new HostedPluginError("plugin_unavailable", "Only authenticated barrier checkpoint actions are admitted during switching", { status: 409 });
       }
+      if (this.recovery.has(input.pluginId)) throw new HostedPluginError("plugin_unavailable", "Plugin publication recovery required", { status: 503 });
       this.generation(input.pluginId, input.generation);
       return await this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
     } finally { release(); }
   }
+  /** Keep the view identities and data generation alive until the launcher commits.
+   * The returned undo lease is idempotent and recreates only verified old workers.
+   */
+  prepareRestart(): Promise<() => Promise<void>> {
+    if (this.restartPreparation) return this.restartPreparation;
+    this.restartPreparation = this.enqueue(async () => {
+      this.closing = true;
+      try {
+        await this.adapter.freeze();
+        for (const view of this.views.values()) view.allowImmediateReopen(true);
+        const restore = await this.manager.suspendForRestart();
+        let restored = false;
+        const resume = async () => {
+          if (restored) return;
+          try { await restore(); restored = true; }
+          finally {
+            this.closing = false; this.restartResume = undefined; this.restartPreparation = undefined;
+            this.adapter.thaw();
+          }
+        };
+        this.restartResume = resume;
+        return resume;
+      } catch (error) {
+        this.closing = false; this.restartPreparation = undefined; this.adapter.thaw();
+        throw error;
+      } finally { for (const view of this.views.values()) view.allowImmediateReopen(false); }
+    });
+    return this.restartPreparation;
+  }
   shutdown(): Promise<void> {
-    // Updater drains while HTTP is alive; session_shutdown must not freeze again.
     if (this.stopping) return this.stopping;
+    if (this.restartResume) {
+      // The reversible drain already stopped every worker. Process exit consumes
+      // the lease; repeating freeze would wait on the same view barrier twice.
+      for (const view of this.views.values()) view.dispose();
+      this.stopping = Promise.resolve();
+      return this.stopping;
+    }
     this.closing = true;
     this.stopping = this.enqueue(async () => {
-      // Host exit necessarily closes realms. Still require every registered view to flush/ack.
       for (const view of this.views.values()) view.allowImmediateReopen(true);
       await this.manager.shutdown();
       for (const view of this.views.values()) view.dispose();
     }, true).catch(error => {
-      this.closing = false; this.stopping = undefined;
+      this.closing = false; this.stopping = undefined; this.adapter.thaw();
       throw error;
     });
     return this.stopping;

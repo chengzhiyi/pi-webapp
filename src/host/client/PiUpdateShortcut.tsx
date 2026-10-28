@@ -2,15 +2,26 @@ import { useLocale, textFor } from "../../../web/src/ui/locale/preference.ts";
 import { IconDownloadOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { Tooltip } from "../../../web/src/ui/primitives/Tooltip.tsx";
 import { useAppUpdate, type AppUpdateActions } from "../../../web/src/ui/settings/useAppUpdate.ts";
+import { useAppUpdateContext, type AppUpdateController } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import css from "./PiUpdateShortcut.module.css";
 
-type Props = AppUpdateActions & { wide: boolean };
+type Props = AppUpdateActions & { wide: boolean; hideError?: boolean };
 
 /** Only actionable releases appear here; a single click starts the update. */
-export function PiUpdateShortcut({ wide, ...updates }: Props) {
+export function PiUpdateShortcut(props: Props) {
+  const controller = useAppUpdateContext();
+  return controller ? <UpdateShortcutContent {...props} controller={controller} /> : <StandaloneUpdateShortcut {...props} />;
+}
+
+function StandaloneUpdateShortcut(props: Props) {
+  const controller = useAppUpdate(props);
+  return <UpdateShortcutContent {...props} controller={controller} />;
+}
+
+function UpdateShortcutContent({ wide, hideError, controller }: Props & { controller: AppUpdateController }) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
-  const { status, checking, installing, targetVersion, restartTimedOut, error, install } = useAppUpdate(updates);
+  const { status, checking, installing, targetVersion, restartTimedOut, error, install } = controller;
   if (!status?.available || !status.canRestart) return null;
   const label = installing ? t("正在升级…", "Updating…")
     : targetVersion ? t("正在重启…", "Restarting…")
@@ -26,6 +37,6 @@ export function PiUpdateShortcut({ wide, ...updates }: Props) {
       </Tooltip>
     </div>
     {(installing || targetVersion) && <span className={css.srOnly} role="status">{label}</span>}
-    {error && <p className={wide ? css.error : css.srOnly} role="alert">{error}</p>}
+    {error && !hideError && <p className={wide ? css.error : css.srOnly} role="alert">{error}</p>}
   </div>;
 }

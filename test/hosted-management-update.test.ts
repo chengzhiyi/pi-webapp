@@ -7,7 +7,7 @@ import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integ
 import { atomicJson } from "../src/host/server/plugins/hosted/storage.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
 
-for (const updatePolicy of ["notify", "automatic", "pinned"] as const) test(`software startup migrates persisted ${updatePolicy} and updates installed disabled plugin`, async () => {
+for (const updatePolicy of ["notify", "automatic", "pinned"] as const) test(`software startup migrates persisted ${updatePolicy} and retains compatible disabled plugin independently`, async () => {
   const root = await mkdtemp(join(tmpdir(), "ori42-migration-"));
   const first = integrationFixture(), next = integrationFixture("0.2.0");
   const integration = new HostedPluginIntegration({ root, workerEntry: "unused", hostVersion: "0.1.29", ownerId: "test", resolveSession: () => null,
@@ -18,7 +18,7 @@ for (const updatePolicy of ["notify", "automatic", "pinned"] as const) test(`sof
     await atomicJson(join(root, "policies/policies.json"), { [id]: { updatePolicy, ...(updatePolicy === "pinned" ? { pinnedVersion: "0.1.0" } : {}) } });
     await integration.start();
     const card = (await integration.inventory()).plugins[0]!;
-    assert.equal(card.version, "0.2.0"); assert.equal(card.enabled, false); assert.equal(card.pinnedVersion, undefined);
+    assert.equal(card.version, "0.1.0"); assert.equal(card.enabled, false); assert.equal(card.pinnedVersion, undefined);
     assert.deepEqual(JSON.parse(await readFile(join(root, "policies/policies.json"), "utf8")), { [id]: { updatePolicy: "notify" } });
     assert.equal(JSON.parse(await readFile(join(root, "host-version.json"), "utf8")).version, "0.1.29");
   } finally { await integration.shutdown(); await rm(root, { recursive: true, force: true }); }

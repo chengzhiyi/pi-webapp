@@ -14,6 +14,8 @@ import { pluginRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
 import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
+import { assertModelAdmission, installModelTransport } from "../models/model-transport.ts";
+import type { ModelNetworkDiagnostic } from "../../../../bin/model-network.mjs";
 
 import type { HostedAgentAdapter } from "../plugins/hosted/agent-adapter.ts";
 import type { HostedScope } from "@chengzhiyi/pi-web-protocol";
@@ -39,6 +41,7 @@ interface WorkspaceRuntime {
   agentErrorReported?: boolean;
   tools: ToolDiagnostics;
   streaming: ViewMessage | null;
+  networkDiagnostic?: ModelNetworkDiagnostic;
   prompts: EditablePromptQueue;
 }
 
@@ -180,6 +183,7 @@ export class WorkspaceSessions {
         if (!this.disposed && !owner.closing) this.onSessionsChanged();
       });
       candidate = runtime;
+      installModelTransport(session, detail => { runtime.networkDiagnostic = detail; }, () => runtime.operation?.operationId);
       const publish = (event: HostEvent) => this.publishFor(runtime, event);
       runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       let lastStreamAt = 0;
@@ -192,7 +196,9 @@ export class WorkspaceSessions {
           if (event.type === "tool_execution_end") tools.end(event, context);
           if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
             runtime.agentErrorReported = true;
-            const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
+            const network = runtime.networkDiagnostic;
+            const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION,
+              ...(network ? { networkKind: network.kind, networkStage: network.stage, causeCodes: network.causes.flatMap(cause => cause.code ? [cause.code] : []).join(","), requestId: network.requestId } : {}) }) ?? network?.errorId;
             publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...runtime.operation });
           }
           if (event.type === "message_end" && event.message.role === "toolResult") tools.message(event.message, context);
@@ -299,13 +305,13 @@ export class WorkspaceSessions {
 
   private async prompt(runtime: WorkspaceRuntime, text: string, images: Array<{ type: "image"; data: string; mimeType: string }>, correlation?: ErrorCorrelation, delivery?: PromptDelivery): Promise<void> {
     if (this.disposed || runtime.closing) throw new Error("Pi 会话不可用");
-    this.hosted?.adapter.assertAdmission();
+    assertModelAdmission(() => this.hosted?.adapter.assertAdmission(), correlation, this.reportError);
     assertPromptDelivery({ ...this.snapshotOf(runtime), idle: runtime.session.isIdle }, text, delivery);
     // Acknowledge after Pi validates the model and credentials, while the
     // model response continues through the session event stream.
     const active = runtime.session;
     const starting = active.isIdle;
-    if (starting) { runtime.operation = correlation; runtime.agentErrorReported = false; }
+    if (starting) { runtime.operation = correlation; runtime.agentErrorReported = false; runtime.networkDiagnostic = undefined; }
     this.telemetry.breadcrumb("send", { ...correlation, piVersion: VERSION });
     let accepted = false;
     let resolve!: () => void;
@@ -351,7 +357,7 @@ export class WorkspaceSessions {
   async resume(correlation?: ErrorCorrelation): Promise<void> {
     const runtime = this.active;
     if (this.disposed || !runtime || runtime.closing) throw new Error('Pi 会话不可用');
-    this.hosted?.adapter.assertAdmission();
+    assertModelAdmission(() => this.hosted?.adapter.assertAdmission(), correlation, this.reportError);
     const session = runtime.session;
     if (!session.isIdle) throw new Error('Pi 正在运行，请等待当前回复结束');
     if (!sessionPaused(session.sessionManager.getBranch())) throw new Error('当前会话没有暂停的任务');

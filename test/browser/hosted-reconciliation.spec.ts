@@ -20,8 +20,10 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
     }, { locale, records, key });
     let failDiscard = false;
     await page.route("**/api/hosted-plugins/views", async route => {
-      writes.push(route.request().postDataJSON());
-      await route.fulfill({ status: failDiscard ? 503 : 200, contentType: "application/json", body: JSON.stringify(failDiscard ? { error: "offline" } : { commands: [] }) });
+      const request = route.request().postDataJSON();
+      if (request.operation !== "reconcile") writes.push(request);
+      const failed = failDiscard && request.operation === "discard";
+      await route.fulfill({ status: failed ? 503 : 200, contentType: "application/json", body: JSON.stringify(failed ? { error: "offline" } : { commands: [], recovery: { state: "unconfirmed" } }) });
     });
     await page.goto(bridge.url);
     const notice = page.locator("[data-hosted-recovery]");
@@ -36,7 +38,7 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
     await notice.locator("summary").click();
     await expect(notice.locator("[data-unconfirmed-view]")).toHaveCount(2);
     await page.screenshot({ path: info.outputPath("recovery-expanded.png") });
-    const discard = notice.getByRole("button").first();
+    const discard = notice.getByRole("button", { name: locale === "zh" ? "丢弃此视图的未确认记录" : "Discard unconfirmed edits for this view", exact: true }).first();
     page.once("dialog", dialog => dialog.dismiss()); await discard.click();
     expect(writes).toEqual([]);
     failDiscard = true;
@@ -50,7 +52,7 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
     await page.reload();
     await expect(notice.locator("summary")).toContainText(locale === "zh" ? "（1）" : "(1)");
     await notice.locator("summary").click();
-    page.once("dialog", dialog => dialog.accept()); await notice.getByRole("button").click();
+    page.once("dialog", dialog => dialog.accept()); await discard.click();
     await expect(notice).toHaveCount(0);
     expect(JSON.parse((await page.evaluate(key => sessionStorage.getItem(key), key))!)).toEqual([]);
   } finally { await bridge.close(); }

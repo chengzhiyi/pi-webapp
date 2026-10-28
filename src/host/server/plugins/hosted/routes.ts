@@ -17,7 +17,7 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new HostedPluginError("invalid_input", "Expected plugin request object", {status: 400});
   const body = input as Record<string, unknown>;
   if (path === "/api/hosted-plugins/views") {
-    if (options?.draining && !["poll", "pollMany", "change", "ack", "close"].includes(String(body.operation))) throw new HostedPluginError("host_restarting", "Only existing view status/flush acknowledgements are admitted during restart", { status: 409 });
+    if (options?.draining && !["poll", "pollMany", "change", "ack", "close", "reconcile", "cancel-initialization"].includes(String(body.operation))) throw new HostedPluginError("host_restarting", "Only existing view status/flush acknowledgements are admitted during restart", { status: 409 });
     if (body.operation !== "pollMany") return host.views(body);
     // Bounded read-only aggregation. Every member still traverses the authenticated
     // session resolver and exact generation/mount/token checks in host.views.

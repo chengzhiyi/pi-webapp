@@ -28,6 +28,7 @@ import type { ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
+import { assertModelAdmission } from "../models/model-transport.ts";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
 // The installed bundle and source checkout have different directory depths.
@@ -140,7 +141,7 @@ async function sendTui(sessionId: string, text: string, images: PromptImages, co
   const active = sameSession(sessionId);
   assertPromptDelivery({ ...tuiSnapshot(), idle: active.isIdle() }, text, delivery);
   const starting = active.isIdle();
-  if (starting) shared.hosted?.adapter.assertAdmission();
+  if (starting) assertModelAdmission(() => shared.hosted?.adapter.assertAdmission(), correlation, (error, fields) => shared.bridge?.reportError?.(error, fields));
   if (starting) shared.operation = correlation;
   try {
     const content = images.length ? [{ type: "text" as const, text }, ...images] : text;
@@ -501,7 +502,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             hosted: shared.hosted?.handlers,
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
               hostedPair: shared.hosted!.manager.hostPair,
-              beforeRestart: () => shared.hosted!.shutdown() }),
+              beforeRestart: () => shared.hosted!.prepareRestart() }),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
@@ -745,7 +746,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
               activeSession(sessionId);
               if (shared.selected === "sdk") { await shared.workspaceSessions!.resume(correlation); return; }
               const active = sameSession(sessionId);
-              shared.hosted?.adapter.assertAdmission();
+              assertModelAdmission(() => shared.hosted?.adapter.assertAdmission(), correlation, (error, fields) => shared.bridge?.reportError?.(error, fields));
               if (!active.isIdle()) throw new Error("Pi 正在运行，请等待当前回复结束");
               if (!active.model || !shared.pi) throw new Error("请先选择模型");
               if (!active.modelRegistry.hasConfiguredAuth(active.model)) throw new Error("请先连接当前模型");

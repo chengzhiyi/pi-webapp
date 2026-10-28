@@ -70,9 +70,8 @@ test("npm and desktop business-package updater stage required pair, keep old run
     assert.deepEqual(f.calls(), { downloads: 1, registry: 1 });
     assert.equal(f.manager.tools[0]!.generation, generation);
     assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.1.0");
-    assert.equal((await readPair(f.storage))!.phase, "selected");
-    await assert.rejects(f.manager.manage(id, "disable"), /selection pending/);
-    await assert.rejects(f.manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" }), /selection pending/);
+    assert.equal((await readPair(f.storage))!.phase, "prepared");
+    await f.manager.setPolicy(id, { updatePolicy: "notify" });
     await updater.requestRestart(prepared);
     assert.equal(JSON.parse(await readFile(join(f.root, "pi-web/launcher.restart"), "utf8")).launcher, prepared.launcher);
     const pointerPath = join(f.root, "pi-web", desktopManaged ? "desktop-update.json" : "update.json");
@@ -80,24 +79,24 @@ test("npm and desktop business-package updater stage required pair, keep old run
     const pointer = JSON.parse(pointerBytes.toString("utf8"));
     assert.equal(pointer.version, "0.2.0");
     await writeFile(pointerPath, JSON.stringify({ ...pointer, version: "0.9.0" }));
-    await assert.rejects(updater.requestRestart(prepared), /pointer changed/);
+    await assert.rejects(f.manager.hostPair.restart(prepared.version, join(prepared.launcher, "../.."), async () => assert.fail("tampered selection must not restart")), /changed/);
     await writeFile(pointerPath, pointerBytes);
     f.offline(); const manager = await f.restart();
     assert.equal((await manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
     assert.equal(manager.tools.length, 1); assert.equal((await readPair(f.storage))!.phase, "reconciled");
-    assert.deepEqual(f.calls(), { downloads: 1, registry: 1 });
+    assert.deepEqual(f.calls(), { downloads: 1, registry: 2 });
     await f.restart(); assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
   });
 });
 
-test("paired software update selects newer release even when local code is already compatible", async t => {
+test("paired software update retains compatible independent plugin without consulting registry", async t => {
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
   await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
-  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.2.0");
-  assert.deepEqual(f.calls(), { downloads: 1, registry: 1 });
+  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.1.0");
+  assert.deepEqual(f.calls(), { downloads: 0, registry: 0 });
   await f.restart();
-  assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.2.0");
+  assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.1.0");
   assert.equal((await f.manager.inventory()).plugins[0]!.enabled, false);
 });
 
@@ -118,17 +117,17 @@ test("alpha host pair preserves exact preview identity and enabled stable plugin
   assert.equal(f.manager.tools.length, 1);
 });
 
-test("paired software update offline retains compatible local code and visible retry diagnostic", async t => {
+test("paired software update offline retains compatible code without a spurious network diagnostic", async t => {
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
   f.offline(); await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
   assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.1.0");
-  assert.equal((await f.manager.inventory()).plugins[0]!.updateDiagnostic!.code, "registry_unreachable");
+  assert.equal((await f.manager.inventory()).plugins[0]!.updateDiagnostic, undefined);
   await f.restart();
   assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.1.0");
 });
 
-test("offline prepared pair leaves startup retry pending until the next online startup", async t => {
+test("compatible pair startup stays independent of online plugin update availability", async t => {
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
   f.offline(); await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {}); await f.manager.shutdown();
@@ -136,12 +135,12 @@ test("offline prepared pair leaves startup retry pending until the next online s
   let integration = new HostedPluginIntegration(options);
   await integration.start();
   assert.equal((await integration.inventory()).plugins[0]!.version, "0.1.0");
-  await assert.rejects(readFile(join(f.storage, "host-version.json")), { code: "ENOENT" });
+  assert.equal(JSON.parse(await readFile(join(f.storage, "host-version.json"), "utf8")).version, "0.2.0");
   await integration.shutdown(); f.online();
   integration = new HostedPluginIntegration(options);
   try {
     await integration.start();
-    assert.equal((await integration.inventory()).plugins[0]!.version, "0.2.0");
+    assert.equal((await integration.inventory()).plugins[0]!.version, "0.1.0");
     assert.equal(JSON.parse(await readFile(join(f.storage, "host-version.json"), "utf8")).version, "0.2.0");
   } finally { await integration.shutdown(); }
 });

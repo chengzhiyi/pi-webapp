@@ -8,19 +8,22 @@ export interface AppUpdateActions {
   getUpdate: () => Promise<UpdateStatus>;
   getRunningVersion: (signal?: AbortSignal) => Promise<{ current: string | null }>;
   setUpdateChannel?: (channel: UpdateChannel) => Promise<{ channel: UpdateChannel }>;
+  cancelUpdate?: () => Promise<void>;
   update: (request?: UpdateRequest) => Promise<{ version: string }>;
 }
 
 /** Shared by Settings and the one-click shortcut, including restart readiness. */
-export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, update }: AppUpdateActions) {
+export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, cancelUpdate, update }: AppUpdateActions) {
   const locale = useLocale();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [checking, setChecking] = useState(true);
   const [installing, setInstalling] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [targetVersion, setTargetVersion] = useState<string | null>(null);
   const [restartTimedOut, setRestartTimedOut] = useState(false);
   const [error, setError] = useState("");
   const installLock = useRef(false);
+  const cancelLock = useRef(false);
   const checkSequence = useRef(0);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -79,6 +82,14 @@ export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, u
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
   }, [targetVersion]);
 
+  const cancel = async () => {
+    if (!cancelUpdate || cancelLock.current || targetVersion) return;
+    cancelLock.current = true; setCancelling(true); setError("");
+    try { await cancelUpdate(); setRestartTimedOut(false); await check(); }
+    catch (cause) { if (mounted.current) setError(updateErrorMessage(cause, locale, "install")); }
+    finally { cancelLock.current = false; if (mounted.current) setCancelling(false); }
+  };
+
   const install = async () => {
     if (installLock.current || checking || !status?.available || !status.canRestart || targetVersion || restartTimedOut) return;
     if (status.downgrade && !window.confirm(textFor(locale,
@@ -88,8 +99,13 @@ export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, u
     setInstalling(true);
     setError("");
     try { const result = await update(status.channel && status.latest ? { channel: status.channel, version: status.latest, ...(status.downgrade ? { allowDowngrade: true } : {}) } : undefined); if (mounted.current) setTargetVersion(result.version); }
-    catch (cause) { if (mounted.current) setError(updateErrorMessage(cause, locale, "install")); }
+    catch (cause) {
+      if (mounted.current) setError(updateErrorMessage(cause, locale, "install"));
+      // A rejected checkpoint can leave recoverable staged state. Refresh status
+      // without clearing the failure so its real cancellation action is visible.
+      try { const next = await getUpdate(); if (mounted.current) setStatus(next); } catch {}
+    }
     finally { installLock.current = false; if (mounted.current) setInstalling(false); }
   };
-  return { status, checking, installing, targetVersion, restartTimedOut, error, check, install, changeChannel };
+  return { status, checking, installing, cancelling, targetVersion, restartTimedOut, error, check, install, changeChannel, cancel };
 }

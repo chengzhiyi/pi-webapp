@@ -1,5 +1,8 @@
 # ORI-42 — official plugin management and software-linked updates
 
+> Historical report: its forced software-linked update policy is superseded by
+> [independent plugins and recoverable updates](hosted-update-recovery.md).
+
 ## Boundary and integration
 
 Local-only change on `fix/ori42-plugin-management`, sibling `pi-webapp-ori42`, based on `683a4a3`. No parent/shared-alpha source, dependencies or builds were changed. No publish, push, CI dispatch, release merge, or native OS install was performed. Parent ORI-22 owns integration and cross-platform acceptance.
