@@ -1,7 +1,8 @@
 # ORI-54 follow-up: crash-safe ownership
 
-Status: local validation complete; awaiting cross-platform PR checks and release.
-Not yet published or applied to the user's storage.
+Status: kernel-custody fix published as 0.1.36 and applied through the paired
+updater after approved offline legacy-lock recovery. An independently discovered
+failed-stop cleanup race is fixed locally below; its checks/release remain pending.
 
 ## Why the first fix was insufficient
 
@@ -106,12 +107,34 @@ pure custody tests in both macOS/Windows smoke checks before publishing.
 Windows CI follow-up: the initial 30-way contention test still timed out after
 its isolated budget was raised to 10s. Do not classify that as merely runner
 slowness. The local retry suppression above removes redundant native attempts;
-the strengthened test again uses the unchanged **2s production budget**, counts
-exactly 30 native acquisitions, checks timed-out local waiters preserve independent
-process exclusion, and settles all callers before cleanup. On macOS the preceding
-implementation fails this new assertion (541 native attempts versus 30), while
-the fix passes all 8 ownership tests and TypeScript checks. Native Windows CI
-must still confirm the fix before release.
+the strengthened test counts exactly 30 native acquisitions, checks timed-out
+local waiters preserve independent-process exclusion, and settles all callers
+before cleanup. On macOS the preceding implementation fails this new assertion
+(541 native attempts versus 30). Windows passed the production-budget trial in
+1.1s, and all PR/main checks passed before 0.1.36 publication. A later overloaded
+local run (load average 64) exceeded 2s; the stress test therefore uses a separate
+10s capacity budget while retaining the structural native-attempt assertion and
+explicit 20ms timeout test. Production remains 2s. Two local full-suite commands
+hit the harness wall-time limit and are not recorded as passes.
+
+## Failed-stop request cleanup follow-up
+
+Alpha-sync CI exposed an intermittent real-RPC stop refusal. Repetition with
+lifecycle diagnostics reproduced an unsolicited second `launcher_stop_requested`
+immediately after `launcher_stop_refused`, while the caller had not retried.
+`refuseShutdown` reopened `stopping` before its asynchronous request-file unlink
+completed; the interval could read the same rejected nonce and start another
+drain, leaving the active editor in `draining` or racing the explicit retry.
+
+Keep shutdown gated until refusal cleanup settles, serialize interval checks,
+and use a shutdown epoch to discard reads initiated before a signal/request
+changed lifecycle state. Do not weaken failed-save refusal or force termination.
+The real-RPC regression instruments only the subprocess filesystem to delay the
+first stop-file unlink by 1.2s: the published source deterministically submits two
+stops instead of one; the fix submits one, retains active state, then permits an
+explicit successful stop/restart/uninstall. All three launcher/RPC tests pass
+locally. This is a distinct launcher race, not evidence of SQLite lock takeover
+or drawing loss.
 
 Old-source control: the real-RPC SIGKILL regression was run against the preceding
 ORI-54 fix (`d21ac8b`) in an isolated source tree. Cold start produced `disabled`
