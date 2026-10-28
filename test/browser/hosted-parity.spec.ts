@@ -281,6 +281,7 @@ test("A11: competing real windows fence stale CAS and preserve losing local geom
     expect((await h.action("get", { id: created.id })).revision).toBeGreaterThan(winner.revision);
     // Restore alone is NOT evidence for the lost realm. Reconcile each old capability
     // explicitly, after rescuing the losing geometry above. No generic registry clear.
+    await secondPage.locator("[data-hosted-recovery] > summary").click();
     const unresolved = secondPage.locator("[data-unconfirmed-view]");
     await expect(unresolved).not.toHaveCount(0);
     while (await unresolved.count()) {
