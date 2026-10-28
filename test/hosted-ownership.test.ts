@@ -59,13 +59,17 @@ test("legacy PID locks (dead or live), unknown and partially written markers are
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("transaction contenders yield to the event loop and serialize without lost commits", async () => {
+test("transaction contenders yield to the event loop and serialize without lost commits", { timeout: 20000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "hosted-transaction-custody-"));
   try {
     let count = 0;
-    await Promise.all(Array.from({ length: 30 }, () => withStorageLock(root, async () => {
+    // Thirty durable marker flushes can exceed the normal 2s contention budget
+    // on Windows. This stress test supplies its own bounded wait, not a changed
+    // production timeout. Settle every contender before inspecting/removing files.
+    const results = await Promise.allSettled(Array.from({ length: 30 }, () => withStorageLock(root, async () => {
       const before = count; await new Promise(resolve => setTimeout(resolve, 2)); count = before + 1;
-    })));
+    }, 10000)));
+    for (const result of results) assert.equal(result.status, "fulfilled", result.status === "rejected" ? String(result.reason) : undefined);
     assert.equal(count, 30);
     await assert.rejects(withStorageLock(root, async () => { throw new Error("operation failed"); }), /operation failed/);
     await withStorageLock(root, async () => {});
