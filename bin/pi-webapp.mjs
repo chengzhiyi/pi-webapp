@@ -144,6 +144,8 @@ async function serve(pi, args) {
   let stopCommand;
   let stopPreflightTimer;
   let stopPreflightId;
+  let stopCheckRunning = false;
+  let stopEpoch = 0;
   const instanceId = randomUUID();
   const startedAt = performance.now();
   const lifecycle = (event, fields = {}) => {
@@ -173,13 +175,17 @@ async function serve(pi, args) {
     clearTimeout(stopPreflightTimer);
     stopPreflightId = undefined;
     lifecycle("launcher_stop_refused", { reason: stopReason });
-    stopping = false;
     restartRequest = null;
-    void readFile(stopPath, "utf8").then(value => value.trim() === nonce ? unlink(stopPath) : undefined).catch(() => {});
+    // Keep the gate closed until the rejected request is gone. Otherwise the
+    // interval can read that same nonce again and launch an unsolicited drain,
+    // racing the caller's explicit retry (or leaving an idle host draining).
+    void readFile(stopPath, "utf8").then(value => value.trim() === nonce ? unlink(stopPath) : undefined)
+      .catch(() => {}).finally(() => { stopping = false; });
   };
   const shutdown = (reason) => {
     if (stopping) return;
     stopping = true;
+    stopEpoch++;
     stopReason = reason;
     lifecycle("launcher_stop_requested", { reason });
     // RPC EOF can exit even when an extension's shutdown handler fails. Drain
@@ -200,18 +206,27 @@ async function serve(pi, args) {
   };
   const startupTimer = setTimeout(() => fail(`Pi 启动超时。日志：${logPath}`), 60000);
   const stopTimer = setInterval(async () => {
-    try { if ((await readFile(stopPath, "utf8")).trim() === nonce) shutdown("stop_request"); }
-    catch { /* No stop request. */ }
-    if (stopping) return;
+    if (stopping || stopCheckRunning) return;
+    stopCheckRunning = true;
+    const epoch = stopEpoch;
     try {
-      const request = JSON.parse(await readFile(restartPath, "utf8"));
-      const prepared = JSON.parse(await readFile(updatePath, "utf8"));
-      const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : prepared;
-      if ((runtimeKind !== "desktop" || desktopPackages) && request.nonce === nonce && request.launcher === selected?.launcher && existsSync(request.launcher)) {
-        restartRequest = request;
-        shutdown("restart_request");
-      }
-    } catch { /* No valid restart request. */ }
+      try {
+        const request = (await readFile(stopPath, "utf8")).trim();
+        if (epoch !== stopEpoch || stopping) return;
+        if (request === nonce) shutdown("stop_request");
+      } catch { /* No stop request. */ }
+      if (stopping || epoch !== stopEpoch) return;
+      try {
+        const request = JSON.parse(await readFile(restartPath, "utf8"));
+        const prepared = JSON.parse(await readFile(updatePath, "utf8"));
+        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : prepared;
+        if (stopping || epoch !== stopEpoch) return;
+        if ((runtimeKind !== "desktop" || desktopPackages) && request.nonce === nonce && request.launcher === selected?.launcher && existsSync(request.launcher)) {
+          restartRequest = request;
+          shutdown("restart_request");
+        }
+      } catch { /* No valid restart request. */ }
+    } finally { stopCheckRunning = false; }
   }, 400);
   process.on("SIGTERM", () => shutdown("signal_sigterm"));
   process.on("SIGINT", () => shutdown("signal_sigint"));
