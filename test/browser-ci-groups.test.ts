@@ -53,7 +53,10 @@ test("CI reuses hosted evidence, aggregates fail-closed, and only cancels obsole
   assert.match(workflow, /test "\$CORE_RESULT" = success/);
   assert.match(workflow, /test "\$BROWSER_RESULT" = success/);
   assert.match(workflow, /protocol_published: \$\{\{ needs.verify-core.outputs.protocol_published \}\}/);
-  assert.match(workflow, /needs: \[verify, platform-smoke\]/);
+  assert.match(workflow, /needs: \[verify, platform-smoke, ownership-minimum\]/);
+  assert.match(workflow, /ownership-minimum:[\s\S]*node-version: '22\.19\.0'/);
+  assert.equal((workflow.match(/--test test\/hosted-ownership\.test\.ts/g) ?? []).length, 1);
+  assert.match(workflow, /test\/release-plan\.test\.ts test\/hosted-ownership\.test\.ts/);
   assert.equal((workflow.match(/cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/g) ?? []).length, 3);
   assert.equal((workflow.match(/github.event.pull_request.number \|\| github.run_id/g) ?? []).length, 3);
   assert.match(workflow, /group: pi-webapp-npm-publish\n      cancel-in-progress: false/);

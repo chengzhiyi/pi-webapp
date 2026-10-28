@@ -9,7 +9,7 @@ import { build } from "esbuild";
 import { HostedPluginManager } from "../src/host/server/plugins/hosted/manager.ts";
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
-import { atomicJson } from "../src/host/server/plugins/hosted/storage.ts";
+import { acquireStorageOwnership, atomicJson, OWNERSHIP_MARKER } from "../src/host/server/plugins/hosted/storage.ts";
 import { inspectStoppedStorage, recoverStoppedLocks, recoverStoppedFork, STOPPED_CONFIRMATION } from "../src/host/server/plugins/hosted/stopped-recovery.ts";
 import { hostedApi } from "../src/host/server/plugins/hosted/routes.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
@@ -93,6 +93,18 @@ test("offline lock recovery requires stopped-owner attestation and exact byte fi
   await assert.rejects(recoverStoppedLocks(root, current.fingerprint, STOPPED_CONFIRMATION), /changed/);
   await symlink(join(root, "active.json"), join(root, "linked"));
   await assert.rejects(inspectStoppedStorage(root), /links/);
+});
+
+test("legacy offline recovery preserves v2 fences and their stable SQLite databases", async t => {
+  const root = await temporary(t);
+  // Simulate the exact on-disk residue after a v2 host crash. Real process death
+  // and kernel release are exercised independently in hosted-ownership.test.ts.
+  await (await acquireStorageOwnership(root, "runtime"))();
+  await writeFile(join(root, "runtime.lock"), OWNERSHIP_MARKER);
+  const report = await inspectStoppedStorage(root);
+  assert.deepEqual((await recoverStoppedLocks(root, report.fingerprint, STOPPED_CONFIRMATION)).recovered, []);
+  assert.equal(await readFile(join(root, "runtime.lock"), "utf8"), OWNERSHIP_MARKER);
+  await (await acquireStorageOwnership(root, "runtime"))();
 });
 
 for (const stage of ["forked", "prepared", "committed", "cleaned"] as const) test(`SIGKILL at ${stage}: unique active pointer, stale generation fenced and user file hash preserved`, async t => {

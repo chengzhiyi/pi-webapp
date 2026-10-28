@@ -11,10 +11,11 @@ import { readPair } from "../src/host/server/updates/hosted-pair.ts";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { startBridge } from "../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
+import { acquireStorageOwnership } from "../src/host/server/plugins/hosted/storage.ts";
 import { terminalHost } from "./helpers/terminal-host.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
 
-const contract = { protocol: 2, runtimeProtocol: 1, pairJournal: 1, capabilities: ["state", "workspace", "legacy", "panels", "messages"] };
+const contract = { protocol: 2, runtimeProtocol: 1, pairJournal: 1, ownershipProtocol: 2, capabilities: ["state", "workspace", "legacy", "panels", "messages"] };
 async function hostPackage(root: string, version: string, worker: Buffer) {
   for (const dir of ["bin", "dist", "web/dist"]) await mkdir(join(root, dir), { recursive: true });
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version, piWebappHostedRuntime: contract }));
@@ -104,7 +105,7 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update drains views b
     }
   }
   assert.equal(installs, 1, "retry must reuse the retained selection, never bypass or replace its journal");
-  await assert.rejects(readFile(lock), { code: "ENOENT" });
+  await (await acquireStorageOwnership(f.broker.root, "runtime"))();
   assert.deepEqual(await f.broker.active(), before, "shutdown preserves enabled intent, active generation and stateRef");
   const restart = JSON.parse(await readFile(marker, "utf8")); assert.equal(restart.nonce, "test-nonce");
   await f.integration.shutdown(); // session_shutdown after pre-restart drain is idempotent.

@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { open, unlink } from "node:fs/promises";
-import { join } from "node:path";
-import { privateDirectory } from "./storage.ts";
+import { acquireStorageOwnership } from "./storage.ts";
 import type { HostedInvocation, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
 import type { HostedPackage } from "./resources.ts";
 import { HostedRuntimeProcess } from "./runtime-process.ts";
@@ -47,17 +45,8 @@ export class HostedPluginSupervisor {
   }
   private async ownRuntime(): Promise<void> {
     if (this.releaseOwnership) return;
-    await privateDirectory(this.broker.root);
-    const path = join(this.broker.root, "runtime.lock");
-    let file;
-    try { file = await open(path, "wx", 0o600); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new HostedPluginError("runtime_owned", "Another host owns this plugin runtime; stop all owners before recovering an abandoned runtime lock");
-      throw error;
-    }
-    try { await file.writeFile(JSON.stringify({ pid: process.pid, ownerId: randomUUID() })); }
-    catch (error) { await file.close(); await unlink(path); throw error; }
-    this.releaseOwnership = async () => { await file.close(); await unlink(path); this.releaseOwnership = null; };
+    const release = await acquireStorageOwnership(this.broker.root, "runtime");
+    this.releaseOwnership = async () => { await release(); this.releaseOwnership = null; };
   }
   private callBroker = (request: HostedInvocation, method: string, input: unknown) => this.broker.call(request, method, input);
   invoke(request: Omit<HostedInvocation, "generation">, timeoutMs?: number): Promise<unknown> {

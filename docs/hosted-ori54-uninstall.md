@@ -1,5 +1,10 @@
 # Runtime ownership, unavailable editor and uninstall (ORI-54)
 
+> Follow-up: this first fix covers orderly shutdown, not independent process
+> termination. The recurrence and replacement kernel mutex are documented in
+> [crash-safe ownership](hosted-crash-safe-ownership.md). Do not treat successful
+> normal-stop verification as certification against abnormal host exits.
+
 ## Cause
 
 The reported `runtime_owned` error is not an archive/uninstall error. The
