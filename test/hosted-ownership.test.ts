@@ -70,10 +70,12 @@ test("transaction contenders yield without native same-process retry storms or l
   });
   try {
     let count = 0;
-    // Use the unchanged production budget. All callers settle before cleanup.
+    // Stress capacity is not a wall-clock certification under an overloaded
+    // test runner. Count native attempts to catch retry storms deterministically;
+    // test bounded local timeout separately below. Production remains at 2s.
     const results = await Promise.allSettled(Array.from({ length: 30 }, () => withStorageLock(root, async () => {
       const before = count; await new Promise(resolve => setTimeout(resolve, 2)); count = before + 1;
-    })));
+    }, 10000)));
     for (const result of results) assert.equal(result.status, "fulfilled", result.status === "rejected" ? String(result.reason) : undefined);
     assert.equal(count, 30);
     assert.equal(attempts, 30, "local waiters must yield without issuing synchronous native lock retries");

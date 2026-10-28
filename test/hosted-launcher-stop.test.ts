@@ -16,9 +16,10 @@ const exec = promisify(execFile);
 const launcher = fileURLToPath(new URL("../bin/pi-webapp.mjs", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js", import.meta.url));
 
-test("real RPC launcher stop releases hosted ownership so restart can open and uninstall", { timeout: 90_000 }, async () => {
+test("real RPC launcher stop releases hosted ownership so restart can open and uninstall", { timeout: 90_000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-launcher-stop-")), agentDir = join(root, "agent"), storage = join(agentDir, "pi-web/hosted");
-  const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEBAPP_PI_CLI: cli, PI_WEBAPP_AUTO_OPEN: "0" };
+  const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEBAPP_PI_CLI: cli, PI_WEBAPP_AUTO_OPEN: "0",
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${new URL("./helpers/slow-launcher-stop-cleanup.mjs", import.meta.url).href}`].filter(Boolean).join(" ") };
   for (const key of ["PI_WEBAPP_RESTART_PORT", "PI_WEBAPP_RESTART_TOKEN", "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS"]) delete env[key as keyof typeof env];
   const run = (...args: string[]) => exec(process.execPath, [launcher, ...args], { cwd: root, env, timeout: 40_000 });
   const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -57,11 +58,15 @@ test("real RPC launcher stop releases hosted ownership so restart can open and u
     await first.view({ ...view, operation: "ack", commandId: freeze.id, ok: false, error: "unsaved test drawing" });
     await refused;
     assert.ok(stopResult, "a failed flush must refuse stop rather than exit with a stale lock");
+    const events = (await readFile(join(agentDir, "pi-web/launcher.log"), "utf8")).split("\n").filter(line => line.includes('"event":"launcher_stop_requested"'));
+    assert.equal(events.length, 1, "slow refusal cleanup must not resubmit the rejected stop request");
     assert.ok(await readFile(lock));
     assert.equal((await first.inventory()).phase, "active");
     assert.deepEqual(await broker.active(), before);
-    await first.view({ ...view, operation: "change", dirty: false, busy: false });
-    await first.view({ ...view, operation: "close" });
+    const clean = await first.view({ ...view, operation: "change", dirty: false, busy: false });
+    assert.equal(clean.status, 200, await clean.text());
+    const closed = await first.view({ ...view, operation: "close" });
+    assert.equal(closed.status, 200, await closed.text());
     await run("stop");
     await (await acquireStorageOwnership(broker.root, "runtime"))();
     assert.deepEqual(await broker.active(), before, "quit must retain enabled intent and drawing state");
@@ -71,6 +76,10 @@ test("real RPC launcher stop releases hosted ownership so restart can open and u
     const removed = await second.manage("uninstall"); assert.equal(removed.status, 200, await removed.text());
     assert.equal((await broker.active())?.enabled, false);
     await (await acquireStorageOwnership(broker.root, "runtime"))();
+  } catch (error) {
+    const log = await readFile(join(agentDir, "pi-web/launcher.log"), "utf8").catch(() => "log unavailable");
+    t.diagnostic(log.replace(/http:\/\/127\.0\.0\.1:\d+\/#[\w-]+/g, "[local service URL redacted]"));
+    throw error;
   } finally { await run("stop").catch(() => {}); await rm(root, { recursive: true, force: true }); }
 });
 
