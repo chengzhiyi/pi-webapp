@@ -120,5 +120,5 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
   }), [cards, reconnect, callbacks]);
   const controllers = connected && sessionId ? cards.map(card => <HostedFrame key={`${sessionId}/${card.pluginId}/${card.generation}`} card={card} reconnect={reconnect}
     abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))} mount={{ kind: "controller", sessionId, locale, theme: theme() }} open={(_kind, id) => callbacks.current.openPanel?.(`${card.contribution!.panelAlias.prefix}${id}`)} sendMessage={async text => { if (!callbacks.current.sendMessage) throw new Error("Composer unavailable"); await callbacks.current.sendMessage(text); }} />) : null;
-  return { plugins: connected ? plugins : [], controllers: <><HostedReconciliation sessionId={sessionId} />{controllers}</>, error };
+  return { plugins: connected ? plugins : [], controllers: <><HostedReconciliation sessionId={sessionId} locale={locale} openRecovered={contentId => callbacks.current.openPanel?.(`diagram:${contentId}`)} />{controllers}</>, error };
 }
