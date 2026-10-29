@@ -41,7 +41,7 @@ function localRelease(bytes: Buffer, version: string) {
  * Only registry and provider transports are deterministic. No action/flush success is mocked.
  */
 export async function hostedParity(page: Page, options: { width?: number; locale?: "zh" | "en"; theme?: "light" | "dark";
-  v1Archive?: string; installDrawing?: boolean; policy?: () => Omit<HostedAgentPolicy, "enabled">;
+  v1Archive?: string; installDrawing?: boolean; prompt?: string; policy?: () => Omit<HostedAgentPolicy, "enabled">;
   seed?: (context: { root: string; retained: AgentSession; sessionId: string }) => Promise<void>;
 } = {}) {
   page.setDefaultTimeout(12_000);
@@ -108,7 +108,7 @@ export async function hostedParity(page: Page, options: { width?: number; locale
       const message: AssistantMessage = { role: "assistant", api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(), content: first ? [{ type: "toolCall", id: callId, name, arguments: args }] : [{ type: "text", text: "Ready" }], stopReason: first ? "toolUse" : "stop", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
       const stream = createAssistantMessageEventStream(); stream.push({ type: "start", partial: message }); stream.push({ type: "done", reason: first ? "toolUse" : "stop", message }); stream.end(message); return stream;
     };
-    await retained.prompt("Local parity drawing operation");
+    await retained.prompt(options.prompt ?? "Local parity drawing operation");
     const result = retained.messages.find(message => message.role === "toolResult" && message.toolCallId === callId);
     expect(result?.role === "toolResult" && result.isError === expectError, JSON.stringify(result)).toBeTruthy();
     return (result as any).details;

@@ -1,12 +1,12 @@
 # pi-webapp
 
-### 让 Pi 编程 Agent，拥有一个看得见、用得顺的工作台。
+### 一个工作台，连接你的 Pi 编程 Agent。
 
-把 AI 对话、项目文件、终端和 Git 放在同一个界面中，不必放弃 Pi 的工具、技能和终端工作流。在浏览器里直接使用，打开独立桌面窗口，或从已有 Pi 会话一键进入。
+把 AI 对话、项目文件、终端与 Git 放在一起。浏览器与桌面端共用一套工作台，同时保留 Pi 的工具、技能、扩展与终端工作流。
 
-[English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
+[English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [项目架构](#技术架构亮点) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 10：** [macOS · Apple 芯片](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage)。请核对 [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS)；测试包未签名或无发布者身份，macOS 未公证。[安全安装说明](#桌面端下载)。
+**桌面测试版 build 10：** 支持 macOS（Apple 芯片 / Intel）、Windows x64 与 Linux x64。[下载、校验与安全安装](#桌面端下载)。测试包未签名或未公证，并非稳定发行版。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -36,6 +36,20 @@ npx pi-webapp
 
 *点击图片可查看原图。截图使用隔离的演示仓库，终端实际运行了两项回归测试；不使用提供方凭据或私有项目数据。[图片生成与维护说明](assets/readme/README.md)。*
 
+## Excalidraw：把对话变成可编辑的手绘图稿
+
+**说出想法 → 动手调整 → 保存成果。** 直接让 Pi 绘制架构图、流程图或概念草图，图稿会出现在对话中；点击 **Edit（编辑）** 即可进入原生 Excalidraw 画布，而不是只能查看一张静态图片。
+
+[![Excalidraw 真实工具卡片：三步手绘流程图，右上角 Edit 按钮可打开原生画布](assets/readme/excalidraw.png)](assets/readme/excalidraw.png)
+
+*截图来自真实插件界面，使用预设英文示例，并非实时模型生成记录。点击图片可查看原图。*
+
+- **在对话里生成：** 用自然语言描述要画的内容，无需另开绘图服务。
+- **亲手调整细节：** 移动图形、修改文字、调整布局，支持原生撤销与重做。
+- **保留可编辑成果：** 将 `.excalidraw` 源文件保存到工作区，或从编辑器导出 PNG。
+
+**可选插件：** 在「**插件 → Hosted 插件**」中显式安装并启用 `@chengzhiyi/pi-excalidraw`，需要可用的兼容发行版。插件不随宿主内置，也不会自动安装，无需额外绘图服务账号。[安装、保存与恢复说明](docs/diagrams.md)。
+
 ## 核心功能
 
 | 能力 | 你可以做什么 |
@@ -49,8 +63,6 @@ npx pi-webapp
 | **模型、技能与插件** | 配置提供方和模型，管理 Pi 软件包/扩展/技能，启停内置文件、终端与 Git；兼容的 Web 插件还可贡献自己的界面。 |
 | **浏览器与桌面入口** | 用后台启动器打开 Web，从 Pi 终端输入 `/web`，或运行自带 Node/Pi 的 Electron 桌面应用。 |
 
-**可选绘图：** 在插件管理中显式安装、启用官方 `@chengzhiyi/pi-excalidraw`。宿主不再携带编辑器和专用字体，首次离线启动不会自动安装。热插拔不替换会话；普通更新等待编辑器关闭，显式重新打开会重置原生撤销历史。旧图稿与浏览器备份保留，详见[迁移与恢复](docs/diagrams.md)。本分支开发协议和插件产物仅用于验证，并非已发布版本。
-
 > 聊天独立运行，但同一工作树中的文件和 Git 改动是共享的。切换聊天不会停止任务；停止服务会结束其后台任务。终端与 Agent 工具使用你的系统权限，不是沙箱环境。
 
 ## 快速开始
@@ -63,7 +75,9 @@ npx pi-webapp
 npx pi-webapp
 ```
 
-启动器会使用 npm 包精确依赖的已验证 Pi SDK（当前 **1.3.0**）在后台启动，并在本地图形桌面打开默认浏览器；不使用或覆盖全局 Pi，避免全局版本升级破坏业务包兼容性。再次执行命令会重新打开已有服务。无图形界面时显示本地地址；设置 `PI_WEBAPP_AUTO_OPEN=0` 可关闭自动打开。
+启动器使用随包锁定的 **Pi SDK 1.3.0** 启动本地后台服务，并打开浏览器；无需安装或修改全局 Pi。再次运行命令即可打开已有服务。
+
+无图形界面时显示本地地址；设置 `PI_WEBAPP_AUTO_OPEN=0` 可关闭浏览器自动打开。
 
 1. 进入「**设置 → 模型**」，配置提供方并选择有权使用的模型。
 2. 选择或添加工作区，开始一次对话。
@@ -112,11 +126,11 @@ pi
 
 ## 技术架构亮点
 
-**一套 Agent 引擎，多种使用入口，插件化工作台。** Pi 负责模型执行、工具与会话持久化；pi-webapp 负责界面、会话编排与工作区工具。
+**共享 React 工作台 → 本地 Node 宿主 → Pi 执行能力。** 这是本地运行的模块化应用，不是微服务集群。Pi 负责 Agent 执行与会话持久化；pi-webapp 负责界面、会话编排与工作区能力。
 
-[![架构图：浏览器与 Electron 复用 React 工作台，经本地 Node 宿主连接 Pi 引擎与工作区插件](assets/readme/architecture-zh.svg)](assets/readme/architecture-zh.svg)
+[![三层架构：共享 React 界面，经 HTTP/NDJSON 连接本地 Node 宿主与 Pi 执行能力；旁列跨端契约、可选 Hosted 插件和诊断支撑](assets/readme/architecture-zh.png)](assets/readme/architecture-zh.png)
 
-*共享的是界面；会话编排、Agent 执行与工作区能力，仍然各司其职。*
+*三条主干连线突出层间边界；同层模块为并列能力，不表示串行调用。点击图片可查看原图。*
 
 | 设计 | 带来的价值 |
 | --- | --- |
@@ -127,7 +141,18 @@ pi
 | **宿主边界上的操作保护** | 本地传输校验令牌与请求来源；文件预览限制工作区及符号链接范围；Git 写入拒绝过期状态，并协调同工作树的已知聊天。这些检查不等于操作系统沙箱。 |
 | **多入口复用同一套界面** | React + TypeScript 构建工作台，Vite/esbuild 完成打包，Electron 提供桌面外壳，无需另维护一套桌面对话 UI。 |
 
-源码导航：`src/adapters/pi/` → Pi 入口 · `src/host/` → 前后端宿主 · `src/plugins/builtin/` → 工作区能力 · `src/contracts/` → 跨端契约 · `web/src/ui/` → 共享 UI · `desktop/` → Electron 外壳。
+**绘图为可选扩展，而非内置能力：** 在插件管理中显式安装、启用官方 `@chengzhiyi/pi-excalidraw`。宿主不携带编辑器和专用字体，首次离线启动不会自动安装。Hosted 插件使用独立 Node 子进程管理生命周期，但不是安全沙箱。本分支开发协议和插件产物仅用于验证，并非已发布版本。更新行为、旧图稿及备份保留方式见[绘图迁移与恢复](docs/diagrams.md)。
+
+### 源码导航
+
+| 目录 | 职责 |
+| --- | --- |
+| `web/src/ui/` · `src/host/client/` | 共享 UI、对话外壳、工作台与浏览器插件管理 |
+| `src/host/server/` | 传输、会话、工作区、模型配置与插件生命周期 |
+| `src/adapters/pi/` | 轻量 Pi 扩展入口 |
+| `src/plugins/builtin/` | 文件、Git、终端，各自拥有服务端、客户端和契约 |
+| `src/contracts/` · `src/platform/telemetry/` | 跨端数据契约与共享诊断 |
+| `bin/` · `desktop/` | CLI 启动器与 Electron 外壳 |
 
 深入了解：[架构与职责划分](docs/architecture.md) · [Web 插件接入与生命周期](docs/web-plugins.md)。
 
@@ -145,8 +170,7 @@ pi
 npm ci
 npm run check
 npm test
-npm run build
-npm run start
+npm run start   # 构建并启动本地服务
 ```
 
 `npm run start` 会构建并启动后台服务。修改扩展代码后，运行 `npm run stop` 再运行 `npm run start`；仅刷新网页不会替换桥接代码。使用 `pi -e .` 开发时，重新构建后在 Pi 中输入 `/reload`，再输入 `/web`。
@@ -155,6 +179,6 @@ npm run start
 
 ---
 
-**让下一次 Pi 任务，从一个可视化工作台开始：** 运行 `npx pi-webapp`，或[体验桌面测试版](#桌面端下载)。如果它让你的工作更顺手，欢迎 [Star 项目](https://github.com/chengzhiyi/pi-webapp)帮助更多人发现，也欢迎[提交反馈与可复现的问题](https://github.com/chengzhiyi/pi-webapp/issues)，一起完善工作流。
+[提交问题或功能建议](https://github.com/chengzhiyi/pi-webapp/issues) · [在 GitHub 上 Star 项目](https://github.com/chengzhiyi/pi-webapp)
 
 基于 MIT 许可证开源。详见 [LICENSE](LICENSE)。

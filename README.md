@@ -1,12 +1,12 @@
 # pi-webapp
 
-### Your Pi coding agent. A visual workspace to build with it.
+### One workspace for your Pi coding agent.
 
-Bring conversations, project files, terminals, and Git into one interface—without giving up Pi's tools, skills, or terminal workflow. Run it in your browser, open a dedicated desktop window, or connect directly from an existing Pi session.
+Conversations, project files, terminals, and Git—side by side. Use the same workbench in your browser or on desktop, while keeping Pi's tools, skills, extensions, and terminal workflow.
 
-[简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
+[简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 10:** [macOS · Apple Silicon](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [macOS · Intel](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-x64.dmg) · [Windows x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-win-x64.exe) · [Linux x64](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-linux-x86_64.AppImage). Verify [SHA-256](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS); unsigned/unnotarized test-release limits apply. [Install safely](#desktop-downloads).
+**Desktop test build 10:** macOS (Apple Silicon / Intel), Windows x64, and Linux x64. [Downloads, checksums & safe installation](#desktop-downloads). These are unsigned/unnotarized test packages, not stable releases.
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -36,6 +36,20 @@ npx pi-webapp
 
 *Click any image for full size. Screenshots use an isolated demo repository. The terminal really runs its two regression tests; no provider credentials or private project data are used. [How these images are made](assets/readme/README.md).*
 
+## Excalidraw: turn conversations into editable diagrams
+
+**Describe it → refine it → keep it.** Ask Pi for an architecture diagram, flowchart, or concept sketch. The drawing appears in the conversation; **Edit** opens the native Excalidraw canvas—not a flattened image.
+
+[![Excalidraw tool card with a hand-drawn three-step workflow and an Edit button for opening the native canvas](assets/readme/excalidraw.png)](assets/readme/excalidraw.png)
+
+*Real plugin UI with a seeded example, not a live model transcript. Click the image for full size.*
+
+- **Create in context:** describe the drawing in the main conversation, without opening another drawing service.
+- **Make it yours:** move shapes, edit labels, adjust layout, and use native undo/redo.
+- **Keep the result:** save editable `.excalidraw` source to the workspace or export a PNG from the editor.
+
+**Optional plugin:** explicitly install and enable `@chengzhiyi/pi-excalidraw` in **Plugins → Hosted plugins**, using an available compatible release. It is not bundled or auto-installed, and needs no drawing-service account. [Setup, saving & recovery](docs/diagrams.md).
+
 ## Core features
 
 | Capability | What you can do |
@@ -61,7 +75,9 @@ Requires **Node.js 22.19+** and npm. Run in your project directory:
 npx pi-webapp
 ```
 
-The launcher starts the npm package's exactly pinned, verified Pi SDK (currently **1.3.0**) in the background and opens your browser on a local graphical desktop. It neither uses nor replaces global Pi, so a global upgrade cannot silently change the business package's runtime. Running the command again reopens the existing service. Headless sessions print the local address instead; `PI_WEBAPP_AUTO_OPEN=0` disables automatic opening.
+The launcher starts a local background service with the package's pinned **Pi SDK 1.3.0** and opens your browser. No global Pi installation is needed or changed. Run the command again to reopen the existing service.
+
+On headless machines, it prints the local address. Set `PI_WEBAPP_AUTO_OPEN=0` to disable automatic browser opening.
 
 1. Open **Settings → Models** to configure a provider and choose a model you have access to.
 2. Select or add a workspace, then start a conversation.
@@ -110,11 +126,11 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 
 ## Architecture highlights
 
-**One agent engine, multiple interfaces, and a plugin-oriented workbench.** Pi handles model execution, tools, and session persistence; pi-webapp handles presentation, session orchestration, and workspace tools.
+**Shared React workbench → local Node host → Pi execution.** This is a local, modular application—not a microservice cluster. Pi owns agent execution and session persistence; pi-webapp adds the interface, session orchestration, and workspace capabilities.
 
-[![Architecture: browser and Electron share a React workbench connected to a local Node host, which integrates the Pi agent engine and workspace plugins](assets/readme/architecture-en.svg)](assets/readme/architecture-en.svg)
+[![Three-layer architecture: shared React UI, HTTP/NDJSON transport, local Node host, and Pi execution; typed contracts, optional hosted plugins, and diagnostics alongside](assets/readme/architecture-en.png)](assets/readme/architecture-en.png)
 
-*The UI is shared; session orchestration, agent execution, and workspace capabilities keep distinct responsibilities.*
+*Three main connectors show the layer boundaries. Components within a layer are peers, not a sequential call chain. Click to view full size.*
 
 | Design choice | Why it matters |
 | --- | --- |
@@ -125,9 +141,18 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 | **Guardrails at the host boundary** | Loopback transport uses token/origin checks; file previews enforce workspace and symlink boundaries. Git writes reject stale state and coordinate known chats sharing the worktree. These checks are not an OS sandbox. |
 | **One UI across entry points** | React + TypeScript power the workbench, Vite/esbuild bundle the app, and Electron provides the desktop shell without a separate conversation UI. |
 
-**Optional drawings:** install and enable the official `@chengzhiyi/pi-excalidraw` card in Plugins. The host ships no Excalidraw editor/fonts and does not auto-install it on offline startup. Hotplug keeps existing sessions; ordinary updates wait for open editors, while explicit reopen resets native undo. Old drawings/backups are preserved; see [migration and recovery](docs/diagrams.md). The development protocol/plugin artifacts on this branch are verification-only, not a published release.
+**Optional, not built in:** drawings belong to the official `@chengzhiyi/pi-excalidraw` plugin, installed and enabled explicitly in Plugins. The host ships no editor/fonts and does not auto-install it on offline startup. Hosted plugins use a separate Node process for lifecycle management—not a security sandbox. Development protocol/plugin artifacts on this branch are verification-only, not a published release. See [drawing migration and recovery](docs/diagrams.md) for update behavior and preserved backups.
 
-Source layout: `src/adapters/pi/` → Pi entry · `src/host/` → server/browser host · `src/plugins/builtin/` → workspace capabilities · `src/contracts/` → cross-boundary contracts · `web/src/ui/` → shared UI · `desktop/` → Electron shell.
+### Source map
+
+| Directory | Responsibility |
+| --- | --- |
+| `web/src/ui/` · `src/host/client/` | Shared UI, conversation shell, workbench, and browser plugin management |
+| `src/host/server/` | Transport, sessions, workspaces, model configuration, and plugin lifecycle |
+| `src/adapters/pi/` | Thin Pi extension entry point |
+| `src/plugins/builtin/` | Files, Git, and Terminal; each owns server, client, and contracts |
+| `src/contracts/` · `src/platform/telemetry/` | Wire contracts and shared diagnostics |
+| `bin/` · `desktop/` | CLI launcher and Electron shell |
 
 Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin integration notes](docs/web-plugins.md) for lifecycle and extension details.
 
@@ -145,8 +170,7 @@ The guides follow the source tree; installed versions may differ. For desktop av
 npm ci
 npm run check
 npm test
-npm run build
-npm run start
+npm run start   # Build and launch the local service
 ```
 
 `npm run start` builds and launches the background service. After changing extension code, run `npm run stop` and `npm run start`; reloading the browser alone does not replace the bridge. With `pi -e .`, rebuild and enter `/reload`, then `/web` in Pi.
@@ -155,6 +179,6 @@ For desktop development: `npm run desktop:prepare` → `npm run desktop:start`. 
 
 ---
 
-**Give your next Pi task a visual workspace:** run `npx pi-webapp` or [try the desktop test build](#desktop-downloads). If it helps your workflow, a [GitHub star](https://github.com/chengzhiyi/pi-webapp) helps others discover it; [feedback and reproducible issues](https://github.com/chengzhiyi/pi-webapp/issues) help shape what comes next.
+[Report a bug or request a feature](https://github.com/chengzhiyi/pi-webapp/issues) · [Star on GitHub](https://github.com/chengzhiyi/pi-webapp)
 
 MIT licensed. See [LICENSE](LICENSE).
