@@ -1,0 +1,19 @@
+.entry { position: fixed; z-index: 50; top: 56px; right: 16px; max-width: calc(100vw - 32px); }
+.trigger { max-width: 100%; padding: 6px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; line-height: 20px; cursor: pointer; box-shadow: var(--dsw-elevation-panel); }
+.trigger:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
+.dialog { box-sizing: border-box; width: min(640px, 100%); max-height: calc(100dvh - 48px); }
+.dialog > div { min-height: 0; }
+.dialog > div > div:last-child { min-height: 0; }
+.content { max-height: calc(100dvh - 250px); overflow: auto; overscroll-behavior: contain; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+.content p { margin: 0 0 12px; }
+.list { display: flex; flex-direction: column; gap: 12px; }
+.item { min-width: 0; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; }
+.item h3 { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+.item details { margin-bottom: 12px; overflow-wrap: anywhere; }
+.item summary, .error summary { cursor: pointer; }
+.item dl { margin: 8px 0 0; }
+.item dt { color: var(--dsw-alias-label-secondary); }
+.item dd { margin: 0 0 6px; }
+.item button { max-width: 100%; height: auto; min-height: 28px; white-space: normal; text-align: left; }
+.error { margin-top: 12px; overflow-wrap: anywhere; color: var(--dsw-alias-state-error-primary); }
+@media (max-width: 600px) { .entry { top: 52px; right: 12px; max-width: calc(100vw - 24px); } }

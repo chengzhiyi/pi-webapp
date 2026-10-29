@@ -184,3 +184,30 @@ was run separately. Native IME coverage here is browser composition/text inserti
 The full editor is not migrated to Shadow DOM; required instance/portal/font/cache
 work is described above. No package versions, lockfiles, server authorization,
 state schema or broker save/coordination rules changed; no publish/push/deploy.
+
+## Refresh recovery UI follow-up
+
+Recovery records previously rendered as unstyled sections before AppFrame. Since
+AppFrame consumes 100% of the viewport, those sections pushed the entire app below
+the fold, producing document scrollbars and incorrect resize geometry. Recovery
+is now a fixed, localized entry with a bounded, themed details dialog. Records
+never participate in page layout. Each discard uses a separate confirmation;
+cancel/failure preserves the journal and capability. Dismissing the dialog only
+hides details, not the recovery entry.
+
+The optional host view operation `reconcile` returns `recovery: closed` only for
+an authenticated, already retired capability (accepted close or explicit discard).
+A clean/frozen view or a generation change is not a substitute for the actual
+close receipt: its owner may still be active. Subsequent local edits may not have
+reached the host. Unknown tokens/server restart/evicted proof records remain
+unconfirmed. The in-memory retired-proof cache is bounded to 1024; eviction never
+confers permission to discard. Scope checks include user, workspace, session,
+mount, generation and token. Old hosts without this operation retain all records.
+
+Browser coverage adds real repeated reloads with checkpoint preservation,
+sidebar dragging, 390/1024/1440 viewport changes, and 20 pending records in 320px
+Chinese dark/1440px English light dialogs. It checks no document overflow or frame
+offset, internal scrolling, cancel focus restoration, failed discard retention,
+and automatic removal of server-confirmed closed records. Unit coverage proves
+clean-looking/dirty/unknown views cannot be silently retired, and even a
+committed old generation needs its actual close receipt before automatic removal.

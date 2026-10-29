@@ -34,11 +34,13 @@ export type HostedViewInput = HostedViewIdentity & (
   | { operation: "change"; viewToken: string; dirty: boolean; busy: boolean }
   | { operation: "ack"; viewToken: string; commandId: number; ok: boolean; error?: string }
   | { operation: "close"; viewToken: string }
+  /** Recognize only server-proven closed views; never infer a save from client status. */
+  | { operation: "reconcile"; viewToken: string }
   /** Explicit per-capability user decision, not a clean/flush acknowledgement. */
   | { operation: "discard"; viewToken: string; confirmation: "discard-unconfirmed-edits" }
 );
 export interface HostedViewCommand { id: number; type: "freeze" | "resume" | "committed"; generation: number }
-export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[] }
+export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: "closed" | "unconfirmed" }
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {
   pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true,
   installed: false, enabled: false, phase: "not-installed",

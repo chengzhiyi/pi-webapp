@@ -14,6 +14,9 @@ const fail = (message: string) => Object.assign(new Error(message), { status: 40
 /** One coordinator per plugin. No dirty-view TTL: lost clients require explicit recovery, not silent success. */
 export class HostedViewCoordinator {
   private views = new Map<string, View>();
+  // Bounded proof of completed close operations. Eviction/restart is unknown,
+  // never proof that an unacknowledged draft may be discarded.
+  private retired = new Map<string, Pick<View, "identity" | "scope">>();
   private sequence = 0;
   private barrier: Barrier | null = null;
   private switching = false;
@@ -50,6 +53,14 @@ export class HostedViewCoordinator {
   private enqueue(view: View, type: HostedViewCommand["type"], id = ++this.sequence) {
     view.commands.push({ id, type, generation: this.generation }); view.waiter?.(); return id;
   }
+  private owns(view: Pick<View, "identity" | "scope">, input: HostedViewIdentity, scope: AuthenticatedViewScope) {
+    return view.scope.ownerId === scope.ownerId && view.scope.workspaceId === scope.workspaceId && view.identity.sessionId === input.sessionId && view.identity.mountId === input.mountId && view.identity.generation === input.generation;
+  }
+  private retire(view: View) {
+    view.waiter?.(); this.views.delete(view.token);
+    this.retired.set(view.token, { identity: view.identity, scope: view.scope });
+    if (this.retired.size > 1024) this.retired.delete(this.retired.keys().next().value!);
+  }
   async handle(input: HostedViewInput, scope: AuthenticatedViewScope): Promise<HostedViewReply> {
     if (!input || input.pluginId !== this.pluginId || input.sessionId !== scope.sessionId || !scope.ownerId || !scope.workspaceId || typeof input.mountId !== "string" || input.mountId.length > 200 || !input.mountId) throw fail("Invalid authenticated view scope");
     if (input.operation === "register") {
@@ -62,7 +73,15 @@ export class HostedViewCoordinator {
       return { viewToken: token, commands: [] };
     }
     const view = this.views.get(input.viewToken);
-    if (!view || view.scope.ownerId !== scope.ownerId || view.scope.workspaceId !== scope.workspaceId || view.identity.sessionId !== input.sessionId || view.identity.mountId !== input.mountId || view.identity.generation !== input.generation) throw fail("Unknown or stale view capability");
+    if (input.operation === "reconcile") {
+      if (typeof input.viewToken !== "string" || !input.viewToken || input.viewToken.length > 200 || !Number.isSafeInteger(input.generation) || input.generation < 1) throw fail("Invalid recovery capability");
+      const record = view ?? this.retired.get(input.viewToken);
+      if (record && !this.owns(record, input, scope)) throw fail("Unknown or stale view capability");
+      // Even a clean/frozen old generation may still have an active owner.
+      // Only a completed close or explicit discard is proof of retirement.
+      return { viewToken: input.viewToken, commands: [], recovery: this.retired.has(input.viewToken) ? "closed" : "unconfirmed" };
+    }
+    if (!view || !this.owns(view, input, scope)) throw fail("Unknown or stale view capability");
     switch (input.operation) {
       case "change":
         if (input.generation !== this.generation) throw fail("Generation changed; reconnect before publishing view status");
@@ -84,12 +103,12 @@ export class HostedViewCoordinator {
       case "discard":
         if (input.confirmation !== "discard-unconfirmed-edits") throw fail("Explicit per-view discard confirmation required");
         if (this.switching || view.activeActions) throw fail("View has an active barrier or action; discard refused");
-        view.waiter?.(); this.views.delete(view.token); break;
+        this.retire(view); break;
       case "close":
         if (view.activeActions) throw fail("View action still in flight");
         if ((view.dirty || view.busy) && !view.frozen) throw fail("Dirty view cannot close without a successful flush");
         if (this.barrier?.pending.has(view.token)) throw fail("View must acknowledge freeze before closing");
-        view.waiter?.(); this.views.delete(view.token); break;
+        this.retire(view); break;
       case "poll": {
         if (!Number.isSafeInteger(input.after) || input.after < 0 || input.after > this.sequence) throw fail("Invalid poll cursor");
         if (view.waiter) throw fail("Only one poll per view is allowed");
