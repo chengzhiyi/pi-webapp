@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { prior, forgetView } from "./view-journal.ts";
+import { priorViews, forgetView } from "./view-journal.ts";
 import { hostedApi } from "./api.ts";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
@@ -8,8 +8,8 @@ import css from "./reconciliation.module.css";
 /** Reload cannot acknowledge edits from a lost realm. Keep recovery out of the
  * app's layout, and remove records automatically only on a server-confirmed close receipt. */
 export function HostedReconciliation({ sessionId, locale }: { sessionId?: string; locale: "zh" | "en" }) {
-  const [pending, setPending] = useState(prior);
-  const [open, setOpen] = useState(false), [confirm, setConfirm] = useState<(typeof prior)[number] | null>(null);
+  const [pending, setPending] = useState(priorViews);
+  const [open, setOpen] = useState(false), [confirm, setConfirm] = useState<ReturnType<typeof priorViews>[number] | null>(null);
   const [error, setError] = useState(""), [working, setWorking] = useState(false), [attempt, setAttempt] = useState(0);
   const t = (zh: string, en: string) => locale === "zh" ? zh : en;
   const shown = pending.filter(item => item.sessionId === sessionId);
@@ -38,10 +38,10 @@ export function HostedReconciliation({ sessionId, locale }: { sessionId?: string
   if (!shown.length) return null;
   const kind = (value: string) => ({ controller: t("后台控制器", "Controller"), workspace: t("工作区", "Workspace"), editor: t("编辑器", "Editor"), tool: t("工具预览", "Tool preview") }[value] ?? t("插件视图", "Plugin view"));
   return <>
-    <div className={css.entry} data-hosted-recovery><button type="button" className={css.trigger} aria-haspopup="dialog" onClick={() => setOpen(true)}>{t("插件视图恢复", "Plugin view recovery")} · {shown.length}</button></div>
+    <div className={css.entry} data-hosted-recovery><p>{t("刷新中断了旧插件视图的连接，尚未收到这些视图的关闭确认；这不表示图稿已丢失。未处理的记录可能阻止停用或卸载。", "Reloading interrupted previous plugin connections before their close confirmations arrived. This does not mean a drawing was lost. Unresolved records may block disabling or uninstalling.")}</p><button type="button" className={css.trigger} aria-haspopup="dialog" onClick={() => setOpen(true)}>{t("插件视图恢复", "Plugin view recovery")} · {shown.length}</button></div>
     <Modal open={open} onClose={() => setOpen(false)} title={t("检查刷新前的插件视图", "Review previous plugin views")} closeLabel={t("关闭", "Close")} className={css.dialog} footer={<Button variant="outline" disabled={working} onClick={() => { setError(""); setAttempt(value => value + 1); }}>{t("重新检查", "Check again")}</Button>}>
       <div className={css.content}>
-        <p>{t("部分旧视图未完成保存确认。请先检查原标签页、编辑器或本地备份，再处理对应记录。已确认关闭的视图会自动移除。", "Some previous views have no save acknowledgment. Check the original tab, editor or local backup before handling each record. Confirmed closed views are removed automatically.")}</p>
+        <p>{t("刷新中断了旧插件视图的连接，未完成保存和关闭确认。请先检查原标签页、编辑器或本地备份，再处理对应记录。已确认关闭的视图会自动移除。", "Reloading interrupted previous plugin connections before save and close confirmations arrived. Check the original tab, editor or local backup before handling each record. Confirmed closed views are removed automatically.")}</p>
         <p>{t("丢弃未确认的修改不会保存或恢复图稿，无法找回的最新修改可能永久丢失。", "Discarding unconfirmed edits does not save or restore a drawing. Unrecoverable recent edits may be permanently lost.")}</p>
         <div className={css.list}>{shown.map((item, index) => <section className={css.item} key={item.viewToken} data-unconfirmed-view={item.mountId}>
           <h3>{kind(item.kind)} {index + 1}</h3>

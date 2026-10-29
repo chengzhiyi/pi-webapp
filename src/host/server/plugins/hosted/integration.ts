@@ -196,6 +196,8 @@ export class HostedPluginIntegration {
     const inventory = await this.manager.inventory();
     return { plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
+      icon: OFFICIAL_PLUGINS.find(plugin => plugin.id === p.id)?.icon,
+      hasRetainedData: p.activeVersion !== null,
       phase: this.recovery ? "reconnect-required" : p.phase,
       updatePolicy: p.updatePolicy, pinnedVersion: p.pinnedVersion, updateDiagnostic: p.updateDiagnostic,
       // A disabled runtime's historical active pointer is not the installed release.

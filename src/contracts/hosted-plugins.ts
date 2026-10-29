@@ -6,6 +6,10 @@ export interface HostedContribution {
 }
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
+  /** Reviewed host artwork key; never arbitrary plugin HTML or executable code. */
+  icon?: "drawing";
+  /** A previous activation/checkpoint remains available after uninstall. */
+  hasRetainedData?: boolean;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
@@ -42,6 +46,6 @@ export type HostedViewInput = HostedViewIdentity & (
 export interface HostedViewCommand { id: number; type: "freeze" | "resume" | "committed"; generation: number }
 export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: "closed" | "unconfirmed" }
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {
-  pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true,
+  pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true, icon: "drawing",
   installed: false, enabled: false, phase: "not-installed",
 };

@@ -172,7 +172,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Uninstall", exact: true }).click();
     await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
-    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("button", { name: "Reinstall", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     // Enabled means the backend committed, not that the new browser realms are ready.
     // Hold actual final-mount readiness requests on mobile to make that distinction deterministic.
     let releaseReadiness!: () => void, heldReadiness = 0;
@@ -191,7 +191,9 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       }
     } finally { releaseReadiness(); }
     const finalGeneration = (await card()).generation!;
-    const expectedKinds = width === 1440 ? ["controller", "tool"] : ["controller", "editor", "tool"];
+    // Explicit disable/uninstall retires owned editor tabs at every viewport.
+    // Reinstall restores data/tools without implicitly resurrecting those tabs.
+    const expectedKinds = ["controller", "tool"];
     await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${finalGeneration}"]`)).toHaveCount(expectedKinds.length);
     await expect.poll(() => [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()])
       .map((view: any) => ({ kind: view.kind, generation: view.identity.generation, busy: view.busy }))

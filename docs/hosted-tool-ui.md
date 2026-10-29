@@ -190,8 +190,9 @@ state schema or broker save/coordination rules changed; no publish/push/deploy.
 Recovery records previously rendered as unstyled sections before AppFrame. Since
 AppFrame consumes 100% of the viewport, those sections pushed the entire app below
 the fold, producing document scrollbars and incorrect resize geometry. Recovery
-is now a fixed, localized entry with a bounded, themed details dialog. Records
-never participate in page layout. Each discard uses a separate confirmation;
+now lives in plugin management, with an explanation and a bounded, themed
+details dialog. Recovery never renders before AppFrame or floats over the
+conversation. Each discard uses a separate confirmation;
 cancel/failure preserves the journal and capability. Dismissing the dialog only
 hides details, not the recovery entry.
 
@@ -211,3 +212,50 @@ offset, internal scrolling, cancel focus restoration, failed discard retention,
 and automatic removal of server-confirmed closed records. Unit coverage proves
 clean-looking/dirty/unknown views cannot be silently retired, and even a
 committed old generation needs its actual close receipt before automatic removal.
+
+## Launcher and uninstall follow-up
+
+The workspace adapter previously used a font diamond while management used a
+pencil. Hosted cards now carry an optional reviewed `icon` key; the host's shared
+artwork registry supplies both surfaces. The offline catalog provides artwork for
+absent packages and older hosts. This imports no plugin editor or business code.
+The disclosure uses a fixed 24px SVG container instead of baseline-aligned text,
+including on narrow screens.
+
+A history renderer's `workbench.entry` is now optional. The drawing history fallback
+keeps explicit historical links and tool output readable, but contributes no
+workspace launcher. After an authoritative catalog reports disabled/uninstalled,
+all owned tabs in retained session docks close. Pending updates, failed catalog
+reads and save-barrier failures do not authorize this cleanup. Frozen realms close
+through the existing capability flow; no host reads plugin DOM or model state.
+Uninstallation displays the authoritative uninstalled state with a Reinstall
+action. Reinstall/enable restores access to existing drawings, without reopening
+old editor tabs implicitly.
+
+Refreshing destroys a document before asynchronous frame flush/close can finish.
+A clean-looking status is insufficient to discard possibly newer local edits.
+The recovery list is therefore retained, but only shown inside plugin management,
+with an explanation of its effect on disable/uninstall. A `view_barrier` error now
+explains the pending save confirmation. Confirmed closes are still removed via
+`reconcile`. After a server restart, explicit per-record `discard` may dismiss an
+unknown capability; it acknowledges no save, changes no drawing and cannot retire
+another live capability. The host never auto-discards records, clears another
+tab's storage or weakens the all-view save barrier.
+
+Browser regression: real independently installed Excalidraw in English/Chinese,
+1440px/390px, with an unresolved old editor plus an edited live editor. Failed
+uninstall retains the editor/package; explicit recovery followed by uninstall
+removes the launcher and owned tabs and enables reinstallation. Reinstallation
+preserves scene elements and restores the same workspace/management icon. Existing
+collapse/parameter regressions additionally measure SVG vertical centering.
+
+
+Verification for this follow-up: 14 browser cases passed (the 12-case UI set,
+plus both corrected production lifecycle cases), 466 Node tests + 94 desktop
+tests passed (5 pre-existing skips), targeted final integration/routes/client
+checks passed, and typecheck/full build passed. Browser evidence lives under
+`artifacts/hosted-tool-ui/uninstall-acceptance`, `uninstall-production`, and
+`uninstall-chain`. The existing live preview receives the compatible frontend
+without force-restarting its old backend or discarding uncertain drafts. New
+server reconciliation/retained-data metadata applies on the next safe restart;
+older-backend artwork/reinstall fallbacks remain supported.

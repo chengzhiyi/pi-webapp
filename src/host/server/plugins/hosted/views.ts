@@ -73,10 +73,18 @@ export class HostedViewCoordinator {
       return { viewToken: token, commands: [] };
     }
     const view = this.views.get(input.viewToken);
-    if (input.operation === "reconcile") {
+    if (input.operation === "reconcile" || input.operation === "discard" && !view) {
       if (typeof input.viewToken !== "string" || !input.viewToken || input.viewToken.length > 200 || !Number.isSafeInteger(input.generation) || input.generation < 1) throw fail("Invalid recovery capability");
       const record = view ?? this.retired.get(input.viewToken);
       if (record && !this.owns(record, input, scope)) throw fail("Unknown or stale view capability");
+      if (input.operation === "discard") {
+        if (input.confirmation !== "discard-unconfirmed-edits") throw fail("Explicit per-view discard confirmation required");
+        if (this.switching) throw fail("View has an active barrier or action; discard refused");
+        // No live capability exists (e.g. after a server restart). The user's
+        // explicit decision dismisses this record only; it acknowledges no save,
+        // changes no drawing and cannot retire any registered sibling.
+        return { viewToken: input.viewToken, commands: [] };
+      }
       // Even a clean/frozen old generation may still have an active owner.
       // Only a completed close or explicit discard is proof of retirement.
       return { viewToken: input.viewToken, commands: [], recovery: this.retired.has(input.viewToken) ? "closed" : "unconfirmed" };

@@ -15,6 +15,8 @@ for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) test(`ho
     const toggle = card.getByRole("button", { name: "Toggle preview", exact: true });
     const preview = page.frameLocator('iframe[title="Excalidraw tool"]');
     await expect(preview.getByRole("img")).toBeVisible();
+    const arrow = toggle.locator("svg"), buttonBounds = (await toggle.boundingBox())!, arrowBounds = (await arrow.boundingBox())!;
+    expect(Math.abs(arrowBounds.y + arrowBounds.height / 2 - buttonBounds.y - buttonBounds.height / 2)).toBeLessThanOrEqual(1);
     const source = await page.locator('iframe[title="Excalidraw tool"]').getAttribute("src");
     for (let i = 0; i < 3; i++) {
       await toggle.click(); await expect(toggle).toHaveAttribute("aria-expanded", "false");

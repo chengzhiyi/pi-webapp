@@ -5,6 +5,7 @@ import { compareVersions, satisfiesHost, stableVersion } from "./versions.ts";
 export interface OfficialPlugin {
   id: string;
   name: string;
+  icon?: "drawing";
   description: { zh: string; en: string };
   registry: string;
   recommendedVersion: string;
@@ -12,7 +13,7 @@ export interface OfficialPlugin {
 }
 /** Offline metadata only. Never imports the editor or downloads it on first launch. */
 export const OFFICIAL_PLUGINS: readonly OfficialPlugin[] = Object.freeze([Object.freeze({
-  id: "@chengzhiyi/pi-excalidraw", name: "Excalidraw",
+  id: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", icon: "drawing" as const,
   description: { zh: "本地手绘画布、AI 绘图及工作区图稿。按需安装。", en: "Local sketch canvas, AI diagrams and workspace drawings. Optional download." },
   registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0",
   requiredCapabilities: ["state", "workspace", "legacy", "panels", "messages"],

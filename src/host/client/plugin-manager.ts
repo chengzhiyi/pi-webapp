@@ -43,7 +43,8 @@ function validateDefinition(value: unknown, expectedId: string): WebPluginDefini
     if (beforeSend !== undefined && typeof beforeSend !== "function") throw new Error("Invalid workbench pre-send hook");
     if (toolViews !== undefined && (!Array.isArray(toolViews) || toolViews.some(view => !view || !Array.isArray(view.tools) || !view.tools.length || view.tools.some((name: unknown) => typeof name !== "string" || !name) || typeof view.component !== "function"))) throw new Error("Invalid workbench tool view");
     if (definition.workbench.resolvePanel !== undefined && typeof definition.workbench.resolvePanel !== "function") throw new Error("Invalid workbench artifact resolver");
-    if (definition.workbench.apiVersion !== 1 || !entry || typeof entry.kind !== "string" || !entry.kind || !isWebLocalizedText(entry.label) || !isWebLocalizedText(entry.description) || (entry.panelTitle !== undefined && !isWebLocalizedText(entry.panelTitle)) || typeof entry.icon !== "function" || !Array.isArray(panels) || !panels.some(panel => panel.kind === entry.kind) || panels.some(panel => typeof panel.kind !== "string" || typeof panel.component !== "function") || new Set(panels.map(panel => panel.kind)).size !== panels.length) throw new Error("Invalid workbench contribution");
+    if (definition.workbench.apiVersion !== 1 || !Array.isArray(panels) || panels.some(panel => typeof panel.kind !== "string" || typeof panel.component !== "function") || new Set(panels.map(panel => panel.kind)).size !== panels.length) throw new Error("Invalid workbench contribution");
+    if (entry !== undefined && (!entry || typeof entry.kind !== "string" || !entry.kind || !isWebLocalizedText(entry.label) || !isWebLocalizedText(entry.description) || (entry.panelTitle !== undefined && !isWebLocalizedText(entry.panelTitle)) || typeof entry.icon !== "function" || !panels.some(panel => panel.kind === entry.kind))) throw new Error("Invalid workbench entry");
   }
   return definition;
 }

@@ -1,4 +1,5 @@
-.entry { position: fixed; z-index: 50; top: 56px; right: 16px; max-width: calc(100vw - 32px); }
+.entry { margin: 0 0 24px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-secondary); }
+.entry p { margin: 0 0 8px; }
 .trigger { max-width: 100%; padding: 6px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; line-height: 20px; cursor: pointer; box-shadow: var(--dsw-elevation-panel); }
 .trigger:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
 .dialog { box-sizing: border-box; width: min(640px, 100%); max-height: calc(100dvh - 48px); }
@@ -16,4 +17,6 @@
 .item dd { margin: 0 0 6px; }
 .item button { max-width: 100%; height: auto; min-height: 28px; white-space: normal; text-align: left; }
 .error { margin-top: 12px; overflow-wrap: anywhere; color: var(--dsw-alias-state-error-primary); }
-@media (max-width: 600px) { .entry { top: 52px; right: 12px; max-width: calc(100vw - 24px); } }
+.history { padding: 16px; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-secondary); }
+.history h3 { margin: 0 0 8px; font-size: 14px; font-weight: 500; color: var(--dsw-alias-label-primary); }
+.history p { margin: 0 0 12px; }

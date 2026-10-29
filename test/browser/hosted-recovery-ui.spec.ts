@@ -18,7 +18,7 @@ test("repeated real reload keeps recovery out of layout and preserves drawing ch
     for (let attempt = 0; attempt < 3; attempt++) {
       lost.push(...await page.evaluate(key => JSON.parse(sessionStorage.getItem(key) ?? "[]"), journal));
       await page.reload();
-      await expect(page.locator("[data-hosted-recovery]")).toHaveCount(1);
+      await expect(page.locator("[data-hosted-recovery]")).toHaveCount(0);
       await expect(page.locator("[data-unconfirmed-view]")).toHaveCount(0);
       await expect(page.frameLocator('iframe[title="Excalidraw tool"]').getByRole("img")).toBeVisible();
       const layout = await page.locator("div:has(> [data-shell-overlay])").boundingBox();
@@ -78,6 +78,7 @@ for (const [width, locale, theme] of [[320, "zh", "dark"], [1440, "en", "light"]
       return rejectDiscard && input.operation === "discard" ? route.fulfill({ status: 503, json: { error: "Fixture recovery offline" } }) : route.continue();
     });
     await page.goto(h.bridge.url);
+    await page.getByRole("button", { name: locale === "zh" ? "插件" : "Plugins", exact: true }).click();
     const trigger = page.getByRole("button", { name: locale === "zh" ? "插件视图恢复 · 20" : "Plugin view recovery · 20", exact: true });
     await expect(trigger).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);

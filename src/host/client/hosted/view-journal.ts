@@ -11,6 +11,9 @@ function load(): UnconfirmedView[] {
 }
 export const prior = load();
 let records = [...prior];
+/** Only departed-document records, excluding capabilities already closed while
+ * management was unmounted. New live views never become recovery candidates. */
+export function priorViews() { return records.filter(record => prior.some(item => item.viewToken === record.viewToken)); }
 function save() { if (typeof sessionStorage !== "undefined") sessionStorage.setItem(key, JSON.stringify(records)); }
 export function rememberView(identity: HostedViewIdentity, viewToken: string, mount: HostedMount) {
   records.push({ ...identity, viewToken, kind: mount.kind, contentId: mount.contentId }); save();
