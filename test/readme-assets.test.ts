@@ -21,7 +21,8 @@ test("both READMEs have accessible, packaged product images and localized diagra
     const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
     const visual = images(tree);
     assert.deepEqual(visual.map(image => image.url), [
-      "assets/readme/workbench.png", "assets/readme/git-review.png", "assets/readme/terminal.png", `assets/readme/architecture-${locale}.svg`,
+      "assets/readme/workbench.png", "assets/readme/git-review.png", "assets/readme/terminal.png",
+      "assets/readme/excalidraw.png", `assets/readme/architecture-${locale}.png`,
     ]);
     for (const image of visual) {
       assert.ok(image.alt && image.alt.length > 20, `${file}: descriptive alt text for ${image.url}`);
@@ -33,16 +34,19 @@ test("both READMEs have accessible, packaged product images and localized diagra
 });
 
 test("screenshots are high-resolution PNGs and diagrams have no external dependencies", async () => {
-  for (const name of ["workbench", "git-review", "terminal"]) {
+  for (const [name, width, height] of [
+    ["workbench", 2160, 1140], ["git-review", 972, 1140], ["terminal", 972, 1140],
+    ["excalidraw", 1488, 722], ["architecture-en", 2800, 2240], ["architecture-zh", 2036, 1642],
+  ] as const) {
     const png = await readFile(new URL(`../assets/readme/${name}.png`, import.meta.url));
     assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-    assert.ok(png.readUInt32BE(16) >= 900, "retain enough resolution for zooming");
-    assert.equal(png.readUInt32BE(20), 1140);
-    assert.ok(png.length < 1024 * 1024, "keep each screenshot below 1 MB");
+    assert.equal(png.readUInt32BE(16), width, `${name}: retain the original capture width`);
+    assert.equal(png.readUInt32BE(20), height, `${name}: retain the original capture height`);
+    assert.ok(png.length < 1024 * 1024, "keep each image below 1 MB");
   }
   for (const locale of ["en", "zh"]) {
     const svg = await readFile(new URL(`../assets/readme/architecture-${locale}.svg`, import.meta.url), "utf8");
-    assert.match(svg, /viewBox="0 0 1120 668"/);
+    assert.match(svg, /viewBox="0 0 1400 1120"/);
     assert.match(svg, /<title id="title">/);
     assert.match(svg, /<desc id="desc">/);
     assert.doesNotMatch(svg, /<script|<foreignObject|<image|\bhref=|@import|<link/i);

@@ -6,7 +6,7 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [项目架构](#技术架构亮点) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 10：** 支持 macOS（Apple 芯片 / Intel）、Windows x64 与 Linux x64。[下载、校验与安全安装](#桌面端下载)。测试包未签名或未公证，并非稳定发行版。
+**桌面测试版 build 10：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 

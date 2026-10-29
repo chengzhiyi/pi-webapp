@@ -6,7 +6,7 @@ Conversations, project files, terminals, and Git—side by side. Use the same wo
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 10:** macOS (Apple Silicon / Intel), Windows x64, and Linux x64. [Downloads, checksums & safe installation](#desktop-downloads). These are unsigned/unnotarized test packages, not stable releases.
+**Desktop test build 10:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/pi-0.1.28-desktop.10-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.28-b10/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
