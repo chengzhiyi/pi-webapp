@@ -1,5 +1,8 @@
 # Hosted UI / all-window barrier handoff (ORI-26)
 
+Current host-owned tool chrome, page-level parameter dialogs and the evaluated
+Shadow DOM boundary are described in [hosted tool UI](hosted-tool-ui.md).
+
 Historical frontend milestone; current optional-default ownership and builtin removal
 are documented in [migration verification](hosted-excalidraw-migration.md). The earlier
 scope below is preserved as provenance, not the current composition.

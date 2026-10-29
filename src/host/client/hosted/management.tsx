@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { OFFICIAL_HOSTED_PLUGIN, type HostedPluginCard, type HostedPluginCatalog, type HostedManageOperation } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
-import { ExcalidrawIcon } from "../../../../web/src/ui/primitives/ExcalidrawIcon.tsx";
+import { HostedPluginIcon } from "./PluginIcon.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
+import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
 
 type Problem = { code?: string; message: string };
 /** One actionable message per failure; raw diagnostics remain inspectable, not repeated. */
@@ -16,6 +17,7 @@ function problemText(problem: Problem, installed: boolean, t: (zh: string, en: s
     no_compatible_version: t("暂无适用于此软件版本的插件。稍后可重新检查。", "No compatible release for this app version. Check again later."),
     registry_unreachable: t("暂时无法访问下载服务。请检查网络后重试。", "Cannot reach the download service. Check your network and retry."),
     download_cancelled: t("下载已取消。", "Download cancelled."),
+    view_barrier: t("尚未完成所有视图的保存确认，操作已停止。请先处理本页的刷新前视图记录，并检查仍打开的编辑器，然后重试。", "Save confirmation is still pending for some views, so the operation stopped. Review previous-view records on this page and any open editors, then retry."),
     runtime_owned: t("插件运行时被其他宿主或遗留锁占用，当前无法打开或卸载。请停止所有宿主并校验备份后，按恢复说明处理；重新安装不会清除此锁。", "Another host or a retained ownership lock blocks this runtime, including opening and uninstalling. Stop all hosts, verify a backup and follow recovery instructions; reinstalling does not clear the lock."),
   };
   const text = messages[problem.code ?? ""] ?? t("操作未完成。请查看诊断信息后重试。", "Operation did not finish. Review diagnostics and retry.");
@@ -44,12 +46,17 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const readEpoch = useRef(0);
+  // Older hosts do not report retained-data metadata. Remember installations
+  // observed by this management page without assuming an operation succeeded.
+  const seenInstalled = useRef(new Set<string>());
+  useEffect(() => { for (const card of catalog.plugins) if (card.installed) seenInstalled.current.add(card.pluginId); }, [catalog]);
   const [download, setDownload] = useState<{ pluginId: string; id: string } | null>(null);
   const [error, setError] = useState<Problem | null>(null);
   const [operationError, setOperationError] = useState<{ id: string; problem: Problem } | null>(null);
   const [notice, setNotice] = useState("");
   const [retryRead, setRetryRead] = useState(0);
-  const [confirm, setConfirm] = useState<{ card: HostedPluginCard; operation: HostedManageOperation; reopen?: boolean } | null>(null);
+  const [confirm, setConfirm] = useState<{ card: HostedPluginCard; operation: ConfirmationOperation; reopen?: boolean } | null>(null);
+  const confirmation = confirm ? managementConfirmation(confirm.operation, locale, confirm.card.name) : null;
   const problem = (cause: unknown): Problem => ({ message: cause instanceof Error ? cause.message : String(cause), code: (cause as Problem)?.code });
   useEffect(() => {
     if (locked.current) return;
@@ -77,7 +84,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
     } catch (cause) {
       setOperationError({ id: card.pluginId, problem: problem(cause) });
       // Read authoritative state after failure, including post-commit failures. Never retry mutations.
-      try { setCatalog(await hostedApi.catalog()); setKnown(true); } catch { /* keep the operation failure visible */ }
+      try { setCatalog(await hostedApi.catalog()); setKnown(true); window.dispatchEvent(new Event("pi:hosted-catalog-changed")); } catch { /* keep the operation failure visible */ }
     } finally { locked.current = false; setBusy(false); onBusyChange(false); setDownload(null); }
   };
   const request = (card: HostedPluginCard, operation: HostedManageOperation) => {
@@ -101,7 +108,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   const downloadFor = (card: HostedPluginCard) => {
     const failure = failureFor(card);
     const unavailable = !card.installed && !!failure && ["metadata_not_found", "tarball_not_found", "no_compatible_version"].includes(failure.code ?? "");
-    return <Button variant="outline" size="sm" disabled={unavailableControls || unavailable} onClick={() => request(card, card.pendingVersion ? "retry" : card.installed ? "update" : "install")}>{card.pendingVersion ? t("应用待更新版本", "Apply pending update") : card.installed ? t("更新", "Update") : unavailable ? t("暂不可下载", "Unavailable") : t("下载", "Download")}</Button>;
+    return <Button variant="outline" size="sm" disabled={unavailableControls || unavailable} onClick={() => request(card, card.pendingVersion ? "retry" : card.installed ? "update" : "install")}>{card.pendingVersion ? t("应用待更新版本", "Apply pending update") : card.installed ? t("更新", "Update") : unavailable ? t("暂不可下载", "Unavailable") : card.hasRetainedData || seenInstalled.current.has(card.pluginId) ? t("重新安装", "Reinstall") : t("下载", "Download")}</Button>;
   };
   const failureView = (card: HostedPluginCard, detail: boolean) => {
     const failure = failureFor(card), diagnostic = card.updateDiagnostic;
@@ -116,7 +123,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       void hostedApi.manage({ pluginId: download.pluginId, operation: "cancel-download", downloadId: download.id }).then(() => setNotice(t("已请求取消，已完成的安装不会回滚。", "Cancellation requested; committed installations are not rolled back."))).catch(cause => setOperationError({ id: download.pluginId, problem: problem(cause) }));
     }}>{t("取消下载（不回滚已提交安装）", "Cancel download (no rollback after commit)")}</Button>}
     {selected ? <div className={rows.detail} data-hosted-detail={selected.pluginId}>
-      <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><ExcalidrawIcon size={30} /></span><div><strong>{name(selected)}</strong><p>{description(selected)}</p></div>{switchFor(selected)}</div>
+      <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span><div><strong>{name(selected)}</strong><p>{description(selected)}</p></div>{switchFor(selected)}</div>
       <dl><dt>{t("插件标识", "Plugin ID")}</dt><dd><code>{selected.pluginId}</code></dd><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
       {failureView(selected, true)}
       <section className={css.configuration}><h2>{t("配置与更新", "Configuration & updates")}</h2>
@@ -131,13 +138,13 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
         </div>
       </section>
     </div> : <ul className={rows.cards}>{shown.map(card => <li className={rows.card} key={card.pluginId} data-hosted-card={card.pluginId}>
-      <span className={rows.artwork} aria-hidden="true"><ExcalidrawIcon size={30} /></span>
+      <span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={card} size={30} /></span>
       <div className={rows.cardMain}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button><p>{description(card)}</p><small><span className={rows.dot} data-enabled={known && card.enabled} />{busy ? t("正在应用…", "Applying…") : status(card)}</small>
         {card.pendingVersion ? <small>{t("关闭编辑器后更新至：", "Close editors to update to: ")}{card.pendingVersion}</small> : card.availableVersion && card.availableVersion !== card.version && <small>{t("可用版本：", "Available release: ")}{card.availableVersion}</small>}
         {failureView(card, false)}
       </div>
       <div className={`${rows.cardEnd} ${css.rowActions}`}>{downloadFor(card)}{switchFor(card)}<span aria-hidden="true">›</span></div>
     </li>)}</ul>}
-    <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirm?.reopen ? t("立即更新？", "Update now?") : t("关闭插件视图？", "Close plugin views?")} closeLabel={t("关闭", "Close")} description={confirm?.reopen ? t("重新打开会清空撤销/重做历史。只有全部视图保存成功才会继续。", "Reopening clears undo/redo history. All views must save successfully before continuing.") : t("相关视图将在保存成功后关闭。工作区文件和插件数据不会删除。", "Related views close only after saving successfully. Workspace files and plugin data are retained.")} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{t("继续", "Continue")}</Button></>} />
+    <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirmation?.title ?? ""} closeLabel={t("关闭", "Close")} description={confirmation?.description} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{confirmation?.confirm}</Button></>} />
   </section>;
 }

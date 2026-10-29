@@ -38,6 +38,20 @@ test("discard of one capability cannot retire another unknown view or manufactur
   c.dispose();
 });
 
+test("a restarted host accepts explicit dismissal of an unknown record without acknowledging any live view", async () => {
+  const c = new HostedViewCoordinator("plugin", 1, 50, 20);
+  await c.handle({ ...identity, mountId: "still-live", operation: "register", kind: "editor" }, scope);
+  const unknown = { ...identity, viewToken: "old-process-token" };
+  assert.equal((await c.handle({ ...unknown, operation: "reconcile" }, scope)).recovery?.state, "absent");
+  await assert.rejects(c.handle({ ...unknown, operation: "discard" } as HostedViewInput, scope), /confirmation/);
+  await c.handle({ ...unknown, operation: "discard", confirmation: "discard-unconfirmed-edits" }, scope);
+  c.allowImmediateReopen(true);
+  await assert.rejects(c.freeze(), /Close editors/);
+  // Dismissal is a user decision, never a server checkpoint/close proof.
+  assert.equal((await c.handle({ ...unknown, operation: "reconcile" }, scope)).recovery?.state, "absent");
+  c.dispose();
+});
+
 test("removed tool retirement keeps its registration/realm until real close; failure is retryable, sibling untouched", async () => {
   const registry = new FrameRegistry();
   let complete!: () => void, called = 0;

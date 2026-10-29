@@ -47,7 +47,7 @@ for (const width of [390, 768, 1440]) test(`official rows keep actions independe
       await route.continue();
     });
     await toggle.click();
-    await expect(panel.getByRole("alert")).toContainText("Operation did not finish");
+    await expect(panel.getByRole("alert")).toContainText("Save confirmation is still pending");
     await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked(); expect(enableCount).toBe(1);
     failEnable = false; await toggle.click();
     await expect.poll(() => enableCount).toBe(2);
@@ -68,10 +68,10 @@ for (const width of [390, 768, 1440]) test(`official rows keep actions independe
     await page.getByRole("button", { name: "‹ Plugins", exact: true }).click();
     // Cancelling the destructive switch leaves authoritative state untouched.
     await toggle.click();
-    const dialog = page.getByRole("dialog", { name: "Close plugin views?", exact: true });
+    const dialog = page.getByRole("dialog", { name: "Disable Excalidraw?", exact: true });
     await expect(dialog).toContainText("saving successfully");
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(toggle).toBeChecked();
-    await toggle.click(); await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await toggle.click(); await dialog.getByRole("button", { name: "Disable", exact: true }).click();
     await expect(toggle).not.toBeChecked(); await expect(toggle).toBeEnabled();
     // Updating from the row cannot accidentally enter details or enable a disabled plugin.
     release = integrationFixture("0.2.0");
@@ -89,9 +89,9 @@ for (const width of [390, 768, 1440]) test(`official rows keep actions independe
     await expect(toggle).not.toBeChecked();
     await page.screenshot({ path: info.outputPath(`official-detail-${width}.png`), fullPage: true });
     await panel.getByRole("button", { name: "Uninstall", exact: true }).click();
-    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("dialog", { name: "Uninstall Excalidraw?", exact: true }).getByRole("button", { name: "Uninstall", exact: true }).click();
     await expect(panel).toContainText("Not installed · Disabled"); await expect(toggle).toBeDisabled();
-    await expect(panel.getByRole("button", { name: "Download", exact: true })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Reinstall", exact: true })).toBeEnabled();
     expect(await page.locator("[data-plugin-panel]").evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     expect(errors).toEqual([]);
   } finally { releaseEnable?.(); await integration.shutdown(); await page.close(); await bridge?.close(); await rm(root, { recursive: true, force: true }); }

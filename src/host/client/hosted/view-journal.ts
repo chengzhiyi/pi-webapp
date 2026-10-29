@@ -30,6 +30,8 @@ function load(): UnconfirmedView[] {
 }
 export const prior = load();
 let records = [...prior];
+/** Management may unmount; never revive records already confirmed closed. */
+export function priorViews() { return records.filter(record => prior.some(item => item.viewToken === record.viewToken)); }
 const recoveryCopies = new Map<string, string>();
 const recoveryPrefix = "pi:hosted:recovery-draft:v1:";
 export const recoveryJournalProblem = () => problem;

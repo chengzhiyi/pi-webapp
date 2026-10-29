@@ -34,7 +34,7 @@ for (const locale of ["zh", "en"] as const) test(`retained runtime lock is unava
     await panel.getByRole("button", { name: locale === "zh" ? "Excalidraw（官方）" : "Excalidraw (Official)", exact: true }).click();
     await expect(panel.getByRole("alert")).toContainText(locale === "zh" ? "重新安装不会清除此锁" : "reinstalling does not clear the lock");
     await panel.getByRole("button", { name: locale === "zh" ? "卸载" : "Uninstall", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: locale === "zh" ? "继续" : "Continue", exact: true }).click();
+    await page.getByRole("dialog", { name: locale === "zh" ? "卸载 Excalidraw？" : "Uninstall Excalidraw?", exact: true }).getByRole("button", { name: locale === "zh" ? "卸载" : "Uninstall", exact: true }).click();
     await expect(panel.getByRole("status")).toHaveCount(0);
     await expect(panel.getByRole("alert")).toContainText(locale === "zh" ? "当前无法打开或卸载" : "including opening and uninstalling");
     await panel.getByText(locale === "zh" ? "诊断信息" : "Diagnostics", { exact: true }).click();

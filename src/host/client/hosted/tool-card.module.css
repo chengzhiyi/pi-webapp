@@ -1,0 +1,22 @@
+.card { min-width: 0; margin: 14px 0; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+.header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px; }
+.header button { font: inherit; color: inherit; cursor: pointer; border-radius: 6px; }
+.header button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.header button:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
+.toggle { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; padding: 6px; border: 0; background: transparent; text-align: left; }
+.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.status { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.chevron { margin-left: auto; width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; }
+.chevron svg { display: block; }
+.chevron[data-collapsed="true"] svg { transform: rotate(-90deg); }
+.parameters { flex: none; padding: 5px 9px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; }
+.preview { min-width: 0; }
+.preview[hidden] { display: none; }
+.dialog { box-sizing: border-box; width: min(760px, 100%); max-height: calc(100dvh - 48px); }
+.dialog > div { min-height: 0; }
+.dialog > div > div:last-child { min-height: 0; }
+.details { max-height: calc(100dvh - 200px); overflow: auto; overscroll-behavior: contain; font-size: 12px; color: var(--dsw-alias-label-primary); }
+.details h3 { margin: 0 0 8px; font-size: 12px; }
+.details pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 18px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); user-select: text; }
+.details pre:last-child { margin-bottom: 0; }
+@media (max-width: 600px) { .header { padding: 8px; } .toggle { gap: 4px; } .status { flex: none; font-size: 10px; } }
