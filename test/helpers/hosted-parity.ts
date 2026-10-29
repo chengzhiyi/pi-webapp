@@ -57,7 +57,9 @@ export async function hostedParity(page: Page, options: { width?: number; locale
     process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = join(destination, "package");
   }
   const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
-  let selected = bytes, version = "0.1.0", bridge: Bridge | undefined, sessions!: WorkspaceSessions;
+  // Normalize only release metadata to the synthetic local registry. Payload code,
+  // resource manifest and hashes remain the independently built archive's bytes.
+  let selected = localRelease(bytes, "0.1.0"), version = "0.1.0", bridge: Bridge | undefined, sessions!: WorkspaceSessions;
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });

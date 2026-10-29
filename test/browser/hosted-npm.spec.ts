@@ -134,8 +134,8 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
         await manager.getByRole("button", { name: "Apply pending update", exact: true }).click();
       } else {
         await manager.getByRole("button", { name: "Update and reopen now", exact: true }).click();
-        await expect(page.getByRole("dialog")).toContainText("Reopening clears undo/redo history");
-        await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+        await expect(page.getByRole("dialog")).toContainText("Undo/redo history will be cleared");
+        await page.getByRole("dialog").getByRole("button", { name: "Update and reopen", exact: true }).click();
       }
       await expect.poll(async () => (await card()).generation, { timeout: 20_000 }).toBe(generation + 1);
       await expect(manager).toContainText(`Installed · Enabled ${version}`);
@@ -147,9 +147,9 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
       expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).not.toBe("hidden");
       await page.screenshot({ path: info.outputPath(`npm-upgrade-${width}.png`) });
     }
-    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Disable", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden"); await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
-    await manager.getByRole("button", { name: "Uninstall", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click(); await expect(manager).toContainText("Not installed");
+    await manager.getByRole("button", { name: "Uninstall", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Uninstall", exact: true }).click(); await expect(manager).toContainText("Not installed");
     expect(await readFile(join(root, "diagrams/npm中文.excalidraw"))).toEqual(saved);
     await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
     await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");

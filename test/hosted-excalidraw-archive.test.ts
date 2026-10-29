@@ -36,8 +36,9 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   t.after(async () => { try { await manager.shutdown(); } finally { await rm(root, { recursive: true, force: true }); } });
   await manager.start(); assert.equal((await manager.inventory()).plugins[0]!.installed,false);
   const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
+  const version = process.env.HOSTED_EXCALIDRAW_VERSION ?? "0.1.0";
   const integrity = "sha512-"+createHash("sha512").update(bytes).digest("base64");
-  const pkg = await manager.installer.installArchive(id,bytes,integrity,"0.1.0");
+  const pkg = await manager.installer.installArchive(id,bytes,integrity,version);
   // The integrated download relay adds one controlled chunk. Older pinned fixtures
   // can still be verified explicitly; never infer the expected census from the payload.
   const expectedResources = Number(process.env.HOSTED_EXCALIDRAW_RESOURCE_COUNT ?? "427");
@@ -74,7 +75,7 @@ test("exact external Excalidraw tgz: install, import, edit, save, drain, restart
   await manager.manage(id,"disable"); assert.equal(manager.tools.length,0);
   await manager.manage(id,"uninstall"); assert.equal((await manager.inventory()).plugins[0]!.installed,false);
   assert.deepEqual(await readFile(join(cwd,"diagrams/中文.excalidraw")),file);
-  await manager.installer.installArchive(id,bytes,integrity,"0.1.0"); await manager.manage(id,"enable");
+  await manager.installer.installArchive(id,bytes,integrity,version); await manager.manage(id,"enable");
   assert.equal((await invoke("read",{id:old.id},"tool") as {revision:number}).revision,1);
   assert.deepEqual(await invoke("get",{id:rich.id}),rich);
   assert.deepEqual(await readFile(join(cwd,"original.excalidraw")),nativeBytes);

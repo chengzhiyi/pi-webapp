@@ -8,6 +8,8 @@ import { FrameAdapter, hostedFrames } from "./frame-adapter.ts";
 import { HostedReconciliation } from "./reconciliation.tsx";
 import { HostedViewClient } from "./view-client.ts";
 import { downloadDrawing } from "./download.ts";
+import { HostedToolCard } from "./ToolCard.tsx";
+import { notification, toolHeight, toolPresentation } from "./tool-ui.ts";
 
 interface HostedCallbacks { current: { openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> } }
 
@@ -21,6 +23,9 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
   const ready = useRef<Promise<unknown>>(Promise.resolve());
   const callbacks = useRef({ open, sendMessage, reconnect, abort }); callbacks.current = { open, sendMessage, reconnect, abort };
   const [error, setError] = useState("");
+  const [presentation, setPresentation] = useState<{ title: string }>();
+  const [height, setHeight] = useState(240); // Compatibility fallback for unnegotiated frames.
+  const [notice, setNotice] = useState<ReturnType<typeof notification>>();
   const [currentTheme, setTheme] = useState(theme);
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(theme()));
@@ -34,7 +39,11 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     const report = (cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : String(cause)); };
     let client: HostedViewClient;
     const frame = new FrameAdapter(iframe.current, identity, async (method, input) => {
+      if (!alive) throw new Error("Frame mount cancelled");
       const value = input as Record<string, unknown>;
+      if (method === "toolPresentation" && mount.kind === "tool") { setPresentation(toolPresentation(input)); return null; }
+      if (method === "resize" && mount.kind === "tool") { setHeight(toolHeight(input)); return null; }
+      if (method === "notify") { setNotice(notification(input)); return null; }
       if (method === "action") {
         if (typeof value?.action !== "string") throw new Error("Invalid action");
         return hostedApi.action({ sessionId: identity.sessionId, pluginId: identity.pluginId, generation: identity.generation, ...client.capability, action: value.action, input: value.input });
@@ -55,7 +64,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       await client.start();
       if (!alive) throw new Error("Frame mount cancelled");
       client.connecting();
-      await frame.connect((mount.kind === "controller" ? card.controllerUrl : card.documentUrl)!, { ...mount, theme: theme() });
+      await frame.connect((mount.kind === "controller" ? card.controllerUrl : card.documentUrl)!, { ...mount, theme: theme(), hostUi: { toolCard: true, autoResize: true, notifications: true } });
       client.listen();
     })();
     ready.current = work;
@@ -72,12 +81,14 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
   useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => setError(String(cause))); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
   // Controller content is hidden, but its transport failure/retry must remain
   // reachable: it participates in the same generation barrier as visible editors.
-  return <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" ? "auto" : mount.kind === "tool" ? 240 : "100%", minHeight: 0 }}>
+  const content = <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" || mount.kind === "tool" ? "auto" : "100%", minHeight: 0 }}>
     {error && <p role="alert">{error} <button type="button" onClick={() => {
       try { viewClient.current?.retry(); setError(""); } catch (cause) { setError(String(cause)); }
     }}>Retry view connection</button></p>}
-    <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ width: "100%", height: "100%", border: 0 }} />
+    {notice && <p role={notice.level === "error" ? "alert" : "status"}>{notice.message}<button type="button" aria-label={mount.locale === "zh" ? "关闭通知" : "Dismiss notification"} onClick={() => setNotice(undefined)}>×</button></p>}
+    <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ display: mount.kind === "controller" ? "none" : "block", width: "100%", height: mount.kind === "tool" ? height : "100%", border: 0 }} />
   </div>;
+  return mount.kind === "tool" ? <HostedToolCard title={presentation?.title} tool={update as ToolViewProps} locale={mount.locale}>{content}</HostedToolCard> : content;
 }
 const theme = (): "light" | "dark" => document.body.hasAttribute("data-ds-dark-theme") ? "dark" : "light";
 

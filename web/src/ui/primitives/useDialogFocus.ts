@@ -26,9 +26,15 @@ export function useDialogFocus(ref: RefObject<HTMLElement>, open: boolean, onClo
         event.preventDefault(); first.focus()
       }
     }
+    const onFocus = (event: FocusEvent) => {
+      const dialogs = document.querySelectorAll('[aria-modal="true"]')
+      if (dialogs[dialogs.length - 1] === dialog && !dialog.contains(event.target as Node)) (controls()[0] ?? dialog).focus()
+    }
     document.addEventListener('keydown', onKey)
+    document.addEventListener('focusin', onFocus)
     return () => {
       document.removeEventListener('keydown', onKey)
+      document.removeEventListener('focusin', onFocus)
       if (previous?.isConnected && previous.getClientRects().length > 0) previous.focus()
       else document.querySelector<HTMLElement>('[data-sidebar-toggle]')?.focus()
     }

@@ -6,6 +6,7 @@ import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
+import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
 
 type Problem = { code?: string; message: string };
 /** One actionable message per failure; raw diagnostics remain inspectable, not repeated. */
@@ -49,7 +50,8 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   const [operationError, setOperationError] = useState<{ id: string; problem: Problem } | null>(null);
   const [notice, setNotice] = useState("");
   const [retryRead, setRetryRead] = useState(0);
-  const [confirm, setConfirm] = useState<{ card: HostedPluginCard; operation: HostedManageOperation; reopen?: boolean } | null>(null);
+  const [confirm, setConfirm] = useState<{ card: HostedPluginCard; operation: ConfirmationOperation; reopen?: boolean } | null>(null);
+  const confirmation = confirm ? managementConfirmation(confirm.operation, locale, confirm.card.name) : null;
   const problem = (cause: unknown): Problem => ({ message: cause instanceof Error ? cause.message : String(cause), code: (cause as Problem)?.code });
   useEffect(() => {
     if (locked.current) return;
@@ -138,6 +140,6 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       </div>
       <div className={`${rows.cardEnd} ${css.rowActions}`}>{downloadFor(card)}{switchFor(card)}<span aria-hidden="true">›</span></div>
     </li>)}</ul>}
-    <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirm?.reopen ? t("立即更新？", "Update now?") : t("关闭插件视图？", "Close plugin views?")} closeLabel={t("关闭", "Close")} description={confirm?.reopen ? t("重新打开会清空撤销/重做历史。只有全部视图保存成功才会继续。", "Reopening clears undo/redo history. All views must save successfully before continuing.") : t("相关视图将在保存成功后关闭。工作区文件和插件数据不会删除。", "Related views close only after saving successfully. Workspace files and plugin data are retained.")} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{t("继续", "Continue")}</Button></>} />
+    <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirmation?.title ?? ""} closeLabel={t("关闭", "Close")} description={confirmation?.description} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{confirmation?.confirm}</Button></>} />
   </section>;
 }

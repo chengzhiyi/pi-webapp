@@ -24,6 +24,8 @@ export interface HostedActionInput {
 export interface HostedMount {
   kind: "controller" | "workspace" | "editor" | "tool"; sessionId: string;
   locale: "zh" | "en"; theme: "light" | "dark"; contentId?: string; visible?: boolean; title?: string;
+  /** Optional UI services, negotiated per mount. Older frames may ignore them. */
+  hostUi?: { toolCard?: true; autoResize?: true; notifications?: true };
 }
 export interface HostedViewIdentity { sessionId: string; pluginId: string; generation: number; mountId: string }
 export type HostedViewInput = HostedViewIdentity & (
