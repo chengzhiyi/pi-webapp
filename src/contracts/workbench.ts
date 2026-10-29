@@ -24,7 +24,8 @@ export interface WorkbenchPanelContribution {
 export interface WorkbenchPluginDefinition extends WebPluginDefinition {
   workbench?: {
     apiVersion: 1;
-    entry: { label: WebLocalizedText; panelTitle?: WebLocalizedText; description: WebLocalizedText; kind: string; multiple?: boolean; icon: ComponentType<{ size?: number }> };
+    /** History-only renderers may omit a launcher. */
+    entry?: { label: WebLocalizedText; panelTitle?: WebLocalizedText; description: WebLocalizedText; kind: string; multiple?: boolean; icon: ComponentType<{ size?: number }> };
     panels: readonly WorkbenchPanelContribution[];
     /** Native tool-result UI, also receives partial arguments while the model streams. Not an MCP Apps bridge. */
     toolViews?: readonly { tools: readonly string[]; component: ComponentType<ToolViewProps> }[];

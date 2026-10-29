@@ -18,6 +18,8 @@ export class HostedViewCoordinator {
   // Browser journals/backups remain the recovery source after a host restart.
   private recoveries = new Map<string, View>();
   private cancelledRegistrations = new Set<string>();
+  // Completed close/discard receipts remain distinguishable from unknown tokens.
+  private retired = new Map<string, Pick<View, "identity" | "scope">>();
   private sequence = 0;
   private barrier: Barrier | null = null;
   private switching = false;
@@ -36,7 +38,7 @@ export class HostedViewCoordinator {
     : this.switching ? view.frozen && !view.dirty && !view.busy
     : view.frozen || (!view.busy && (this.immediate || !["editor", "workspace"].includes(view.kind))));
   private authoringViews() { return [...this.views.values()].filter(view => view.kind !== "controller"); }
-  private sameScope(view: View, input: HostedViewIdentity, scope: AuthenticatedViewScope) {
+  private sameScope(view: Pick<View, "identity" | "scope">, input: HostedViewIdentity, scope: AuthenticatedViewScope) {
     return view.scope.ownerId === scope.ownerId && view.scope.workspaceId === scope.workspaceId
       && view.identity.sessionId === input.sessionId && view.identity.mountId === input.mountId && view.identity.generation === input.generation;
   }
@@ -65,6 +67,11 @@ export class HostedViewCoordinator {
   private enqueue(view: View, type: HostedViewCommand["type"], id = ++this.sequence) {
     view.commands.push({ id, type, generation: this.generation }); view.waiter?.(); return id;
   }
+  private retire(view: View) {
+    view.waiter?.(); this.views.delete(view.token); this.cancelledRegistrations.add(view.token);
+    this.retired.set(view.token, { identity: view.identity, scope: view.scope });
+    if (this.retired.size > 1024) this.retired.delete(this.retired.keys().next().value!);
+  }
   async handle(input: HostedViewInput, scope: AuthenticatedViewScope): Promise<HostedViewReply> {
     if (!input || input.pluginId !== this.pluginId || input.sessionId !== scope.sessionId || !scope.ownerId || !scope.workspaceId || typeof input.mountId !== "string" || input.mountId.length > 200 || !input.mountId) throw fail("Invalid authenticated view scope");
     if (input.operation === "register") {
@@ -86,9 +93,12 @@ export class HostedViewCoordinator {
     if (typeof input.viewToken !== "string" || !input.viewToken || input.viewToken.length > 200) throw fail("Invalid view capability");
     const view = this.views.get(input.viewToken);
     const retained = this.recoveries.get(input.viewToken);
+    const closed = this.retired.get(input.viewToken);
+    if (closed && !this.sameScope(closed, input, scope)) throw fail("Unknown or stale view capability");
     if (input.operation === "reconcile" || input.operation === "recover") {
       if (view && !this.sameScope(view, input, scope) || retained && !this.sameScope(retained, input, scope)) throw fail("Unknown or stale view capability");
       if (retained) return { viewToken: input.viewToken, commands: [], recovery: this.recovery(retained, "retained") };
+      if (closed) return { viewToken: input.viewToken, commands: [], recovery: { state: "retired" } };
       if (!view) {
         // Reconciliation may beat a late REGISTER whose response was lost at reload.
         // Fence that exact nonce so the abandoned request cannot resurrect a view.
@@ -114,11 +124,18 @@ export class HostedViewCoordinator {
       this.recoveries.delete(input.viewToken);
       return { viewToken: input.viewToken, commands: [] };
     }
+    if (input.operation === "discard" && !view && !retained) {
+      if (input.confirmation !== "discard-unconfirmed-edits") throw fail("Explicit per-view discard confirmation required");
+      if (this.switching) throw fail("View has an active barrier or action; discard refused");
+      // Explicit dismissal after a restart acknowledges no save and changes no drawing.
+      this.cancelledRegistrations.add(input.viewToken);
+      return { viewToken: input.viewToken, commands: [] };
+    }
     if (!view || !this.sameScope(view, input, scope)) throw fail("Unknown or stale view capability");
     switch (input.operation) {
       case "cancel-initialization":
         if (view.initialized || view.activeActions || this.switching) throw fail("View already initialized; preserve its recovery record");
-        view.waiter?.(); this.views.delete(view.token); this.cancelledRegistrations.add(view.token); break;
+        this.retire(view); break;
       case "change":
         if (input.generation !== this.generation) throw fail("Generation changed; reconnect before publishing view status");
         if (typeof input.dirty !== "boolean" || typeof input.busy !== "boolean") throw fail("Invalid view status");
@@ -140,12 +157,12 @@ export class HostedViewCoordinator {
       case "discard":
         if (input.confirmation !== "discard-unconfirmed-edits") throw fail("Explicit per-view discard confirmation required");
         if (this.switching || view.activeActions) throw fail("View has an active barrier or action; discard refused");
-        view.waiter?.(); this.views.delete(view.token); this.cancelledRegistrations.add(view.token); break;
+        this.retire(view); break;
       case "close":
         if (view.activeActions) throw fail("View action still in flight");
         if (view.kind !== "controller" && (view.dirty || view.busy) && !view.frozen) throw fail("Dirty view cannot close without a successful flush");
         if (this.barrier?.pending.has(view.token)) throw fail("View must acknowledge freeze before closing");
-        view.waiter?.(); this.views.delete(view.token); this.cancelledRegistrations.add(view.token); break;
+        this.retire(view); break;
       case "poll": {
         if (!Number.isSafeInteger(input.after) || input.after < 0 || input.after > this.sequence) throw fail("Invalid poll cursor");
         if (view.waiter) throw fail("Only one poll per view is allowed");

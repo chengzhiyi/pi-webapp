@@ -41,7 +41,9 @@ function localRelease(bytes: Buffer, version: string) {
  * Only registry and provider transports are deterministic. No action/flush success is mocked.
  */
 export async function hostedParity(page: Page, options: { width?: number; locale?: "zh" | "en"; theme?: "light" | "dark";
-  v1Archive?: string; installDrawing?: boolean; policy?: () => Omit<HostedAgentPolicy, "enabled">;
+  /** Explicit immutable package for version-specific UI capabilities; defaults to legacy compatibility. */
+  archive?: string;
+  v1Archive?: string; installDrawing?: boolean; prompt?: string; policy?: () => Omit<HostedAgentPolicy, "enabled">;
   seed?: (context: { root: string; retained: AgentSession; sessionId: string }) => Promise<void>;
 } = {}) {
   page.setDefaultTimeout(12_000);
@@ -56,8 +58,10 @@ export async function hostedParity(page: Page, options: { width?: number; locale
     await symlink(new URL("../../node_modules", import.meta.url).pathname, join(destination, "package/node_modules"), "dir");
     process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = join(destination, "package");
   }
-  const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
-  let selected = bytes, version = "0.1.0", bridge: Bridge | undefined, sessions!: WorkspaceSessions;
+  const bytes = await readFile(options.archive ?? process.env.HOSTED_EXCALIDRAW_TGZ!);
+  // Normalize only release metadata to the synthetic local registry. Payload code,
+  // resource manifest and hashes remain the independently built archive's bytes.
+  let selected = localRelease(bytes, "0.1.0"), version = "0.1.0", bridge: Bridge | undefined, sessions!: WorkspaceSessions;
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
@@ -106,7 +110,7 @@ export async function hostedParity(page: Page, options: { width?: number; locale
       const message: AssistantMessage = { role: "assistant", api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(), content: first ? [{ type: "toolCall", id: callId, name, arguments: args }] : [{ type: "text", text: "Ready" }], stopReason: first ? "toolUse" : "stop", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
       const stream = createAssistantMessageEventStream(); stream.push({ type: "start", partial: message }); stream.push({ type: "done", reason: first ? "toolUse" : "stop", message }); stream.end(message); return stream;
     };
-    await retained.prompt("Local parity drawing operation");
+    await retained.prompt(options.prompt ?? "Local parity drawing operation");
     const result = retained.messages.find(message => message.role === "toolResult" && message.toolCallId === callId);
     expect(result?.role === "toolResult" && result.isError === expectError, JSON.stringify(result)).toBeTruthy();
     return (result as any).details;

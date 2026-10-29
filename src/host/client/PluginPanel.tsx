@@ -118,7 +118,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
                 </span>
               </button>;
             })}
-            {!plugins.some(plugin => plugin.definition.workbench) && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
+            {!plugins.some(plugin => plugin.definition.workbench?.entry) && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
           </div>
         </div>;
         const registered = panels.find(item => item.contribution.kind === tab.kind);

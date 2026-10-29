@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 import { startBridge } from "../../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
-import { BUILTIN_IDS } from "../../src/contracts/plugins.ts";
+// Only enabled workspace capabilities have launchers; the optional drawing
+// package is absent in this fixture. Historical drawing recovery has no launcher.
+const launcherLabels = { en: ["Git changes", "Workspace files", "Open terminal"], zh: ["Git 改动", "工作区文件", "打开终端"] };
 
-async function expectTopAlignedGrid(grid: Locator) {
+async function expectTopAlignedGrid(grid: Locator, locale: "zh" | "en") {
   await expect(grid).toBeVisible();
   await expect.poll(() => grid.evaluate(node => {
     const body = node.parentElement!.parentElement!;
@@ -19,14 +21,16 @@ async function expectTopAlignedGrid(grid: Locator) {
     };
   })).toEqual({ topInset: 24, extraHeight: 0, extraWidth: 0 });
   const entries = grid.getByRole("button");
-  await expect(entries).toHaveCount(Object.keys(BUILTIN_IDS).length);
+  await expect(entries).toHaveCount(launcherLabels[locale].length);
+  await expect(grid.getByRole("button", { name: "Excalidraw", exact: true })).toHaveCount(0);
+  for (const label of launcherLabels[locale]) await expect(grid.getByRole("button", { name: label, exact: true })).toHaveCount(1);
   for (const entry of await entries.all()) await expect(entry).toBeInViewport({ ratio: 1 });
   const boxes = await entries.evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect();
     return { x: box.x, y: box.y, bottom: box.bottom, width: box.width, height: box.height };
   }));
   const availableWidth = await grid.evaluate(node => node.clientWidth);
-  const columns = Math.min(Object.keys(BUILTIN_IDS).length, Math.floor((availableWidth + 12) / (224 + 12)) || 1);
+  const columns = Math.min(launcherLabels[locale].length, Math.floor((availableWidth + 12) / (224 + 12)) || 1);
   for (let i = 0; i < boxes.length; i++) {
     expect(boxes[i].height).toBeGreaterThanOrEqual(156);
     expect(Math.abs(boxes[i].width - boxes[0].width)).toBeLessThan(1);
@@ -59,19 +63,19 @@ for (const { width, locale, theme } of cases) test(`workspace guide uses a top-a
     await page.getByRole("button", { name: label("Open right sidebar", "打开右侧边栏"), exact: true }).click();
     await expect(panel.getByRole("heading")).toHaveCount(0);
     await expect(panel.getByText(/^(Workspace tools|工作区工具)$/)).toHaveCount(0);
-    await expectTopAlignedGrid(grid);
+    await expectTopAlignedGrid(grid, locale as "zh" | "en");
     if (width >= 768) {
       await panel.getByRole("button", { name: label("Fullscreen", "全屏"), exact: true }).click();
-      await expectTopAlignedGrid(grid);
+      await expectTopAlignedGrid(grid, locale as "zh" | "en");
       await page.screenshot({ path: testInfo.outputPath(`guide-fullscreen-${width}.png`), animations: "disabled" });
       await panel.getByRole("button", { name: label("Split", "分栏"), exact: true }).click();
       await expect(grid).toHaveCount(2);
-      for (const item of await grid.all()) await expectTopAlignedGrid(item);
+      for (const item of await grid.all()) await expectTopAlignedGrid(item, locale as "zh" | "en");
       const secondPane = panel.locator('[data-dockkit-pane][data-dockkit-column="1"]');
       await secondPane.getByRole("button", { name: label("Close", "关闭"), exact: true }).click();
       await expect(grid).toHaveCount(1);
       await panel.getByRole("button", { name: label("Exit fullscreen", "退出全屏"), exact: true }).click();
-      await expectTopAlignedGrid(grid);
+      await expectTopAlignedGrid(grid, locale as "zh" | "en");
     }
     await page.screenshot({ path: testInfo.outputPath(`guide-${width}.png`), animations: "disabled" });
     // Cards remain reachable when the window is both narrow and short.
@@ -84,7 +88,7 @@ for (const { width, locale, theme } of cases) test(`workspace guide uses a top-a
     await last.focus();
     await expect(last).toBeInViewport({ ratio: 1 });
     await page.setViewportSize({ width, height: 1040 });
-    await expectTopAlignedGrid(grid);
+    await expectTopAlignedGrid(grid, locale as "zh" | "en");
     expect(errors).toEqual([]);
   } finally {
     try { if (!page.isClosed()) await page.goto("about:blank"); }

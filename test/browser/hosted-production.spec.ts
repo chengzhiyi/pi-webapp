@@ -39,7 +39,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
   const prior = process.env.PI_CODING_AGENT_DIR, roots = process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS;
   process.env.PI_CODING_AGENT_DIR = join(root, "agent"); process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = "";
   const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
-  let selected = bytes, version = "0.1.0", downloads = 0, bridge: Bridge | undefined, sessions!: WorkspaceSessions;
+  let selected = localRelease(bytes, "0.1.0"), version = "0.1.0", downloads = 0, bridge: Bridge | undefined, sessions!: WorkspaceSessions;
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
@@ -134,7 +134,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
     await showManager(); await manager.getByRole("button", { name: "Update", exact: true }).click();
     await expect(manager).toContainText("Close editors to update to: 0.1.1"); expect((await card()).generation).toBe(generation);
     await manager.getByRole("button", { name: "Update and reopen now", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Update and reopen", exact: true }).click();
     await expect.poll(async () => (await card()).generation, { timeout: 20_000 }).toBe(generation + 1);
     await expect(manager).not.toContainText("Close editors to update to:");
     const after = await action("get", { id: draftId }); expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision);
@@ -165,14 +165,14 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       expect((await action("get", { id: draftId })).scene).toEqual(before.scene);
     }
     await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Disable", exact: true }).click();
     await expect(manager).toContainText("Installed · Disabled");
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden");
     await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
     await manager.getByRole("button", { name: "Uninstall", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Uninstall", exact: true }).click();
     await expect(manager).toContainText("Not installed"); expect(await readFile(join(root, "diagrams/中文.excalidraw"))).toEqual(saved);
-    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
+    await manager.getByRole("button", { name: "Reinstall", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled");
     // Enabled means the backend committed, not that the new browser realms are ready.
     // Hold actual final-mount readiness requests on mobile to make that distinction deterministic.
     let releaseReadiness!: () => void, heldReadiness = 0;
@@ -191,7 +191,9 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       }
     } finally { releaseReadiness(); }
     const finalGeneration = (await card()).generation!;
-    const expectedKinds = width === 1440 ? ["controller", "tool"] : ["controller", "editor", "tool"];
+    // Explicit disable/uninstall retires owned editor tabs at every viewport.
+    // Reinstall restores data/tools without implicitly resurrecting those tabs.
+    const expectedKinds = ["controller", "tool"];
     await expect(page.locator(`iframe[title^="Excalidraw "][src*="generation=${finalGeneration}"]`)).toHaveCount(expectedKinds.length);
     await expect.poll(() => [...(integration as any).views.values()].flatMap((coordinator: any) => [...coordinator.views.values()])
       .map((view: any) => ({ kind: view.kind, generation: view.identity.generation, busy: view.busy }))

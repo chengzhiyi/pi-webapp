@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useDialogFocus } from './useDialogFocus.ts'
+import { DialogFocusOwner } from './dialog-focus-scope.ts'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
@@ -45,6 +46,7 @@ export function Modal({
   if (!open) return null
 
   return createPortal((
+    <DialogFocusOwner.Provider value={dialog}>
     <div className={css.root} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div
@@ -76,5 +78,6 @@ export function Modal({
           )}
       </div>
     </div>
+    </DialogFocusOwner.Provider>
   ), document.body)
 }

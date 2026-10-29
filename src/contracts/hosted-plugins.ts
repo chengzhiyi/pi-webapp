@@ -6,6 +6,10 @@ export interface HostedContribution {
 }
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
+  /** Reviewed host artwork key; never arbitrary plugin HTML or executable code. */
+  icon?: "drawing";
+  /** A previous activation/checkpoint remains available after uninstall. */
+  hasRetainedData?: boolean;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
@@ -24,6 +28,8 @@ export interface HostedActionInput {
 export interface HostedMount {
   kind: "controller" | "workspace" | "editor" | "tool"; sessionId: string;
   locale: "zh" | "en"; theme: "light" | "dark"; contentId?: string; visible?: boolean; title?: string;
+  /** Optional UI services, negotiated per mount. Older frames may ignore them. */
+  hostUi?: { toolCard?: true; autoResize?: true; notifications?: true };
 }
 export interface HostedViewIdentity { sessionId: string; pluginId: string; generation: number; mountId: string }
 export type HostedViewInput = HostedViewIdentity & (
@@ -48,6 +54,6 @@ export interface HostedViewRecovery {
 export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: HostedViewRecovery }
 
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {
-  pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true,
+  pluginId: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", official: true, icon: "drawing",
   installed: false, enabled: false, phase: "not-installed",
 };

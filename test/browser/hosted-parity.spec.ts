@@ -281,12 +281,14 @@ test("A11: competing real windows fence stale CAS and preserve losing local geom
     expect((await h.action("get", { id: created.id })).revision).toBeGreaterThan(winner.revision);
     // Restore alone is NOT evidence for the lost realm. Reconcile each old capability
     // explicitly, after rescuing the losing geometry above. No generic registry clear.
-    await secondPage.locator("[data-hosted-recovery] > summary").click();
+    await secondPage.getByRole("button", { name: "Plugins", exact: true }).click();
+    await secondPage.locator("[data-hosted-recovery]").getByRole("button").click();
     const unresolved = secondPage.locator("[data-unconfirmed-view]");
     await expect(unresolved).not.toHaveCount(0);
     while (await unresolved.count()) {
       const count = await unresolved.count();
-      await unresolved.first().getByRole("button", { name: "Discard unconfirmed edits for this view", exact: true }).click();
+      await unresolved.first().getByRole("button", { name: "Discard this view's unconfirmed edits", exact: true }).click();
+      await secondPage.getByRole("dialog", { name: "Discard this view's unconfirmed edits?", exact: true }).getByRole("button", { name: "Discard edits", exact: true }).click();
       await expect(unresolved).toHaveCount(count - 1);
     }
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);

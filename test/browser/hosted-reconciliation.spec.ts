@@ -8,15 +8,12 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
   const bridge = await startBridge(host, new URL("../../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }));
   const key = "pi:hosted:unconfirmed-views:v1";
   const records = ["controller", "editor"].map((kind, i) => ({ pluginId: "official", generation: 8, sessionId: "terminal-a", mountId: `old-${i}`, viewToken: `token-${i}`, kind }));
-  const writes: unknown[] = [];
+  const writes: unknown[] = [], t = (zh: string, en: string) => locale === "zh" ? zh : en;
   try {
     await page.setViewportSize({ width, height: 800 });
     await page.addInitScript(({ locale, records, key }) => {
-      localStorage.setItem("pi-web-locale", locale);
-      localStorage.setItem("pi-web-theme", "dark");
-      if (!sessionStorage.getItem("seeded")) {
-        sessionStorage.setItem(key, JSON.stringify(records)); sessionStorage.setItem("seeded", "1");
-      }
+      localStorage.setItem("pi-web-locale", locale); localStorage.setItem("pi-web-theme", "dark");
+      if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem(key, JSON.stringify(records)); sessionStorage.setItem("seeded", "1"); }
     }, { locale, records, key });
     let failDiscard = false;
     await page.route("**/api/hosted-plugins/views", async route => {
@@ -27,33 +24,35 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
     });
     await page.goto(bridge.url);
     const notice = page.locator("[data-hosted-recovery]");
-    await expect(notice).toBeVisible();
-    await expect(notice.locator("summary")).toContainText(locale === "zh" ? "插件草稿待确认（2）" : "Plugin drafts need review (2)");
-    await expect(notice).not.toHaveAttribute("open");
-    expect(writes).toEqual([]);
-    const bounds = await notice.boundingBox();
-    expect(bounds!.height).toBeLessThan(70); expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
-    expect(await notice.evaluate(el => getComputedStyle(el).position)).toBe("fixed");
+    await expect(notice).toHaveCount(0);
+    await page.getByRole("button", { name: t("插件", "Plugins"), exact: true }).click();
+    const trigger = notice.getByRole("button");
+    await expect(trigger).toContainText("2"); expect(writes).toEqual([]);
+    const bounds = (await notice.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(await notice.evaluate(el => getComputedStyle(el).position)).not.toBe("fixed");
     await page.screenshot({ path: info.outputPath("recovery-collapsed.png") });
-    await notice.locator("summary").click();
-    await expect(notice.locator("[data-unconfirmed-view]")).toHaveCount(2);
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: t("检查刷新前的插件视图", "Review previous plugin views"), exact: true });
+    await expect(dialog.locator("[data-unconfirmed-view]")).toHaveCount(2);
     await page.screenshot({ path: info.outputPath("recovery-expanded.png") });
-    const discard = notice.getByRole("button", { name: locale === "zh" ? "丢弃此视图的未确认记录" : "Discard unconfirmed edits for this view", exact: true }).first();
-    page.once("dialog", dialog => dialog.dismiss()); await discard.click();
+    const discard = dialog.getByRole("button", { name: t("丢弃此视图的未确认修改", "Discard this view's unconfirmed edits"), exact: true }).first();
+    const confirm = page.getByRole("dialog", { name: t("丢弃此视图的未确认修改？", "Discard this view's unconfirmed edits?"), exact: true });
+    await discard.click(); await confirm.getByRole("button", { name: t("取消", "Cancel"), exact: true }).click();
     expect(writes).toEqual([]);
     failDiscard = true;
-    page.once("dialog", dialog => dialog.accept()); await discard.click();
-    await expect(notice.getByRole("alert")).toContainText("offline");
+    await discard.click(); await confirm.getByRole("button", { name: t("确认丢弃", "Discard edits"), exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("offline");
     expect(JSON.parse((await page.evaluate(key => sessionStorage.getItem(key), key))!)).toHaveLength(2);
     failDiscard = false;
-    page.once("dialog", dialog => dialog.accept()); await discard.click();
-    await expect(notice.locator("[data-unconfirmed-view]")).toHaveCount(1);
+    await discard.click(); await confirm.getByRole("button", { name: t("确认丢弃", "Discard edits"), exact: true }).click();
+    await expect(dialog.locator("[data-unconfirmed-view]")).toHaveCount(1);
     expect(writes.at(-1)).toMatchObject({ operation: "discard", viewToken: "token-0", confirmation: "discard-unconfirmed-edits" });
     await page.reload();
-    await expect(notice.locator("summary")).toContainText(locale === "zh" ? "（1）" : "(1)");
-    await notice.locator("summary").click();
-    page.once("dialog", dialog => dialog.accept()); await discard.click();
+    await page.getByRole("button", { name: t("插件", "Plugins"), exact: true }).click();
+    await expect(trigger).toContainText("1"); await trigger.click();
+    await discard.click(); await confirm.getByRole("button", { name: t("确认丢弃", "Discard edits"), exact: true }).click();
     await expect(notice).toHaveCount(0);
     expect(JSON.parse((await page.evaluate(key => sessionStorage.getItem(key), key))!)).toEqual([]);
-  } finally { await bridge.close(); }
+  } finally { await page.close(); await bridge.close(); }
 });

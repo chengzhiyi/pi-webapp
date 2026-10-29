@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ManagedPlugin, PluginManagementView, PluginToggle } from "../../contracts/plugins.ts";
 import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, textFor } from "../../../web/src/ui/locale/preference.ts";
@@ -13,9 +13,10 @@ interface Props {
   getPluginManagement(): Promise<PluginManagementView>;
   togglePlugin(input: PluginToggle): Promise<PluginManagementView>;
   generation?: number;
+  recovery?: ReactNode;
 }
 /** DSH-inspired package rows and detail navigation; switches only reflect acknowledged host state. */
-export function PluginManagementPage({ getPluginManagement, togglePlugin, generation = 0 }: Props) {
+export function PluginManagementPage({ getPluginManagement, togglePlugin, generation = 0, recovery }: Props) {
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
   const localized = (value: string | { zh: string; en: string }) => typeof value === "string" ? value : value[locale];
@@ -79,6 +80,7 @@ export function PluginManagementPage({ getPluginManagement, togglePlugin, genera
       <button type="button" className={css.refresh} disabled={loading || busy !== null || hostedBusy} onClick={() => void refresh()} aria-label={t("刷新插件", "Refresh plugins")}>{loading ? "…" : "↻"}</button>
     </header>
     <p className={css.scope}>{t("全局设置 · 影响此服务的所有工作区和聊天；所有聊天空闲后才可修改。", "Global settings · Applies to every workspace and chat on this service. Changes require all chats to be idle.")}</p>
+    {recovery}
     {error && <p className={css.error} role="alert">{error}</p>}
     {notice && <p className={css.notice} role="status">{notice}</p>}
     {loading && !view && <p role="status">{t("正在读取插件…", "Loading plugins…")}</p>}

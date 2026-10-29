@@ -55,10 +55,11 @@ test("lost dirty editor has a real downloadable recovery copy and explicit reten
     const localDraft = await page.evaluate(key => localStorage.getItem(key)!, backupKey);
     await expect.poll(() => [...(h.integration as any).views.values()].flatMap((c: any) => [...c.views.values()]).some((view: any) => view.kind === "editor" && view.dirty)).toBe(true);
     await page.reload();
-    await page.locator("[data-hosted-recovery] > summary").click();
+    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await page.locator("[data-hosted-recovery]").getByRole("button").click();
     const recoveries = page.locator("[data-unconfirmed-view]");
-    await expect(recoveries.filter({ hasText: "Previous-document editor" })).toBeVisible();
-    const priorEditor = recoveries.filter({ hasText: "Previous-document editor" });
+    await expect(recoveries.filter({ has: page.getByRole("heading", { name: /^Editor/ }) })).toBeVisible();
+    const priorEditor = recoveries.filter({ has: page.getByRole("heading", { name: /^Editor/ }) });
     const download = page.waitForEvent("download");
     await priorEditor.getByRole("button", { name: /Download local recovery copy/ }).click();
     const exported = await download; const recovered = await readFile((await exported.path())!, "utf8");
@@ -71,9 +72,12 @@ test("lost dirty editor has a real downloadable recovery copy and explicit reten
     const retain = page.getByRole("button", { name: "Retain recovery record and unblock", exact: true });
     while (await retain.count()) {
       const count = await retain.count(); await retain.first().click();
+      await page.getByRole("dialog", { name: "Retain this view for recovery?", exact: true }).getByRole("button", { name: "Retain record", exact: true }).click();
       await expect(retain).toHaveCount(count - 1);
     }
     await expect(recoveries.filter({ hasText: "recovery record retained" }).first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Hosted test", exact: true }).click();
     const generation = (await h.card()).generation!;
     h.upgrade(); await h.manage("update", { reopenEditors: true });
     expect((await h.card()).generation).toBe(generation + 1);

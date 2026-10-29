@@ -20,6 +20,37 @@ async function register(coordinator: HostedViewCoordinator, id: string, kind: "t
   await request({ operation: "change", dirty: false, busy: false });
   return request;
 }
+test("reload reconciliation removes only server-proven retired views, never clean-looking live or unknown views", async () => {
+  const coordinator = new HostedViewCoordinator("plugin", 1, 50, 100);
+  const live = await register(coordinator, "lost-after-refresh", "editor");
+  assert.equal((await live({ operation: "reconcile" })).recovery?.state, "unconfirmed");
+  await live({ operation: "change", dirty: true, busy: true });
+  assert.equal((await live({ operation: "reconcile" })).recovery?.state, "unconfirmed");
+  await assert.rejects(live({ operation: "close" }), /Dirty view/);
+  const closed = await register(coordinator, "retired");
+  await closed({ operation: "close" });
+  assert.equal((await closed({ operation: "reconcile" })).recovery?.state, "retired");
+  await assert.rejects(closed({ operation: "reconcile" }, { ...scope, ownerId: "other" }), /capability/);
+  await assert.rejects(closed({ operation: "reconcile" }, { ...scope, workspaceId: "other" }), /capability/);
+  assert.equal((await coordinator.handle({ ...identity("unknown"), viewToken: "unknown", operation: "reconcile" }, scope)).recovery?.state, "absent");
+  coordinator.dispose();
+});
+
+test("a generation commit does not replace the actual view close receipt during recovery", async () => {
+  const coordinator = new HostedViewCoordinator("plugin", 1, 50, 100);
+  const view = await register(coordinator, "old-tool");
+  const frozen = coordinator.freeze();
+  const command = (await view({ operation: "poll", after: 0, immediate: true })).commands[0]!;
+  await view({ operation: "ack", commandId: command.id, ok: true }); await frozen;
+  assert.equal((await view({ operation: "reconcile" })).recovery?.state, "active");
+  await coordinator.committed({ generation: 2 });
+  assert.equal((await view({ operation: "reconcile" })).recovery?.state, "unconfirmed");
+  await view({ operation: "close" });
+  assert.equal((await view({ operation: "reconcile" })).recovery?.state, "retired");
+  assert.throws(() => coordinator.admitAction({ ...identity("old-tool"), viewToken: view.viewToken, action: "sync" }, scope), /capability/);
+  await coordinator.freeze(); await coordinator.committed({ generation: 3 });
+  coordinator.dispose();
+});
 test("every frame flushes even when another rejects; failed ready and offline preserve send failure", async () => {
   const registry = new FrameRegistry(); const called: string[] = [];
   for (const id of ["controller", "hidden-editor", "tool"]) registry.add({ identity: identity(id), ready: Promise.resolve(), adapter: { async call() { called.push(id); if (id === "hidden-editor") throw new Error("IME busy"); } } as unknown as FrameAdapter });

@@ -19,6 +19,7 @@ import type { ReactNode } from 'react'
 import type { LayoutInfo, PanelInfo, SelectHook, SlotRenderer } from '../contract.ts'
 import { computeColumns, rightbarDragAction, rightbarElasticWidth, CENTER_MIN, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { useDialogFocus } from '../primitives/useDialogFocus.ts'
+import { DialogFocusOwner } from '../primitives/dialog-focus-scope.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import css from './AppFrame.module.css'
 
@@ -270,7 +271,7 @@ export function AppFrame({
       {drawerOpen && <button type="button" className={css.drawerMask} tabIndex={-1} aria-label={t('sidebar.close')} onClick={actions.closeSidebar} />}
       <div ref={drawerRef} className={css.sidebarCol} style={drawerOpen ? { width: sidebarWidth } : undefined}
         role={drawerOpen ? 'dialog' : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t('sidebar.label') : undefined} tabIndex={drawerOpen ? -1 : undefined}>
-        {sidebar}
+        <DialogFocusOwner.Provider value={drawerOpen ? drawerRef : null}>{sidebar}</DialogFocusOwner.Provider>
       </div>
       <>
         <CenterColumn>{main}</CenterColumn>

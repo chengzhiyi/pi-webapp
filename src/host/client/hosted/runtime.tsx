@@ -5,9 +5,12 @@ import type { HostedMount, HostedPluginCard, HostedViewIdentity } from "../../..
 import { hostedApi } from "./api.ts";
 import { retainHostedCards } from "./catalog.ts";
 import { FrameAdapter, hostedFrames } from "./frame-adapter.ts";
-import { HostedReconciliation } from "./reconciliation.tsx";
+import { useHostedReconciliation } from "./reconciliation.tsx";
 import { HostedViewClient } from "./view-client.ts";
 import { downloadDrawing } from "./download.ts";
+import { HostedToolCard } from "./ToolCard.tsx";
+import { notification, toolHeight, toolPresentation } from "./tool-ui.ts";
+import { HostedPluginIcon } from "./PluginIcon.tsx";
 
 interface HostedCallbacks { current: { openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> } }
 
@@ -21,6 +24,9 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
   const ready = useRef<Promise<unknown>>(Promise.resolve());
   const callbacks = useRef({ open, sendMessage, reconnect, abort }); callbacks.current = { open, sendMessage, reconnect, abort };
   const [error, setError] = useState("");
+  const [presentation, setPresentation] = useState<{ title: string }>();
+  const [height, setHeight] = useState(240); // Compatibility fallback for unnegotiated frames.
+  const [notice, setNotice] = useState<ReturnType<typeof notification>>();
   const [currentTheme, setTheme] = useState(theme);
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(theme()));
@@ -34,7 +40,11 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     const report = (cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : String(cause)); };
     let client: HostedViewClient;
     const frame = new FrameAdapter(iframe.current, identity, async (method, input) => {
+      if (!alive) throw new Error("Frame mount cancelled");
       const value = input as Record<string, unknown>;
+      if (method === "toolPresentation" && mount.kind === "tool") { setPresentation(toolPresentation(input)); return null; }
+      if (method === "resize" && mount.kind === "tool") { setHeight(toolHeight(input)); return null; }
+      if (method === "notify") { setNotice(notification(input)); return null; }
       if (method === "action") {
         if (typeof value?.action !== "string") throw new Error("Invalid action");
         return hostedApi.action({ sessionId: identity.sessionId, pluginId: identity.pluginId, generation: identity.generation, ...client.capability, action: value.action, input: value.input });
@@ -55,7 +65,7 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       await client.start();
       if (!alive) throw new Error("Frame mount cancelled");
       client.connecting();
-      await frame.connect((mount.kind === "controller" ? card.controllerUrl : card.documentUrl)!, { ...mount, theme: theme() });
+      await frame.connect((mount.kind === "controller" ? card.controllerUrl : card.documentUrl)!, { ...mount, theme: theme(), hostUi: { toolCard: true, autoResize: true, notifications: true } });
       client.listen();
     })();
     ready.current = work;
@@ -72,12 +82,14 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
   useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => setError(String(cause))); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
   // Controller content is hidden, but its transport failure/retry must remain
   // reachable: it participates in the same generation barrier as visible editors.
-  return <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" ? "auto" : mount.kind === "tool" ? 240 : "100%", minHeight: 0 }}>
+  const content = <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" || mount.kind === "tool" ? "auto" : "100%", minHeight: 0 }}>
     {error && <p role="alert">{error} <button type="button" onClick={() => {
       try { viewClient.current?.retry(); setError(""); } catch (cause) { setError(String(cause)); }
     }}>Retry view connection</button></p>}
-    <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ width: "100%", height: "100%", border: 0 }} />
+    {notice && <p role={notice.level === "error" ? "alert" : "status"}>{notice.message}<button type="button" aria-label={mount.locale === "zh" ? "关闭通知" : "Dismiss notification"} onClick={() => setNotice(undefined)}>×</button></p>}
+    <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ display: mount.kind === "controller" ? "none" : "block", width: "100%", height: mount.kind === "tool" ? height : "100%", border: 0 }} />
   </div>;
+  return mount.kind === "tool" ? <HostedToolCard title={presentation?.title} tool={update as ToolViewProps} locale={mount.locale}>{content}</HostedToolCard> : content;
 }
 const theme = (): "light" | "dark" => document.body.hasAttribute("data-ds-dark-theme") ? "dark" : "light";
 
@@ -89,7 +101,7 @@ function definition(card: HostedPluginCard, reconnect: () => void, callbacks: Ho
     artifactTools: contribution.artifactTools,
     workbench: {
       apiVersion: 1,
-      entry: { ...contribution.entry, kind: panelKind(contribution.entry.kind), icon: () => <span aria-hidden="true">◇</span> },
+      entry: { ...contribution.entry, kind: panelKind(contribution.entry.kind), icon: props => <HostedPluginIcon card={card} {...props} /> },
       panels: contribution.panels.map(kind => ({ kind: panelKind(kind), component: (props: WorkbenchPanelProps) => <HostedFrame card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
         mount={{ kind: kind === contribution.entry.kind ? "workspace" : "editor", sessionId: props.session.sessionId, contentId: props.contentId, title: props.title, visible: props.visible, locale: props.locale, theme: theme() }} open={(kind, id, title) => props.open(panelKind(kind), id, title)} sendMessage={props.sendMessage} /> })),
       toolViews: contribution.toolViews.length ? [{ tools: contribution.toolViews, component: (props: ToolViewProps) => props.session ? <HostedFrame key={hostedFrames.incarnation(props.session.sessionId, props.call.toolCallId)} card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
@@ -101,7 +113,9 @@ function definition(card: HostedPluginCard, reconnect: () => void, callbacks: Ho
 }
 /** The v1 runtime is untouched. Hosted frames are adapted into existing workbench rendering slots. */
 export function useHostedPlugins(connected: boolean, sessionId: string | undefined, generation: number, callbacks: HostedCallbacks, locale: "zh" | "en") {
+  const recovery = useHostedReconciliation({ sessionId, locale, openRecovered: contentId => callbacks.current.openPanel?.(`diagram:${contentId}`) });
   const [cards, setCards] = useState<HostedPluginCard[]>([]);
+  const [inactivePlugins, setInactivePlugins] = useState<string[]>([]);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const reconnect = useMemo(() => () => setRevision(value => value + 1), []);
@@ -109,7 +123,13 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
     if (!connected || !sessionId) { setCards([]); return; }
     let alive = true; const abort = new AbortController();
     window.addEventListener("pi:hosted-catalog-changed", reconnect);
-    void hostedApi.catalog(abort.signal).then(catalog => { if (alive) { setCards(previous => retainHostedCards(catalog.plugins, previous)); setError(""); } }).catch(cause => { if (alive) { if (cause.status !== 404) setError(String(cause)); } });
+    void hostedApi.catalog(abort.signal).then(catalog => { if (alive) {
+      setCards(previous => retainHostedCards(catalog.plugins, previous));
+      // Only authoritative disabled/uninstalled state retires owned tabs. Pending
+      // updates and failed reads must leave the mounted editor and undo intact.
+      if (!catalog.offline) setInactivePlugins(catalog.plugins.filter(card => !card.installed || !card.enabled).map(card => card.pluginId));
+      setError("");
+    } }).catch(cause => { if (alive) { if (cause.status !== 404) setError(String(cause)); } });
     return () => { alive = false; abort.abort(); window.removeEventListener("pi:hosted-catalog-changed", reconnect); };
   }, [connected, sessionId, generation, revision]);
   const definitions = useRef(new WeakMap<HostedPluginCard, LoadedPlugin>());
@@ -120,5 +140,5 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
   }), [cards, reconnect, callbacks]);
   const controllers = connected && sessionId ? cards.map(card => <HostedFrame key={`${sessionId}/${card.pluginId}/${card.generation}`} card={card} reconnect={reconnect}
     abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))} mount={{ kind: "controller", sessionId, locale, theme: theme() }} open={(_kind, id) => callbacks.current.openPanel?.(`${card.contribution!.panelAlias.prefix}${id}`)} sendMessage={async text => { if (!callbacks.current.sendMessage) throw new Error("Composer unavailable"); await callbacks.current.sendMessage(text); }} />) : null;
-  return { plugins: connected ? plugins : [], controllers: <><HostedReconciliation sessionId={sessionId} locale={locale} openRecovered={contentId => callbacks.current.openPanel?.(`diagram:${contentId}`)} />{controllers}</>, error };
+  return { plugins: connected ? plugins : [], inactivePlugins, recovery, controllers, error };
 }
