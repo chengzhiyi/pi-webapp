@@ -249,13 +249,22 @@ for (const width of [320, 390, 768]) {
       const during = await page.getByRole("textbox", { includeHidden: true }).boundingBox();
       expect(during!.width).toBeCloseTo(before!.width, 0);
       await actions(page, "Workspace A").click();
+      const menu = page.getByRole("menu", { name: /Workspace A 的工作区操作|Workspace actions for Workspace A/ });
+      await expect(menu).toBeVisible();
       await expect(page.getByRole("menuitem")).toBeDisabled();
+      // An all-disabled portal menu must still own keyboard focus. Otherwise
+      // Escape reaches the drawer and closes two interaction layers at once.
+      await expect(menu).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu")).toHaveCount(0);
       await expect(dialog).toBeVisible();
       await expect(actions(page, "Workspace A")).toBeFocused();
       const focusable = dialog.locator('button:visible:not([disabled])');
       await focusable.last().focus();
+      await page.keyboard.press("Tab");
+      await expect(focusable.first()).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(focusable.last()).toBeFocused();
       await page.keyboard.press("Tab");
       await expect(focusable.first()).toBeFocused();
       await page.keyboard.press("Escape");

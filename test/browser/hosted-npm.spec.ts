@@ -157,7 +157,7 @@ for (const width of [1440, 390]) test(`published npm ${upgradeFrom ? `upgrade fr
     expect(retained.getAllTools().find(tool => tool.name === "diagram_read")!.exposure).toBe("hidden"); await expect(page.locator('iframe[title^="Excalidraw "]')).toHaveCount(0);
     await manager.getByRole("button", { name: "Uninstall", exact: true }).click(); await page.getByRole("dialog").getByRole("button", { name: "Uninstall", exact: true }).click(); await expect(manager).toContainText("Not installed");
     expect(await readFile(join(root, "diagrams/npm中文.excalidraw"))).toEqual(saved);
-    await manager.getByRole("button", { name: "Download", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
+    await manager.getByRole("button", { name: "Reinstall", exact: true }).click(); await expect(manager).toContainText("Installed · Disabled", { timeout: 60_000 });
     await manager.getByRole("switch", { name: "Enable Excalidraw", exact: true }).click(); await expect(manager).toContainText("Installed · Enabled");
     expect((await action("get", { id: draftId })).scene).toEqual(before.scene); expect(sessions.session).toBe(retained);
     expect(await page.evaluate(() => (window as any).__npmTestBoot)).toBe(bootId); expect(errors).toEqual([]); expect(external).toEqual([]);

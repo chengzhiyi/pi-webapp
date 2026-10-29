@@ -74,14 +74,23 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`interactive terminal life
       expect(creations).toBe(1);
     }
     if (width >= 768) {
+      let measurement = 0;
+      const ptySize = async () => {
+        // A mode attribute precedes ResizeObserver and the HTTP resize ACK.
+        // Read a fresh shell result, never a file left by an earlier query.
+        const path = join(cwd, `terminal-size-${++measurement}`);
+        await command(`stty size > terminal-size-${measurement}`);
+        let value = "";
+        await expect.poll(async () => value = await readFile(path, "utf8").catch(() => "")).toMatch(/^\d+\s+\d+\s*$/);
+        return value;
+      };
+      const pushSize = await ptySize();
       await rightbar.getByRole("button", { name: "Fullscreen", exact: true }).click();
       await expect(rightbar).toHaveAttribute("data-sidebar-right-panel", "fullscreen");
-      await command("stty size > terminal-size");
-      await expect.poll(async () => readFile(join(cwd, "terminal-size"), "utf8").catch(() => "")).toMatch(/\d+ \d+/);
-      const fullscreenSize = await readFile(join(cwd, "terminal-size"), "utf8");
+      await expect.poll(ptySize).not.toBe(pushSize);
       await rightbar.getByRole("button", { name: "Exit fullscreen", exact: true }).click();
       await expect(rightbar).toHaveAttribute("data-sidebar-right-panel", "push");
-      await expect.poll(async () => { await command("stty size > terminal-size"); return readFile(join(cwd, "terminal-size"), "utf8"); }).not.toBe(fullscreenSize);
+      await expect.poll(ptySize).toBe(pushSize);
     }
     if (width === 1440) {
       await rightbar.getByRole("button", { name: "Split", exact: true }).click();

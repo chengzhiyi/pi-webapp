@@ -4,9 +4,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) test(`host tool card collapses and parameters stay page-level at ${width}/${theme}`, async ({ page }, info) => {
-  test.skip(!process.env.HOSTED_EXCALIDRAW_TGZ, "Explicit independently built archive required");
+  test.skip(!process.env.HOSTED_TOOL_UI_TGZ, "Explicit UI-capable published archive required");
   test.setTimeout(90_000);
-  const h = await hostedParity(page, { width, theme });
+  const h = await hostedParity(page, { width, theme, archive: process.env.HOSTED_TOOL_UI_TGZ });
   try {
     await h.tool("excalidraw_create_view", boxes(30));
     await page.goto(h.bridge.url);
@@ -52,7 +52,7 @@ for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) test(`ho
 });
 
 test("native Chinese editing and repeated enable/dispose leave no host dialogs or focus listeners", async ({ page }, info) => {
-  test.skip(!process.env.HOSTED_EXCALIDRAW_TGZ, "Explicit independently built archive required");
+  test.skip(!process.env.HOSTED_TOOL_UI_TGZ, "Explicit UI-capable published archive required");
   test.setTimeout(100_000);
   const consoleErrors: string[] = [];
   page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
@@ -67,7 +67,7 @@ test("native Chinese editing and repeated enable/dispose leave no host dialogs o
     document.removeEventListener = ((type: string, listener: unknown, options: any) => { listeners.get(type)?.delete(listener); remove(type, listener as EventListener, options); }) as typeof document.removeEventListener;
     (window as any).__hostFocusListeners = () => [...listeners].map(([type, set]) => [type, set.size]);
   });
-  const h = await hostedParity(page);
+  const h = await hostedParity(page, { archive: process.env.HOSTED_TOOL_UI_TGZ });
   try {
     const created = await h.tool("excalidraw_create_view", boxes()); await page.goto(h.bridge.url);
     const editor = await h.open(), canvas = editor.locator("canvas.interactive");
@@ -109,9 +109,9 @@ test("native Chinese editing and repeated enable/dispose leave no host dialogs o
 });
 
 test("independent cards/editors retain dirty views when close, uninstall and update cannot save", async ({ page }, info) => {
-  test.skip(!process.env.HOSTED_EXCALIDRAW_TGZ, "Explicit independently built archive required");
+  test.skip(!process.env.HOSTED_TOOL_UI_TGZ, "Explicit UI-capable published archive required");
   test.setTimeout(110_000);
-  const h = await hostedParity(page);
+  const h = await hostedParity(page, { archive: process.env.HOSTED_TOOL_UI_TGZ });
   let failSync = false;
   try {
     const first = await h.tool("excalidraw_create_view", { ...boxes(), title: "First drawing" });
@@ -191,4 +191,24 @@ test("independent cards/editors retain dirty views when close, uninstall and upd
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
   } finally { failSync = false; await h.close(); }
+});
+
+test("legacy published iframe keeps its own tool chrome and editor without host UI negotiation", async ({ page }, info) => {
+  test.skip(!process.env.HOSTED_EXCALIDRAW_TGZ, "Explicit legacy published archive required");
+  test.setTimeout(90_000);
+  const h = await hostedParity(page);
+  try {
+    const created = await h.tool("excalidraw_create_view", boxes());
+    await page.goto(h.bridge.url);
+    const preview = page.frameLocator('iframe[title="Excalidraw tool"]');
+    await expect(preview.getByRole("img")).toBeVisible();
+    await expect(page.locator("[data-hosted-tool-card]")).toHaveCount(0);
+    await expect(preview.getByRole("button", { name: "View parameters", exact: true })).toBeVisible();
+    const editor = await h.open();
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.appState.zoom?.value).toBe(1);
+    await editor.locator("canvas.interactive").click(); await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.press("ArrowRight"); await page.keyboard.press("Escape");
+    await expect.poll(async () => (await h.action("get", { id: created.id })).scene.elements[0].x).not.toBe(0);
+    await page.screenshot({ path: info.outputPath("legacy-tool-and-editor.png") });
+    expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
+  } finally { await h.close(); }
 });

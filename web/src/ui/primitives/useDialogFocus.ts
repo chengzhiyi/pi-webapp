@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
+import { withinDialogFocusScope } from './dialog-focus-scope.ts'
 
 /** Focus containment for the topmost dialog; nested dialogs keep their own Escape. */
 export function useDialogFocus(ref: RefObject<HTMLElement>, open: boolean, onClose: () => void) {
@@ -20,15 +21,15 @@ export function useDialogFocus(ref: RefObject<HTMLElement>, open: boolean, onClo
       const items = controls()
       const first = items[0] ?? dialog
       const last = items.at(-1) ?? dialog
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      if (event.shiftKey && (document.activeElement === first || !withinDialogFocusScope(dialog, document.activeElement))) {
         event.preventDefault(); last.focus()
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      } else if (!event.shiftKey && (document.activeElement === last || !withinDialogFocusScope(dialog, document.activeElement))) {
         event.preventDefault(); first.focus()
       }
     }
     const onFocus = (event: FocusEvent) => {
       const dialogs = document.querySelectorAll('[aria-modal="true"]')
-      if (dialogs[dialogs.length - 1] === dialog && !dialog.contains(event.target as Node)) (controls()[0] ?? dialog).focus()
+      if (dialogs[dialogs.length - 1] === dialog && !withinDialogFocusScope(dialog, event.target as Node)) (controls()[0] ?? dialog).focus()
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('focusin', onFocus)

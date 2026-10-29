@@ -41,6 +41,8 @@ function localRelease(bytes: Buffer, version: string) {
  * Only registry and provider transports are deterministic. No action/flush success is mocked.
  */
 export async function hostedParity(page: Page, options: { width?: number; locale?: "zh" | "en"; theme?: "light" | "dark";
+  /** Explicit immutable package for version-specific UI capabilities; defaults to legacy compatibility. */
+  archive?: string;
   v1Archive?: string; installDrawing?: boolean; prompt?: string; policy?: () => Omit<HostedAgentPolicy, "enabled">;
   seed?: (context: { root: string; retained: AgentSession; sessionId: string }) => Promise<void>;
 } = {}) {
@@ -56,7 +58,7 @@ export async function hostedParity(page: Page, options: { width?: number; locale
     await symlink(new URL("../../node_modules", import.meta.url).pathname, join(destination, "package/node_modules"), "dir");
     process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS = join(destination, "package");
   }
-  const bytes = await readFile(process.env.HOSTED_EXCALIDRAW_TGZ!);
+  const bytes = await readFile(options.archive ?? process.env.HOSTED_EXCALIDRAW_TGZ!);
   // Normalize only release metadata to the synthetic local registry. Payload code,
   // resource manifest and hashes remain the independently built archive's bytes.
   let selected = localRelease(bytes, "0.1.0"), version = "0.1.0", bridge: Bridge | undefined, sessions!: WorkspaceSessions;

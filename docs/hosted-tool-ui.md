@@ -287,3 +287,33 @@ real dirty-draft backup download and explicit retention, per-view discard failur
 operation confirmations, independent cards/editors, update, uninstall/reinstall,
 themed narrow dialogs, and keyboard focus. Browser evidence is in
 `artifacts/alpha-merge/browser` and `artifacts/alpha-merge/browser-followup`.
+
+## Complete CI matrix follow-up
+
+The dialog focus boundary includes React-owned portal menus. Modal and drawer
+providers supply an owning element ref; MenuSurface registers its portal layer
+before moving focus and unregisters on unmount. Focus outside that scope is still
+contained. Escape belongs to the innermost menu first, and closes the drawer only
+after its menu has closed. The ownership registry contains host UI elements, not
+plugin DOM/state, and creates no global event listeners of its own.
+
+CI keeps the immutable public Excalidraw 0.1.0 fixture for legacy compatibility and
+adds a separate `HOSTED_TOOL_UI_TGZ` pinned to public 0.1.3. Both use SHA-512 SRI;
+the newer fixture also verifies release provenance against source commit
+`d419333729106787d069ca9617a7637b66d4280d`. Native chrome tests explicitly select the
+UI-capable fixture; they never silently substitute it for legacy regressions. An
+additional real legacy iframe/editor test proves negotiation fallback still works.
+The public npm install/upgrade gate continues using actual registry transport.
+
+Workspace-grid tests now assert the three specific enabled launchers and absence
+of a drawing launcher, rather than counting every BUILTIN_IDS metadata entry.
+Public reinstall tests select Reinstall; competing-window recovery tests open
+management and separately confirm each old capability in the new dialog. Their
+scene/CAS, downloadable backup, losing geometry and clean-shutdown assertions are
+preserved. No retry, timeout, lifecycle gate or test-group exclusion is relaxed.
+
+The full matrix also exposed a terminal-test sampling race: a fullscreen mode
+attribute changes before ResizeObserver/HTTP resize reaches the PTY. The test now
+uses a fresh, completed shell measurement for each query, waits for the actual
+fullscreen size change, and requires the original push size to return on exit.
+This strengthens the existing resize assertion without changing terminal behavior.
