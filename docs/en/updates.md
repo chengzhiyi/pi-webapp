@@ -25,6 +25,20 @@ Choose an update preference under **App updates**. It is saved in Pi's data dire
 
 **Older entry points:** before using channels, finish active work and update the original npx/global launcher to a stable release supporting this feature. Updating only a managed business package does not update the global entry point. Older desktop shells also require a new installer; shells without channel support cannot select alpha. This preference controls the npm **business package**, not the desktop menu's separate GitHub Releases shell-update channel.
 
+### Desktop build 10 and preview updates
+
+The public `0.1.28 / build 10` shell can update stable business packages but cannot retain an alpha selection across launches. Updating only the backend does not update that shell. Install a shell with channel support once, then select Preview and update online. Build 11 is being prepared in this repository; public availability depends on its installer release. Settings identifies an incompatible shell and links to desktop downloads.
+
+Preview selects the newer of `latest` and `alpha`. For example, stable `0.1.39` supersedes `0.1.39-alpha.1`; a newer alpha must be published before an alpha upgrade is offered.
+
+### Save-confirmation timeout
+
+`Missing view flush acknowledgement; old version retained` means a plugin view did not acknowledge its save/freeze within 15 seconds, so version switching stopped. Save and close drawings or editors. For disconnected views left after reload, review local copies in the session's Plugin view recovery dialog, retain the recovery record to unblock, then retry. Keep drawings and data directories. Timeout diagnostics identify the pending plugin, session and mount without exposing capability tokens.
+
+### Source and published versions
+
+The repository version is a release baseline. CI's `scripts/prepare-release.mjs` allocates the next version from npm dist-tags, updates manifests in its temporary checkout, and publishes the verified tarball. The workflow deliberately does not push version commits back to the branch, which is why source remained at `0.1.29` while published versions advanced. This change synchronizes the source baseline to `0.1.39`; future CI releases still increment from npm. The desktop shell also has its own build number in `desktop/release.json`.
+
 If the page does not return:
 
 ```bash

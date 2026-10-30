@@ -47,7 +47,12 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
     </div>
     {status?.latest && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
+    {status?.requiresDesktopUpgrade && <p className={css.note}>
+      <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载新版桌面应用", "Download desktop update")}</a>
+      {t("。安装支持更新通道的桌面版本后，可在此选择体验版并在线升级。", ". Install a desktop release with update-channel support, then return here to select preview and update online.")}
+    </p>}
     {targetVersion && <p className={css.note} role="status">{t("正在重启并等待新版连接…", "Restarting and waiting for the new version…")}</p>}
     {error && <p className={css.error} role="alert">{error}</p>}
+    {error?.includes("Missing view flush acknowledgement") && <p className={css.note}>{t("插件视图尚未确认保存。请保存并关闭绘图或编辑器；若视图已失联，请先在插件恢复记录中处理未确认的编辑，再重试升级。", "A plugin view has not confirmed its save. Save and close drawings or editors; if a view disconnected, review its unconfirmed edits in plugin recovery before retrying.")}</p>}
   </section>;
 }

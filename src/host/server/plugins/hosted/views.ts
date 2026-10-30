@@ -189,7 +189,10 @@ export class HostedViewCoordinator {
     try {
       await new Promise<void>((resolve, reject) => {
         const finish = (error?: Error) => { if (this.barrier?.id !== id) return; clearTimeout(this.barrier.timer); this.barrier = null; error ? reject(error) : resolve(); };
-        this.barrier = { id, pending: new Set(this.authoringViews().map(view => view.token)), resolve: () => finish(), reject: error => finish(error), timer: setTimeout(() => finish(fail("Missing view flush acknowledgement; old version retained")), this.freezeMs) };
+        this.barrier = { id, pending: new Set(this.authoringViews().map(view => view.token)), resolve: () => finish(), reject: error => finish(error), timer: setTimeout(() => {
+          const pending = this.authoringViews().filter(view => this.barrier?.pending.has(view.token));
+          finish(fail(`Missing view flush acknowledgement; old version retained. Plugin: ${this.pluginId}. Pending views: ${pending.map(view => `${view.kind}:${view.identity.mountId} (session ${view.identity.sessionId})`).join(", ")}. Save and close these views, or review their recovery records before retrying.`));
+        }, this.freezeMs) };
         for (const view of this.authoringViews()) this.enqueue(view, "freeze", id);
         if (!this.authoringViews().length) finish();
       });

@@ -249,19 +249,19 @@ export class SelfUpdater {
     const channel = await this.channel();
     const sourceCheckout = existsSync(join(this.packageRoot, ".git"));
     const status: UpdateStatus = { current, channel, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
+    if (this.desktopManaged) status.desktopShell = { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" };
     const transaction = await this.transaction(), pair = await this.hostedPair?.status?.();
     if (transaction && !["failed", "cancelled", "committed"].includes(transaction.phase)) status.recovery = { version: transaction.version, phase: transaction.phase,
       canCancel: transaction.legacyRecovery ? await this.admittedLegacyRecovery(current) : transaction.phase !== "restart-requested" || await this.admittedFallback(transaction, current) };
     else if (pair && !["cancelled", "reconciled"].includes(pair.phase)) status.recovery = { version: pair.version, phase: pair.phase,
       canCancel: pair.phase === "prepared" || await this.admittedLegacyRecovery(current) };
-    if (this.desktopManaged && !this.desktopPackageUpdates) return { ...status, canRestart: false,
+    if (this.desktopManaged && !this.desktopPackageUpdates) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
-    if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false,
+    if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
       reason: "当前桌面外壳尚不支持体验版持久化，请先安装支持更新通道的新版桌面应用。" };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     if (this.desktopManaged && this.desktopPackageUpdates) {
-      status.desktopShell = { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" };
       if (status.canRestart) status.reason = "业务包更新安装到用户目录，不修改 pi.app。请先结束所有聊天任务并关闭终端，再升级并重启后台。";
     }
     try {
@@ -282,6 +282,7 @@ export class SelfUpdater {
       status.available = channel === "stable" ? compareVersions(latest, current) !== 0 : compareVersions(latest, current) > 0;
       if (this.desktopManaged && status.downgrade && !this.desktopReleaseChannels && compareVersions(latest, process.env.PI_WEBAPP_DESKTOP_VERSION ?? current) < 0) {
         status.canRestart = false;
+        status.requiresDesktopUpgrade = true;
         status.reason = "当前桌面外壳尚不支持切回低于内置包的版本，请先安装支持更新通道的新版桌面应用。";
       }
     } catch (error) {

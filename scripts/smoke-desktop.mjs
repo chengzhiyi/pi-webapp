@@ -169,6 +169,16 @@ try {
   assert.equal(update.canRestart, true);
   assert.match(update.reason, /用户目录/);
   assert.equal(update.desktopShell.build, String(release.buildNumber));
+  await stage("desktop-preview-channel");
+  const preference = await fetch(`${address.origin}/api/update/channel`, { method: "POST", signal: AbortSignal.timeout(10000),
+    headers: { ...authorization, "Content-Type": "application/json", Origin: address.origin },
+    body: JSON.stringify({ sessionId, channel: "alpha" }) });
+  assert.equal(preference.status, 200);
+  const preview = await fetch(`${address.origin}/api/update`, { headers: authorization, signal: AbortSignal.timeout(30000) }).then(r => r.json());
+  assert.equal(preview.channel, "alpha");
+  assert.equal(preview.canRestart, true, "the actual installed shell must admit preview updates");
+  assert.equal(preview.requiresDesktopUpgrade, undefined);
+  assert.equal(JSON.parse(await readFile(join(agentDir, "pi-web", "update-preferences.json"), "utf8")).channel, "alpha");
   const blocked = await fetch(`${address.origin}/api/update`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) });
   assert.equal(blocked.status, 409, "an open terminal must block package restarts");
   assert.match((await blocked.json()).error, /终端/);
@@ -203,7 +213,7 @@ try {
     checks: [...(installerPayload ? ["installer-payload-launch"] : []), "native-desktop-update-menu",
       ...(supportsUpdateDownload ? ["native-desktop-update-download"] : []),
       "native-name-menu-title-pi", "about-build-and-executable-location", "custom-app-icon-loads", "standalone-runtime-without-system-node-pi", "sandboxed-renderer", "native-pty", "workspace-files",
-      "authenticated-backend", "desktop-update-protection", "desktop-package-update-enabled", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
+      "authenticated-backend", "desktop-update-protection", "desktop-package-update-enabled", "desktop-release-channel-enabled", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
   console.log("Desktop smoke passed: standalone runtime, sandbox, PTY, files, shared browser, update guard and shutdown.");
 } catch (error) {
   await writeFile(join(artifacts, "smoke-failure.json"), JSON.stringify({ phase, platform: process.platform, arch: process.arch, errorType: error.name }) + "\n");

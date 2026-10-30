@@ -161,3 +161,26 @@ test("a stable downgrade is never sent without confirmation; confirmed request p
     expect(requests).toEqual([{ sessionId: "channel-test", channel: "stable", version: "0.1.29", allowDowngrade: true }]);
   } finally { await bridge.close(); }
 });
+
+test("an old desktop shell offers its upgrade entry while preview installation stays blocked", async ({ page }) => {
+  const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)));
+  let installs = 0;
+  await page.route("**/api/update", route => {
+    if (route.request().method() === "POST") installs++;
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      current: "0.1.38", channel: "alpha", latest: null, available: false, canRestart: false,
+      requiresDesktopUpgrade: true, desktopShell: { version: "0.1.28", build: "10" },
+      reason: "当前桌面外壳尚不支持体验版持久化，请先安装支持更新通道的新版桌面应用。",
+    }) });
+  });
+  try {
+    await page.goto(bridge.url);
+    await page.getByRole("button", { name: /Pi 设置|Pi Settings/ }).click();
+    await expect(page.getByText(/(桌面外壳|Desktop shell) 0\.1\.28 · build 10/)).toBeVisible();
+    const download = page.getByRole("link", { name: /下载新版桌面应用|Download desktop update/ });
+    await expect(download).toBeVisible();
+    await expect(download).toHaveAttribute("href", "https://github.com/chengzhiyi/pi-webapp/releases");
+    await expect(page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ })).toHaveCount(0);
+    expect(installs).toBe(0);
+  } finally { await bridge.close(); }
+});

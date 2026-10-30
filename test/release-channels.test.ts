@@ -123,6 +123,8 @@ test("old desktop shells cannot select alpha packages they cannot retain on the 
   const status = await oldShell.check();
   assert.equal(status.canRestart, false); assert.equal(status.available, false);
   assert.match(status.reason ?? "", /先安装.*新版桌面/);
+  assert.equal(status.requiresDesktopUpgrade, true);
+  assert.ok(status.desktopShell, "blocked preview updates still identify the old desktop shell");
   await assert.rejects(oldShell.prepare(), /新版桌面/);
   assert.equal(f.calls.length, 0);
 });
