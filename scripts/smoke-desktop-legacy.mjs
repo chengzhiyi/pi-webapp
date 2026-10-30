@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron, chromium, expect } from "@playwright/test";
+import { saveSmokeDiagnostics, seedSmokeLocale } from "./desktop-smoke-diagnostics.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const args = process.argv.slice(2);
@@ -73,8 +74,21 @@ let supervisor;
 let state;
 let browser;
 let electron;
+let phase = "prepare-fixture";
+let electronStderr = "";
+async function stage(name) {
+  phase = name;
+  console.log(`Legacy smoke phase: ${name}`);
+  await writeFile(join(artifacts, "legacy-smoke-progress.json"), JSON.stringify({ phase, platform: process.platform, arch: process.arch }) + "\n");
+}
+async function bounded(promise, ms = 10000) {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Legacy smoke timed out during ${phase}`)), ms); })]); }
+  finally { clearTimeout(timer); }
+}
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
 try {
+  await stage("legacy-backend-start");
   const fd = openSync(join(temporary, "legacy-start.log"), "a", 0o600);
   try { supervisor = spawn(node, [legacyLauncher, "__serve", piShim], { cwd: home, env, stdio: ["ignore", fd, fd, "ipc"] }); }
   finally { closeSync(fd); }
@@ -95,9 +109,11 @@ try {
   assert.equal(state.version, unmarked ? undefined : legacyPackage.version);
   assert.equal(state.bridgeVersion, unmarked ? undefined : 1);
   assert.equal(state.desktopProtocolVersion, undefined);
+  await stage("legacy-browser-launch");
   browser = await chromium.launch({ headless: true, ...(process.env.PI_WEB_TEST_CHROME === "true" ? { channel: "chrome" } : {}) });
   const web = await browser.newPage();
   await web.addInitScript(() => localStorage.setItem("pi-web-locale", "en"));
+  await stage("legacy-browser-ready");
   await web.goto(state.url);
   await web.getByRole("button", { name: "Close Pi settings", exact: true }).click();
   await web.getByRole("button", { name: "Open right sidebar", exact: true }).click();
@@ -111,21 +127,33 @@ try {
     await terminal.locator("textarea").press("Enter");
     await expect(terminal.locator(".xterm-rows")).toContainText(text);
   };
+  await stage("legacy-pty-before-desktop");
   await send("LEGACY_BEFORE_DESKTOP");
+  await stage("desktop-attach");
   electron = await _electron.launch({ ...(packaged ? { executablePath } : {}),
     args: [...(packaged ? [] : [join(root, "desktop")]), `--user-data-dir=${join(temporary, "electron")}`], env, timeout: 60000 });
+  electron.process().stderr?.on("data", chunk => { electronStderr = (electronStderr + chunk.toString()).slice(-131072); });
+  await electron.context().addInitScript(seedSmokeLocale);
+  await stage("desktop-first-window");
   const page = await electron.firstWindow({ timeout: 70000 });
-  await page.evaluate(() => localStorage.setItem("pi-web-locale", "en"));
-  await page.reload();
+  // Do not interrupt the legacy page's initial authenticated bootstrap with a
+  // reload. A created native window is not evidence that the UI is ready yet.
+  await stage("desktop-initial-ui-ready");
+  await expect(page.getByRole("button", { name: /^(Close Pi settings|关闭 Pi 设置)$/ })).toBeVisible({ timeout: 45000 });
+  await stage("desktop-reload-ready");
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.getByRole("button", { name: "Close Pi settings", exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "Close Pi settings", exact: true }).click();
   await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
   await expect(page.locator("[data-sidebar-right-session]")).toHaveAttribute("data-sidebar-right-session", sessionId);
   assert.equal(await readFile(statePath, "utf8"), originalState, "desktop must not rewrite legacy state or start another service");
+  await stage("legacy-pty-during-desktop");
   await send("LEGACY_DURING_DESKTOP");
   await page.screenshot({ path: join(artifacts, "legacy-desktop-shared-service.png") });
   // An attached desktop's close action must never stop the external supervisor/Pi/PTY.
   await electron.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1 }); });
-  const closed = electron.waitForEvent("close");
+  await stage("desktop-close-keeps-legacy");
+  const closed = electron.waitForEvent("close", { timeout: 30000 });
   await page.evaluate(() => window.close());
   await closed;
   electron = null;
@@ -133,6 +161,7 @@ try {
   assert.equal(alive(state.piPid), true);
   assert.equal(await readFile(statePath, "utf8"), originalState);
   await assert.rejects(readFile(join(agentDir, "pi-web/launcher.stop")), { code: "ENOENT" });
+  await stage("legacy-pty-after-desktop");
   await send("LEGACY_AFTER_DESKTOP_CLOSED");
   const result = { packaged, platform: process.platform, arch: process.arch, legacyVersion: legacyPackage.version,
     legacyLauncherSha256: createHash("sha256").update(sourceLauncher).digest("hex"),
@@ -143,12 +172,20 @@ try {
       "desktop-close-keeps-supervisor-and-pi-alive", "no-stop-file-written", "existing-browser-pty-after-desktop-close"], errors: [] };
   await writeFile(join(artifacts, "legacy-smoke-result.json"), JSON.stringify(result, null, 2) + "\n");
   console.log("Legacy smoke passed: genuine old Web backend, desktop/browser share session, existing PTY survives attach and desktop close.");
+} catch (error) {
+  console.error(`Legacy smoke failed during ${phase}:`, error);
+  await mkdir(join(artifacts, "legacy"), { recursive: true });
+  await saveSmokeDiagnostics({ artifacts: join(artifacts, "legacy"), agentDir, phase, error, stderr: electronStderr, env }).catch(() => {});
+  const page = electron?.windows()[0];
+  if (page) await bounded(page.screenshot({ path: join(artifacts, "legacy-failure.png"), timeout: 4000 }), 5000).catch(() => {});
+  throw error;
 } finally {
   if (electron) {
-    await electron.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1 }); }).catch(() => {});
-    await electron.close().catch(() => {});
+    const ownedChild = electron.process();
+    await bounded(electron.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1 }); })).catch(() => {});
+    await bounded(electron.close()).catch(error => { try { ownedChild.kill("SIGKILL"); } catch {} console.error("Isolated desktop cleanup:", error.message); });
   }
-  await browser?.close();
+  await bounded(browser?.close()).catch(error => console.error("Isolated browser cleanup:", error.message));
   // Only the fixture we just created is stopped. Never read/write the real user's state.
   try {
     const current = JSON.parse(await readFile(statePath, "utf8"));
