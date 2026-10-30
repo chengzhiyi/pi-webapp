@@ -27,7 +27,9 @@ Choose an update preference under **App updates**. It is saved in Pi's data dire
 
 ### Desktop build 10 and preview updates
 
-The public `0.1.28 / build 10` shell can update stable business packages but cannot retain an alpha selection across launches. Updating only the backend does not update that shell. Install a shell with channel support once, then select Preview and update online. Build 11 is being prepared in this repository; public availability depends on its installer release. Settings identifies an incompatible shell and links to desktop downloads.
+The public `0.1.28 / build 10` shell can update stable business packages but cannot retain an alpha selection across launches. Updating only the backend does not update that shell. Install a shell with channel support once, then select Preview and update online. [Build 11 is available](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b11) and retains preview preferences and selected releases. Settings identifies an incompatible shell and links to desktop downloads.
+
+When replacing build 10, finish chats and close terminals, choose “停止服务并退出” (stop service and quit) in the old app, then replace it and start build 11. Attaching the new shell to a still-running old backend does not change its capability flags. If that backend was retained, stop it from its original entry point before starting through the new shell.
 
 Preview selects the newer of `latest` and `alpha`. For example, stable `0.1.39` supersedes `0.1.39-alpha.1`; a newer alpha must be published before an alpha upgrade is offered.
 
