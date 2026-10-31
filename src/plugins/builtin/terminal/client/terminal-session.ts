@@ -23,7 +23,7 @@ function openTerminal(terminal: Terminal, container: HTMLElement) {
 /** Owned by a Dock tab, never by the lifetime of a rendered pane or active session. */
 export class TerminalSession {
   readonly element = document.createElement("div");
-  readonly terminal = new Terminal({ cursorBlink: true, scrollback: 2000, fontSize: 13, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", minimumContrastRatio: 4.5 });
+  readonly terminal = new Terminal({ cursorBlink: true, scrollback: 2000, fontSize: 13, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", minimumContrastRatio: 4.5, macOptionClickForcesSelection: true });
   readonly fit = new FitAddon();
   private state: TerminalState = { phase: "starting" };
   private readonly listeners = new Set<() => void>();
@@ -50,6 +50,14 @@ export class TerminalSession {
     this.terminal.loadAddon(this.fit);
     window.addEventListener("offline", this.offline);
     window.addEventListener("online", this.online);
+    // Ctrl/Cmd+C copies when text is selected; otherwise Ctrl+C still reaches the shell as SIGINT.
+    this.terminal.attachCustomKeyEventHandler(event => {
+      if (event.type === "keydown" && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "c" && this.terminal.hasSelection()) {
+        void navigator.clipboard?.writeText(this.terminal.getSelection()).catch(() => {});
+        return false;
+      }
+      return true;
+    });
     this.terminal.onData(data => this.input(data));
     this.terminal.onResize(size => {
       if (this.state.phase === "connected" && this.active) this.enqueue("resize", size);
@@ -75,7 +83,9 @@ export class TerminalSession {
   measure() {
     if (!this.element.isConnected || !this.element.clientWidth || !this.element.clientHeight || this.element.closest("[aria-hidden=true]")) return;
     const dark = document.body.hasAttribute("data-ds-dark-theme");
-    this.terminal.options.theme = dark ? { background: "#151618", foreground: "#e5e5e5", cursor: "#e5e5e5" } : { background: "#ffffff", foreground: "#242424", cursor: "#242424" };
+    this.terminal.options.theme = dark
+      ? { background: "#151618", foreground: "#e5e5e5", cursor: "#e5e5e5", selectionBackground: "#264f78", selectionInactiveBackground: "#3a3d41" }
+      : { background: "#ffffff", foreground: "#242424", cursor: "#242424", selectionBackground: "#add6ff", selectionInactiveBackground: "#e5ebf1" };
     const proposed = this.fit.proposeDimensions();
     if (proposed) this.terminal.resize(Math.min(500, Math.max(2, proposed.cols)), Math.min(300, Math.max(1, proposed.rows)));
   }
