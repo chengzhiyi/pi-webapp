@@ -43,10 +43,10 @@ export async function validateDesktopRelease(agentDir, release) {
 }
 
 /** Older selections require explicit consent bound to this exact bundled fallback. */
-export async function readDesktopRelease(agentDir, minimumVersion) {
+export async function readDesktopRelease(agentDir, minimumVersion, approvedFallbackVersion = minimumVersion) {
   try {
     const release = JSON.parse(await readFile(desktopUpdatePath(agentDir), "utf8"));
-    if (compare(release.version, minimumVersion) < 0 && release.fallbackVersion !== minimumVersion) return null;
+    if (compare(release.version, minimumVersion) < 0 && release.fallbackVersion !== approvedFallbackVersion) return null;
     return await validateDesktopRelease(agentDir, release);
   } catch { return null; }
 }

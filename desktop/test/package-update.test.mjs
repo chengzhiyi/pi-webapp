@@ -81,6 +81,49 @@ test("desktop package restart keeps the URL and adopts only its authenticated su
   assert.equal(await backend.readState(), null);
 });
 
+for (const accepted of [true, false]) test(`a running preview supervisor ${accepted ? "accepts a stable restart bound to its shell baseline" : "rejects a stable restart bound to a different shell fallback"}`, async t => {
+  const backend = await fixture(t);
+  const shellVersion = "0.1.39";
+  backend.version = shellVersion;
+  backend.bundled.version = shellVersion;
+  backend.env.PI_WEBAPP_DESKTOP_VERSION = shellVersion;
+  backend.env.PI_WEBAPP_DESKTOP_BUILD = "12";
+  const preview = await stageRuntime(backend.agentDir, "0.1.48-alpha.1");
+  await writeDesktopRelease(backend.agentDir, preview);
+  const first = await backend.connect();
+  assert.equal(first.version, preview.version);
+  const stable = await stageRuntime(backend.agentDir, "0.1.47");
+  await writeDesktopRelease(backend.agentDir, { ...stable, fallbackVersion: accepted ? shellVersion : "0.1.28", previous: preview });
+  const markerPath = join(backend.agentDir, "pi-web", "launcher.restart");
+  const marker = JSON.stringify({ nonce: first.nonce, launcher: stable.launcher });
+  await writeFile(markerPath, marker);
+  if (!accepted) {
+    // The supervisor checks markers every 400ms. Cover multiple admission passes
+    // without starting a second owner or treating a wrong fallback as consent.
+    await delay(1100);
+    const current = await backend.readState();
+    assert.equal(current.nonce, first.nonce);
+    assert.equal(current.version, preview.version);
+    assert.equal(alive(first.pid), true);
+    assert.equal(await readFile(markerPath, "utf8"), marker);
+    return;
+  }
+  let next;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const current = await backend.readState();
+    if (current?.url && current.nonce !== first.nonce && current.version === stable.version) { next = current; break; }
+    await delay(50);
+  }
+  assert.ok(next, "a verified stable selection above the shell baseline must be consumed by the running preview supervisor");
+  assert.equal(next.url, first.url, "channel switching preserves the existing browser origin and bearer token");
+  for (let attempt = 0; alive(first.pid) && attempt < 100; attempt++) await delay(20);
+  assert.equal(alive(first.pid), false, "the old supervisor must exit after handing off the same browser address");
+  await backend.refresh();
+  assert.equal(backend.state.nonce, next.nonce);
+  assert.equal(backend.owned, true);
+  await assert.rejects(readFile(markerPath), { code: "ENOENT" });
+});
+
 test("failed desktop update restarts the previous service and restores its persistent selection", async t => {
   const backend = await fixture(t);
   const previous = await stageRuntime(backend.agentDir, "9.0.0");

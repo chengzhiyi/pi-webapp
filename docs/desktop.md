@@ -482,3 +482,20 @@ Settings separately identifies the current window (a display-only UA marker),
 the backend launcher and its real capabilities, the shell at backend startup,
 and the business package. The UA marker grants no capability. Native **About pi**
 remains authoritative for the app location/version/build.
+
+When returning from Preview to Stable, the running supervisor must validate
+downgrade consent against `PI_WEBAPP_DESKTOP_VERSION` (the native bundle), not
+its own selected npm version. The updater binds consent to that exact bundle;
+the supervisor preserves that binding when admitting the restart and choosing
+the successor's independent Pi dependency. A mismatched fallback, stale nonce,
+invalid package or incompatible data format still refuses the restart. This
+supervisor correction ships in the business package; build 14 can obtain it
+through a Stable bootstrap without another desktop installation.
+
+If an earlier supervisor has already left a Stable return at
+`restart-requested`, keep its selected package and recovery journal. Once all
+chats and terminals are idle and drawings are protected, use the native normal
+**退出 → 停止服务并退出**, then reopen the installed desktop. Its bundled
+selection validator starts the already verified Stable package. Do not delete
+the state/lock or restart marker, edit a receipt, or kill the old owner to clear
+this condition. A refused stop requires resolving the reported save/drain issue.

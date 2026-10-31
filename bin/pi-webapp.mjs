@@ -20,6 +20,10 @@ const minimum = [0, 87, 1];
 const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const runtimeKind = process.env.PI_WEBAPP_RUNTIME === "desktop" ? "desktop" : "npm";
 const desktopPackages = runtimeKind === "desktop" && process.env.PI_WEBAPP_DESKTOP_PACKAGE_UPDATES === "1";
+// Downgrade consent is bound to the native bundle, not the currently selected
+// business package (which may already be an alpha). Preserve that binding at
+// both restart admission and successor dependency selection.
+const desktopFallbackVersion = process.env.PI_WEBAPP_DESKTOP_VERSION ?? packageVersion;
 const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind, desktopProtocolVersion, launcherHandoffProtocol, launcherVersion: packageVersion, desktopShell: { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" }, desktopReleaseChannels: process.env.PI_WEBAPP_DESKTOP_RELEASE_CHANNELS === "1" };
 const launcher = fileURLToPath(import.meta.url);
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));
@@ -238,7 +242,7 @@ async function serve(pi, args) {
       try {
         const request = JSON.parse(await readFile(restartPath, "utf8"));
         const prepared = JSON.parse(await readFile(updatePath, "utf8"));
-        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : prepared;
+        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : prepared;
         if (stopping || epoch !== stopEpoch) return;
         if ((runtimeKind !== "desktop" || desktopPackages) && request.nonce === nonce && request.launcher === selected?.launcher && existsSync(request.launcher)) {
           restartRequest = request;
@@ -369,7 +373,7 @@ async function serve(pi, args) {
     const restartEnv = { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RESTART_PORT: oldUrl.port, PI_WEBAPP_RESTART_TOKEN: oldUrl.hash.slice(1) };
     try {
       const runLauncher = async (path) => {
-        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : null;
+        const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : null;
         const env = selected?.launcher === path ? { ...restartEnv, PI_WEBAPP_PI_CLI: selected.piCli } : restartEnv;
         return new Promise((resolveExit) => {
           const next = spawnNode(process.execPath, [path, "start", ...args], { cwd: process.cwd(), env, stdio: ["ignore", fd, fd] });
@@ -403,7 +407,7 @@ async function clearManagedLauncher(path) {
 async function managedLauncher() {
   if (runtimeKind === "desktop") {
     if (!desktopPackages) return null;
-    const selected = await readDesktopRelease(agentDir, packageVersion);
+    const selected = await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion);
     return selected && await realpath(selected.launcher) !== await realpath(launcher) ? selected.launcher : null;
   }
   try {
@@ -426,7 +430,7 @@ async function start(args) {
   }
   const managed = await managedLauncher();
   if (managed) {
-    const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion) : null;
+    const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : null;
     const env = selected?.launcher === managed ? { ...process.env, PI_WEBAPP_PI_CLI: selected.piCli } : process.env;
     const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd: process.cwd(), env, stdio: "inherit" });
     const code = await new Promise((resolveExit, rejectExit) => { next.once("error", rejectExit); next.once("exit", (status) => resolveExit(status)); });
