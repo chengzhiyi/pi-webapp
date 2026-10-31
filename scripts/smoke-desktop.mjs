@@ -100,7 +100,7 @@ try {
   // Exercise the packaged native menu -> fixed Release metadata -> actual verified
   // download -> manual handoff path. Only network bytes/native dialogs are fixtures;
   // no installed app, publisher certificate, or user's backend is used/replaced.
-  const supportsUpdateDownload = process.platform === "darwin" && process.arch === "arm64";
+  const supportsUpdateDownload = packaged && process.platform === "darwin" && process.arch === "arm64";
   if (supportsUpdateDownload) await electron.evaluate(async ({ Menu, dialog, shell, app }, build) => {
     const fs = process.getBuiltinModule("node:fs/promises");
     const { createHash } = process.getBuiltinModule("node:crypto");
@@ -199,6 +199,43 @@ try {
   assert.equal(JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8")).pid, state.pid);
   await page.screenshot({ path: join(artifacts, "desktop-terminal.png") });
   assert.deepEqual(errors, []);
+  await stage("quit-cancel-and-refused-stop-recovery");
+  // Only the stop failure and native answers are fixtures. Drive the actual
+  // application menu repeatedly to catch a stuck askingQuit gate after recovery.
+  const quitRecovery = await electron.evaluate(async ({ app, Menu, dialog, BrowserWindow }) => {
+    const { DesktopBackend } = process.getBuiltinModule("node:module").createRequire(`${app.getAppPath()}/package.json`)("./backend.mjs");
+    const original = { stop: DesktopBackend.prototype.stop, refresh: DesktopBackend.prototype.refresh, show: dialog.showMessageBox };
+    const answers = [0, 2, 0, 0];
+    const prompts = [];
+    const parents = [];
+    const item = Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…");
+    const waitForPrompts = async count => {
+      for (let n = 0; n < 200 && prompts.length < count; n++) await new Promise(resolve => setTimeout(resolve, 10));
+      if (prompts.length !== count) throw new Error("quit flow did not reach its expected confirmation");
+      await new Promise(resolve => setImmediate(resolve));
+    };
+    try {
+      // A desktop-only confirmation must remain reachable with an unhealthy service.
+      DesktopBackend.prototype.refresh = async () => { throw new Error("fixture backend health failure"); };
+      DesktopBackend.prototype.stop = async () => { throw new Error("停止已取消：插件保存或释放未完成"); };
+      dialog.showMessageBox = async (...args) => {
+        parents.push(args.length === 2 && args[0] === BrowserWindow.getAllWindows()[0]);
+        prompts.push(args.at(-1)); return { response: answers.shift() };
+      };
+      item.click(); await waitForPrompts(1); // Cancel.
+      item.click(); await waitForPrompts(3); // Stop refused, return to app.
+      item.click(); await waitForPrompts(4); // Retry remains possible.
+      return { prompts, parents, windows: BrowserWindow.getAllWindows().length };
+    } finally {
+      DesktopBackend.prototype.stop = original.stop; DesktopBackend.prototype.refresh = original.refresh;
+      dialog.showMessageBox = original.show;
+    }
+  });
+  assert.equal(quitRecovery.windows, 1);
+  assert.deepEqual(quitRecovery.parents, [true, true, true, true]);
+  assert.equal(quitRecovery.prompts[2].title, "后台尚未停止");
+  assert.match(quitRecovery.prompts[2].detail, /插件保存或释放未完成/);
+  assert.equal(JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8")).pid, state.pid);
   await stage("confirmed-owned-service-shutdown");
   // Mock only the native confirmation, then exercise the real close/stop path.
   await electron.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false }); });
@@ -208,12 +245,47 @@ try {
   electron = null;
   await assert.rejects(readFile(join(agentDir, "pi-web", "launcher.json")), { code: "ENOENT" });
   assert.throws(() => process.kill(state.piPid, 0));
+  await stage("desktop-only-exit-preserves-service");
+  const shutdownErrorsPath = join(temporary, "shutdown-errors.jsonl");
+  // Relaunch an owned service, leave it alive, then attach and quit again. Only
+  // native confirmations are automated; verify the real processes and HTTP API.
+  for (const mode of ["stop", "keep", "attach"]) {
+    electron = await _electron.launch({ ...(packaged ? { executablePath } : {}),
+      args: [...(packaged ? [] : [join(root, "desktop")]), `--user-data-dir=${join(temporary, "electron")}`], env, timeout: 60000 });
+    await electron.firstWindow({ timeout: 70000 });
+    const shared = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8"));
+    await electron.evaluate(({ app, dialog }, { errorsPath, mode }) => {
+      const { DesktopBackend } = process.getBuiltinModule("node:module").createRequire(`${app.getAppPath()}/package.json`)("./backend.mjs");
+      dialog.showErrorBox = title => process.getBuiltinModule("node:fs").appendFileSync(errorsPath, JSON.stringify(title) + "\n");
+      if (mode !== "stop") DesktopBackend.prototype.refresh = async () => { throw new Error("fixture backend health failure"); };
+      dialog.showMessageBox = async () => ({ response: mode === "stop" ? 2 : 1 });
+    }, { errorsPath: shutdownErrorsPath, mode });
+    const desktopClosed = electron.waitForEvent("close", { timeout: 15000 });
+    await electron.evaluate(({ Menu }) => {
+      setImmediate(() => Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…").click());
+    });
+    await desktopClosed;
+    electron = null;
+    assert.equal(await readFile(shutdownErrorsPath, "utf8").catch(error => { if (error.code === "ENOENT") return ""; throw error; }), "",
+      "closing a loading window must not show a blocking native error box");
+    if (mode === "stop") {
+      await assert.rejects(readFile(join(agentDir, "pi-web", "launcher.json")), { code: "ENOENT" });
+      assert.throws(() => process.kill(shared.piPid, 0));
+      continue;
+    }
+    assert.equal(JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8")).pid, shared.pid);
+    process.kill(shared.pid, 0); process.kill(shared.piPid, 0);
+    const sharedUrl = new URL(shared.url);
+    assert.equal((await fetch(`${sharedUrl.origin}/api/update/version`, { signal: AbortSignal.timeout(5000),
+      headers: { Authorization: `Bearer ${sharedUrl.hash.slice(1)}` } })).status, 200);
+    if (mode === "attach") await stage("attached-exit-preserves-service");
+  }
   await writeFile(join(artifacts, "smoke-result.json"), JSON.stringify({ packaged, platform: process.platform, arch: process.arch,
     version: state.version, appName, piVersion, desktopBuild: release.buildNumber, installerPayload,
     checks: [...(installerPayload ? ["installer-payload-launch"] : []), "native-desktop-update-menu",
       ...(supportsUpdateDownload ? ["native-desktop-update-download"] : []),
       "native-name-menu-title-pi", "about-build-and-executable-location", "custom-app-icon-loads", "standalone-runtime-without-system-node-pi", "sandboxed-renderer", "native-pty", "workspace-files",
-      "authenticated-backend", "desktop-update-protection", "desktop-package-update-enabled", "desktop-release-channel-enabled", "shared-browser-backend", "confirmed-stop-reaps-pi"], errors }, null, 2) + "\n");
+      "authenticated-backend", "desktop-update-protection", "desktop-package-update-enabled", "desktop-release-channel-enabled", "shared-browser-backend", "quit-cancel-refusal-and-retry", "confirmed-stop-reaps-pi", "desktop-only-exit-preserves-service", "attached-exit-preserves-service"], errors }, null, 2) + "\n");
   console.log("Desktop smoke passed: standalone runtime, sandbox, PTY, files, shared browser, update guard and shutdown.");
 } catch (error) {
   await writeFile(join(artifacts, "smoke-failure.json"), JSON.stringify({ phase, platform: process.platform, arch: process.arch, errorType: error.name }) + "\n");

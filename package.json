@@ -34,6 +34,7 @@
     "assets/readme",
     "bin",
     "desktop/managed-release.mjs",
+    "desktop/stop-outcome.mjs",
     "desktop/release-version.mjs",
     "desktop/check-pty.cjs",
     "dist",

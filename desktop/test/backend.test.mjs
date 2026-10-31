@@ -121,6 +121,84 @@ test("stop only targets the exact owned nonce, never a replacement service", asy
   assert.equal(backend.owned, false);
 });
 
+async function waitForStopMarker(backend) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try { if (await readFile(backend.stopPath, "utf8") === state.nonce) return; }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.fail("desktop did not publish its stop request");
+}
+
+test("a refused plugin save is reported promptly without abandoning or killing the owned backend", async t => {
+  const backend = await fixture(t);
+  backend.state = state;
+  backend.owned = true;
+  await save(backend, state);
+  // Advance only the deadline clock so the old implementation fails promptly,
+  // rather than leaving this regression test waiting for its real 15s timeout.
+  const now = Date.now(); let elapsed = 0;
+  t.mock.method(Date, "now", () => now + elapsed);
+  const stopped = backend.stop().then(() => null, error => error);
+  try {
+    await waitForStopMarker(backend);
+    await unlink(backend.stopPath); // Launcher refused flush; same owner stays live.
+    elapsed = 16000;
+    const error = await stopped;
+    assert.ok(error instanceof Error, "a refused drain must not report success");
+    assert.match(error.message, /插件.*(?:保存|释放)|停止.*取消/);
+    assert.doesNotMatch(error.message, /超时/);
+    assert.equal(backend.owned, true);
+    assert.deepEqual(await backend.readState(), state);
+  } finally { backend.owned = false; }
+});
+
+test("normal shutdown between state sampling and marker inspection is not mistaken for a refused save", async t => {
+  const backend = await fixture(t);
+  backend.state = state;
+  backend.owned = true;
+  await save(backend, state);
+  const readState = backend.readState.bind(backend);
+  let finishShutdown = false;
+  backend.readState = async () => {
+    const current = await readState();
+    if (finishShutdown && current) {
+      finishShutdown = false;
+      await unlink(backend.statePath);
+      await unlink(backend.stopPath);
+    }
+    return current;
+  };
+  const stopped = backend.stop();
+  try {
+    await waitForStopMarker(backend);
+    finishShutdown = true;
+    await stopped;
+    assert.equal(backend.owned, false);
+    assert.equal(await backend.readState(), null);
+  } finally { backend.owned = false; }
+});
+
+test("a still-pending drain can finish after the old 15s desktop deadline", async t => {
+  const backend = await fixture(t);
+  backend.state = state;
+  backend.owned = true;
+  await save(backend, state);
+  const now = Date.now(); let elapsed = 0; let result;
+  t.mock.method(Date, "now", () => now + elapsed);
+  const stopped = backend.stop().then(() => { result = "stopped"; }, error => { result = error; });
+  try {
+    await waitForStopMarker(backend);
+    elapsed = 16000;
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(result, undefined, "a pending flush must retain the full launcher shutdown budget");
+    await unlink(backend.statePath);
+    await stopped;
+    assert.equal(result, "stopped");
+    assert.equal(backend.owned, false);
+  } finally { backend.owned = false; }
+});
+
 test("spawn errors are bounded and the log descriptor is closed", async t => {
   const child = new EventEmitter();
   child.kill = () => {};

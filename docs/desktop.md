@@ -326,6 +326,17 @@ stay in Pi's existing data directory, not inside the application bundle.
 - Closing the window or choosing Quit asks whether to stop the owned service or
   leave it running. Stopping ends **all** sessions and terminals on that service,
   including those used by a browser. Cancel leaves the application open.
+- Desktop-only exit does not wait for backend health checks. A confirmed stop
+  allows the same 40-second drain budget as the CLI, and distinguishes a plugin
+  save/release refusal from a pending drain. If stopping fails, choose to return
+  and save/close the affected views, or explicitly exit only the desktop. This
+  never forces a failed plugin flush or kills its service. A pending stop request
+  may still complete after the desktop exits; staged native updates still require
+  their installation safety checks.
+- Navigation cancellation or renderer termination during a quit request never
+  opens a synchronous native error alert, which could otherwise block shutdown
+  while the window is still loading. Quit confirmations are attached to and
+  focus the main window.
 - An attached service is never stopped by closing the desktop window.
 - “Window → Open in browser” opens the same backend, not another Pi process.
 - After choosing to leave the service running, reopening the desktop attaches to

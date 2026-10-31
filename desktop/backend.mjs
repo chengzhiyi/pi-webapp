@@ -4,6 +4,7 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { desktopProtocolVersion, readDesktopRelease, rollbackDesktopRelease } from "./managed-release.mjs";
+import { observeStopOutcome } from "./stop-outcome.mjs";
 
 export function localAddress(value) {
   const url = new URL(value);
@@ -303,10 +304,16 @@ export class DesktopBackend {
     const current = await this.readState();
     if (current?.pid !== this.state.pid || current?.nonce !== this.state.nonce || !this.isAlive(current.pid)) return;
     await writeFile(this.stopPath, this.state.nonce, { mode: 0o600 });
-    const deadline = Date.now() + 15000;
+    // A view flush alone can take 15s. Share the CLI's 40s drain budget and
+    // distinguish an explicit refusal from a still-pending shutdown.
+    const deadline = Date.now() + 40000;
     while (Date.now() < deadline) {
-      const next = await this.readState();
-      if (!next || next.nonce !== this.state.nonce || !this.isAlive(this.state.pid)) { this.owned = false; return; }
+      const outcome = await observeStopOutcome(async () => {
+        const next = await this.readState();
+        return next && this.isAlive(next.pid) ? next : null;
+      }, this.stopPath, this.state.nonce);
+      if (outcome === "stopped") { this.owned = false; return; }
+      if (outcome === "refused") throw new Error("停止已取消：插件保存或释放未完成，后台及数据已保留。请保存并关闭绘图或编辑器；失联视图请先处理插件恢复记录，再重试。");
       await delay(100);
     }
     throw new Error("停止后端超时，应用尚未退出。请查看启动日志后重试。");

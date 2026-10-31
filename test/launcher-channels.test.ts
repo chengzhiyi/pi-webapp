@@ -12,6 +12,7 @@ test("cold npm launches retain alpha and explicit stable selections, but ignore 
   await mkdir(join(root, "desktop"));
   await cp(new URL("../desktop/managed-release.mjs", import.meta.url), join(root, "desktop", "managed-release.mjs"));
   await cp(new URL("../desktop/release-version.mjs", import.meta.url), join(root, "desktop", "release-version.mjs"));
+  await cp(new URL("../desktop/stop-outcome.mjs", import.meta.url), join(root, "desktop", "stop-outcome.mjs"));
   await symlink(resolve("node_modules"), join(root, "node_modules"), process.platform === "win32" ? "junction" : "dir");
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.2.0-alpha.1" }));
   const agentDir = join(root, "agent");

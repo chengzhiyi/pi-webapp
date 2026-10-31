@@ -8,6 +8,7 @@ import { DesktopBackend, externalAddress, localAddress, sameDocument } from "./b
 import { connectBackend } from "./connect.mjs";
 import { DesktopUpdater } from "./updater.mjs";
 import { configureLocalExport } from "./downloads.mjs";
+import { confirmDesktopQuit } from "./quit.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -51,14 +52,18 @@ function showWindow() {
   });
   window.webContents.on("will-attach-webview", event => event.preventDefault());
   window.webContents.on("render-process-gone", () => {
-    dialog.showErrorBox("界面进程已退出", "后台任务可能仍在运行。请使用“窗口 → 重新加载界面”，不要重复发送任务。");
+    if (!askingQuit && !quitting) dialog.showErrorBox("界面进程已退出", "后台任务可能仍在运行。请使用“窗口 → 重新加载界面”，不要重复发送任务。");
   });
   window.on("close", event => {
     if (!quitting) { event.preventDefault(); void requestQuit(); }
   });
   window.on("closed", () => { window = null; });
   // Load the existing same-origin page; no Node/preload privileges are exposed to it.
-  void window.loadURL(backendUrl).catch(() => dialog.showErrorBox("无法加载界面", "请查看后端日志，或重新打开应用。"));
+  void window.loadURL(backendUrl).catch(() => {
+    // Closing a loading window aborts navigation. A synchronous native alert
+    // here would re-enter the macOS modal loop and block shutdown itself.
+    if (!askingQuit && !quitting) dialog.showErrorBox("无法加载界面", "请查看后端日志，或重新打开应用。");
+  });
 }
 
 async function openExternal(value) {
@@ -68,32 +73,29 @@ async function openExternal(value) {
   const answer = await dialog.showMessageBox({ type: "question", title: "在浏览器中打开链接？",
     message: "此链接将交给系统默认浏览器。", detail: url, buttons: ["取消", "打开浏览器"],
     defaultId: 0, cancelId: 0, noLink: true });
-  if (answer.response === 1) await shell.openExternal(url).catch(() => dialog.showErrorBox("无法打开链接", "请检查默认浏览器设置。"));
+  if (answer.response === 1 && !quitting) await shell.openExternal(url).catch(() => {
+    if (!askingQuit && !quitting) dialog.showErrorBox("无法打开链接", "请检查默认浏览器设置。");
+  });
+}
+
+function showQuitMessage(options) {
+  if (window && !window.isDestroyed()) {
+    window.show(); window.focus();
+    return dialog.showMessageBox(window, options);
+  }
+  return dialog.showMessageBox(options);
 }
 
 async function requestQuit() {
   if (askingQuit || quitting) return;
   if (startup) return; // Finish acquiring ownership before permitting shutdown.
   if (updater?.busy) {
-    await dialog.showMessageBox({ message: "桌面更新正在处理，请等待下载或系统校验完成后再退出。", buttons: ["确定"] });
+    await showQuitMessage({ message: "桌面更新正在处理，请等待下载或系统校验完成后再退出。", buttons: ["确定"] });
     return;
   }
   askingQuit = true;
   try {
-    await updater?.assertQuitSafe(); // A native-staged update may install on normal exit.
-    await backend?.refresh();
-    if (backend?.owned) {
-      const answer = await dialog.showMessageBox({ type: "warning", title: `退出 ${appName}`,
-        message: "是否同时停止后台服务？",
-        detail: "停止服务将结束所有聊天的运行任务和终端，也会断开正在使用该服务的浏览器。继续后台运行后，可重新打开桌面应用或使用 pi-webapp stop 停止。",
-        buttons: ["取消", "仅关窗口，后台继续", "停止服务并退出"], defaultId: 0, cancelId: 0, noLink: true });
-      if (answer.response === 0) return;
-      if (answer.response === 2) await backend.stop();
-    } else if (backend) {
-      const answer = await dialog.showMessageBox({ type: "info", title: "关闭桌面应用",
-        message: "当前连接的是已有服务，关闭桌面不会停止它。", buttons: ["取消", "关闭桌面"], defaultId: 0, cancelId: 0 });
-      if (answer.response !== 1) return;
-    }
+    if (!await confirmDesktopQuit({ appName, backend, updater, showMessageBox: showQuitMessage })) return;
     quitting = true;
     app.quit();
   } catch (error) { dialog.showErrorBox("尚未退出", error.message); }
@@ -105,6 +107,7 @@ function installMenu() {
     { label: appName, submenu: [
       { label: `关于 ${appName}`, click: async () => {
         await backend?.refresh().catch(() => {});
+        if (askingQuit || quitting) return;
         return dialog.showMessageBox({ type: "info", message: appName,
           detail: `桌面外壳版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n当前 pi-webapp ${backend?.state?.version ?? "unknown"}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n业务包通过界面设置中的“应用更新”升级；“检查桌面更新”仅更新桌面外壳安装包。` });
       } },
@@ -142,7 +145,7 @@ else {
   }));
   updater = new DesktopUpdater({ current: { version: app.getVersion(), build: release.buildNumber },
     packaged: app.isPackaged, appPath: resolve(dirname(app.getPath("exe")), "../.."), cachePath: app.getPath("temp"),
-    autoUpdater, showMessageBox: options => dialog.showMessageBox(options),
+    autoUpdater, showMessageBox: options => quitting ? Promise.resolve({ response: 0 }) : dialog.showMessageBox(options),
     openExternal: url => shell.openExternal(url), revealFile: path => shell.showItemInFolder(path),
     getBackend: () => { if (!backend) throw new Error("后台身份尚未确认，请稍后重试安装"); return backend; },
     setProgress: value => window?.setProgressBar(value),
