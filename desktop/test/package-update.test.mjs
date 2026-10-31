@@ -19,7 +19,7 @@ async function fixture(t) {
   const backend = new DesktopBackend({ agentDir: root, version: pkg.version, node: process.execPath, piCli,
     launcher, npmCli: "unused", cwd: root, isAlive: alive,
     env: { ...process.env, PI_CODING_AGENT_DIR: root, PI_WEBAPP_RESTART_PORT: undefined, PI_WEBAPP_RESTART_TOKEN: undefined, PI_WEB_SENTRY_ENABLED: "false" }, timeoutMs: 10000 });
-  t.after(async () => { await backend.stop(); await rm(root, { recursive: true, force: true }); });
+  t.after(async () => { await backend.stop(); await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
   return backend;
 }
 

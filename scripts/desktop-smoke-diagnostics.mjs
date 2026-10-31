@@ -1,6 +1,33 @@
 import { open, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+/** Playwright's close event also waits for inherited stdio. Observe the OS
+ * process first, then close only its dead parent's test-side pipe endpoints.
+ * Never signal a process or use app.quit/exit to manufacture a passing check.
+ */
+export function waitForDesktopProcessExit(child, { timeoutMs = 15000, expectedPid = child.pid } = {}) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const cleanup = () => { clearTimeout(timer); child.off("exit", exited); };
+    const exited = (code, signal) => {
+      cleanup();
+      try {
+        if (code !== 0 || signal) throw new Error(`Desktop process exited unsuccessfully: code ${code}, signal ${signal}`);
+        if (!Number.isInteger(expectedPid) || expectedPid < 1) throw new Error("Desktop main PID is invalid");
+        try {
+          process.kill(expectedPid, 0);
+          throw new Error("Desktop main PID is still alive after launcher exit");
+        } catch (error) { if (error.code !== "ESRCH") throw error; }
+        for (const stream of child.stdio ?? []) stream?.destroy();
+        resolve({ code, signal });
+      } catch (error) { reject(error); }
+    };
+    child.once("exit", exited);
+    timer = setTimeout(() => { cleanup(); reject(new Error("Desktop process exit timed out")); }, timeoutMs);
+    if (child.exitCode != null || child.signalCode != null) exited(child.exitCode, child.signalCode);
+  });
+}
+
 // Playwright also injects into opaque/error documents. Do not touch storage
 // outside the actual loopback UI; storage failures on that UI must still fail.
 export function seedSmokeLocale() {

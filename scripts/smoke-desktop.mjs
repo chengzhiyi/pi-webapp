@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { saveSmokeDiagnostics, seedSmokeLocale } from "./desktop-smoke-diagnostics.mjs";
+import { saveSmokeDiagnostics, seedSmokeLocale, waitForDesktopProcessExit } from "./desktop-smoke-diagnostics.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const packaged = process.argv.includes("--packaged");
@@ -252,19 +252,38 @@ try {
   for (const mode of ["stop", "keep", "attach"]) {
     electron = await _electron.launch({ ...(packaged ? { executablePath } : {}),
       args: [...(packaged ? [] : [join(root, "desktop")]), `--user-data-dir=${join(temporary, "electron")}`], env, timeout: 60000 });
+    electron.process().stderr?.on("data", chunk => { electronStderr = (electronStderr + chunk.toString()).slice(-131072); });
     await electron.firstWindow({ timeout: 70000 });
     const shared = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8"));
-    await electron.evaluate(({ app, dialog }, { errorsPath, mode }) => {
+    const actualPid = await electron.evaluate(({ app, dialog, BrowserWindow }, { errorsPath, mode, tracePath }) => {
+      const fs = process.getBuiltinModule("node:fs");
+      const trace = event => fs.appendFileSync(tracePath, JSON.stringify({ mode, event, pid: process.pid,
+        windows: BrowserWindow.getAllWindows().map(w => ({ visible: w.isVisible(), loading: w.webContents.isLoading() })) }) + "\n");
+      for (const event of ["before-quit", "will-quit", "quit", "window-all-closed"]) app.on(event, () => trace(event));
+      for (const window of BrowserWindow.getAllWindows()) {
+        for (const event of ["ready-to-show", "close", "closed"]) window.on(event, () => trace(event));
+        window.webContents.on("will-prevent-unload", () => trace("will-prevent-unload"));
+        window.webContents.on("render-process-gone", () => trace("render-process-gone"));
+      }
+      trace("before-menu");
       const { DesktopBackend } = process.getBuiltinModule("node:module").createRequire(`${app.getAppPath()}/package.json`)("./backend.mjs");
       dialog.showErrorBox = title => process.getBuiltinModule("node:fs").appendFileSync(errorsPath, JSON.stringify(title) + "\n");
       if (mode !== "stop") DesktopBackend.prototype.refresh = async () => { throw new Error("fixture backend health failure"); };
-      dialog.showMessageBox = async () => ({ response: mode === "stop" ? 2 : 1 });
-    }, { errorsPath: shutdownErrorsPath, mode });
+      dialog.showMessageBox = async () => { trace("quit-confirmation"); return { response: mode === "stop" ? 2 : 1 }; };
+      return process.pid;
+    }, { errorsPath: shutdownErrorsPath, mode, tracePath: join(artifacts, `quit-${mode}.jsonl`) });
     const desktopClosed = electron.waitForEvent("close", { timeout: 15000 });
-    await electron.evaluate(({ Menu }) => {
-      setImmediate(() => Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…").click());
-    });
-    await desktopClosed;
+    const processExited = waitForDesktopProcessExit(electron.process(), { expectedPid: actualPid });
+    try {
+      await Promise.all([processExited, desktopClosed, electron.evaluate(({ Menu }) => {
+        setImmediate(() => Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…").click());
+      })]);
+    }
+    catch (error) {
+      console.error("Timed out quit mode:", mode, "main PID:", electron.process().pid,
+        "alive:", (() => { try { process.kill(electron.process().pid, 0); return true; } catch { return false; } })());
+      throw error;
+    }
     electron = null;
     assert.equal(await readFile(shutdownErrorsPath, "utf8").catch(error => { if (error.code === "ENOENT") return ""; throw error; }), "",
       "closing a loading window must not show a blocking native error box");

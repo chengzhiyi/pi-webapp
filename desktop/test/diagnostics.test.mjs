@@ -1,10 +1,79 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { redactDiagnostic, saveSmokeDiagnostics, seedSmokeLocale } from "../../scripts/desktop-smoke-diagnostics.mjs";
+import * as smokeDiagnostics from "../../scripts/desktop-smoke-diagnostics.mjs";
+
+function processFixture() {
+  const child = new EventEmitter();
+  let destroyed = 0;
+  Object.assign(child, { pid: 2147483647, exitCode: null, signalCode: null,
+    stdio: [null, { destroy() { destroyed++; } }, { destroy() { destroyed++; } }],
+    kill() { assert.fail("exit observation must never signal the desktop"); } });
+  return { child, get destroyed() { return destroyed; }, exit(code = 0, signal = null) {
+    child.exitCode = code; child.signalCode = signal; child.emit("exit", code, signal);
+  } };
+}
+
+test("desktop exit observation ignores close until a successful process exit is independently confirmed", async () => {
+  const f = processFixture();
+  let settled = false;
+  const exited = smokeDiagnostics.waitForDesktopProcessExit(f.child, { timeoutMs: 1000 });
+  exited.then(() => { settled = true; }, () => { settled = true; });
+  f.child.emit("close", 0, null);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled, false, "stdio close alone is not an exit receipt");
+  assert.equal(f.destroyed, 0, "pipes must stay intact while the process may still run");
+  f.exit();
+  assert.deepEqual(await exited, { code: 0, signal: null });
+  assert.equal(f.destroyed, 2, "only a proven normal exit permits residual pipe cleanup");
+  assert.equal(f.child.listenerCount("exit"), 0);
+});
+
+test("desktop exit observation refuses pipe cleanup when the expected main PID is still alive", async () => {
+  const f = processFixture();
+  const exited = smokeDiagnostics.waitForDesktopProcessExit(f.child, { expectedPid: process.pid, timeoutMs: 1000 });
+  const rejected = assert.rejects(exited);
+  f.exit();
+  await rejected;
+  assert.equal(f.destroyed, 0);
+  assert.equal(f.child.listenerCount("exit"), 0);
+});
+
+test("desktop exit observation never promotes a nonzero exit or signal into successful shutdown", async () => {
+  for (const [code, signal] of [[1, null], [null, "SIGTERM"]]) {
+    const f = processFixture();
+    const exited = smokeDiagnostics.waitForDesktopProcessExit(f.child, { timeoutMs: 1000 });
+    const rejected = assert.rejects(exited);
+    f.exit(code, signal);
+    await rejected;
+    assert.equal(f.destroyed, 0);
+    assert.equal(f.child.listenerCount("exit"), 0);
+  }
+});
+
+test("desktop exit observation times out without destroying pipes or retaining event listeners", async () => {
+  const f = processFixture();
+  await assert.rejects(smokeDiagnostics.waitForDesktopProcessExit(f.child, { timeoutMs: 10 }), /timed?\s*out|timeout|超时/i);
+  assert.equal(f.destroyed, 0);
+  assert.equal(f.child.listenerCount("exit"), 0);
+  assert.equal(f.child.listenerCount("error"), 0);
+  assert.equal(f.child.listenerCount("close"), 0);
+  f.exit();
+  assert.equal(f.destroyed, 0, "a late event must not resurrect expired cleanup");
+});
+
+test("desktop exit observation handles a process that already exited before listener registration", async () => {
+  const f = processFixture();
+  f.exit();
+  assert.deepEqual(await smokeDiagnostics.waitForDesktopProcessExit(f.child, { timeoutMs: 1000 }), { code: 0, signal: null });
+  assert.equal(f.destroyed, 2);
+  assert.equal(f.child.listenerCount("exit"), 0);
+});
 
 test("locale injection skips opaque/error/external documents but never hides storage failures on the real loopback UI", () => {
   const code = `(${seedSmokeLocale.toString()})()`;
