@@ -34,7 +34,7 @@ export interface BridgeHost {
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
-  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart"> & Partial<Pick<SelfUpdater, "setChannel" | "cancel">>;
+  selfUpdate?: Pick<SelfUpdater, "check" | "runningVersion" | "prepare" | "requestRestart"> & Partial<Pick<SelfUpdater, "setChannel" | "cancel" | "requestLauncherHandoff" | "launcherIdentity">>;
   resolvePluginInteraction?(sessionId: string, pluginId: string, requestId: string, value: unknown): Promise<void>;
   snapshot(): SessionView;
   /** Canonical cwd paths of every retained running chat, including background chats. */
@@ -250,7 +250,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         json(res, 200, telemetry.config.browser); return;
       }
       if (req.method === "GET" && path === "/api/update/version") {
-        try { json(res, 200, { current: await host.selfUpdate?.runningVersion() ?? null, desktopProtocolVersion }); }
+        try { json(res, 200, { current: await host.selfUpdate?.runningVersion() ?? null, desktopProtocolVersion, ...(host.selfUpdate?.launcherIdentity ? { launcher: host.selfUpdate.launcherIdentity(), desktopHandoffProtocol: host.selfUpdate.launcherIdentity().handoffProtocol } : {}) }); }
         catch (error) { fail(error, 503, error instanceof Error ? error.message : "无法读取版本"); }
         return;
       }
@@ -365,7 +365,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/desktop/handoff", "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -380,6 +380,18 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (cause instanceof Error && cause.message === "请求内容过大") { json(res, 413, { error: cause.message }); return; }
             if (cause instanceof SyntaxError || isExpectedError(cause)) { json(res, 400, { error: "请求内容无效" }); return; }
             throw cause;
+          }
+          if (path === "/api/desktop/handoff") {
+            const input = body as { nonce?: unknown; requestId?: unknown } | null;
+            if (!input || typeof input.nonce !== "string" || typeof input.requestId !== "string") { json(res, 400, { error: "交接身份无效" }); return; }
+            if (!host.selfUpdate?.requestLauncherHandoff) { json(res, 409, { error: "请先在稳定版通道升级业务包，再重试启动器交接" }); return; }
+            if (restarting || preparingUpdate || logins.getActive()) { json(res, 409, { error: "更新、登录或启动器交接正在进行中" }); return; }
+            const blocker = pluginRegistry.restartBlocker();
+            if (!host.snapshot().idle || (host.busyGitWorkspaces?.() ?? []).length || blocker) { json(res, 409, { error: blocker ?? "请等待所有聊天任务空闲后再交接启动器；运行状态已保留" }); return; }
+            restarting = true;
+            try { await host.selfUpdate.requestLauncherHandoff(input.nonce, input.requestId); }
+            catch (error) { restarting = false; throw error; }
+            json(res, 202, { accepted: true, protocol: 1, requestId: input.requestId }); return;
           }
           if (typeof body !== "object" || body === null || !("sessionId" in body) || typeof body.sessionId !== "string") {
             json(res, 400, { error: "缺少会话标识" });

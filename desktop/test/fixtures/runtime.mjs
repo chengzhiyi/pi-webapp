@@ -34,6 +34,7 @@ export async function stageRuntime(agentDir, version, { broken = false } = {}) {
   await cp(join(source, "desktop", "managed-release.mjs"), join(root, "desktop", "managed-release.mjs"));
   await cp(join(source, "desktop", "release-version.mjs"), join(root, "desktop", "release-version.mjs"));
   await cp(join(source, "desktop", "stop-outcome.mjs"), join(root, "desktop", "stop-outcome.mjs"));
+  await cp(join(source, "desktop", "launcher-handoff.mjs"), join(root, "desktop", "launcher-handoff.mjs"));
   for (const path of ["dist", "web/dist", "node_modules"]) await mkdir(join(root, path), { recursive: true });
   await symlink(join(source, "node_modules", "cross-spawn"), join(root, "node_modules", "cross-spawn"), process.platform === "win32" ? "junction" : "dir");
   await symlink(join(source, "node_modules", "undici"), join(root, "node_modules", "undici"), process.platform === "win32" ? "junction" : "dir");

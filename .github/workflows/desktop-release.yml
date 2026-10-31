@@ -114,6 +114,9 @@ jobs:
         timeout-minutes: 6
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run desktop:smoke -- --packaged
+      - name: Verify real shared-launcher handoff, terminal refusal and channel persistence
+        timeout-minutes: 4
+        run: npm run desktop:smoke:handoff
       - name: Install the genuine pre-protocol npm release for migration QA
         shell: bash
         run: npm install --prefix "$RUNNER_TEMP/legacy-npm" --ignore-scripts --no-audit --no-fund pi-webapp@0.1.27 @earendil-works/pi-coding-agent@1.3.0 @earendil-works/pi-ai@1.3.0

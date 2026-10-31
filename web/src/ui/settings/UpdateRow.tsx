@@ -3,6 +3,7 @@ import { useAppUpdateContext, type AppUpdateController } from "./AppUpdateProvid
 import { useLocale, textFor } from "../locale/preference.ts";
 import { Button } from "../primitives/Button.tsx";
 import { SettingsSelect } from "./SettingsSelect.tsx";
+import { desktopClient } from "./desktop-client.ts";
 import css from "./UpdateRow.module.css";
 
 export function UpdateRow(props: AppUpdateActions) {
@@ -20,6 +21,7 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
   const t = (zh: string, en: string) => textFor(locale, zh, en);
   const { status, checking, installing, cancelling, targetVersion, restartTimedOut, error, check, install, changeChannel, cancel } = props.controller;
 
+  const client = desktopClient(navigator.userAgent);
   const summary = status
     ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("目标版本", "Target version")} ${status.latest}` : ""}`
     : checking ? t("正在读取版本…", "Reading version…") : t("暂时无法读取版本", "Version unavailable");
@@ -37,6 +39,8 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
       <div className={css.details}>
         <div className={css.title}>{t("应用更新", "App updates")}</div>
         <p className={css.summary}>{summary}</p>
+        {client && <p className={css.summary}>{t("当前桌面窗口", "Current desktop window")} {client.version} · build {client.build}</p>}
+        {status?.launcher && <p className={css.summary}>{t("后台启动器", "Backend launcher")} {status.launcher.version} · {t("体验版持久化", "Preview persistence")} {status.launcher.releaseChannels ? t("支持", "supported") : t("不支持", "unsupported")}</p>}
         {status?.desktopShell && <p className={css.summary}>{t("后台启动时的桌面外壳", "Desktop shell at backend startup")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
       </div>
       <div className={css.actions}>
@@ -45,6 +49,13 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
         <Button variant="outline" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("检查中…", "Checking…") : t("检查更新", "Check for updates")}</Button>
       </div>
     </div>
+    {status?.launcherHandoff?.required && <div className={css.note}>
+      <p>{t("安装新版桌面不会自动接管仍在运行的共享后台。需要先安全交接启动器，再使用体验版在线升级。交接会等待聊天空闲、终端关闭和真实图稿保存确认，并保留原本地地址。", "Installing a desktop update does not take over a running shared backend. Safely hand off the launcher before preview updates. Handoff requires idle chats, closed terminals and real drawing save confirmations, and preserves the local address.")}</p>
+      {client?.handoff
+        ? <a href="pi-desktop://launcher-handoff" target="_blank" rel="noreferrer">{t("安全切换到当前桌面启动器…", "Safely switch to this desktop launcher…")}</a>
+        : <p>{t("安全交接入口从桌面 build 13 开始提供。build 12 已支持体验版，但缺少旧共享后台交接功能；无需重复安装 build 12。", "The safe handoff action is available from desktop build 13. Build 12 supports preview releases but lacks shared-backend handoff; reinstalling build 12 will not help.")} <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载支持安全交接的桌面版本", "Get a desktop release with safe handoff")}</a></p>}
+      {!status.launcherHandoff.supported && <p>{t("当前后台还缺少安全交接协议：请先选择稳定版并升级业务包，再从桌面菜单重试交接。", "This backend lacks the safe handoff protocol: first update its business package on Stable, then retry from the desktop menu.")}</p>}
+    </div>}
     {status?.desktopShell && <p className={css.note}>{t("共享后台可能由旧版桌面启动。当前窗口的桌面版本请查看菜单「pi → 关于 pi」。业务包升级不会替换桌面应用。", "A shared backend may have been started by an older desktop. For this window’s desktop version, see pi → About pi. Updating the business package does not replace the desktop app.")}</p>}
     {status?.latest && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}

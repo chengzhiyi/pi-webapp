@@ -8,6 +8,7 @@ import { atomicJson, readJournal, withStorageLock } from "../plugins/hosted/stor
 import { promisify } from "node:util";
 import { npmCommand } from "../../../../bin/npm-command.mjs";
 import { desktopProtocolVersion, readDesktopRelease, validateDesktopRelease, writeDesktopRelease } from "../../../../desktop/managed-release.mjs";
+import { launcherHandoffProtocol, readHandoff, writeHandoff } from "../../../../desktop/launcher-handoff.mjs";
 import { desktopPeerSpecs, exactSdkPeerSpecs, verifyDesktopPackage } from "./desktop-package.ts";
 
 const execFileAsync = promisify(execFile);
@@ -87,6 +88,44 @@ export class SelfUpdater {
     this.validateHostedPair = options.validateHostedPair;
     this.hostedPair = options.hostedPair;
     this.beforeRestart = options.beforeRestart;
+  }
+
+  launcherIdentity() {
+    return { version: process.env.PI_WEBAPP_LAUNCHER_VERSION ?? "unknown",
+      desktopShell: { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" },
+      packageUpdates: this.desktopPackageUpdates, releaseChannels: this.desktopReleaseChannels,
+      handoffProtocol: process.env.PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL === "1" ? launcherHandoffProtocol : 0 };
+  }
+
+  /** Called only under the bridge's all-idle mutation gate. No generic stop/kill. */
+  async requestLauncherHandoff(nonce: string, requestId: string): Promise<void> {
+    if (!this.desktopManaged || !this.launcherNonce || nonce !== this.launcherNonce || this.launcherIdentity().handoffProtocol !== 1)
+      throw new Error("旧后台启动器尚无安全交接协议，请先在稳定版通道升级业务包，再从桌面菜单重试；现有任务保持运行。");
+    if (!/^[a-f0-9-]{36}$/i.test(requestId)) throw new Error("Invalid handoff request identity");
+    if (this.preparing || this.restartPending || this.savingPreference || this.cancellation || this.preparedUpdate) throw new Error("升级或启动器交接正在进行中");
+    await this.runningVersion();
+    const transaction = await this.transaction();
+    if (transaction && !["committed", "cancelled", "failed"].includes(transaction.phase)) throw new Error("请先完成或取消未完成的业务包更新，再交接启动器");
+    const statePath = join(this.agentDir, "pi-web", "launcher.json");
+    const owner = JSON.parse(await readFile(statePath, "utf8"));
+    const matches = (state: typeof owner) => state.nonce === nonce && state.pid === owner.pid && state.runtimeKind === "desktop" && state.launcherHandoffProtocol === 1;
+    if (!matches(owner)) throw new Error("后台启动器身份已变化，交接未执行");
+    const prior = await readHandoff(this.agentDir);
+    if (prior?.nonce === nonce && ["requested", "draining"].includes(prior.phase)) throw new Error("启动器交接尚未完成，请保留当前窗口");
+    let resume: void | (() => Promise<void>) = undefined, accepted = false;
+    try {
+      if (!this.beforeRestart) throw new Error("后台缺少图稿排空协议，交接未执行");
+      resume = await this.beforeRestart();
+      if (!matches(JSON.parse(await readFile(statePath, "utf8")))) throw new Error("后台启动器身份已变化，交接未执行");
+      const receipt = { protocol: 1, nonce, requestId, pid: owner.pid, phase: "requested" };
+      try { await writeHandoff(this.agentDir, receipt); accepted = true; }
+      catch (error) {
+        const actual = await readHandoff(this.agentDir).catch(() => null);
+        accepted = actual?.nonce === nonce && actual?.requestId === requestId && ["requested", "draining", "stopped"].includes(actual.phase);
+        if (!accepted) throw error;
+      }
+      this.restartPending = true;
+    } finally { if (!accepted && resume) await resume(); }
   }
 
   private async current(): Promise<string> {
@@ -249,6 +288,7 @@ export class SelfUpdater {
     const channel = await this.channel();
     const sourceCheckout = existsSync(join(this.packageRoot, ".git"));
     const status: UpdateStatus = { current, channel, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
+    if (this.desktopManaged) { status.launcher = this.launcherIdentity(); status.launcherHandoff = { supported: status.launcher.handoffProtocol === 1, required: !this.desktopReleaseChannels }; }
     if (this.desktopManaged) status.desktopShell = { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" };
     const transaction = await this.transaction(), pair = await this.hostedPair?.status?.();
     if (transaction && !["failed", "cancelled", "committed"].includes(transaction.phase)) status.recovery = { version: transaction.version, phase: transaction.phase,
@@ -257,8 +297,10 @@ export class SelfUpdater {
       canCancel: pair.phase === "prepared" || await this.admittedLegacyRecovery(current) };
     if (this.desktopManaged && !this.desktopPackageUpdates) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
-    if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
-      reason: "当前桌面外壳尚不支持体验版持久化，请先安装支持更新通道的新版桌面应用。" };
+    if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false,
+      reason: status.launcherHandoff?.supported
+        ? "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。已安装 build 13 或更新桌面时，请使用菜单「pi → 安全切换到当前桌面启动器…」完成交接，无需重复安装。"
+        : "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。请先切回稳定版并升级业务包，再使用 build 13 或更新桌面菜单安全切换启动器；已安装新版桌面无需重复安装。" };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     if (this.desktopManaged && this.desktopPackageUpdates) {

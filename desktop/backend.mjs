@@ -4,6 +4,8 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { desktopProtocolVersion, readDesktopRelease, rollbackDesktopRelease } from "./managed-release.mjs";
+import { randomUUID } from "node:crypto";
+import { readHandoff, readHandoffIntent, writeHandoffIntent } from "./launcher-handoff.mjs";
 import { observeStopOutcome } from "./stop-outcome.mjs";
 
 export function localAddress(value) {
@@ -221,7 +223,26 @@ export class DesktopBackend {
   async connect() {
     const existing = await this.existing();
     if (existing) { this.state = existing; return existing; }
+    const intent = await readHandoffIntent(this.agentDir);
     const selected = await readDesktopRelease(this.agentDir, this.bundled.version);
+    if (intent) {
+      localAddress(intent.url);
+      if (!intent.completed && !intent.cancelled) {
+        const receipt = await readHandoff(this.agentDir);
+        if (receipt?.nonce !== intent.nonce || receipt.requestId !== intent.requestId || receipt.pid !== intent.pid
+            || receipt.phase !== "stopped" || this.isAlive(intent.pid))
+          throw new Error("旧启动器交接结果尚未确认，未启动第二个后台。请检查交接收据和日志；原数据已保留。");
+        if ((selected ?? this.bundled).version !== intent.version) throw new Error("中断交接的业务包选择已变化，未自动切换版本；请检查恢复记录");
+      }
+      Object.assign(this, selected ?? this.bundled);
+      const successor = await this.launch({ previousUrl: intent.url });
+      if (!this.owned || successor.pid !== this.child?.pid || successor.url !== intent.url) throw new Error("交接恢复遇到其他启动器，未认领该实例");
+      if (!intent.completed && !intent.cancelled) {
+        await this.validateHandoffSuccessor(successor, intent.url);
+        await writeHandoffIntent(this.agentDir, { ...intent, completed: true });
+      }
+      return successor;
+    }
     Object.assign(this, selected ?? this.bundled);
     try { return await this.launch(); }
     catch (error) {
@@ -231,12 +252,12 @@ export class DesktopBackend {
     }
   }
 
-  async launch() {
+  async launch({ previousUrl } = {}) {
     await mkdir(dirname(this.statePath), { recursive: true });
     const fd = openSync(this.logPath, "a", 0o600);
     try {
       this.child = this.spawnProcess(this.node, [this.launcher, "__serve", this.node], {
-        cwd: this.cwd, env: runtimeEnvironment(this.env, this), detached: true,
+        cwd: this.cwd, env: { ...runtimeEnvironment(this.env, this), ...(previousUrl ? { PI_WEBAPP_RESTART_PORT: localAddress(previousUrl).port, PI_WEBAPP_RESTART_TOKEN: localAddress(previousUrl).hash.slice(1) } : {}) }, detached: true,
         stdio: ["ignore", fd, fd, "ipc"], windowsHide: true,
       });
     } finally { closeSync(fd); }
@@ -284,6 +305,71 @@ export class DesktopBackend {
       if (this.child.connected) this.child.disconnect();
       this.child.unref();
     }
+  }
+
+  async validateHandoffSuccessor(successor, expectedUrl) {
+    const identity = await (await this.request(localAddress(successor.url), "/api/update/version")).json();
+    if (!this.owned || successor.pid !== this.child?.pid || successor.url !== expectedUrl || successor.launcherHandoffProtocol !== 1 || successor.desktopReleaseChannels !== true
+        || identity.launcher?.releaseChannels !== true || identity.launcher.version !== successor.version
+        || identity.launcher.desktopShell?.build !== this.env.PI_WEBAPP_DESKTOP_BUILD
+        || identity.launcher.desktopShell?.version !== this.env.PI_WEBAPP_DESKTOP_VERSION)
+      throw new Error("新后台未通过原地址及通道能力验证，请保留当前窗口并检查日志");
+  }
+
+  /** Explicitly transfer an idle shared backend to this shell's runtime.
+   * HTTP owns the chat/terminal/real-save gate; no ordinary stop or signals. */
+  async handoff() {
+    if (this.handingOff) throw new Error("启动器交接正在进行中");
+    this.handingOff = true;
+    try {
+      await this.refresh();
+      const old = await this.readState();
+      if (!this.state || old?.nonce !== this.state.nonce || old?.pid !== this.state.pid || old?.url !== this.state.url || !this.isAlive(old.pid)) throw new Error("后台归属已变化，请重新检查后再交接");
+      await this.validate(old);
+      if (old.runtimeKind !== "desktop" || old.launcherHandoffProtocol !== 1) throw new Error("旧后台尚无安全交接协议。请先切回稳定版升级业务包，再从此菜单重试；无需重复安装当前桌面，现有任务保持运行。");
+      // Validate the selected package BEFORE draining the current service. Never
+      // silently downgrade an installed business package to this shell's bundle.
+      const selected = await readDesktopRelease(this.agentDir, this.bundled.version) ?? (this.bundled.version === old.version ? this.bundled : null);
+      if (!selected || selected.version !== old.version) throw new Error("当前业务包选择记录未通过验证或版本不一致，交接未执行；请先完成稳定版业务包更新");
+      const url = localAddress(old.url), requestId = randomUUID();
+      const intent = { protocol: 1, nonce: old.nonce, requestId, pid: old.pid, version: old.version, url: old.url, phase: "requested" };
+      await writeHandoffIntent(this.agentDir, intent);
+      try {
+        const response = await this.fetchRequest(`${url.origin}/api/desktop/handoff`, { method: "POST", redirect: "error",
+          headers: { Authorization: `Bearer ${url.hash.slice(1)}`, Origin: url.origin, "Content-Type": "application/json" },
+          body: JSON.stringify({ nonce: old.nonce, requestId }), signal: AbortSignal.timeout(40000) });
+        if (!response.ok) {
+          await writeHandoffIntent(this.agentDir, { ...intent, cancelled: true });
+          const reply = await response.json().catch(() => null);
+          throw new Error(typeof reply?.error === "string" ? reply.error : "后台未接受安全交接，请先升级稳定版业务包");
+        }
+        const reply = await response.json();
+        if (!reply?.accepted || reply.protocol !== 1 || reply.requestId !== requestId) throw new Error("启动器交接响应身份不一致");
+      } catch (error) {
+        // A lost HTTP response is not a failed drain, nor is it permission to
+        // start a second owner. Only this exact durable request can be resumed.
+        const receipt = await readHandoff(this.agentDir).catch(() => null);
+        if (receipt?.nonce !== old.nonce || receipt.requestId !== requestId || receipt.pid !== old.pid) throw error;
+      }
+      const deadline = Date.now() + this.timeoutMs;
+      while (Date.now() < deadline) {
+        const receipt = await readHandoff(this.agentDir);
+        if (receipt?.nonce !== old.nonce || receipt.requestId !== requestId || receipt.pid !== old.pid) throw new Error("启动器交接收据已变化；未启动或停止其他实例");
+        if (["failed", "refused"].includes(receipt.phase)) throw new Error("旧启动器未确认正常退出，交接未完成。原始数据和恢复记录已保留，请检查日志。");
+        const current = await this.readState();
+        if (current && (current.nonce !== old.nonce || current.pid !== old.pid)) throw new Error("另一启动器已接管服务，未覆盖该实例，请重新检查");
+        if (receipt.phase === "stopped" && !this.isAlive(old.pid) && !current) {
+          this.owned = false;
+          Object.assign(this, selected);
+          const successor = await this.launch({ previousUrl: old.url });
+          await this.validateHandoffSuccessor(successor, old.url);
+          await writeHandoffIntent(this.agentDir, { ...intent, completed: true });
+          return successor;
+        }
+        await delay(100);
+      }
+      throw new Error("启动器交接仍在等待旧进程正常退出；未强制停止或启动第二个后台，请保留当前窗口并检查日志");
+    } finally { this.handingOff = false; }
   }
 
   /** A supervised package restart keeps the URL/token, but changes the owner nonce.

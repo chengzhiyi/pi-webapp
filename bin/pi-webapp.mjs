@@ -14,11 +14,13 @@ import { observeStopOutcome } from "./launcher-state.mjs";
 import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
+import { launcherHandoffProtocol, readHandoff, writeHandoff } from "../desktop/launcher-handoff.mjs";
+
 const minimum = [0, 87, 1];
 const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const runtimeKind = process.env.PI_WEBAPP_RUNTIME === "desktop" ? "desktop" : "npm";
 const desktopPackages = runtimeKind === "desktop" && process.env.PI_WEBAPP_DESKTOP_PACKAGE_UPDATES === "1";
-const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind, desktopProtocolVersion };
+const runtimeInfo = { version: packageVersion, bridgeVersion: 1, runtimeKind, desktopProtocolVersion, launcherHandoffProtocol, launcherVersion: packageVersion, desktopShell: { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" }, desktopReleaseChannels: process.env.PI_WEBAPP_DESKTOP_RELEASE_CHANNELS === "1" };
 const launcher = fileURLToPath(import.meta.url);
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));
 const agentDir = resolve((process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent")).replace(/^~(?=$|[\\/])/, homedir()));
@@ -127,7 +129,7 @@ async function serve(pi, args) {
   const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
   const piPrefix = process.env.PI_WEBAPP_PI_CLI ? [resolve(process.env.PI_WEBAPP_PI_CLI)] : [];
   const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
-    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce }, stdio: ["pipe", "pipe", "pipe"],
+    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce, PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL: "1", PI_WEBAPP_LAUNCHER_VERSION: packageVersion }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
   let ready = false;
@@ -137,6 +139,7 @@ async function serve(pi, args) {
   let stateWrite = Promise.resolve();
   let stopping = false;
   let restartRequest = null;
+  let handoffRequest = null;
   let runningUrl = null;
   let buffer = "";
   let killTimer;
@@ -165,6 +168,9 @@ async function serve(pi, args) {
   let devReloadCommand;
   const finishShutdown = (reason) => {
     child.stdin?.end();
+    // A handoff is not permission to kill a stalled process. The new desktop
+    // must wait for this supervisor and its child to exit naturally.
+    if (handoffRequest) return;
     killTimer = setTimeout(() => {
       forceStopRequested = true;
       lifecycle("pi_force_stop", { reason, signal: "SIGTERM" });
@@ -217,6 +223,18 @@ async function serve(pi, args) {
         if (request === nonce) shutdown("stop_request");
       } catch { /* No stop request. */ }
       if (stopping || epoch !== stopEpoch) return;
+      if (runtimeKind === "desktop") {
+        const handoff = await readHandoff(agentDir).catch(() => null);
+        if (handoff?.nonce === nonce && handoff.pid === process.pid && handoff.phase === "requested") {
+          // The authenticated HTTP gate already froze admission and received the
+          // real plugin checkpoint/worker drain before publishing this request.
+          try { await writeHandoff(agentDir, { ...handoff, phase: "draining" }); }
+          catch { lifecycle("launcher_handoff_receipt_failed"); return; }
+          handoffRequest = handoff;
+          stopping = true; stopEpoch++; stopReason = "launcher_handoff";
+          lifecycle("launcher_handoff_draining"); finishShutdown(stopReason); return;
+        }
+      }
       try {
         const request = JSON.parse(await readFile(restartPath, "utf8"));
         const prepared = JSON.parse(await readFile(updatePath, "utf8"));
@@ -332,6 +350,7 @@ async function serve(pi, args) {
     });
   });
   await stateWrite;
+  if (handoffRequest) await writeHandoff(agentDir, { ...handoffRequest, phase: failed || child.exitCode !== 0 ? "failed" : "stopped" });
   clearTimeout(startupTimer);
   clearTimeout(stopPreflightTimer);
   clearTimeout(devReloadTimer);

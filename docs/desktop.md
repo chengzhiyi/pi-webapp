@@ -215,7 +215,7 @@ keeps its existing name; this rename is for the native desktop application.
 
 Download builds from **[GitHub Releases](https://github.com/chengzhiyi/pi-webapp/releases)**,
 not the npm package, source ZIP or an expired Actions artifact. The current
-[build 12 release](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b12) offers macOS arm64/Intel, Windows x64, and Linux x64 test installers. Build 12 fixes quit responsiveness, loading-window shutdown alerts and backend-stop recovery. It also supports persistent stable/preview business-package updates from Settings; older build 10 shells need this one-time installer upgrade.
+[build 13 release](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b13) offers macOS arm64/Intel, Windows x64, and Linux x64 test installers. Build 12 fixes quit responsiveness, loading-window shutdown alerts and backend-stop recovery. It also supports persistent stable/preview business-package updates from Settings; older build 10 shells need this one-time installer upgrade.
 Use each release's actual asset list and acceptance notes, not matrix configuration
 alone, to determine support.
 
@@ -445,3 +445,40 @@ support. Custom icons are configured for all platforms; the icon replacement
 has only been verified in a packaged macOS arm64 app.
 Formal signing, automatic desktop updates, tray integration, completion
 notifications and cross-platform end-to-end QA are not included in this delivery.
+
+### Existing shared launchers and safe handoff (build 13)
+
+Installing a newer shell preserves a running shared backend; it does not change
+that launcher's environment. A build 10 launcher can therefore keep reporting
+`PI_WEBAPP_DESKTOP_RELEASE_CHANNELS=0` after build 12 attaches. Package restarts
+inherit that environment. Installing build 12 again cannot resolve this.
+
+Build 13 adds **pi → 安全切换到当前桌面启动器…** and a Settings action.
+First update the old backend's stable business package to a release advertising
+handoff protocol 1. The new shell then authenticates the exact owner and requests
+`POST /api/desktop/handoff`. The bridge refuses current/background chats,
+terminals, authentication or update activity, closes new mutation admission,
+and acquires the real hosted save/worker-drain lease. Only then may it write a
+request-bound private handoff journal. A failed save restores admission and
+preserves the original backend.
+
+The supervisor closes Pi's RPC input after that drain and records completion
+only after the child exits successfully. This path has **no force-stop timer**.
+The new shell waits for the exact receipt and old supervisor PID to disappear;
+a missing state file alone is insufficient. It validates the selected business
+package before draining, preserves the exact URL/token (and therefore the local
+storage origin), and launches that same package with its own Node/runtime and
+channel capabilities. Replacement owners and mismatched receipts are never
+claimed as successful handoffs. A private native intent preserves the original
+address across interruption; recovery requires the same stopped receipt, a dead
+old supervisor, and the exact selected package, followed by the same authenticated
+successor capability checks. Completed/cancelled intents retain the known origin
+on subsequent ordinary starts without reviving an old handoff. Unsupported predecessors are directed to stable
+package bootstrap, rather than repeated installation of the already installed
+shell. An unresolved exit/launch failure leaves diagnostic receipts for recovery;
+it does not authorize killing an old owner or clearing its lock.
+
+Settings separately identifies the current window (a display-only UA marker),
+the backend launcher and its real capabilities, the shell at backend startup,
+and the business package. The UA marker grants no capability. Native **About pi**
+remains authoritative for the app location/version/build.

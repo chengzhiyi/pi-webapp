@@ -95,7 +95,7 @@ export interface ConfigChange { sessionId: string; kind: ConfigKind; scope: Conf
 export type UpdateChannel = "stable" | "alpha";
 export interface UpdateRequest { channel: UpdateChannel; version: string; allowDowngrade?: boolean }
 /** desktopShell identifies the shell that launched this backend, which may be shared by newer windows. */
-export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; channel?: UpdateChannel; downgrade?: boolean; reason?: string; requiresDesktopUpgrade?: boolean; desktopShell?: { version: string; build: string }; recovery?: { version: string; phase: string; canCancel: boolean } }
+export interface UpdateStatus { current: string; latest: string | null; available: boolean; canRestart: boolean; channel?: UpdateChannel; downgrade?: boolean; reason?: string; requiresDesktopUpgrade?: boolean; desktopShell?: { version: string; build: string }; launcher?: { version: string; desktopShell: { version: string; build: string }; packageUpdates: boolean; releaseChannels: boolean; handoffProtocol: number }; launcherHandoff?: { supported: boolean; required: boolean }; recovery?: { version: string; phase: string; canCancel: boolean } }
 export type LoginMethod = "api_key" | "oauth";
 export interface ProviderView { id: string; name: string; configured: boolean; storedCredential: boolean; methods: LoginMethod[] }
 export interface ProviderModelFields { id: string; name?: string; contextWindow?: number; maxTokens?: number; input?: Array<"text" | "image"> }

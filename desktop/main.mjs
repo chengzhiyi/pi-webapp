@@ -28,6 +28,7 @@ let updater;
 let bundledPiVersion = "unknown";
 let quitting = false;
 let askingQuit = false;
+let handingOff = false;
 let startup = true;
 
 function showWindow() {
@@ -40,7 +41,9 @@ function showWindow() {
   // The shared Web document may retain its own branding; keep the native app title pi.
   window.on("page-title-updated", event => event.preventDefault());
   window.once("ready-to-show", () => window?.show());
+  window.webContents.setUserAgent(`${window.webContents.getUserAgent()} PiDesktop/${app.getVersion()} PiDesktopBuild/${release.buildNumber}`);
   window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === "pi-desktop://launcher-handoff") { void requestLauncherHandoff(); return { action: "deny" }; }
     void openExternal(url);
     return { action: "deny" };
   });
@@ -88,6 +91,7 @@ function showQuitMessage(options) {
 
 async function requestQuit() {
   if (askingQuit || quitting) return;
+  if (handingOff) { await showQuitMessage({ message: "正在安全交接后台启动器，请等待正常退出和重新连接。", buttons: ["确定"] }); return; }
   if (startup) return; // Finish acquiring ownership before permitting shutdown.
   if (updater?.busy) {
     await showQuitMessage({ message: "桌面更新正在处理，请等待下载或系统校验完成后再退出。", buttons: ["确定"] });
@@ -102,6 +106,24 @@ async function requestQuit() {
   finally { askingQuit = false; }
 }
 
+async function requestLauncherHandoff() {
+  if (startup || quitting || askingQuit || handingOff || updater?.busy || !backend) return;
+  handingOff = true;
+  try {
+    const answer = await showQuitMessage({ type: "question", title: "安全切换后台启动器",
+      message: "将旧共享后台交接给当前桌面启动器？",
+      detail: "仅在所有聊天空闲、无终端且图稿保存确认完成后进行。旧进程正常退出后，使用当前桌面运行环境和原业务包重启，保留原本地地址、图稿恢复副本和更新通道。发现运行任务或保存阻塞会中止，不会强制停止。",
+      buttons: ["取消", "检查并安全交接"], defaultId: 0, cancelId: 0, noLink: true });
+    if (answer.response !== 1 || quitting) return;
+    const state = await backend.handoff();
+    backendUrl = localAddress(state.url).href;
+    await window?.loadURL(backendUrl);
+    await showQuitMessage({ type: "info", message: "启动器安全交接完成",
+      detail: `当前桌面 ${app.getVersion()} build ${release.buildNumber} 已启动原业务包 ${state.version}，支持持久化体验版通道。请在设置中检查更新。`, buttons: ["好"] });
+  } catch (error) { await showQuitMessage({ type: "warning", message: "启动器交接未完成", detail: error.message, buttons: ["好"] }); }
+  finally { handingOff = false; }
+}
+
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: appName, submenu: [
@@ -109,9 +131,10 @@ function installMenu() {
         await backend?.refresh().catch(() => {});
         if (askingQuit || quitting) return;
         return dialog.showMessageBox({ type: "info", message: appName,
-          detail: `桌面外壳版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n当前 pi-webapp ${backend?.state?.version ?? "unknown"}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n业务包通过界面设置中的“应用更新”升级；“检查桌面更新”仅更新桌面外壳安装包。` });
+          detail: `桌面外壳版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n当前 pi-webapp ${backend?.state?.version ?? "unknown"}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n后台启动器 ${backend?.state?.launcherVersion ?? "unknown"} · 启动桌面 ${backend?.state?.desktopShell?.version ?? "unknown"} build ${backend?.state?.desktopShell?.build ?? "unknown"}\n启动器通道持久化：${backend?.state?.desktopReleaseChannels === true ? "支持" : backend?.state?.desktopReleaseChannels === false ? "不支持" : "未报告"}\n业务包通过界面设置中的“应用更新”升级；“检查桌面更新”仅更新桌面外壳安装包。` });
       } },
-      { label: "检查桌面更新…", click: () => { if (!startup) void updater?.run(); } },
+      { label: "安全切换到当前桌面启动器…", click: () => void requestLauncherHandoff() },
+      { label: "检查桌面更新…", click: () => { if (!startup && !handingOff) void updater?.run(); } },
       { label: "取消桌面更新下载", click: () => updater?.cancelDownload() },
       { type: "separator" }, { label: "退出…", accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
     ] },

@@ -22,7 +22,7 @@ test("packaged launcher uses its verified local SDK, not a global or inherited P
   const packageRoot = join(root, "node_modules", "pi-webapp");
   await cp(new URL("../bin/", import.meta.url), join(packageRoot, "bin"), { recursive: true });
   await mkdir(join(packageRoot, "desktop"));
-  for (const name of ["managed-release.mjs", "release-version.mjs", "stop-outcome.mjs"]) await cp(new URL(`../desktop/${name}`, import.meta.url), join(packageRoot, "desktop", name));
+  for (const name of ["managed-release.mjs", "release-version.mjs", "stop-outcome.mjs", "launcher-handoff.mjs"]) await cp(new URL(`../desktop/${name}`, import.meta.url), join(packageRoot, "desktop", name));
   await mkdir(join(packageRoot, "dist")); await writeFile(join(packageRoot, "dist", "extension.js"), "");
   await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.31-alpha.6", peerDependencies: Object.fromEntries(peers.map(name => [name, "1.3.0"])) }));
   for (const name of ["cross-spawn", "undici"]) await symlink(resolve("node_modules", name), join(root, "node_modules", name), process.platform === "win32" ? "junction" : "dir");
