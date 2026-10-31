@@ -299,8 +299,8 @@ export class SelfUpdater {
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
     if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false,
       reason: status.launcherHandoff?.supported
-        ? "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。已安装 build 13 或更新桌面时，请使用菜单「pi → 安全切换到当前桌面启动器…」完成交接，无需重复安装。"
-        : "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。请先切回稳定版并升级业务包，再使用 build 13 或更新桌面菜单安全切换启动器；已安装新版桌面无需重复安装。" };
+        ? "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。已安装 build 14 或更新桌面时，请使用菜单「pi → 安全切换到当前桌面启动器…」完成交接，无需重复安装。"
+        : "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。请先切回稳定版并升级业务包，再使用 build 14 或更新桌面菜单安全切换启动器；已安装新版桌面无需重复安装。" };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
     if (this.desktopManaged && this.desktopPackageUpdates) {

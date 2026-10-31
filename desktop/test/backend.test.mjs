@@ -245,3 +245,21 @@ process.stdin.on('end',()=>server.close(()=>process.exit(0)));
   await assert.rejects(backend.connect(), /健康检查/);
   assert.equal(await backend.readState(), null, "failed readiness must reap the owned supervisor and Pi");
 });
+
+test("an unreadable startup state during a pending stop is not proof the owner exited", async t => {
+  const backend = await fixture(t);
+  backend.state = state; backend.owned = true;
+  await save(backend, state);
+  let result;
+  const stopped = backend.stop().then(() => { result = "stopped"; }, error => { result = error; });
+  try {
+    await waitForStopMarker(backend);
+    await writeFile(backend.statePath, "{");
+    await new Promise(resolve => setTimeout(resolve, 220));
+    assert.equal(result, undefined, "unknown state must keep waiting instead of certifying a stop");
+    await save(backend, state);
+    await unlink(backend.statePath);
+    await stopped;
+    assert.equal(result, "stopped");
+  } finally { backend.owned = false; }
+});

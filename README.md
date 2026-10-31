@@ -6,7 +6,7 @@ Conversations, project files, terminals, and Git—side by side. Use the same wo
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 13:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/pi-0.1.39-desktop.13-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
+**Desktop test build 14:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -105,25 +105,25 @@ Enter **`/web`** inside Pi. The browser stays synchronized with that terminal se
 
 ## Desktop downloads
 
-**Latest desktop test release: [pi 0.1.39 · build 13](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b13).** Download the installer for your operating system and CPU:
+**Latest desktop test release: [pi 0.1.39 · build 14](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b14).** Download the installer for your operating system and CPU:
 
 | Platform | Download |
 | --- | --- |
-| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/pi-0.1.39-desktop.13-mac-arm64.dmg) |
-| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/pi-0.1.39-desktop.13-mac-x64.dmg) |
-| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/pi-0.1.39-desktop.13-win-x64.exe) |
-| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/pi-0.1.39-desktop.13-linux-x86_64.AppImage) |
+| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-mac-arm64.dmg) |
+| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-mac-x64.dmg) |
+| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-win-x64.exe) |
+| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-linux-x86_64.AppImage) |
 
-[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b13/desktop-release.json)
+[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/desktop-release.json)
 
 **Build 12 fixes desktop quit responsiveness.** Quit confirmations focus the main window, closing a loading window no longer opens a blocking error alert, and a failed backend stop offers a desktop-only exit. Existing background services remain available.
 
-**Build 13 adds safe transfer from an old shared launcher.** Build 12 already supports preview updates, but attaching it to a build 10 backend preserves the old launcher's capabilities. With build 13 installed, first update the business package on Stable, then use **pi → 安全切换到当前桌面启动器…**. Handoff waits for idle chats, closed terminals and real drawing save confirmation, preserves the local address and recovery copies, and never force-stops the old owner. Then select Preview and update; the selected channel/release persist across restarts. Preview chooses the newer of npm’s `latest` and `alpha`; an older alpha is not offered as an upgrade. Current-window, launcher and business-package versions are shown separately. Existing npm 0.1.26/0.1.27 services remain available for attachment without taking over their tasks.
+**Build 14 adds safe transfer from an old shared launcher.** Build 12 already supports preview updates, but attaching it to a build 10 backend preserves the old launcher's capabilities. With build 14 installed, first update the business package on Stable, then use **pi → 安全切换到当前桌面启动器…**. Handoff waits for idle chats, closed terminals and real drawing save confirmation, preserves the local address and recovery copies, and never force-stops the old owner. Then select Preview and update; the selected channel/release persist across restarts. Preview chooses the newer of npm’s `latest` and `alpha`; an older alpha is not offered as an upgrade. Current-window, launcher and business-package versions are shown separately. Existing npm 0.1.26/0.1.27 services remain available for attachment without taking over their tasks.
 
 The **pi** desktop app bundles Node and Pi—no separate runtime installation needed. It can reuse a compatible Web service, open the same service in your browser, and let you choose whether background tasks continue after closing the app. Bring your own model credentials, Git/SSH setup, and project toolchains.
 
 - **Install:** macOS: drag **pi.app** from the DMG into Applications. Windows: run the EXE installer. Linux: make the AppImage executable and run it; see the release notes for the FUSE alternative.
-- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 13** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
+- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 14** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
 - **Test-release limits:** these are opt-in prereleases, not publisher-signed stable distributions. macOS uses ad-hoc signatures without Apple notarization and may be blocked by Gatekeeper; follow the [macOS test installation guide](docs/desktop-testing.md) and stop if verification fails. Windows/Linux packages are unsigned. Never disable system security globally. Desktop shell updates require manual installation; business-package updates use the app's Settings. Windows ARM and Linux ARM are not included.
 
 ## Architecture highlights

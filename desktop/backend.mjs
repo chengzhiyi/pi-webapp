@@ -109,12 +109,16 @@ export class DesktopBackend {
   }
 
   async readState() {
-    try { return JSON.parse(await readFile(this.statePath, "utf8")); }
-    catch (error) {
-      if (error.code === "ENOENT") return null;
-      // An exclusive startup write can briefly contain incomplete JSON.
-      if (error instanceof SyntaxError) return { starting: true };
-      throw error;
+    for (let attempt = 0; ; attempt++) {
+      try { return JSON.parse(await readFile(this.statePath, "utf8")); }
+      catch (error) {
+        if (error.code === "ENOENT") return null;
+        // Windows may briefly deny opens while an atomic replacement/deletion
+        // is pending. Retry the read, never reinterpret denial as an absent owner.
+        if (process.platform === "win32" && ["EPERM", "EACCES"].includes(error.code) && attempt < 10) { await delay(25); continue; }
+        if (error instanceof SyntaxError) return { starting: true };
+        throw error;
+      }
     }
   }
 
@@ -388,6 +392,7 @@ export class DesktopBackend {
     if (!this.owned || !this.state) return;
     await this.refresh();
     const current = await this.readState();
+    if (current?.starting) throw new Error("后台状态暂不可读，未确认停止；请稍后重试，原后台已保留");
     if (current?.pid !== this.state.pid || current?.nonce !== this.state.nonce || !this.isAlive(current.pid)) return;
     await writeFile(this.stopPath, this.state.nonce, { mode: 0o600 });
     // A view flush alone can take 15s. Share the CLI's 40s drain budget and
@@ -396,6 +401,7 @@ export class DesktopBackend {
     while (Date.now() < deadline) {
       const outcome = await observeStopOutcome(async () => {
         const next = await this.readState();
+        if (next?.starting) return this.state; // Unknown is still pending, never a stop receipt.
         return next && this.isAlive(next.pid) ? next : null;
       }, this.stopPath, this.state.nonce);
       if (outcome === "stopped") { this.owned = false; return; }

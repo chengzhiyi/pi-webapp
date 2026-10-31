@@ -33,4 +33,4 @@ try {
 } finally {
  try {const state=JSON.parse(await readFile(stateFile,'utf8'));await post('/api/desktop/handoff',{nonce:state.nonce,requestId:randomUUID()});for(let i=0;i<700&&alive(state.pid);i++)await delay(100);assert.equal(alive(state.pid),false);await rm(root,{recursive:true,force:true});}catch(e){console.error('fixture cleanup needs inspection',root,e.message);process.exitCode=1;}
 }
-assert.ok(passed);console.log('Real predecessor → build 13 handoff, terminal refusal, same URL/token and alpha channel persistence: PASS');
+assert.ok(passed);console.log('Real predecessor → build 14 handoff, terminal refusal, same URL/token and alpha channel persistence: PASS');
