@@ -212,7 +212,7 @@ keeps its existing name; this rename is for the native desktop application.
 
 Download builds from **[GitHub Releases](https://github.com/chengzhiyi/pi-webapp/releases)**,
 not the npm package, source ZIP or an expired Actions artifact. The current
-[build 11 release](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b11) offers macOS arm64/Intel, Windows x64, and Linux x64 test installers. It also supports persistent stable/preview business-package updates from Settings; older build 10 shells need this one-time installer upgrade.
+[build 12 release](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b12) offers macOS arm64/Intel, Windows x64, and Linux x64 test installers. Build 12 fixes quit responsiveness, loading-window shutdown alerts and backend-stop recovery. It also supports persistent stable/preview business-package updates from Settings; older build 10 shells need this one-time installer upgrade.
 Use each release's actual asset list and acceptance notes, not matrix configuration
 alone, to determine support.
 
