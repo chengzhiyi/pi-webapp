@@ -37,7 +37,7 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
       <div className={css.details}>
         <div className={css.title}>{t("应用更新", "App updates")}</div>
         <p className={css.summary}>{summary}</p>
-        {status?.desktopShell && <p className={css.summary}>{t("桌面外壳", "Desktop shell")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
+        {status?.desktopShell && <p className={css.summary}>{t("后台启动时的桌面外壳", "Desktop shell at backend startup")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
       </div>
       <div className={css.actions}>
         {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <Button variant="primary" disabled={installing || checking} onClick={() => { void install(); }}>{installing ? t("正在安装…", "Installing…") : status.downgrade ? t("切换到稳定版并重启", "Switch to stable and restart") : t("升级并重启", "Update and restart")}</Button>}
@@ -45,6 +45,7 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
         <Button variant="outline" disabled={checking || installing || Boolean(targetVersion)} onClick={() => { void check(); }}>{checking ? t("检查中…", "Checking…") : t("检查更新", "Check for updates")}</Button>
       </div>
     </div>
+    {status?.desktopShell && <p className={css.note}>{t("共享后台可能由旧版桌面启动。当前窗口的桌面版本请查看菜单「pi → 关于 pi」。业务包升级不会替换桌面应用。", "A shared backend may have been started by an older desktop. For this window’s desktop version, see pi → About pi. Updating the business package does not replace the desktop app.")}</p>}
     {status?.latest && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
     {status?.requiresDesktopUpgrade && <p className={css.note}>

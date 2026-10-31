@@ -39,8 +39,8 @@ for (const locale of ["en", "zh"] as const) test(`uninstall removes launchers an
     await expect(recovery).toBeVisible();
     expect(await recovery.evaluate(e => getComputedStyle(e).position)).not.toBe("fixed");
     await recovery.getByRole("button").click();
-    const recoveryDialog = page.getByRole("dialog", { name: t("Review previous plugin views", "检查刷新前的插件视图"), exact: true });
-    await expect(recoveryDialog).toContainText(t("Reloading interrupted", "刷新中断"));
+    const recoveryDialog = page.getByRole("dialog", { name: t("Review previous plugin views", "检查之前的插件视图"), exact: true });
+    await expect(recoveryDialog).toContainText(t("previous plugin views", "旧插件视图"));
     await recoveryDialog.locator('[data-unconfirmed-view="departed-editor"]').getByRole("button", { name: t("Discard this view's unconfirmed edits", "丢弃此视图的未确认修改"), exact: true }).click();
     await page.getByRole("dialog", { name: t("Discard this view's unconfirmed edits?", "丢弃此视图的未确认修改？"), exact: true }).getByRole("button", { name: t("Discard edits", "确认丢弃"), exact: true }).click();
     lost = null;

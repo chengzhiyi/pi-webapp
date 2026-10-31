@@ -176,7 +176,7 @@ test("an old desktop shell offers its upgrade entry while preview installation s
   try {
     await page.goto(bridge.url);
     await page.getByRole("button", { name: /Pi 设置|Pi Settings/ }).click();
-    await expect(page.getByText(/(桌面外壳|Desktop shell) 0\.1\.28 · build 10/)).toBeVisible();
+    await expect(page.getByText(/(后台启动时的桌面外壳|Desktop shell at backend startup) 0\.1\.28 · build 10/)).toBeVisible();
     const download = page.getByRole("link", { name: /下载新版桌面应用|Download desktop update/ });
     await expect(download).toBeVisible();
     await expect(download).toHaveAttribute("href", "https://github.com/chengzhiyi/pi-webapp/releases");

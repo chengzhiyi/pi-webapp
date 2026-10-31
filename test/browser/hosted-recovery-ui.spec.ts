@@ -83,7 +83,7 @@ for (const [width, locale, theme] of [[320, "zh", "dark"], [1440, "en", "light"]
     await expect(trigger).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
     await trigger.click();
-    const dialog = page.getByRole("dialog", { name: locale === "zh" ? "检查刷新前的插件视图" : "Review previous plugin views", exact: true });
+    const dialog = page.getByRole("dialog", { name: locale === "zh" ? "检查之前的插件视图" : "Review previous plugin views", exact: true });
     await expect(dialog.locator("[data-unconfirmed-view]")).toHaveCount(20);
     await expect(dialog.locator('[data-unconfirmed-view="confirmed-closed"]')).toHaveCount(0);
     const bounds = (await dialog.boundingBox())!;

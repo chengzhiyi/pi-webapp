@@ -14,7 +14,9 @@ The plugin now sends its actual initial status from `initialize`, rather than le
 
 ## Abrupt reload: explicit reconciliation, not a handoff claim
 
-A per-tab sessionStorage journal records exact registered capabilities (including kind/content ID). Successful real close removes the matching record. A replacement document displays the previous document's unconfirmed capabilities separately, including generation and mount/content identity.
+A per-view localStorage journal durably records exact registered capabilities (including kind/content ID), with the per-tab sessionStorage journal retained for migration and reload ownership. Reopening a whole desktop window can therefore discover unconfirmed views even after its old sessionStorage has disappeared. Independent per-token writes avoid one window overwriting another’s records, and separate retirement receipts prevent stale windows from reviving confirmed closures. Original records and drawing backup bytes are retained.
+
+Recovery lists previous views across all sessions, including generation and mount/content identity. Records discovered from another window are recovery candidates, never automatic permission to reconcile/retire a still-live controller or cancel a pending registration. The user must check the old window and backups before explicitly retaining a disconnected view. Local drawing copies are captured before a new editor can replace the shared scene key; retaining a view revokes its write capability without claiming a save or overwriting the winning drawing. If durable journaling fails, new authoring frames do not connect; ordinary chat remains usable.
 
 The journal is **not** a draft/checkpoint identity, proof of a latest draft, a server-wide lost-view list, or a guarantee of recovery if browser storage is unavailable/lost. A copied tab journal is also not liveness evidence. Missing capabilities remain fail closed; this change never enumerates/clears registrations or guesses that a newer revision supersedes them.
 

@@ -146,8 +146,11 @@ Capable desktop shells set `PI_WEBAPP_DESKTOP_PACKAGE_UPDATES=1`. In these shell
 **Settings → App updates → Update and restart** uses npm to update `pi-webapp`,
 just like the browser launcher. This does **not** replace Electron, standalone
 Node, app icons or any files inside `pi.app`. Those still use the desktop installer
-channel above. Settings and About show the running business-package version
-separately from the desktop shell version/build.
+channel above. Settings shows the running business-package version and labels
+`desktopShell` as the shell **at backend startup**. An existing shared backend
+retains its launcher environment after a newer desktop attaches; this field is
+not the current window’s installed shell identity. Use **pi → 关于 pi** for that
+window’s actual desktop version/build.
 
 - An exact npm release is installed into a fresh private directory under
   `~/.pi/agent/pi-web/releases/<version>-<unique-id>/`. npm integrity checking and
