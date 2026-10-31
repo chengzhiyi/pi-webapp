@@ -10,7 +10,7 @@ export interface WorkbenchPanelProps {
   visible: boolean;
   contentId: string;
   title: string;
-  renderMarkdown(text: string): ReactNode;
+  renderMarkdown(text: string, pathImages?: { resolve(value: string): string | undefined }): ReactNode;
   open(kind: string, contentId: string, title: string): void;
   sendMessage(text: string): Promise<void>;
   resource<T>(create: () => T, dispose?: (value: T) => void, activate?: (value: T, active: boolean) => void): T;

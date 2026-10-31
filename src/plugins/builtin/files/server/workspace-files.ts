@@ -110,3 +110,29 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
     } finally { await file.close(); }
   });
 }
+
+/** Raw bytes of one raster workspace image, for `<img>` use in rendered Markdown. */
+export async function readWorkspaceImage(cwd: string, path: string): Promise<{ mimeType: string; bytes: Buffer }> {
+  return fileOperation(async () => {
+    const target = await workspacePath(cwd, path);
+    if (!(await stat(target)).isFile()) throw new WorkspaceFileError("这不是可预览的普通文件");
+    const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
+    try {
+      const info = await file.stat();
+      if (!info.isFile()) throw new WorkspaceFileError("这不是可预览的普通文件");
+      if (info.size > MAX_IMAGE_BYTES) throw new WorkspaceFileError("图片过大，无法预览", 413);
+      const buffer = Buffer.alloc(info.size + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      if (length > info.size) throw new WorkspaceFileError("文件正在变化，请重新读取", 409);
+      const bytes = buffer.subarray(0, length);
+      const mimeType = imageType(bytes);
+      if (!mimeType) throw new WorkspaceFileError("不支持的图片类型", 415);
+      return { mimeType, bytes };
+    } finally { await file.close(); }
+  });
+}

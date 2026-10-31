@@ -126,7 +126,7 @@ export function PiApp() {
     setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && panel.shown && !pluginsOpen && !fullscreen }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
-  const renderMarkdown = useCallback((text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
+  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <MarkdownText text={text} pathImages={pathImages} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
   const send: typeof bridge.send = async (...args) => {
     const sessionId = bridge.session?.sessionId;
     setPreSendError("");

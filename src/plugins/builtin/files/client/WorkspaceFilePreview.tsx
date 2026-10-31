@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CodeBlock } from "../../../../../web/src/ui/shared/primitives/markdown/CodeBlock.tsx";
 import { IconRefreshOutlineRegular } from "../../../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { ImageLightbox } from "../../../../../web/src/ui/conversation/ImageLightbox.tsx";
@@ -7,9 +7,22 @@ import { workspaceFilesApi } from "./workspace-files-api.ts";
 import type { WorkspaceFilePreview as Preview } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
+/** Resolve a Markdown image destination against the previewed file's directory; undefined when remote, absolute-scheme or escaping the workspace. */
+export function resolveWorkspaceImagePath(markdownPath: string, destination: string): string | undefined {
+  let value = destination.replace(/[?#].*$/u, "");
+  try { value = decodeURI(value); } catch { /* keep authored text */ }
+  if (value === "" || value.includes("\\") || value.includes("\0") || /^[a-z][a-z\d+.-]*:/iu.test(value) || value.startsWith("//")) return undefined;
+  const segments = value.startsWith("/") ? [] : markdownPath.split("/").slice(0, -1);
+  for (const part of value.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") { if (segments.pop() === undefined) return undefined; } else segments.push(part);
+  }
+  return segments.length ? segments.join("/") : undefined;
+}
+
 /** Conversation streaming must not repeatedly parse an unchanged preview. */
 export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ sessionId, path, renderMarkdown }: {
-  sessionId: string; path: string; renderMarkdown(text: string): ReactNode;
+  sessionId: string; path: string; renderMarkdown(text: string, pathImages?: { resolve(value: string): string | undefined }): ReactNode;
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +45,30 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
   const name = path.split("/").at(-1)!;
   const extension = name.includes(".") ? name.split(".").at(-1)!.toLowerCase() : name.toLowerCase();
   const language = ({ mjs: "javascript", cjs: "javascript", mts: "typescript", cts: "typescript", md: "markdown", svg: "xml", gitignore: "text", dockerfile: "dockerfile", makefile: "make" } as Record<string, string>)[extension] ?? extension;
+  const [imageTick, setImageTick] = useState(0);
+  const images = useRef(new Map<string, string | null>());
+  useEffect(() => {
+    const cache = images.current;
+    cache.clear();
+    return () => { for (const url of cache.values()) if (url) URL.revokeObjectURL(url); cache.clear(); };
+  }, [sessionId, path, revision]);
+  const pathImages = useMemo(() => ({
+    resolve(value: string): string | undefined {
+      const target = resolveWorkspaceImagePath(path, value);
+      if (target === undefined) return undefined;
+      const cache = images.current;
+      const hit = cache.get(target);
+      if (hit !== undefined) return hit ?? undefined;
+      cache.set(target, null);
+      void workspaceFilesApi.raw(sessionId, target, new AbortController().signal).then(blob => {
+        if (images.current !== cache || cache.get(target) !== null) return;
+        cache.set(target, URL.createObjectURL(blob));
+        setImageTick(value => value + 1);
+      }).catch(() => { /* Missing or unsupported images stay as alt text. */ });
+      return undefined;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [sessionId, path, revision, imageTick]);
   const reload = () => setRevision(value => value + 1);
   const image = useMemo(() => preview?.kind === "image" ? `data:${preview.mimeType};base64,${preview.data}` : null, [preview]);
   const content = () => {
@@ -48,7 +85,7 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
     }
     if (preview.kind !== "text") return null;
     if (preview.text === "") return <p className={css.state}>{t("空文件", "Empty file")}</p>;
-    if (markdown && !source) return <div className={css.markdown}>{renderMarkdown(preview.text)}</div>;
+    if (markdown && !source) return <div className={css.markdown}>{renderMarkdown(preview.text, pathImages)}</div>;
     return <CodeBlock code={preview.text} lang={language} lineNumbers className={css.code} copyLabel={t("复制", "Copy")} copiedLabel={t("已复制", "Copied")} toolbarLabels={{ codeLabel: t("代码", "Code"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") }} />;
   };
   return <div className={css.body}>

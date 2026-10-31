@@ -20,7 +20,7 @@ const fields = new Set(["stage", "route", "method", "status", "durationMs", "con
 const routes = new Set([
   "/api/workspace/git/control", "/api/workspace/git/write", "/api/workspace/git/status", "/api/workspace/git/diff",
   "/api/workspace/git/history", "/api/workspace/git/commit-detail", "/api/workspace/git/commit-diff",
-  "/api/workspace/files/list", "/api/workspace/files/preview",
+  "/api/workspace/files/list", "/api/workspace/files/preview", "/api/workspace/files/raw",
   "/api/plugins", "/api/plugin-action", "/api/plugin-interaction", "/api/resume", "/api/update", "/api/update/version", "/api/update/channel", "/api/provider/models", "/api/provider/logout", "/api/provider/login/active",
   "/api/telemetry/config", "/api/image", "/api/attachment", "/api/attachment/remove", "/api/session", "/api/providers", "/api/models", "/api/config", "/api/workspaces", "/api/commands", "/api/events", "/api/message", "/api/prompt-queue", "/api/abort", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level",
   "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/capability", "/api/directory/list", "/api/directory/create", "/api/directory/pick",
