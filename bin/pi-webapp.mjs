@@ -362,7 +362,27 @@ async function serve(pi, args) {
   clearInterval(stopTimer);
   clearTimeout(killTimer);
   if (claimed) {
-    try { if (JSON.parse(await readFile(statePath, "utf8")).nonce === nonce) await unlink(statePath); }
+    try {
+      if (JSON.parse(await readFile(statePath, "utf8")).nonce === nonce) {
+        // A confirmed normal stop may supersede a restart this supervisor never
+        // accepted. Archive only our request after a natural successful exit,
+        // while the owner claim still excludes a successor writing its request.
+        if (!restartRequest && stopReason === "stop_request" && ready && !failed && child.exitCode === 0 && !forceStopRequested) {
+          try {
+            const request = JSON.parse(await readFile(restartPath, "utf8"));
+            if (request.nonce === nonce) {
+              const history = join(agentDir, "pi-web", "restart-history");
+              await mkdir(history, { recursive: true, mode: 0o700 });
+              await rename(restartPath, join(history, `${nonce}-${randomUUID()}.json`));
+              lifecycle("launcher_restart_request_archived");
+            }
+          } catch (error) {
+            if (error?.code !== "ENOENT") lifecycle("launcher_restart_archive_failed", { code: error?.code ?? "invalid_request" });
+          }
+        }
+        await unlink(statePath);
+      }
+    }
     catch { /* Already removed. */ }
   }
   try { if ((await readFile(stopPath, "utf8")).trim() === nonce) await unlink(stopPath); } catch { /* Already removed. */ }

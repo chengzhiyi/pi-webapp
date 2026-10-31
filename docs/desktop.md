@@ -499,3 +499,10 @@ chats and terminals are idle and drawings are protected, use the native normal
 selection validator starts the already verified Stable package. Do not delete
 the state/lock or restart marker, edit a receipt, or kill the old owner to clear
 this condition. A refused stop requires resolving the reported save/drain issue.
+Fixed supervisors archive only their own unaccepted restart request under
+`pi-web/restart-history/` after a successful natural normal stop, before releasing
+their owner claim. Foreign-owner requests, nonzero exits and forced exits remain
+untouched. When recovering an older binary that already left a request, retain
+the original bytes in the recovery backup; an operator may archive it only after
+verifying the exact old supervisor and Pi processes have exited naturally and
+the authenticated replacement is already running that request's selected target.

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,6 +106,18 @@ for (const accepted of [true, false]) test(`a running preview supervisor ${accep
     assert.equal(current.version, preview.version);
     assert.equal(alive(first.pid), true);
     assert.equal(await readFile(markerPath, "utf8"), marker);
+    await backend.stop(); // Explicit recovery, never manually remove the request.
+    for (let attempt = 0; alive(first.pid) && attempt < 100; attempt++) await delay(20);
+    assert.equal(alive(first.pid), false);
+    const history = join(backend.agentDir, "pi-web", "restart-history");
+    await assert.rejects(readFile(markerPath), { code: "ENOENT" }, "a successful explicit stop must retire its obsolete request before releasing ownership");
+    const names = (await readdir(history)).filter(name => name.startsWith(`${first.nonce}-`) && name.endsWith(".json"));
+    assert.equal(names.length, 1);
+    assert.equal(await readFile(join(history, names[0]), "utf8"), marker, "archiving preserves the original request bytes");
+    const exit = (await readFile(backend.logPath, "utf8")).split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line))
+      .find(record => record.event === "pi_process_exit" && record.pid === first.pid);
+    assert.equal(exit.reason, "stop_request"); assert.equal(exit.exitCode, 0); assert.equal(exit.forceStopRequested, false);
+    await writeFile(markerPath, JSON.stringify({ nonce: "a-later-owner", launcher: stable.launcher }), { flag: "wx" });
     return;
   }
   let next;
@@ -122,6 +134,33 @@ for (const accepted of [true, false]) test(`a running preview supervisor ${accep
   assert.equal(backend.state.nonce, next.nonce);
   assert.equal(backend.owned, true);
   await assert.rejects(readFile(markerPath), { code: "ENOENT" });
+});
+
+for (const outcome of ["other-owner", "nonzero", "forced-zero"]) test(`explicit stop preserves an obsolete restart marker for ${outcome}`, async t => {
+  const backend = await fixture(t);
+  if (outcome === "nonzero") {
+    await writeFile(backend.piCli, fakePi.replace("server.close(() => process.exit(0))", "server.close(() => process.exit(7))"));
+  } else if (outcome === "forced-zero") {
+    await writeFile(backend.piCli, fakePi.replace('process.stdin.on(\'end\', () => server.close(() => process.exit(0)));',
+      "process.stdin.on('end', () => {}); process.on('SIGTERM', () => server.close(() => process.exit(0)));"));
+  }
+  const first = await backend.connect();
+  const markerPath = join(backend.agentDir, "pi-web", "launcher.restart");
+  const marker = JSON.stringify({ nonce: outcome === "other-owner" ? "a-different-owner" : first.nonce, launcher: join(backend.agentDir, "unselected-candidate.mjs") });
+  await writeFile(markerPath, marker);
+  await backend.stop();
+  for (let attempt = 0; alive(first.pid) && attempt < 100; attempt++) await delay(20);
+  assert.equal(alive(first.pid), false);
+  assert.equal(await readFile(markerPath, "utf8"), marker);
+  const names = await readdir(join(backend.agentDir, "pi-web", "restart-history")).catch(error => { if (error.code === "ENOENT") return []; throw error; });
+  assert.equal(names.some(name => name.startsWith(`${first.nonce}-`)), false);
+  const exit = (await readFile(backend.logPath, "utf8")).split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line))
+    .find(record => record.event === "pi_process_exit" && record.pid === first.pid);
+  if (outcome === "nonzero") assert.equal(exit.exitCode, 7);
+  if (outcome === "forced-zero") {
+    assert.equal(exit.exitCode, 0);
+    assert.equal(exit.forceStopRequested, true, "a forced SIGTERM handled as exit(0) is still not a natural stop receipt");
+  }
 });
 
 test("failed desktop update restarts the previous service and restores its persistent selection", async t => {
