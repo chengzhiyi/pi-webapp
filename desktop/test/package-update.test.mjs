@@ -158,7 +158,9 @@ for (const outcome of ["other-owner", "nonzero", "forced-zero"]) test(`explicit 
     .find(record => record.event === "pi_process_exit" && record.pid === first.pid);
   if (outcome === "nonzero") assert.equal(exit.exitCode, 7);
   if (outcome === "forced-zero") {
-    assert.equal(exit.exitCode, 0);
+    // Windows cannot trap SIGTERM. POSIX also covers a handler masking the
+    // forced signal as exit(0); both platforms must retain the original marker.
+    if (process.platform !== "win32") assert.equal(exit.exitCode, 0);
     assert.equal(exit.forceStopRequested, true, "a forced SIGTERM handled as exit(0) is still not a natural stop receipt");
   }
 });
