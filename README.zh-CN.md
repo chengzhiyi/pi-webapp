@@ -165,7 +165,7 @@ pi
 - **帮助与参考：** [排错](docs/zh/troubleshooting.md) · [常见问题](docs/zh/faq.md) · [命令行](docs/zh/reference/cli.md) · [环境变量](docs/zh/reference/environment.md)
 - **参与开发：** [架构说明](docs/architecture.md) · [Web 插件](docs/web-plugins.md) · [桌面构建](docs/desktop.md) · [开发者](docs/zh/developers.md)
 
-这些指南也会构建成可搜索的站点：先运行 `npm --prefix docs ci`，再用 `npm run docs:dev` 预览、`npm run docs:build` 构建。站点有了公开地址后，这些链接应改指向它。
+这些指南也会构建成可搜索的站点：先运行 `npm --prefix docs ci`，再用 `npm run docs:dev` 预览、`npm run docs:build` 构建。站点发布在 <https://pi.emath.top>。
 
 指南随源码演进，可能与你安装的版本不同；桌面端支持范围以上方已核实的下载链接及对应版本发布说明为准。
 

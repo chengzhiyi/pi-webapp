@@ -53,7 +53,7 @@ npm run docs:check        # 校验输出里的每个链接、资源和 #锚点�
 npm run docs:preview      # 在本地提供构建好的站点
 ```
 
-预览地址以 `/pi-webapp/` 结尾，因为站点是为 GitHub Pages 的项目路径构建的。要构建部署在根路径的版本，请设置 `DOCS_BASE=/`。
+站点是为自己域名的根路径（<https://pi.emath.top>）构建的，所以预览地址在 `/`。要改为构建 GitHub Pages 的项目路径，请设置 `DOCS_BASE=/pi-webapp/`。
 
 页面写作准则：
 
