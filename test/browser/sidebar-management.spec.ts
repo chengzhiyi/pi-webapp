@@ -66,6 +66,9 @@ test("search empty state, visible focus, disclosure semantics and safe workspace
     await expect(searchButton).toHaveAttribute("aria-expanded", "false");
     await expect(workspace(page, "Workspace A")).toHaveAttribute("aria-expanded", "true");
     await workspace(page, "Chat A").focus();
+    // Each chat row is followed by its own "…" actions menu in tab order.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: /Chat A 的会话操作|Chat actions for Chat A/ })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(workspace(page, "Workspace B")).toBeFocused();
     await expect(workspace(page, "Chat A")).toHaveAttribute("title", "Chat A");
