@@ -1,22 +1,36 @@
 # CI verification and release browsers
 
 `CI and npm publish` retains `verify` as the aggregate required check. The browser
-matrix has four disjoint filename groups on independent runners, each with
+matrix has five disjoint filename groups on independent runners, each with
 **one worker**:
 
 - `general`: files that start with neither `hosted-` nor `workspace-`;
 - `workspace`: all `workspace-*` browser files;
-- `hosted`: `hosted-*` files except the stress file, plus the separate public npm
-  cross-version upgrade check;
+- `hosted`: `hosted-*` files except the stress and hosted-ui files, plus the
+  separate public npm cross-version upgrade check. The production and transport
+  acceptance files, and any new `hosted-*` file, stay here;
+- `hosted-ui`: `hosted-parity`, `hosted-tool-ui`, `hosted-uninstall-ui`,
+  `hosted-recovery-ui`, `hosted-view-recovery` and `hosted-viewport-parity-fix`
+  (about 137 of the former ~250 hosted seconds);
 - `stress`: `hosted-stress.spec.ts`, retaining all 20 warmups, 50 measured cycles,
-  memory/lifecycle assertions and measurement attachments.
+  memory/lifecycle assertions and measurement attachments. It runs on pushes to
+  `main` / `alpha` (and so gates every publish) and on manual runs, not on PRs.
+
+PRs that change only `docs/**` or `.github/workflows/docs.yml` skip every suite:
+the `changes` job reads the PR file list and `verify` reports success directly.
+A failed `changes` job fails `verify`.
 
 The group helper partitions by filename, including future/nested files and Windows
 paths. Local `playwright.config.ts` still discovers the entire suite unchanged.
 The former general group took 214–222 seconds; workspace cases accounted for about
 120 seconds of it. Splitting files across isolated runners reduces that serial
 cost without enabling concurrent workers in process-env/GC-sensitive tests.
-The roughly three-minute stress test remains a critical-path floor.
+The roughly three-minute stress test remains the critical-path floor on pushes;
+on PRs the hosted and hosted-ui groups (~2–2.5 minutes each) are.
+
+Dependency installs and fixture downloads have step timeouts (5 and 3 minutes;
+normally ~20s and ~2s), and browser jobs a 15-minute limit, so a registry hang
+fails quickly instead of holding a runner for the full job timeout.
 
 ## Browser environment: no per-run apt installation
 
@@ -65,14 +79,15 @@ access, and publishes that same tarball. Those checks are not removed to save ti
 
 ## Acceptance, evidence and cancellation
 
-The matrix has `fail-fast: false`; `verify` requires successful core and **all four**
-browser groups. Failed, skipped or cancelled jobs cannot turn the aggregate green.
-Hosted and stress reports must pass `verify-hosted-browser-results.mjs`: hosted
-requires both production viewport lifecycle cases and acknowledged shutdown;
+The matrix has `fail-fast: false`; `verify` requires successful core and **every**
+browser group in the run (four on PRs, five on pushes). Failed, skipped or cancelled jobs cannot turn the aggregate green.
+Hosted, hosted-ui and stress reports must pass `verify-hosted-browser-results.mjs`:
+hosted requires both production viewport lifecycle cases and acknowledged shutdown;
+hosted-ui requires acknowledged shutdown and clean, unretried bodies;
 stress requires its named measurement once, without skips or retries.
 
 Each group runs once with line + JSON reporters and uploads
-`browser-evidence-{general,workspace,hosted,stress}` with `.ci/browser/report.json`
+`browser-evidence-{general,workspace,hosted,hosted-ui,stress}` with `.ci/browser/report.json`
 and `test-results`. The public `0.1.0` → `0.1.1` update remains a distinct check.
 
 Only superseded checks on the same PR/group are cancelled. Branch/release runs
@@ -92,7 +107,7 @@ PI_WEB_BROWSER_GROUP=workspace npx playwright test --config=playwright.ci.config
 
 For real runs, `scripts/prepare-hosted-ci-fixtures.mjs` validates immutable public
 fixture integrities and exports the exact fixture paths and stress configuration.
-Compare the union of four `--list --reporter=json` outputs against local discovery:
+Compare the union of five `--list --reporter=json` outputs against local discovery:
 every test identity must appear exactly once.
 
 After rollout, collect 10–20 samples of runner initialization, dependency setup,

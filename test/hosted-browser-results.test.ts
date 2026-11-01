@@ -51,7 +51,17 @@ test("separate stress gate requires the real test to run once and pass cleanly",
   assert.ok(verifyHostedBrowserResults(stressReport(undefined, "fake.spec.ts"), "stress").failures.length > 0);
   assert.ok(verifyHostedBrowserResults(stressReport(), "hosted").failures.length > 0); // Production gate not relaxed.
   // @ts-expect-error The CLI must reject an invalid runtime group too.
-  assert.throws(() => verifyHostedBrowserResults(stressReport(), "typo"), /hosted or stress/);
+  assert.throws(() => verifyHostedBrowserResults(stressReport(), "typo"), /hosted, hosted-ui or stress/);
+});
+
+test("hosted-ui keeps the clean-shutdown gate without requiring production cases", () => {
+  const passed = { suites: [{ file: "hosted-parity.spec.ts", specs: [{ title: "parity", tests: [{ results: [{ status: "passed" }] }] }] }], errors: [] };
+  assert.deepEqual(verifyHostedBrowserResults(passed, "hosted-ui"), { bodyPassed: 1, cleanPassed: 1, diagnosticSkipped: 0, failures: [] });
+  const dirty = { suites: [{ file: "hosted-parity.spec.ts", specs: [{ title: "parity", tests: [{ results: [{ status: "passed", annotations: [{ type: "shutdown-failed-closed" }] }] }] }] }], errors: [] };
+  assert.deepEqual(verifyHostedBrowserResults(dirty, "hosted-ui").failures, ["parity: shutdown was not acknowledged"]);
+  const retried = { suites: [{ file: "hosted-parity.spec.ts", specs: [{ title: "parity", tests: [{ results: [{ status: "failed" }, { status: "passed" }] }] }] }], errors: [] };
+  assert.equal(verifyHostedBrowserResults(retried, "hosted-ui").failures.length, 1);
+  assert.equal(verifyHostedBrowserResults(report(), "hosted").failures.length, 0);
 });
 
 test("stress cannot inherit the hosted-only diagnostic skip exception", () => {

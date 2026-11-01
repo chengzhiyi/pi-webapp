@@ -16,10 +16,39 @@ permissions:
   contents: read
 
 jobs:
+  # PRs that only touch the docs site skip the suites; verify still reports a
+  # result. Push runs already ignore docs-only changes through paths-ignore.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Detect docs-only pull requests
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then echo code=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -Ev '^(docs/|\.github/workflows/docs\.yml$)' > /dev/null; then
+            echo code=false >> "$GITHUB_OUTPUT"
+          else
+            echo code=true >> "$GITHUB_OUTPUT"
+          fi
+
   verify-core:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # The release Chrome preflight must match the publish runner, not a container.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     # Only superseded PR checks may be cancelled; branch/release runs stay unique.
     concurrency:
       group: ${{ github.workflow }}-core-${{ github.event.pull_request.number || github.run_id }}
@@ -55,8 +84,11 @@ jobs:
           pnpm --filter @chengzhiyi/pi-web-protocol build
       - name: Resolve the protocol dependency for verification
         run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
+      # Normally ~20s; fail fast on a registry hang instead of holding the job.
       - run: npm ci
+        timeout-minutes: 5
       - name: Fetch integrity-pinned published plugin fixtures
+        timeout-minutes: 3
         run: node scripts/prepare-hosted-ci-fixtures.mjs
       - name: Verify the runner Chrome used by release probes
         timeout-minutes: 1
@@ -73,12 +105,16 @@ jobs:
           node --import ./test/setup-env.mjs --experimental-strip-types --test test/auto-open.test.ts test/extension-flow.test.ts test/hosted-bootstrap.test.ts
 
   browser:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
-        group: [general, workspace, hosted, stress]
+        # The ~3 minute stress measurement gates main/alpha pushes (and therefore
+        # every publish), not each PR iteration.
+        group: ${{ fromJSON(github.event_name == 'pull_request' && '["general","workspace","hosted","hosted-ui"]' || '["general","workspace","hosted","hosted-ui","stress"]') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     concurrency:
       group: ${{ github.workflow }}-browser-${{ matrix.group }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -114,8 +150,11 @@ jobs:
           pnpm --filter @chengzhiyi/pi-web-protocol build
       - name: Resolve the protocol dependency for verification
         run: node scripts/sync-protocol-dependency.mjs --source .ci/pi-extensions/packages/protocol
+      # Normally ~20s; fail fast on a registry hang instead of holding the job.
       - run: npm ci
+        timeout-minutes: 5
       - name: Fetch integrity-pinned published plugin fixtures
+        timeout-minutes: 3
         run: node scripts/prepare-hosted-ci-fixtures.mjs
       # ubuntu-24.04 already has native browser libraries and the PTY compiler.
       # Tests use the default headless shell, not the unused full Chrome binary.
@@ -134,7 +173,7 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: .ci/browser/report.json
         run: npx playwright test --config=playwright.ci.config.ts --reporter=line,json
       - name: Require clean hosted lifecycle or complete stress evidence
-        if: always() && (matrix.group == 'hosted' || matrix.group == 'stress') && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
+        if: always() && (matrix.group == 'hosted' || matrix.group == 'hosted-ui' || matrix.group == 'stress') && steps.browser.outcome != 'skipped' && steps.browser.outcome != 'cancelled'
         run: node scripts/verify-hosted-browser-results.mjs .ci/browser/report.json "${{ matrix.group }}"
       - name: Verify real public cross-version plugin update
         if: matrix.group == 'hosted'
@@ -160,7 +199,7 @@ jobs:
   # turn green merely because an upstream job did not run.
   verify:
     if: always()
-    needs: [verify-core, browser]
+    needs: [changes, verify-core, browser]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -168,18 +207,25 @@ jobs:
     steps:
       - name: Require every verification group to succeed
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
           CORE_RESULT: ${{ needs.verify-core.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
         run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$CODE_CHANGED" = false ]; then echo "Docs-only pull request: suites skipped."; exit 0; fi
           test "$CORE_RESULT" = success
           test "$BROWSER_RESULT" = success
 
   platform-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     concurrency:
       group: ${{ github.workflow }}-smoke-${{ matrix.os }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -193,6 +239,8 @@ jobs:
       - run: node --experimental-strip-types --test test/npm-command.test.ts test/self-update.test.ts test/open-web-page.test.ts test/release-channels.test.ts test/release-plan.test.ts test/hosted-ownership.test.ts
 
   ownership-minimum:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -230,8 +278,10 @@ jobs:
       - name: Resolve the published protocol dependency
         run: node scripts/sync-protocol-dependency.mjs
       - name: Fetch integrity-pinned published plugin fixtures
+        timeout-minutes: 3
         run: node scripts/prepare-hosted-ci-fixtures.mjs
       - run: npm ci
+        timeout-minutes: 5
       - name: Choose the next version and npm distribution tag
         run: node scripts/prepare-release.mjs
       - run: npm run check
