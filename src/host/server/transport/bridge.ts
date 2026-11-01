@@ -388,7 +388,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             if (!input || typeof input.nonce !== "string" || typeof input.requestId !== "string") { json(res, 400, { error: "交接身份无效" }); return; }
             if (!host.selfUpdate?.requestLauncherHandoff) { json(res, 409, { error: "请先在稳定版通道升级业务包，再重试启动器交接" }); return; }
             if (restarting || preparingUpdate || logins.getActive()) { json(res, 409, { error: "更新、登录或启动器交接正在进行中" }); return; }
-            const blocker = pluginRegistry.restartBlocker();
+            const blocker = pluginRegistry.restartBlocker() ?? pluginRegistry.restartConfirmations()[0];
             if (!host.snapshot().idle || (host.busyGitWorkspaces?.() ?? []).length || blocker) { json(res, 409, { error: blocker ?? "请等待所有聊天任务空闲后再交接启动器；运行状态已保留" }); return; }
             restarting = true;
             try { await host.selfUpdate.requestLauncherHandoff(input.nonce, input.requestId); }
@@ -469,6 +469,13 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             const input = body as Record<string, unknown>;
             const hasTarget = "channel" in input || "version" in input || "allowDowngrade" in input;
             if (hasTarget && ((input.channel !== "stable" && input.channel !== "alpha") || typeof input.version !== "string" || (input.allowDowngrade !== undefined && typeof input.allowDowngrade !== "boolean"))) { json(res, 400, { error: "更新参数无效" }); return; }
+            if (input.force !== undefined && typeof input.force !== "boolean") { json(res, 400, { error: "更新参数无效" }); return; }
+            // Plugins never refuse an update. What they hold (open terminals, unconfirmed views) is
+            // shown to the user once; a confirmed retry (force) releases it and proceeds.
+            const force = input.force === true;
+            const confirm = (reasons: string[]) => json(res, 409, { error: reasons.join("；"), reason: "update_confirm_required" });
+            const pending = pluginRegistry.restartConfirmations();
+            if (pending.length && !force) { confirm(pending); return; }
             // Downloads own staged code only. Current chats and plugin management
             // remain available until the short, reversible restart checkpoint.
             preparingUpdate = true;
@@ -477,10 +484,21 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               prepared = await host.selfUpdate.prepare(hasTarget ? { channel: input.channel as "stable" | "alpha", version: input.version as string, allowDowngrade: input.allowDowngrade as boolean | undefined } : undefined);
               const changedBlocker = pluginRegistry.restartBlocker();
               if (!host.snapshot().idle || (host.busyGitWorkspaces?.() ?? []).length || changedBlocker) throw new Error(changedBlocker ?? "下载完成；当前聊天仍在运行，请结束任务后再升级");
+              const changedPending = pluginRegistry.restartConfirmations();
+              if (changedPending.length && !force) { confirm(changedPending); return; }
+              if (force) await pluginRegistry.releaseForRestart();
               restarting = true;
               // Keep the page and checkpoint transport alive until views have flushed,
               // workers exited and the validated restart marker is actually written.
-              await host.selfUpdate.requestRestart(prepared);
+              try { await host.selfUpdate.requestRestart(prepared, { force }); }
+              catch (error) {
+                const code = (error as { code?: unknown })?.code;
+                if (!force && (code === "view_barrier" || code === "drain_pending")) {
+                  restarting = false;
+                  confirm(["部分插件视图未确认保存（未保存内容会保留在插件视图恢复记录中），插件后台任务也可能被中断"]); return;
+                }
+                throw error;
+              }
             }
             catch (error) { restarting = false; throw error; }
             finally { preparingUpdate = false; }

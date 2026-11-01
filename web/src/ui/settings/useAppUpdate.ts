@@ -98,7 +98,18 @@ export function useAppUpdate({ getUpdate, getRunningVersion, setUpdateChannel, c
     installLock.current = true;
     setInstalling(true);
     setError("");
-    try { const result = await update(status.channel && status.latest ? { channel: status.channel, version: status.latest, ...(status.downgrade ? { allowDowngrade: true } : {}) } : undefined); if (mounted.current) setTargetVersion(result.version); }
+    const request: UpdateRequest | undefined = status.channel && status.latest ? { channel: status.channel, version: status.latest, ...(status.downgrade ? { allowDowngrade: true } : {}) } : undefined;
+    try {
+      let result: { version: string };
+      try { result = await update(request); }
+      catch (cause) {
+        // Plugins never refuse an update; what they hold (open terminals, unconfirmed views) is confirmed once.
+        if ((cause as { reason?: string })?.reason !== "update_confirm_required") throw cause;
+        if (!window.confirm(textFor(locale, `${(cause as Error).message}。\n\n仍然升级？`, `${(cause as Error).message}.\n\nUpdate anyway?`))) return;
+        result = await update({ ...request, force: true });
+      }
+      if (mounted.current) setTargetVersion(result.version);
+    }
     catch (cause) {
       if (mounted.current) setError(updateErrorMessage(cause, locale, "install"));
       // A rejected checkpoint can leave recoverable staged state. Refresh status
