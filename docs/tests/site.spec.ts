@@ -1,57 +1,70 @@
 import { test, expect } from '@playwright/test';
 
-// Exercise the generated production site, not Vite's source/dev fallback.
-test('project-base deep link, reload, language counterpart and narrow layout', async ({ page }, testInfo) => {
+// These tests exercise the generated production site (vitepress preview), not the dev server.
+
+test('deep link, reload, sidebar navigation and narrow layout', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('response', (response) => {
     if (response.url().startsWith('http://127.0.0.1:4175/') && response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
-  await page.goto('./zh/getting-started.html');
-  await expect(page.locator('h1')).toHaveText('安装与首次对话');
-  await expect(page.locator('.docs-version')).toContainText('开发版文档');
+  await page.goto('./getting-started');
+  await expect(page.locator('h1')).toHaveText('Quick start');
   await page.reload();
-  await expect(page.locator('h1')).toHaveText('安装与首次对话');
+  await expect(page.locator('h1')).toHaveText('Quick start');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('guide-zh.png'), fullPage: true });
-  const language = page.locator('.VPNavBarTranslations');
-  // Narrow layouts put translations in the navigation menu rather than the desktop bar.
-  if (await language.isVisible()) {
-    await language.locator('button').click();
-    await language.getByRole('link', { name: 'English', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: /mobile navigation/i }).click();
-    await page.locator('.VPNavScreen').getByRole('link', { name: 'English', exact: true }).click();
-  }
-  await expect(page).toHaveURL(/\/pi-webapp\/en\/getting-started(?:\.html)?$/);
-  await expect(page.locator('h1')).toHaveText('Install & first conversation');
-  await expect(page.locator('.docs-version')).toContainText('Development docs');
+
+  // Follow an in-content link; on narrow layouts the sidebar sits behind a menu button.
+  await page.locator('.vp-doc').getByRole('link', { name: 'Conversations' }).first().click();
+  await expect(page).toHaveURL(/\/pi-webapp\/conversation$/);
+  await expect(page.locator('h1')).toHaveText('Conversations');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
 
-test('Chinese and English local search, keyboard open/select/escape', async ({ page }) => {
-  await page.goto('./zh/');
+test('every screenshot on a content-heavy page loads', async ({ page }) => {
+  await page.goto('./workspace-tools');
+  await page.locator('.vp-doc img').last().scrollIntoViewIfNeeded();
+  const images = page.locator('.vp-doc img');
+  expect(await images.count()).toBeGreaterThan(2);
+  await expect.poll(() => images.evaluateAll((all) => all.every((img) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
+});
+
+test('local search opens from the keyboard and finds a page by its content', async ({ page }) => {
+  await page.goto('./');
   // Wait until hydration installs the keyboard listener.
-  await expect(page.locator('.VPNavBarSearch button')).toBeVisible();
-  await page.locator('.VPNavBarSearch button').click();
-  const search = page.locator('#localsearch-input');
-  await expect(search).toBeVisible();
-  await search.fill('遥测');
-  await expect(page.locator('.VPLocalSearchBox .results')).toContainText('安全与隐私');
-  // A shorter substring also finds Chinese text without spaces between words.
-  await search.fill('采集');
-  await expect(page.locator('.VPLocalSearchBox .results')).toContainText('安全与隐私');
-  await search.press('Escape');
-  await expect(search).not.toBeVisible();
-  await page.goto('./en/');
-  // SSR already exposes the button before Vue installs its keyboard listener.
   await page.waitForFunction(() => Boolean((document.querySelector('#app') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
   await page.keyboard.press('Control+k');
+  const search = page.locator('#localsearch-input');
   await expect(search).toBeVisible();
-  await search.fill('recovery');
-  await expect(page.locator('.VPLocalSearchBox .results')).toContainText('Updates');
+  await search.fill('stop --force');
+  await expect(page.locator('.VPLocalSearchBox .results')).toContainText('Troubleshooting');
   await search.press('ArrowDown');
   await search.press('Enter');
-  await expect(page).toHaveURL(/\/en\/updates/);
+  await expect(page).toHaveURL(/\/pi-webapp\/(troubleshooting|reference\/cli)/);
+  await page.keyboard.press('Escape');
+});
+
+test('dark mode toggles and persists across reload', async ({ page }) => {
+  await page.goto('./introduction');
+  await page.waitForFunction(() => Boolean((document.querySelector('#app') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
+  const html = page.locator('html');
+  const before = await html.evaluate((el) => el.classList.contains('dark'));
+  // The appearance switch lives in the nav bar on wide screens and in the navigation menu on narrow ones.
+  const toggle = page.locator('.VPSwitchAppearance:visible').first();
+  if (await toggle.count()) await toggle.click();
+  else {
+    await page.getByRole('button', { name: /mobile navigation/i }).click();
+    await page.locator('.VPNavScreen .VPSwitchAppearance').click();
+  }
+  await expect.poll(() => html.evaluate((el) => el.classList.contains('dark'))).toBe(!before);
+  await page.reload();
+  await expect.poll(() => html.evaluate((el) => el.classList.contains('dark'))).toBe(!before);
+});
+
+test('edit link points at the source file and code blocks are copyable', async ({ page }) => {
+  await page.goto('./getting-started');
+  const edit = page.locator('.edit-link a');
+  await expect(edit).toHaveAttribute('href', 'https://github.com/chengzhiyi/pi-webapp/edit/main/docs/en/getting-started.md');
+  await expect(page.locator('.vp-doc div[class*="language-"] button.copy').first()).toBeAttached();
 });

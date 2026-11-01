@@ -4,7 +4,7 @@
 
 Conversations, project files, terminals, and Git—side by side. Use the same workbench in your browser or on desktop, while keeping Pi's tools, skills, extensions, and terminal workflow.
 
-[简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
+[简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/introduction.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
 **Desktop test build 14:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/pi-0.1.39-desktop.14-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b14/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
 
@@ -48,7 +48,7 @@ npx pi-webapp
 - **Make it yours:** move shapes, edit labels, adjust layout, and use native undo/redo.
 - **Keep the result:** save editable `.excalidraw` source to the workspace or export a PNG from the editor.
 
-**Optional plugin:** explicitly install and enable `@chengzhiyi/pi-excalidraw` in **Plugins → Hosted plugins**, using an available compatible release. It is not bundled or auto-installed, and needs no drawing-service account. [Setup, saving & recovery](docs/diagrams.md).
+**Optional plugin:** explicitly install and enable `@chengzhiyi/pi-excalidraw` in **Plugins → Official plugins**, using an available compatible release. It is not bundled or auto-installed, and needs no drawing-service account. [Setup, saving & recovery](docs/diagrams.md).
 
 ## Core features
 
@@ -160,9 +160,12 @@ Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin
 
 ## Guides & development
 
-- **New users:** [First conversation](docs/en/getting-started.md) · [Sessions](docs/en/sessions.md) · [Workspace tools](docs/en/workspace-tools.md)
-- **Configuration:** [Models, packages, and skills](docs/en/configuration.md) · [Updates](docs/en/updates.md) · [Troubleshooting](docs/en/troubleshooting.md)
-- **Contributors:** [Architecture](docs/architecture.md) · [Web plugins](docs/web-plugins.md) · [Desktop builds](docs/desktop.md)
+- **New users:** [Quick start](docs/en/getting-started.md) · [Conversations](docs/en/conversation.md) · [Sessions and workspaces](docs/en/sessions.md) · [Files, terminal and Git](docs/en/workspace-tools.md) · [Diagrams](docs/en/diagrams.md)
+- **Configuration:** [Overview](docs/en/configuration.md) · [Models and providers](docs/en/models.md) · [Packages, skills and plugins](docs/en/extensions.md) · [Updates](docs/en/updates.md) · [Security and privacy](docs/en/security.md)
+- **Help and reference:** [Troubleshooting](docs/en/troubleshooting.md) · [FAQ](docs/en/faq.md) · [Command line](docs/en/reference/cli.md) · [Environment variables](docs/en/reference/environment.md)
+- **Contributors:** [Architecture](docs/architecture.md) · [Web plugins](docs/web-plugins.md) · [Desktop builds](docs/desktop.md) · [Developers](docs/en/developers.md)
+
+The guides are also built as a searchable site with `npm run docs:build` (preview it with `npm run docs:dev`, after `npm --prefix docs ci`). They are written as VitePress pages under `docs/en/`; once the site has a public address, these links should point to it.
 
 The guides follow the source tree; installed versions may differ. For desktop availability, use the verified release links above and their release notes.
 

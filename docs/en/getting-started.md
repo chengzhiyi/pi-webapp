@@ -1,56 +1,100 @@
-# Install & first conversation
+# Quick start
 
-## 1. Check prerequisites
+This page takes you from nothing to a working conversation in about five minutes, using the web launcher.
 
-Browser usage requires **Node.js 22.19 or later** and npm. Check `node --version`. If Pi is missing, the launcher installs the official `@earendil-works/pi-coding-agent` through npm. An existing Pi must be **0.87.1 or later** and is not automatically replaced. Check `pi --version`.
-
-Desktop packages include their runtime: do not install global Node/Pi just for desktop; read the [desktop guide](./desktop). Downloads, Pi installation, and model requests require access to the corresponding networks.
-
-## 2. Open the Web interface
-
-Run this in the directory you want to use as your workspace:
+## 1. Check Node.js
 
 ```bash
+node --version
+```
+
+You need `v22.19.0` or later. If the version is lower, install a current Node.js LTS from [nodejs.org](https://nodejs.org/) first.
+
+## 2. Start pi-webapp in your project
+
+Open a terminal in the folder you want to work on and run:
+
+```bash
+cd ~/projects/my-app
 npx pi-webapp
 ```
 
-On a local graphical desktop, the default browser opens and Pi stays in the background. Headless environments print a local address; it is not a public URL. Running the launcher again reopens the existing service rather than starting a service for every terminal.
+The first run downloads the package and the Pi runtime it is pinned to, which took about 25 seconds on a fresh machine. Later runs start in a few seconds. When the service is ready you see:
 
-Optional global installation:
-
-```bash
-npm install -g pi-webapp
-pi-webapp
+```text
+pi-webapp 已在后台运行（PID 81627）：http://127.0.0.1:63127/#2pYOwyI--fTihtd9Q4LO4LUf7Gz9ajb-
+停止服务：pi-webapp stop（源码目录中可运行 npm run stop）
 ```
 
-For remote usage, use a secure, privately managed local tunnel rather than exposing a listening port or sharing the token. Never publish the forwarded URL. See [security](./security).
+::: info The command-line messages are in Chinese
+The launcher prints Chinese only for now. The first line means "pi-webapp is running in the background (PID …): *address*". The second means "To stop the service: `pi-webapp stop`". Your port, PID and token will differ. [All launcher messages](./reference/cli#messages) are translated in the reference.
+:::
 
-## 3. Configure a model and send a first message
+Your default browser opens on that address. If it doesn't (a remote machine, an SSH session, or a Linux box with no desktop), open the printed address in a browser on the same machine. See [Remote machines](./security#remote-machines) before you forward it anywhere.
 
-1. Open **Settings → Models**. Initial setup also leads to this page.
-2. Choose a provider/model you are entitled to use and add authentication or sign in using the supported UI. Browser sign-in opens the provider page. If its callback cannot reach the Pi machine, use manual code entry when prompted. Never send API keys in chat.
-3. Return to the conversation and select a workspace in the sidebar. Add another workspace if needed, verify its path, then create a session. Also verify the current workspace when using the launch directory.
-4. Select an available model and send a read-only first message, such as “Explain how you can help me; do not modify any files yet.”
-5. A completed streaming reply without an authentication error confirms the first conversation. Define scope and allowed actions before asking for file changes.
+**Keep the full address private.** The part after `#` is an access token that lets whoever has it drive your agent.
 
-No reply? Check [troubleshooting](./troubleshooting) for authentication, version, and service checks instead of repeatedly submitting the task.
+## 3. Connect a model
 
-## 4. Status and stop
+On first start there is no model, so pi-webapp opens **Pi Settings → Models** with the title **Connect a model to begin**.
+
+![First run: Pi Settings opens on Models with an Add provider card](/images/first-run.png)
+
+Pick whichever fits what you have:
+
+- **A provider that offers sign-in** (the card shows **Browser sign-in**): click it, finish sign-in on the provider's page, and the dialog updates by itself. If the page can't reach your machine to complete the callback, the dialog offers **Can't finish automatically? Enter an authorization code**.
+- **A provider that uses an API key**: choose it in the **Provider** list, paste the key and click **Connect**.
+- **Your own endpoint**: close the card and choose **＋ Add custom provider**. See [Models and providers](./models).
+
+When it says **Connected**, click **Return to conversation and choose a model**.
+
+::: tip No key to hand?
+The custom provider form accepts any OpenAI- or Anthropic-compatible URL, including a model server on your own machine. That is also how you can try pi-webapp without an account, with a local server.
+:::
+
+## 4. Send your first message
+
+1. Open the model picker at the bottom right of the message box, choose **Model**, and select a model.
+2. Type a read-only first request and press **Enter**:
+
+   ```text
+   Explain how you can help me in this project. Don't change any files yet.
+   ```
+
+3. The reply streams in. The chat gets a title from your first message and appears under the workspace in the sidebar.
+
+![A conversation with a collapsed tool call and a reply](/images/conversation.png)
+
+A finished reply with a **Usage** line under it is your confirmation that everything is connected. If you get an authentication or network error instead, see [Troubleshooting](./troubleshooting).
+
+## 5. Open Files, Terminal or Git
+
+Click the panel icon in the upper right of the conversation to open the right sidebar. Its start page offers **Workspace files**, **Open terminal** and **Git changes**. They are covered in [Files, terminal and Git](./workspace-tools).
+
+## 6. Stop it, and start it again
 
 ```bash
 npx pi-webapp status
 npx pi-webapp stop
 ```
 
-After a global installation use `pi-webapp status` / `pi-webapp stop`. **Stopping the service ends background tasks across chats and service-owned terminals.** Finish active work first. Closing the page does not stop the service.
+`status` prints `pi-webapp 正在运行：` followed by the address, or `pi-webapp 未运行` if nothing is running. `stop` prints `pi-webapp 已停止` (stopped). Stopping ends all running chats and terminals, so finish your work first.
 
-## Alternative: an existing Pi terminal
+Closing the browser tab does **not** stop the service. After you stop and start it again the address has a new port and a new token, so an old bookmark won't work.
 
-```bash
-pi install npm:pi-webapp
-pi
-```
+::: tip Prefer a global command?
+`npm install -g pi-webapp` gives you a `pi-webapp` command to use instead of `npx pi-webapp`.
+:::
 
-Enter `/web` inside Pi. The browser stays synchronized with that terminal session. Its random URL token lasts only for the current process; enter `/web` again to reopen it. Exiting that Pi process ends this service. Background-launcher stop and web-update procedures do not apply to this mode.
+## Things worth knowing on day two
 
-Next: [sessions](./sessions) · [model configuration](./configuration) · [updates](./updates)
+- **Run it from another folder?** If the service is already running, `npx pi-webapp` only prints and reopens the existing address; it does not add the new folder. Use **Add workspace** in the sidebar instead ([Sessions and workspaces](./sessions#add-and-remove-workspaces)).
+- **Interface language.** The interface follows your browser language. To change it, open **Pi Settings → General → Language**.
+- **Updating.** **Pi Settings → General → App updates** can update the launcher for you. See [Updates](./updates).
+
+## Next steps
+
+- [Conversations](./conversation): attachments, slash commands, pausing and queued messages
+- [Sessions and workspaces](./sessions): several projects at once
+- [Models and providers](./models): more than one model, custom endpoints
+- [Security and privacy](./security): what the agent can touch
