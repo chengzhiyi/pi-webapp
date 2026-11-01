@@ -16,7 +16,7 @@ test('deep link, reload, sidebar navigation and narrow layout', async ({ page })
 
   // Follow an in-content link; on narrow layouts the sidebar sits behind a menu button.
   await page.locator('.vp-doc').getByRole('link', { name: 'Conversations' }).first().click();
-  await expect(page).toHaveURL(/\/pi-webapp\/conversation$/);
+  await expect(page).toHaveURL(/\/conversation$/);
   await expect(page.locator('h1')).toHaveText('Conversations');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
@@ -41,7 +41,7 @@ test('local search opens from the keyboard and finds a page by its content', asy
   await expect(page.locator('.VPLocalSearchBox .results')).toContainText('Troubleshooting');
   await search.press('ArrowDown');
   await search.press('Enter');
-  await expect(page).toHaveURL(/\/pi-webapp\/(troubleshooting|reference\/cli)/);
+  await expect(page).toHaveURL(/\/(troubleshooting|reference\/cli)/);
   await page.keyboard.press('Escape');
 });
 
@@ -86,7 +86,7 @@ test('language switch keeps the page: English to Chinese and back, with Chinese 
     }
   };
   await switchTo('简体中文');
-  await expect(page).toHaveURL(/\/pi-webapp\/zh\/getting-started$/);
+  await expect(page).toHaveURL(/\/zh\/getting-started$/);
   await expect(page.locator('h1')).toHaveText('快速开始');
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -107,7 +107,7 @@ test('language switch keeps the page: English to Chinese and back, with Chinese 
   await search.press('Escape');
 
   await switchTo('English');
-  await expect(page).toHaveURL(/\/pi-webapp\/getting-started$/);
+  await expect(page).toHaveURL(/\/getting-started$/);
   await expect(page.locator('h1')).toHaveText('Quick start');
   expect(errors).toEqual([]);
 });

@@ -53,7 +53,7 @@ npm run docs:check        # verifies every link, asset and #anchor in the output
 npm run docs:preview      # serve the production build locally
 ```
 
-The preview URL ends with `/pi-webapp/`, because the site is built for a GitHub Pages project path. Set `DOCS_BASE=/` for a root-hosted build.
+The site is built for the root of its own domain (<https://pi.emath.top>), so the preview is served at `/`. Set `DOCS_BASE=/pi-webapp/` to build for the GitHub Pages project path instead.
 
 Guidelines for pages:
 
