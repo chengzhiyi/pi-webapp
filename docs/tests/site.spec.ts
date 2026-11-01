@@ -117,3 +117,20 @@ test('the Chinese edit link points at the Chinese source file', async ({ page })
   await expect(page.locator('h1')).toHaveText('排错');
   await expect(page.locator('.edit-link a')).toHaveAttribute('href', 'https://github.com/chengzhiyi/pi-webapp/edit/main/docs/zh/troubleshooting.md');
 });
+
+test('home page: install command, screenshot tabs and the Chinese home', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('.home-install code')).toHaveText('npx pi-webapp');
+  const image = page.locator('.home-window img');
+  const before = await image.getAttribute('src');
+  await page.getByRole('tab', { name: 'Terminal' }).click();
+  await expect(image).not.toHaveAttribute('src', before!);
+  await expect(image).toHaveAttribute('src', /\/images\/terminal\.png$/);
+  await expect(page.locator('.home-way')).toHaveCount(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await page.goto('./zh/');
+  await expect(page.locator('.home-install-box button')).toContainText('复制');
+  await page.getByRole('tab', { name: '终端' }).click();
+  await expect(page.locator('.home-window img')).toHaveAttribute('src', /\/images\/zh\/terminal\.png$/);
+});

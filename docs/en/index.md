@@ -18,27 +18,39 @@ hero:
       link: https://github.com/chengzhiyi/pi-webapp
 
 features:
-  - title: Start in one command
+  - icon:
+      src: /icons/terminal.svg
+    title: Start in one command
     details: Run <code>npx pi-webapp</code> in a project folder, connect a model, and send your first message.
     link: /getting-started
     linkText: Quick start
-  - title: Work across projects
+  - icon:
+      src: /icons/layers.svg
+    title: Work across projects
     details: Chats run independently. Switch workspaces or start another chat while earlier work keeps running.
     link: /sessions
     linkText: Sessions and workspaces
-  - title: Files, terminal and Git beside the chat
+  - icon:
+      src: /icons/panels.svg
+    title: Files, terminal and Git beside the chat
     details: Preview files, run a real shell and review diffs without leaving the conversation.
     link: /workspace-tools
     linkText: Workspace tools
-  - title: Editable diagrams
+  - icon:
+      src: /icons/shapes.svg
+    title: Editable diagrams
     details: Ask for an architecture diagram or flowchart and edit it on a native Excalidraw canvas.
     link: /diagrams
     linkText: Diagrams
-  - title: Your models, your data
+  - icon:
+      src: /icons/shield.svg
+    title: Your models, your data
     details: Bring your own provider. Sessions and credentials stay in Pi's data folder on your machine.
     link: /security
     linkText: Security and privacy
-  - title: Something not working?
+  - icon:
+      src: /icons/help.svg
+    title: Something not working?
     details: Symptom, cause and fix for the problems people actually hit.
     link: /troubleshooting
     linkText: Troubleshooting
