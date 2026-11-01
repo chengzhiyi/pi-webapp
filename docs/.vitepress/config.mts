@@ -84,7 +84,8 @@ export default defineConfig({
     search: { provider: 'local' },
     outline: { level: [2, 3] },
     editLink: {
-      pattern: ({ filePath }) => `${repo}/edit/main/docs/${filePath}`,
+      // Serialized into the client bundle: it must not close over variables.
+      pattern: ({ filePath }) => `https://github.com/chengzhiyi/pi-webapp/edit/main/docs/${filePath}`,
       text: 'Edit this page on GitHub',
     },
     socialLinks: [{ icon: 'github', link: repo }],
