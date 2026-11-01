@@ -68,3 +68,52 @@ test('edit link points at the source file and code blocks are copyable', async (
   await expect(edit).toHaveAttribute('href', 'https://github.com/chengzhiyi/pi-webapp/edit/main/docs/en/getting-started.md');
   await expect(page.locator('.vp-doc div[class*="language-"] button.copy').first()).toBeAttached();
 });
+
+test('language switch keeps the page: English to Chinese and back, with Chinese search', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('./getting-started');
+  await expect(page.locator('h1')).toHaveText('Quick start');
+  // On wide screens the language menu is in the nav bar; on narrow ones it is inside the navigation menu.
+  const switchTo = async (name: string) => {
+    const bar = page.locator('.VPNavBarTranslations');
+    if (await bar.isVisible()) {
+      await bar.locator('button').click();
+      await bar.getByRole('link', { name, exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: /mobile navigation/i }).click();
+      await page.locator('.VPNavScreen').getByRole('link', { name, exact: true }).click();
+    }
+  };
+  await switchTo('简体中文');
+  await expect(page).toHaveURL(/\/pi-webapp\/zh\/getting-started$/);
+  await expect(page.locator('h1')).toHaveText('快速开始');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  // Chinese screenshots (the Chinese-interface set) load on the Chinese page.
+  await page.locator('.vp-doc img').last().scrollIntoViewIfNeeded();
+  const images = page.locator('.vp-doc img');
+  await expect.poll(() => images.evaluateAll((all) => all.length > 0 && all.every((img) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  expect(await images.first().getAttribute('src')).toContain('/images/zh/');
+
+  // Chinese substring search works without spaces between words.
+  await page.waitForFunction(() => Boolean((document.querySelector('#app') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
+  await page.keyboard.press('Control+k');
+  const search = page.locator('#localsearch-input');
+  await expect(search).toBeVisible();
+  await search.fill('访问令牌');
+  await expect(page.locator('.VPLocalSearchBox .results')).toContainText('安全与隐私');
+  await search.press('Escape');
+
+  await switchTo('English');
+  await expect(page).toHaveURL(/\/pi-webapp\/getting-started$/);
+  await expect(page.locator('h1')).toHaveText('Quick start');
+  expect(errors).toEqual([]);
+});
+
+test('the Chinese edit link points at the Chinese source file', async ({ page }) => {
+  await page.goto('./zh/troubleshooting');
+  await expect(page.locator('h1')).toHaveText('排错');
+  await expect(page.locator('.edit-link a')).toHaveAttribute('href', 'https://github.com/chengzhiyi/pi-webapp/edit/main/docs/zh/troubleshooting.md');
+});

@@ -43,13 +43,13 @@ These documents describe how pi-webapp is built and released. They aren't part o
 
 ## Work on these docs
 
-The site is built with [VitePress](https://vitepress.dev/). The pages are the Markdown files in `docs/en/`, published at the site root. Everything else in `docs/` is engineering material and is deliberately left out of the build.
+The site is built with [VitePress](https://vitepress.dev/). The English pages are the Markdown files in `docs/en/`, published at the site root; the Chinese translation is in `docs/zh/`, published under `/zh/`. Everything else in `docs/` is engineering material and is deliberately left out of the build.
 
 ```bash
 npm --prefix docs ci      # once
 npm run docs:dev          # live preview
 npm run docs:build        # production build; fails on dead page links
-npm run docs:check        # verifies every link, asset and #anchor in the output
+npm run docs:check        # verifies every link, asset and #anchor in the output, and that each English page has a Chinese counterpart
 npm run docs:preview      # serve the production build locally
 ```
 
@@ -62,6 +62,7 @@ Guidelines for pages:
 - Quote exact UI labels in **bold**, and say what the output looks like.
 - Keep internal work-item names and design-doc numbers out of user pages.
 - Link between pages so none is a dead end.
-- The interface labels in screenshots are English. Take screenshots with a stand-in model server, never with real credentials or private projects.
+- English is the source text. When you change an English page, update its Chinese counterpart too, quoting interface labels as they appear in the Chinese interface.
+- The interface labels in screenshots are English (Chinese pages use the Chinese-interface set in `docs/public/images/zh/`). Take screenshots with a stand-in model server, never with real credentials or private projects.
 
 Changes under `docs/` are built on every pull request; the site is deployed from `main`.
