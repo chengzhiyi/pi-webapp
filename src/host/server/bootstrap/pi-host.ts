@@ -182,7 +182,9 @@ async function workspaceList(): Promise<WorkspaceListView> {
   const tuiPath = tui ? await workspaceDirectory(tui.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return null; }) : null;
   const allSessions = await SessionManager.listAll();
   const retained = shared.workspaceSessions?.retainedSessions() ?? [];
-  if (tui && tuiPath) retained.push({ sessionId: tui.sessionId, cwd: tuiPath, path: null, name: tui.name, modified: tui.messages.at(-1)?.timestamp ?? new Date().toISOString(), idle: tui.idle, blank: tui.idle && shared.tuiPrompts.length === 0 && !tui.messages.some((message) => message.role === "user") });
+  if (tui && tuiPath) retained.push({ sessionId: tui.sessionId, cwd: tuiPath, path: null, name: tui.name, modified: tui.messages.at(-1)?.timestamp ?? new Date().toISOString(), idle: tui.idle,
+    // A real terminal chat always stays reachable; only the background service's unseen startup chat may hide while empty.
+    blank: !!process.env.PI_WEBAPP_LAUNCHER_NONCE && tui.idle && shared.tuiPrompts.length === 0 && !tui.messages.some((message) => message.role === "user") });
   const sessions: WorkspaceSessionView[] = (await Promise.all(items.map(async (workspace) => {
     const saved = await sessionsForWorkspace(workspace.path, allSessions).catch((cause) => {
       if (cause instanceof WorkspaceUnavailableError) workspace.available = false;
