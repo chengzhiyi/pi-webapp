@@ -15,6 +15,7 @@ import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
 import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
 
+import { HostedDevWatcher, type HostedDevSources } from "./dev-plugins.ts";
 function declaredSecrets(manifest: unknown): string[] { try { return [...parseDeclarations(manifest).secrets]; } catch { return []; } }
 export interface HostedIntegrationOptions extends Omit<HostedManagerOptions, "hooks" | "lifecycle"> {
   /** Single local bearer-authenticated principal, never supplied in a browser body. */
@@ -27,6 +28,11 @@ export interface HostedIntegrationOptions extends Omit<HostedManagerOptions, "ho
   /** Pending human approvals, surfaced in the catalog and answered through `handlers.decide`. */
   approvals?: ExecuteApprovals;
 }
+  /** Developer opt-in: sources are polled and applied through the normal `update` switch. Absent in production. */
+  dev?: HostedDevSources;
+  /** Developer status file (read by `pnpm dev` in plugin workspaces). */
+  devStatusPath?: string;
+  devPollMs?: number;
 /** One process-wide management queue and Agent barrier for ALL hosted plugins. */
 export class HostedPluginIntegration {
   readonly manager: HostedPluginManager;
@@ -46,9 +52,19 @@ export class HostedPluginIntegration {
   private readonly trusted: ReadonlyMap<string, HostedPluginPolicy>;
   constructor(options: HostedIntegrationOptions) {
     this.options = options;
+  private readonly devWatcher?: HostedDevWatcher;
     this.trusted = options.policies ?? DEFAULT_POLICIES;
     this.adapter = new HostedAgentAdapter({
       policy: (id, scope) => {
+    if (options.dev?.enabled) {
+      this.devWatcher = new HostedDevWatcher({ sources: options.dev, statusPath: options.devStatusPath, pollMs: options.devPollMs, changed: () => options.changed?.(),
+        // The same serialized path as the "Update" button; editors reopen because a developer's own save must not wait on a click.
+        switcher: { update: async pluginId => {
+          // Never "update" what the user has not installed: the manager would record that as a failed update check on the card.
+          const catalog = await this.inventory();
+          return catalog.plugins.find(p => p.pluginId === pluginId)?.installed ? this.manage({ pluginId, operation: "update", reopenEditors: true }) : catalog;
+        } } });
+    }
         // Bindings are created by trusted SDK/TUI factories, including during construction
         // before a candidate is retained. Actual execution always revalidates retained scope.
         const policy = options.policy?.(id, scope);
@@ -234,9 +250,10 @@ export class HostedPluginIntegration {
     const secrets = new Map<string, Array<{ name: string; configured: boolean }>>();
     for (const p of inventory.plugins) {
       const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
+    this.devWatcher?.start();
       if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => ({ name, configured: await store.has(p.id, name) }))));
     }
-    return { plugins: inventory.plugins.map(p => ({
+    return { ...(this.devWatcher ? { dev: this.devWatcher.info() } : {}), plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
       description: p.description, ...(secrets.has(p.id) ? { secrets: secrets.get(p.id) } : {}),
       icon: OFFICIAL_PLUGINS.find(plugin => plugin.id === p.id)?.icon,
@@ -298,6 +315,7 @@ export class HostedPluginIntegration {
       this.generation(input.pluginId, input.generation);
       return await this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
     } finally { release(); }
+    this.devWatcher?.invalidate(input.pluginId); // an install/enable/update by hand changes what "synced" means: re-evaluate on the next poll
   }
   /** Keep the view identities and data generation alive until the launcher commits.
    * The returned undo lease is idempotent and recreates only verified old workers.
@@ -305,7 +323,7 @@ export class HostedPluginIntegration {
   prepareRestart(): Promise<() => Promise<void>> {
     if (this.restartPreparation) return this.restartPreparation;
     this.restartPreparation = this.enqueue(async () => {
-      this.closing = true;
+      this.closing = true; this.devWatcher?.stop();
       try {
         await this.adapter.freeze();
         for (const view of this.views.values()) view.allowImmediateReopen(true);
@@ -316,13 +334,13 @@ export class HostedPluginIntegration {
           try { await restore(); restored = true; }
           finally {
             this.closing = false; this.restartResume = undefined; this.restartPreparation = undefined;
-            this.adapter.thaw();
+            this.adapter.thaw(); this.devWatcher?.start();
           }
         };
         this.restartResume = resume;
         return resume;
       } catch (error) {
-        this.closing = false; this.restartPreparation = undefined; this.adapter.thaw();
+        this.closing = false; this.restartPreparation = undefined; this.adapter.thaw(); this.devWatcher?.start();
         throw error;
       } finally { for (const view of this.views.values()) view.allowImmediateReopen(false); }
     });
@@ -342,11 +360,12 @@ export class HostedPluginIntegration {
       for (const view of this.views.values()) view.allowImmediateReopen(true);
       await this.manager.shutdown();
       for (const view of this.views.values()) view.dispose();
-    }, true).catch(error => {
+    }, true).then(() => this.devWatcher?.idle()).catch(error => {
       for (const view of this.views.values()) view.allowImmediateReopen(false);
-      this.closing = false; this.stopping = undefined; this.adapter.thaw();
+      this.closing = false; this.stopping = undefined; this.adapter.thaw(); this.devWatcher?.start();
       throw error;
     });
+    this.devWatcher?.stop();
     return this.stopping;
   }
 }

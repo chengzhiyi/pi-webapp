@@ -171,3 +171,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
     <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirmation?.title ?? ""} closeLabel={t("关闭", "Close")} description={confirmation?.description} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{confirmation?.confirm}</Button></>} />
   </section>;
 }
+    {catalog.dev && <div data-hosted-dev>
+      {catalog.dev.notices.map((item, index) => <div key={index} className={item.level === "info" ? css.notice : css.error} role={item.level === "error" ? "alert" : "status"}><strong>{t("开发模式", "Dev mode")}{item.pluginId ? ` · ${item.pluginId}` : ""}</strong>: {item.message}</div>)}
+      {catalog.dev.sources.map(source => <p key={source.pluginId} className={css.notice} role="status" data-hosted-dev-source={source.pluginId}>{t("开发目录", "Dev directory")} · <code>{source.root}</code> · {source.state}{source.version ? ` ${source.version}` : ""}{source.message ? ` — ${source.message}` : ""}</p>)}
+    </div>}

@@ -23,7 +23,13 @@ export interface HostedPluginCard {
 }
 /** A plugin asked to lift a background session's read-only restriction; only the user can answer. */
 export interface HostedExecuteApproval { id: string; pluginId: string; sessionId: string; title: string }
-export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean; approvals?: HostedExecuteApproval[] }
+/** Present only when the developer explicitly opted in (PI_WEBAPP_HOSTED_DEV_ROOTS / ARCHIVES or hosted-dev.json). */
+export interface HostedDevInfo {
+  /** Why a configured source is not usable: bad path, unknown id, invalid manifest, restart needed... */
+  notices: Array<{ level: "error" | "warning" | "info"; pluginId?: string; message: string }>;
+  sources: Array<{ pluginId: string; root: string; state: "waiting-build" | "switching" | "synced" | "pending" | "not-installed" | "error"; version?: string; message?: string }>;
+}
+export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean; approvals?: HostedExecuteApproval[]; dev?: HostedDevInfo }
 export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy" | "cancel-download";
 export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; /** Exact client nonce; cancellation cannot target another request. */ downloadId?: string; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
 export interface HostedActionInput {

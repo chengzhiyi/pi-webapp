@@ -19,7 +19,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { HostedPluginIntegration } from "../plugins/hosted/integration.ts";
 import { legacyCheckpointLoader } from "../plugins/hosted/legacy-checkpoints.ts";
 import { hostedCapabilities } from "../plugins/hosted/capabilities/bootstrap.ts";
-import { devPluginsFromEnv } from "../plugins/hosted/dev-plugins.ts";
+import { HostedDevSources, hostedDevConfigPath, hostedDevStatusPath } from "../plugins/hosted/dev-plugins.ts";
 import { OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
@@ -305,10 +305,12 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     return { cwd: canonical, sessionId, workspaceId: createHash("sha256").update(canonical).digest("hex") };
   };
   const hostedRoot = join(getAgentDir(), "pi-web", "hosted");
-  const dev = devPluginsFromEnv();
+  // Explicit developer opt-in only (env or ~/.pi/agent/pi-web/hosted-dev.json); with neither, this is inert and the production path is untouched.
+  const dev = new HostedDevSources({ configPath: hostedDevConfigPath(getAgentDir()) });
   shared.hosted ??= new HostedPluginIntegration({
     root: hostedRoot,
-    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], devArchives: dev.archives } : {}),
+    ...(dev.enabled ? { dev, devStatusPath: hostedDevStatusPath(getAgentDir()) } : {}),
+    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], devArchives: dev.archives, devRoots: dev.roots } : {}),
     // Inert for plugins that declare no secrets/network/scheduler/sessions (every shipped plugin today).
     ...hostedCapabilities({ root: hostedRoot, sessions: () => shared.workspaceSessions, activeWorkspace: () => shared.workspaceSessions?.path ?? null, trustedScope,
       sessionTitle: id => shared.workspaceSessions?.retainedSessions().find(session => session.sessionId === id)?.name,

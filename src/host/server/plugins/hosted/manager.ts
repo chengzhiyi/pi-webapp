@@ -40,6 +40,8 @@ export interface HostedManagerOptions {
   /** Test seam for timers. */
   /** Plugin id -> local .tgz (developer opt-in). Those plugins install/update from the file, never the registry. */
   devArchives?: ReadonlyMap<string, string>;
+  /** Plugin id -> developer package directory (explicit opt-in). The map may be updated live; entries win over `devArchives`. */
+  devRoots?: ReadonlyMap<string, string>;
   scheduleTimers?: { setInterval(fn: () => void, ms: number): unknown; clearInterval(handle: unknown): void };
 }
 export interface ManagedHostedPlugin {
@@ -98,6 +100,14 @@ export class HostedPluginManager {
       }, capabilities));
     }
   }
+  /** Developer-supplied source (directory or tgz) for this plugin, or null for the registry. */
+  private devSource(id: string): ((signal?: AbortSignal) => Promise<HostedPackage>) | null {
+    const root = this.options.devRoots?.get(id), archive = this.options.devArchives?.get(id);
+    if (root) return signal => this.installer.installDevDirectory(id, root, signal);
+    if (archive) return signal => this.installer.installDevArchive(id, archive, signal);
+    return null;
+  }
+  isDevPlugin(id: string): boolean { return !!(this.options.devRoots?.has(id) || this.options.devArchives?.has(id)); }
   private supervisor(id: string) {
     officialPlugin(id, this.installer.catalog);
     const supervisor = this.supervisors.get(id);
@@ -247,12 +257,12 @@ export class HostedPluginManager {
       const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
       const result = await (async () => { switch (operation) {
         case "check": {
-          if (this.options.devArchives?.has(id)) return { version: latest ?? null, dev: true };
+          if (this.isDevPlugin(id)) return { version: latest ?? null, dev: true };
           const release = await this.check(id, latest, undefined, signal); return { version: release.version };
         }
         case "install": {
-          const dev = this.options.devArchives?.get(id);
-          if (dev) { const pkg = await this.installer.installDevArchive(id, dev, signal); return { installed: true, version: pkg.version }; }
+          const dev = this.devSource(id);
+          if (dev) { const pkg = await dev(signal); return { installed: true, version: pkg.version }; }
           const release = await this.check(id, latest, version, signal);
           const pkg = await this.installer.install(id, release, signal); this.available.delete(id);
           await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; enablement unchanged" });
@@ -275,9 +285,9 @@ export class HostedPluginManager {
         case "disable": await this.lifecycle(id, () => s.disable()); this.packages.delete(id); return { enabled: false };
         case "update": {
           if (!latest) throw new HostedPluginError("not_installed", "Only installed plugins can be updated");
-          const dev = this.options.devArchives?.get(id);
+          const dev = this.devSource(id);
           if (dev) {
-            const pkg = await this.installer.installDevArchive(id, dev, signal), active = await s.broker.active();
+            const pkg = await dev(signal), active = await s.broker.active();
             if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
             if (active.version === pkg.version && !s.pendingVersion) return { unchanged: true, version: pkg.version };
             const result = await this.lifecycle(id, () => s.replace(pkg)); if (!result.pending) this.packages.set(id, pkg); return result;
