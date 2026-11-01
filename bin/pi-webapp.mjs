@@ -193,12 +193,14 @@ async function serve(pi, args) {
     void readFile(stopPath, "utf8").then(value => value.trim() === nonce ? unlink(stopPath) : undefined)
       .catch(() => {}).finally(() => { stopping = false; });
   };
-  const shutdown = (reason) => {
+  const shutdown = (reason, force = false) => {
     if (stopping) return;
     stopping = true;
     stopEpoch++;
     stopReason = reason;
     lifecycle("launcher_stop_requested", { reason });
+    // An explicit operator override: skip the save/drain preflight that an unresponsive view can block.
+    if (force) { lifecycle("launcher_stop_forced", { reason }); finishShutdown(reason); return; }
     // RPC EOF can exit even when an extension's shutdown handler fails. Drain
     // while the transport is alive and require an explicit successful response.
     if (ready && stopCommand) {
@@ -225,6 +227,7 @@ async function serve(pi, args) {
         const request = (await readFile(stopPath, "utf8")).trim();
         if (epoch !== stopEpoch || stopping) return;
         if (request === nonce) shutdown("stop_request");
+        else if (request === `${nonce} force`) shutdown("stop_request", true);
       } catch { /* No stop request. */ }
       if (stopping || epoch !== stopEpoch) return;
       if (runtimeKind === "desktop") {
@@ -505,16 +508,36 @@ async function openPageIfLocal(url) {
   }
 }
 
-async function stop() {
+// Last resort for `stop --force`: a supervisor that predates the force marker (or is wedged)
+// never answers it, so end the whole process tree. Hosted ownership recovers from SIGKILL.
+async function killTree(pid) {
+  if (process.platform === "win32") { spawn.sync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }); return; }
+  const listed = spawn.sync("pgrep", ["-P", String(pid)], { encoding: "utf8" });
+  for (const child of String(listed.stdout ?? "").split("\n").map(Number).filter(Number.isInteger)) if (child > 0) await killTree(child);
+  try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+}
+
+async function stop(force = false) {
   const state = await activeState();
   if (!state) { console.log("pi-webapp 未运行"); return; }
   if (!state.nonce) throw new Error("pi-webapp 正在启动，请稍后再停止");
-  await writeFile(stopPath, state.nonce, { mode: 0o600 });
+  if (force) console.error("pi-webapp: 强制停止将跳过插件视图的保存确认，未保存的编辑可能丢失。");
+  await writeFile(stopPath, force ? `${state.nonce} force` : state.nonce, { mode: 0o600 });
   for (let attempt = 0; attempt < 400; attempt++) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     const outcome = await observeStopOutcome(activeState, stopPath, state.nonce);
     if (outcome === "stopped") { console.log("pi-webapp 已停止"); return; }
-    if (outcome === "refused") throw new Error("停止已取消：插件保存或释放未完成，服务及数据已保留。请处理插件诊断后重试。");
+    if (force && outcome === "pending" && attempt === 49) {
+      console.error("pi-webapp: 服务 5 秒内没有响应强制停止，正在直接结束后台进程及其子进程。");
+      await killTree(state.pid);
+      await unlink(stopPath).catch(() => {});
+      for (let wait = 0; wait < 50 && alive(state.pid); wait++) await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+      if (alive(state.pid)) throw new Error(`无法结束后台进程 PID：${state.pid}`);
+      await activeState();
+      console.log("pi-webapp 已强制停止");
+      return;
+    }
+    if (outcome === "refused") throw new Error("停止已取消：插件保存或释放未完成，服务及数据已保留。请先保存并关闭所有 pi-webapp 浏览器标签页，或在插件页处理未确认的视图后重试；开发时可运行 pi-webapp stop --force 强制停止（可能丢失未保存的编辑）。");
   }
   throw new Error(`停止超时。后台进程 PID：${state.pid}；日志：${logPath}`);
 }
@@ -523,15 +546,16 @@ async function main() {
   const [argument, ...rest] = process.argv.slice(2);
   if (argument === "__serve") { await serve(rest[0], rest.slice(1)); return; }
   if (argument === "stop" || argument === "status") {
-    if (rest.length) throw new Error(`用法：pi-webapp ${argument}`);
-    if (argument === "stop") await stop();
+    const force = argument === "stop" && rest.length === 1 && rest[0] === "--force";
+    if (rest.length && !force) throw new Error(`用法：pi-webapp ${argument}${argument === "stop" ? " [--force]" : ""}`);
+    if (argument === "stop") await stop(force);
     else {
       const state = await activeState();
       console.log(state ? `pi-webapp ${state.url ? `正在运行：${state.url}` : "正在启动"}` : "pi-webapp 未运行");
     }
     return;
   }
-  if (argument === "--help" || argument === "-h") { console.log("用法：pi-webapp [start|status|stop] [Pi 参数]"); return; }
+  if (argument === "--help" || argument === "-h") { console.log("用法：pi-webapp [start|status|stop [--force]] [Pi 参数]"); return; }
   if (argument && argument !== "start" && !argument.startsWith("-")) throw new Error("用法：pi-webapp [start|status|stop] [Pi 参数]");
   await start(argument === "start" || !argument ? rest : [argument, ...rest]);
 }

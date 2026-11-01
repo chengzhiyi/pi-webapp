@@ -54,6 +54,7 @@
   ],
   "scripts": {
     "start": "npm run build && node bin/pi-webapp.mjs",
+    "dev": "node bin/pi-webapp.mjs stop --force && npm run build && node bin/pi-webapp.mjs start",
     "status": "node bin/pi-webapp.mjs status",
     "stop": "node bin/pi-webapp.mjs stop",
     "check": "tsc --noEmit && tsc -p web/tsconfig.json",

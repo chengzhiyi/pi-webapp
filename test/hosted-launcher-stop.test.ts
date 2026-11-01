@@ -83,6 +83,37 @@ test("real RPC launcher stop releases hosted ownership so restart can open and u
   } finally { await run("stop").catch(() => {}); await rm(root, { recursive: true, force: true }); }
 });
 
+test("stop --force exits even while a view never confirms its save, and plain stop still refuses", { timeout: 90_000 }, async t => {
+  const root = await mkdtemp(join(tmpdir(), "hosted-launcher-force-")), agentDir = join(root, "agent"), storage = join(agentDir, "pi-web/hosted");
+  const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEBAPP_PI_CLI: cli, PI_WEBAPP_AUTO_OPEN: "0" };
+  for (const key of ["PI_WEBAPP_RESTART_PORT", "PI_WEBAPP_RESTART_TOKEN", "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS"]) delete env[key as keyof typeof env];
+  const run = (...args: string[]) => exec(process.execPath, [launcher, ...args], { cwd: root, env, timeout: 40_000 });
+  const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
+  const fixture = integrationFixture();
+  await new HostedPluginInstaller({ root: join(storage, "packages"), hostVersion: version }).installArchive(id, fixture.bytes, integrity(fixture.bytes), "0.1.0");
+  await mkdir(storage, { recursive: true });
+  await writeFile(join(storage, "host-version.json"), JSON.stringify({ version }));
+  try {
+    await run("start");
+    const state = JSON.parse(await readFile(join(agentDir, "pi-web/launcher.json"), "utf8")), url = new URL(state.url);
+    const headers = { Authorization: `Bearer ${url.hash.slice(1)}`, Origin: url.origin, "Content-Type": "application/json" };
+    const call = (path: string, body: unknown) => fetch(url.origin + path, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal((await call("/api/hosted-plugins/manage", { pluginId: id, operation: "enable" })).status, 200);
+    const sessionId = (await (await fetch(url.origin + "/api/session", { headers })).json()).sessionId as string;
+    const card = (await (await fetch(url.origin + "/api/hosted-plugins", { headers })).json()).plugins[0];
+    const identity = { pluginId: id, sessionId, generation: card.generation, mountId: "never-acks" };
+    const registered = await call("/api/hosted-plugins/views", { ...identity, operation: "register", kind: "editor" });
+    const view = { ...identity, viewToken: (await registered.json()).viewToken };
+    await call("/api/hosted-plugins/views", { ...view, operation: "change", dirty: true, busy: false });
+    // The view never polls or acknowledges, so the ordinary stop must be refused.
+    await assert.rejects(run("stop"), /--force/);
+    assert.match((await run("status")).stdout, /正在运行/);
+    const forced = await run("stop", "--force");
+    assert.match(forced.stdout, /已停止/);
+    assert.match((await run("status")).stdout, /未运行/);
+  } finally { await run("stop", "--force").catch(() => {}); await rm(root, { recursive: true, force: true }); }
+});
+
 for (const signal of ["SIGTERM", "SIGKILL"] as const) test(`real RPC host ${signal} permits cold start, upgrade activation and uninstall without lock repair`, { timeout: 90_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "hosted-launcher-crash-")), agentDir = join(root, "agent"), storage = join(agentDir, "pi-web/hosted");
   const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEBAPP_PI_CLI: cli, PI_WEBAPP_AUTO_OPEN: "0" };
