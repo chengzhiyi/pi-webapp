@@ -109,7 +109,8 @@ test("stop --force exits even while a view never confirms its save, and plain st
     await assert.rejects(run("stop"), /--force/);
     assert.match((await run("status")).stdout, /正在运行/);
     const forced = await run("stop", "--force");
-    assert.match(forced.stdout, /已停止/);
+    // Either a clean stop or the kill fallback (after 5s without a response) is a successful forced stop.
+    assert.match(forced.stdout, /已(强制)?停止/);
     assert.match((await run("status")).stdout, /未运行/);
   } finally { await run("stop", "--force").catch(() => {}); await rm(root, { recursive: true, force: true }); }
 });

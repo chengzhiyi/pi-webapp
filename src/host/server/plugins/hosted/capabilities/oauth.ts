@@ -28,7 +28,12 @@ const MAX_FLOWS = 8;
 /** GitHub OAuth device flow. Device codes stay in host memory; the browser only gets the short user code. */
 export class DeviceFlows {
   private readonly flows = new Map<string, Flow>();
-  constructor(private readonly fetcher: Fetch = (url, init) => fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(15_000) }), private readonly now: () => number = Date.now) {}
+  private readonly fetcher: Fetch;
+  private readonly now: () => number;
+  constructor(fetcher: Fetch = (url, init) => fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(15_000) }), now: () => number = Date.now) {
+    this.fetcher = fetcher;
+    this.now = now;
+  }
   private async post(url: string, params: Record<string, string>): Promise<Record<string, unknown>> {
     let response;
     try { response = await this.fetcher(url, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "pi-webapp" }, body: new URLSearchParams(params).toString() }); }
