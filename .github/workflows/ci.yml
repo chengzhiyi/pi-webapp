@@ -5,6 +5,11 @@ on:
     branches: [main, alpha]
   push:
     branches: [main, alpha]
+    # A push that only changes the documentation site must not publish the package.
+    # docs.yml builds and checks those changes; mixed pushes still run everything.
+    paths-ignore:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
