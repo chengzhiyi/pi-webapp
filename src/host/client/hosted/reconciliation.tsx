@@ -1,34 +1,51 @@
 import { useEffect, useState } from "react";
-import { priorViews, forgetView, reconcileView, retainViewForRecovery, discardView, recoveryDrafts, recoveryJournalProblem, type UnconfirmedView } from "./view-journal.ts";
+import { priorViews, forgetView, settleView, retainViewForRecovery, discardView, recoveryDrafts, recoveryJournalProblem, type UnconfirmedView } from "./view-journal.ts";
 import { downloadDrawing } from "./download.ts";
+import { hostedApi } from "./api.ts";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import css from "./reconciliation.module.css";
 
-/** Reconcile in the background even while management is closed. Authoring drafts
- * require explicit retention/discard; controllers contain no local authoring state. */
+/** Reconcile in the background even while management is closed. Records whose window is
+ * gone and whose local copy matches the saved drawing clear themselves; authoring drafts
+ * that may differ still require explicit retention/discard. */
 export function useHostedReconciliation({ sessionId, locale, openRecovered }: { sessionId?: string; locale: "zh" | "en"; openRecovered?(contentId: string): void }) {
   const [pending, setPending] = useState(priorViews);
   const [open, setOpen] = useState(false), [confirm, setConfirm] = useState<{ item: UnconfirmedView; operation: "discard" | "retain" } | null>(null);
   const [error, setError] = useState(""), [working, setWorking] = useState(false), [attempt, setAttempt] = useState(0);
   const t = (zh: string, en: string) => locale === "zh" ? zh : en;
-  const shown = pending, journalProblem = recoveryJournalProblem();
+  // Views another window is still polling are that window's to save and close.
+  const [live, setLive] = useState<ReadonlySet<string>>(new Set());
+  // List a record only once checked, so self-clearing records never flash the banner.
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const shown = pending.filter(item => checked.has(item.viewToken) && !live.has(item.viewToken)), journalProblem = recoveryJournalProblem();
   const forget = (token: string) => { forgetView(token); setPending(value => value.filter(item => item.viewToken !== token)); };
   useEffect(() => { setOpen(false); setConfirm(null); setError(""); }, [sessionId]);
   useEffect(() => {
     let alive = true;
     void (async () => {
-      for (const item of pending.filter(item => !item.discovered)) {
+      let generations = new Map<string, number>();
+      try { generations = new Map((await hostedApi.catalog()).plugins.flatMap(card => card.generation === undefined ? [] : [[card.pluginId, card.generation] as const])); }
+      catch { /* Without the current generation, drawing copies cannot be compared and stay listed. */ }
+      const check = (token: string) => setChecked(value => new Set(value).add(token));
+      for (const item of pending) {
         if (!alive) return;
         try {
-          const state = await reconcileView(item);
+          const state = await settleView(item, generations.get(item.pluginId));
           if (!alive) return;
           if (state?.state === "retired" || state?.state === "absent" && item.kind === "controller") forget(item.viewToken);
           else if (state?.state === "retained") setPending(value => value.map(record => record.viewToken === item.viewToken ? { ...record, retained: true } : record));
+          setLive(value => {
+            const next = new Set(value);
+            if (item.discovered && state?.state === "unconfirmed" && state.stale === false) next.add(item.viewToken); else next.delete(item.viewToken);
+            return next;
+          });
+          check(item.viewToken);
         } catch (cause) {
+          if (!alive) return;
           // Older hosts retain every uncertain record, without inferring a save.
-          if (cause instanceof Error && cause.message === "Unknown view operation") return;
-          if (alive) setError(String(cause));
+          if (cause instanceof Error && cause.message === "Unknown view operation") { setChecked(new Set(pending.map(record => record.viewToken))); return; }
+          check(item.viewToken); setError(String(cause));
         }
       }
     })();
