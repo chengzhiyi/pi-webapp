@@ -1,11 +1,39 @@
-.docs-version {
-  margin: 0 0 20px;
-  padding: 10px 14px;
-  border-left: 3px solid var(--vp-c-brand-1);
-  border-radius: 4px;
+:root {
+  --vp-c-brand-1: #3a5bd9;
+  --vp-c-brand-2: #4d6ce0;
+  --vp-c-brand-3: #5a78e6;
+  --vp-c-brand-soft: rgba(58, 91, 217, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #8aa2ff;
+  --vp-c-brand-2: #7992f5;
+  --vp-c-brand-3: #6a84ec;
+}
+
+/* Screenshots: keep them readable, bordered and never wider than the column. */
+.vp-doc img {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+}
+
+.vp-doc figure {
+  margin: 20px 0;
+}
+
+.vp-doc figcaption {
+  margin-top: 8px;
   color: var(--vp-c-text-2);
-  background: var(--vp-c-bg-soft);
   font-size: 13px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+/* Wide tables scroll inside the content column instead of the whole page. */
+.vp-doc table {
+  display: block;
+  overflow-x: auto;
+}
+
+.vp-doc .expected-output {
+  margin-top: -8px;
 }
