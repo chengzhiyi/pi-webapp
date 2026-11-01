@@ -81,7 +81,7 @@ for (const width of [390, 768, 1440]) test(`official rows keep actions independe
     await refresh.click(); await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
     await page.screenshot({ path: info.outputPath(`official-list-${width}.png`), fullPage: true });
     // The description participates in whole-row pointer navigation too.
-    const description = await panel.getByText("Draw and edit hand-drawn diagrams, and save them to your workspace.", { exact: true }).boundingBox();
+    const description = await panel.getByText("Local sketch canvas, AI diagrams and workspace drawings. Optional download.", { exact: true }).boundingBox();
     expect(description).not.toBeNull();
     // The title button's stretched hit target intentionally overlays the description.
     await page.mouse.click(description!.x + description!.width / 2, description!.y + description!.height / 2);

@@ -160,9 +160,12 @@ pi
 
 ## 使用指南与开发
 
-- **新用户：** [首次对话](docs/zh/getting-started.md) · [会话管理](docs/zh/sessions.md) · [工作区工具](docs/zh/workspace-tools.md)
-- **配置与排错：** [模型、软件包与技能](docs/zh/configuration.md) · [版本更新](docs/zh/updates.md) · [常见问题](docs/zh/troubleshooting.md)
-- **参与开发：** [架构说明](docs/architecture.md) · [Web 插件](docs/web-plugins.md) · [桌面构建](docs/desktop.md)
+- **新用户：** [快速开始](docs/zh/getting-started.md) · [对话](docs/zh/conversation.md) · [会话与工作区](docs/zh/sessions.md) · [文件、终端与 Git](docs/zh/workspace-tools.md) · [图表](docs/zh/diagrams.md)
+- **配置：** [配置概览](docs/zh/configuration.md) · [模型与提供方](docs/zh/models.md) · [包、技能与插件](docs/zh/extensions.md) · [更新](docs/zh/updates.md) · [安全与隐私](docs/zh/security.md)
+- **帮助与参考：** [排错](docs/zh/troubleshooting.md) · [常见问题](docs/zh/faq.md) · [命令行](docs/zh/reference/cli.md) · [环境变量](docs/zh/reference/environment.md)
+- **参与开发：** [架构说明](docs/architecture.md) · [Web 插件](docs/web-plugins.md) · [桌面构建](docs/desktop.md) · [开发者](docs/zh/developers.md)
+
+这些指南也会构建成可搜索的站点：先运行 `npm --prefix docs ci`，再用 `npm run docs:dev` 预览、`npm run docs:build` 构建。站点发布在 <https://pi.emath.top>。
 
 指南随源码演进，可能与你安装的版本不同；桌面端支持范围以上方已核实的下载链接及对应版本发布说明为准。
 

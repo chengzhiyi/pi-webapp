@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { hostedCapabilities, SCHEDULER_SESSION_ID } from "../src/host/server/plugins/hosted/capabilities/bootstrap.ts";
+
+const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "w" });
+test("wiring resolves sessions lazily, requires human approval to execute, and scopes ticks to the active workspace", async () => {
+  let sessions: unknown = null, active: string | null = null;
+  const w = hostedCapabilities({ root: "/tmp/unused", sessions: () => sessions as never, activeWorkspace: () => active, trustedScope: scope });
+  const host = w.capabilities.sessions!;
+  assert.equal(host.ownerOf("x"), null); assert.equal(host.activeCount("p"), 0);
+  await assert.rejects(host.create({ pluginId: "p", cwd: "/w", title: "t", prompt: "p", mode: "plan" }), { code: "sessions_unavailable" });
+  assert.equal(w.scheduledScope("p"), null, "no active workspace -> tick skipped");
+  active = "/work";
+  assert.deepEqual(w.scheduledScope("p"), { cwd: "/work", sessionId: SCHEDULER_SESSION_ID, workspaceId: "w" });
+  const calls: string[] = [];
+  sessions = { detachedOwner: () => "p", detachedCount: () => 0, sendDetached: async () => { calls.push("send"); }, createDetached: async () => "s1", releaseDetached: async () => {}, abortDetached: async () => {}, detachedEvents: () => ({ events: [], next: 0 }) };
+  await host.send("s1", "go");
+  await assert.rejects(host.send("s1", "go", "execute"), { code: "approval_required" });
+  assert.deepEqual(calls, ["send"], "unapproved execute never reaches the session");
+  const [request] = w.approvals.pending();
+  assert.deepEqual([request!.pluginId, request!.sessionId], ["p", "s1"]);
+  w.approvals.decide(request!.id, true);
+  await host.send("s1", "go", "execute");
+  assert.deepEqual(calls, ["send", "send"], "approved execute reaches the session");
+  await host.release("s1");
+  assert.equal(w.approvals.pending().length, 0);
+  await assert.rejects(host.send("s1", "again", "execute"), { code: "approval_required" }, "grant ended with the session");
+  const throwing = hostedCapabilities({ root: "/tmp/unused", sessions: () => null, activeWorkspace: () => "/gone", trustedScope: () => { throw new Error("ENOENT"); } });
+  assert.equal(throwing.scheduledScope("p"), null);
+});

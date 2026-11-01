@@ -60,3 +60,20 @@ test("late aggregate reply cannot operate on an unmounted view", async () => {
   await sleep(10); remove(); release({ replies: [{ reply: { viewToken: "token", commands: [{ id: 1, type: "freeze", generation: 1 }] } }] });
   await sleep(10); assert.equal(accepted, false);
 });
+
+test("poller holds a Web Lock only while views are polled, and wake() polls without waiting for the timer", async t => {
+  const locks: { name: string; released: boolean }[] = [];
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { locks: { request: (name: string, run: () => Promise<void>) => { const lock = { name, released: false }; locks.push(lock); return run().then(() => { lock.released = true; }); } } } });
+  t.after(() => { original ? Object.defineProperty(globalThis, "navigator", original) : delete (globalThis as any).navigator; });
+  let requests = 0;
+  const poller = new HostedViewPoller(60_000, async views => { requests++; return { replies: views.map(view => ({ reply: { viewToken: view.viewToken, commands: [] } })) }; });
+  const entry = { input: () => ({ ...identity, viewToken: "token", operation: "poll" as const, after: 0 }), accept: async () => {}, fail: () => {} };
+  const remove = poller.add(entry);
+  await sleep(20);
+  assert.equal(requests, 1); assert.equal(locks.length, 1); assert.equal(locks[0]!.released, false);
+  poller.wake(); await sleep(20);
+  assert.equal(requests, 2, "wake must not wait for the 60 s idle timer");
+  remove(); await sleep(10);
+  assert.equal(locks[0]!.released, true);
+});

@@ -36,6 +36,15 @@ test("workspace file endpoints require the active session, token and same origin
     assert.equal(preview.kind, "text");
     assert.equal(preview.text, "# Local only\n");
     assert.match((await request("preview", { path: "readme.md" })).headers.get("cache-control")!, /no-store/);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==", "base64");
+    await writeFile(join(cwd, "pic.png"), png);
+    const raw = await request("raw", { path: "pic.png" });
+    assert.equal(raw.status, 200);
+    assert.equal(raw.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await raw.arrayBuffer()), png);
+    assert.equal((await request("raw", { path: "readme.md" })).status, 415);
+    assert.equal((await request("raw", { path: "../outside" })).status, 403);
+    assert.equal((await request("raw", { path: "pic.png" }, { ...headers, Authorization: "" })).status, 401);
     const error = await (await request("preview", { path: "missing" })).json();
     assert.equal(error.errorCode, "validation_error");
     assert.equal(error.errorId, undefined);

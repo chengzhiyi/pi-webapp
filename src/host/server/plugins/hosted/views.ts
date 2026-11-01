@@ -38,6 +38,11 @@ export class HostedViewCoordinator {
     : this.switching ? view.frozen && !view.dirty && !view.busy
     : view.frozen || (!view.busy && (this.immediate || !["editor", "workspace"].includes(view.kind))));
   private authoringViews() { return [...this.views.values()].filter(view => view.kind !== "controller"); }
+  /** Lets an owner see views that may never acknowledge a barrier, so each can be discarded explicitly. */
+  pendingViews(ownerId: string) {
+    return this.authoringViews().filter(view => view.scope.ownerId === ownerId)
+      .map(view => ({ ...view.identity, viewToken: view.token, kind: view.kind, dirty: view.dirty, busy: view.busy }));
+  }
   private sameScope(view: Pick<View, "identity" | "scope">, input: HostedViewIdentity, scope: AuthenticatedViewScope) {
     return view.scope.ownerId === scope.ownerId && view.scope.workspaceId === scope.workspaceId
       && view.identity.sessionId === input.sessionId && view.identity.mountId === input.mountId && view.identity.generation === input.generation;
@@ -182,7 +187,7 @@ export class HostedViewCoordinator {
     if (this.switching) throw fail("A view barrier is already active");
     if (!this.canSwitch()) {
       const blocked = [...this.views.values()].filter(view => view.activeActions || view.kind !== "controller" && !view.frozen && (view.busy || !this.immediate && ["editor", "workspace"].includes(view.kind)));
-      throw fail(`Close editors before updating; old version retained. Pending views: ${blocked.map(view => `${view.kind}:${view.identity.mountId}`).join(", ")}`);
+      throw fail(`Close editors before updating; old version retained. Pending views: ${blocked.map(view => `${view.kind}:${view.identity.mountId}${view.activeActions ? ` (action in flight x${view.activeActions})` : view.busy ? " (busy)" : ""}`).join(", ")}`);
     }
     this.switching = true;
     const id = ++this.sequence;

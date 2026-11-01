@@ -1,9 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { lstat, mkdtemp, readdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentFetch } from "../../../../../bin/http-transport.mjs";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
 import { extractHostedArchive, MAX_ARCHIVE_BYTES } from "./archive.ts";
+import { snapshotDevPackage } from "./dev-package.ts";
 import { HostedPluginError, isMissing } from "./errors.ts";
 import { compatibleRelease, officialPlugin, OFFICIAL_PLUGINS, selectRelease, type OfficialPlugin, type RegistryRelease } from "./official-catalog.ts";
 import { sha256, validateHostedPackage, type HostedPackage } from "./resources.ts";
@@ -44,7 +46,9 @@ export class HostedPluginInstaller {
     }
     if (index.schema !== 1 || !Number.isSafeInteger(index.revision) || index.revision < 0 || !index.versions || typeof index.versions !== "object" || Array.isArray(index.versions)) throw new HostedPluginError("invalid_storage", "Invalid plugin installation index");
     for (const [id, versions] of Object.entries(index.versions)) {
-      officialPlugin(id, this.catalog);
+      // Another host sharing this store (e.g. a dev host) may have installed a plugin this host's catalog
+      // lacks. Keep its record and bytes untouched but never let it block the plugins this host does know.
+      if (!this.catalog.some(p => p.id === id)) continue;
       if (!Array.isArray(versions) || versions.length > 16 || new Set(versions.map(v => v.version)).size !== versions.length) throw new HostedPluginError("invalid_storage", "Invalid installed version list");
       for (const version of versions) this.validateRecord(id, version);
     }
@@ -187,26 +191,81 @@ export class HostedPluginInstaller {
         await extractHostedArchive(bytes, staging); signal?.throwIfAborted();
         const pkg = await validateHostedPackage(staging, id);
         if (pkg.version !== expectedVersion || !isHostedPluginManifest(pkg.manifest) || !satisfiesHost(this.hostVersion, pkg.manifest.hostRange) || !plugin.requiredCapabilities.every(c => pkg.manifest.capabilities.includes(c))) throw new HostedPluginError("incompatible_plugin", "Archive version/capabilities differ from selected release");
-        const old = index.versions[id]?.find(v => v.version === pkg.version);
-        if (old && old.digest !== pkg.digest) throw new HostedPluginError("version_replaced", "An installed immutable version cannot be replaced with different content");
-        const record: InstalledHostedVersion = { version: pkg.version, digest: pkg.digest, integrity, directory: `${sha256(id)}/${pkg.version}-${pkg.digest}`, installedAt: new Date().toISOString() };
-        await privateDirectory(join(this.root, "versions", sha256(id)));
-        if (!old && (index.versions[id]?.length ?? 0) >= 16) throw new HostedPluginError("version_budget", "Retained plugin version budget reached; collect unreferenced versions first");
-        await atomicJson(join(this.root, "install-journal.json"), { schema: 1, pluginId: id, next: record } satisfies InstallJournal);
-        const destination = this.path(record);
-        let exists = false;
-        try { await lstat(destination); exists = true; } catch (error) { if (!isMissing(error)) throw error; }
-        if (exists) {
-          const installed = await validateHostedPackage(destination, id);
-          if (installed.digest !== pkg.digest) throw new HostedPluginError("resource_changed", "Installed package content was modified");
-        } else await rename(staging, destination);
-        signal?.throwIfAborted();
-        if (!old) {
-          index.versions[id] = [...(index.versions[id] ?? []), record]; index.revision++;
-          await atomicJson(join(this.root, "installed.json"), index);
+        return await this.commitStaged(id, index, staging, pkg, integrity, signal);
+      } finally { await rm(staging, { recursive: true, force: true }); }
+    }, 10_000);
+  }
+  /** Move a validated staging directory into the immutable store and index it. Caller holds the storage lock. */
+  private async commitStaged(id: string, index: InstallationIndex, staging: string, pkg: HostedPackage, integrity: string, signal?: AbortSignal): Promise<HostedPackage> {
+    const old = index.versions[id]?.find(v => v.version === pkg.version);
+    if (old && old.digest !== pkg.digest) throw new HostedPluginError("version_replaced", "An installed immutable version cannot be replaced with different content");
+    const record: InstalledHostedVersion = { version: pkg.version, digest: pkg.digest, integrity, directory: `${sha256(id)}/${pkg.version}-${pkg.digest}`, installedAt: new Date().toISOString() };
+    await privateDirectory(join(this.root, "versions", sha256(id)));
+    if (!old && (index.versions[id]?.length ?? 0) >= 16) throw new HostedPluginError("version_budget", "Retained plugin version budget reached; collect unreferenced versions first");
+    await atomicJson(join(this.root, "install-journal.json"), { schema: 1, pluginId: id, next: record } satisfies InstallJournal);
+    const destination = this.path(record);
+    let exists = false;
+    try { await lstat(destination); exists = true; } catch (error) { if (!isMissing(error)) throw error; }
+    if (exists) {
+      const installed = await validateHostedPackage(destination, id);
+      if (installed.digest !== pkg.digest) throw new HostedPluginError("resource_changed", "Installed package content was modified");
+    } else await rename(staging, destination);
+    signal?.throwIfAborted();
+    if (!old) {
+      index.versions[id] = [...(index.versions[id] ?? []), record]; index.revision++;
+      await atomicJson(join(this.root, "installed.json"), index);
+    }
+    await rm(join(this.root, "install-journal.json"));
+    // Canonical: asset serving compares realpaths, so a symlinked data directory (e.g. /tmp on macOS) must not make a fresh install unservable.
+    return { ...pkg, root: await realpath(destination) };
+  }
+  /** Developer-trusted local archive (explicit env opt-in, never the registry). It still goes through the full extraction, identity,
+   * resource and host-range validation of `installArchive`; only the registry download and publisher SRI are replaced by a local hash. */
+  async installDevArchive(id: string, file: string, signal?: AbortSignal): Promise<HostedPackage> {
+    officialPlugin(id, this.catalog);
+    const bytes = await readFile(file);
+    const integrity = "sha512-" + createHash("sha512").update(bytes).digest("base64");
+    const probe = await mkdtemp(join(tmpdir(), "pi-dev-archive-"));
+    try {
+      await extractHostedArchive(bytes, probe);
+      const version = (await validateHostedPackage(probe, id)).version;
+      return await this.installArchive(id, bytes, integrity, version, signal);
+    } finally { await rm(probe, { recursive: true, force: true }); }
+  }
+  /** Developer-trusted package DIRECTORY (explicit opt-in via PI_WEBAPP_HOSTED_DEV_ROOTS / hosted-dev.json, never the registry).
+   * package.json + dist/ are snapshotted into staging and then pass the identical identity, resource-hash, manifest, capability and
+   * host-range validation as an archive. Only "immutable version / must come from a tgz" is relaxed: the installer assigns a fresh,
+   * strictly increasing patch version per distinct content, and returns the already-installed version for unchanged content. */
+  async installDevDirectory(id: string, directory: string, signal?: AbortSignal): Promise<HostedPackage> {
+    const plugin = officialPlugin(id, this.catalog);
+    return withStorageLock(this.root, async () => {
+      const index = await this.recoverLocked(); signal?.throwIfAborted();
+      const staging = await mkdtemp(join(this.root, "staging", "stage-"));
+      try {
+        const { contentHash, packageJson } = await snapshotDevPackage(directory, staging); signal?.throwIfAborted();
+        const sourcesPath = join(this.root, "dev-sources.json");
+        const sources = await readJson<Record<string, { contentHash: string; version: string }>>(sourcesPath) ?? {};
+        const known = sources[id], installed = index.versions[id] ?? [];
+        const same = known?.contentHash === contentHash ? installed.find(v => v.version === known.version) : undefined;
+        if (same) {
+          const pkg = await validateHostedPackage(this.path(same), id);
+          if (pkg.digest !== same.digest) throw new HostedPluginError("resource_changed", "Installed package integrity changed");
+          return pkg;
         }
-        await rm(join(this.root, "install-journal.json"));
-        return { ...pkg, root: destination };
+        const base = typeof packageJson.version === "string" ? stableVersion(packageJson.version) : null;
+        if (!base) throw new HostedPluginError("invalid_version", "A dev package needs an exact stable x.y.z version in package.json");
+        const latestPatch = Math.max(-1, ...installed.map(v => stableVersion(v.version)).filter(v => v && v.major === base.major && v.minor === base.minor).map(v => v!.patch));
+        const patch = Math.max(Math.floor((Date.now() - Date.UTC(2026, 0, 1)) / 1000), latestPatch + 1);
+        const version = `${base.major}.${base.minor}.${patch}`;
+        await writeFile(join(staging, "package.json"), JSON.stringify({ ...packageJson, version }, null, 2), { flag: "wx", mode: 0o600 });
+        const pkg = await validateHostedPackage(staging, id);
+        if (!satisfiesHost(this.hostVersion, pkg.manifest.hostRange)) throw new HostedPluginError("incompatible_plugin", `Package hostRange ${pkg.manifest.hostRange} does not include host ${this.hostVersion}`);
+        const missing = plugin.requiredCapabilities.filter(c => !pkg.manifest.capabilities.includes(c));
+        if (missing.length) throw new HostedPluginError("incompatible_plugin", `Package lacks required capabilities: ${missing.join(", ")}`);
+        const integrity = "sha512-" + createHash("sha512").update(contentHash).digest("base64");
+        const committed = await this.commitStaged(id, index, staging, pkg, integrity, signal);
+        sources[id] = { contentHash, version }; await atomicJson(sourcesPath, sources);
+        return committed;
       } finally { await rm(staging, { recursive: true, force: true }); }
     }, 10_000);
   }

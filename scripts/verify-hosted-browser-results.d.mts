@@ -4,4 +4,4 @@ export interface HostedBrowserSummary {
   diagnosticSkipped: number;
   failures: string[];
 }
-export function verifyHostedBrowserResults(report: unknown, group?: "hosted" | "stress"): HostedBrowserSummary;
+export function verifyHostedBrowserResults(report: unknown, group?: "hosted" | "hosted-ui" | "stress"): HostedBrowserSummary;

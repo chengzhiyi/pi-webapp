@@ -7,9 +7,15 @@ export interface HostedContribution {
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
   /** Reviewed host artwork key; never arbitrary plugin HTML or executable code. */
-  icon?: "drawing";
+  icon?: "drawing" | "github";
   /** A previous activation/checkpoint remains available after uninstall. */
   hasRetainedData?: boolean;
+  /** Catalog blurb, shown before the plugin is enabled. */
+  description?: { zh: string; en: string };
+  /** Secrets this enabled plugin declares and whether each is stored. Values never leave the host. */
+  secrets?: Array<{ name: string; configured: boolean;
+    /** "browser": host can sign in through GitHub in the user's browser. "token-page": only a pre-filled token page is available. */
+    signIn?: "browser" | "token-page"; createUrl?: string }>;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
@@ -17,7 +23,15 @@ export interface HostedPluginCard {
   /** Manifest-only, integrity-qualified served documents, never arbitrary package paths. */
   documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
 }
-export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean }
+/** A plugin asked to lift a background session's read-only restriction; only the user can answer. */
+export interface HostedExecuteApproval { id: string; pluginId: string; sessionId: string; title: string }
+/** Present only when the developer explicitly opted in (PI_WEBAPP_HOSTED_DEV_ROOTS / ARCHIVES or hosted-dev.json). */
+export interface HostedDevInfo {
+  /** Why a configured source is not usable: bad path, unknown id, invalid manifest, restart needed... */
+  notices: Array<{ level: "error" | "warning" | "info"; pluginId?: string; message: string }>;
+  sources: Array<{ pluginId: string; root: string; state: "waiting-build" | "switching" | "synced" | "pending" | "not-installed" | "error"; version?: string; message?: string }>;
+}
+export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean; approvals?: HostedExecuteApproval[]; dev?: HostedDevInfo }
 export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy" | "cancel-download";
 export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; /** Exact client nonce; cancellation cannot target another request. */ downloadId?: string; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
 export interface HostedActionInput {
@@ -51,6 +65,8 @@ export interface HostedViewRecovery {
   state: "active" | "unconfirmed" | "retained" | "retired" | "absent";
   kind?: HostedMount["kind"]; dirty?: boolean; busy?: boolean;
 }
+/** An authoring view the host still holds for this owner; the token is a capability for its own owner only. */
+export interface HostedPendingView extends HostedViewIdentity { viewToken: string; kind: HostedMount["kind"]; dirty: boolean; busy: boolean }
 export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: HostedViewRecovery }
 
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {

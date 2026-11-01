@@ -249,7 +249,7 @@ test("web keeps a fresh Pi sender after creating a session", async () => {
     assert.equal((await returnToRunning()).status, 202, "cached sessions can be selected without a saved path");
     assert.equal(sessions.session, running);
     const withBackground = await (await fetch(`${url.origin}/api/workspaces`, { headers })).json();
-    assert.ok(withBackground.sessions.some((item: { id: string }) => item.id === emptyId), "unsaved background chats stay in the sidebar");
+    assert.ok(!withBackground.sessions.some((item: { id: string }) => item.id === emptyId), "empty background chats leave the sidebar but stay selectable by id");
     assert.ok(withBackground.sessions.some((item: { id: string }) => item.id === "new"), "the TUI stays reachable while in the background");
     const returnToEmpty = await fetch(`${url.origin}/api/session/select`, {
       method: "POST", headers, body: JSON.stringify({ sessionId: other.getSessionId(), workspaceId: initialWorkspace.id, id: emptyId, path: emptyFile ?? "" }),

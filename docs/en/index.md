@@ -1,21 +1,57 @@
-# Overview & entry points
+---
+layout: home
+title: pi-webapp user guide
 
-pi-webapp is a local browser and desktop interface for the Pi coding agent. Pi still runs the agent, tools, and session storage; this is not a replacement agent service.
+hero:
+  name: pi-webapp
+  text: A workbench for the Pi coding agent
+  tagline: Conversations, project files, terminals and Git side by side, in your browser or a desktop app. Pi keeps running the agent; pi-webapp adds the workspace around it.
+  actions:
+    - theme: brand
+      text: Quick start
+      link: /getting-started
+    - theme: alt
+      text: What is pi-webapp?
+      link: /introduction
+    - theme: alt
+      text: GitHub
+      link: https://github.com/chengzhiyi/pi-webapp
 
-::: warning Development documentation
-These pages follow the source tree; the source manifest version appears in the footer. npm latest and public hosting have not been verified. Your installed version may differ. Web usage requires Node.js ≥ 22.19 and an existing Pi ≥ 0.87.1; desktop uses its bundled runtime.
-:::
-
-| Entry point | Best for | Lifetime |
-| --- | --- | --- |
-| `npx pi-webapp` / global command | Direct browser use; recommended | Pi runs in the background; closing the browser does not stop tasks. Use `status` / `stop`. |
-| `/web` inside an existing Pi terminal | Existing Pi terminal users | Bound to that Pi process; exiting it ends the service. |
-| pi desktop test build | Opt-in macOS arm64 testers | Bundles Node/Pi, can reuse a compatible backend, and offers background-task choices on exit. |
-
-Start with [installation and a first conversation](./getting-started). Already running? Read [sessions](./sessions), [workspace tools](./workspace-tools), or [troubleshooting](./troubleshooting). Read [desktop test limits](./desktop) before downloading.
-
-## Important boundaries
-
-- Chats run independently; switching chats is not stopping them.
-- Terminals and the agent use your system permissions, not a sandbox. Git changes belong to a shared worktree.
-- Local URLs contain access tokens: do not share them. Sentry error reporting is off by default and requires an explicit opt-in. See [security and privacy](./security).
+features:
+  - icon:
+      src: /icons/terminal.svg
+    title: Start in one command
+    details: Run <code>npx pi-webapp</code> in a project folder, connect a model, and send your first message.
+    link: /getting-started
+    linkText: Quick start
+  - icon:
+      src: /icons/layers.svg
+    title: Work across projects
+    details: Chats run independently. Switch workspaces or start another chat while earlier work keeps running.
+    link: /sessions
+    linkText: Sessions and workspaces
+  - icon:
+      src: /icons/panels.svg
+    title: Files, terminal and Git beside the chat
+    details: Preview files, run a real shell and review diffs without leaving the conversation.
+    link: /workspace-tools
+    linkText: Workspace tools
+  - icon:
+      src: /icons/shapes.svg
+    title: Editable diagrams
+    details: Ask for an architecture diagram or flowchart and edit it on a native Excalidraw canvas.
+    link: /diagrams
+    linkText: Diagrams
+  - icon:
+      src: /icons/shield.svg
+    title: Your models, your data
+    details: Bring your own provider. Sessions and credentials stay in Pi's data folder on your machine.
+    link: /security
+    linkText: Security and privacy
+  - icon:
+      src: /icons/help.svg
+    title: Something not working?
+    details: Symptom, cause and fix for the problems people actually hit.
+    link: /troubleshooting
+    linkText: Troubleshooting
+---

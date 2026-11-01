@@ -7,9 +7,15 @@ export interface HostedBridgeHandlers {
   /** checkpointOnly is set by the host's restart fence, never parsed from JSON. */
   action(input: HostedActionInput, options?: { checkpointOnly: boolean }): Promise<unknown>;
   views(input: Record<string, unknown>): Promise<unknown>;
+  /** Answers a pending plugin execute-approval request; returns the refreshed catalog. */
+  decide?(id: string, allow: boolean): unknown | Promise<unknown>;
+  /** Stores (string) or removes (null) a declared plugin secret. The value is never returned. */
+  secret?(pluginId: string, name: string, value: string | null): unknown | Promise<unknown>;
+  /** Browser sign-in for a declared secret (OAuth device flow). Tokens are stored host-side and never returned. */
+  secretAuth?(input: { phase: "start"; pluginId: string; name: string } | { phase: "poll" | "cancel"; deviceId: string }): unknown | Promise<unknown>;
   asset(path: string): Promise<{bytes: Buffer; mime: string} | null>;
 }
-export const HOSTED_API_PATHS = ["/api/hosted-plugins/manage", "/api/hosted-plugins/action", "/api/hosted-plugins/views"];
+export const HOSTED_API_PATHS = ["/api/hosted-plugins/manage", "/api/hosted-plugins/action", "/api/hosted-plugins/views", "/api/hosted-plugins/approvals", "/api/hosted-plugins/secrets"];
 /** Parse only authenticated wire DTOs. cwd/workspace from an iframe are never propagated. */
 export async function hostedApi(host: HostedBridgeHandlers | undefined, path: string, input: unknown, options?: { draining: boolean }): Promise<unknown> {
   if (!host) throw new HostedPluginError("hosted_unavailable", "Hosted plugin integration is not available in this runtime", {status: 503});
@@ -26,6 +32,25 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
       try { return { reply: await host.views({ ...view, operation: "poll", immediate: true }) }; }
       catch (error) { return { failure: hostedHttpFailure(error) }; }
     })) };
+  }
+  if (path === "/api/hosted-plugins/approvals") {
+    if (options?.draining) throw new HostedPluginError("host_restarting", "Host is updating; approvals are fenced", { status: 409 });
+    if (typeof body.id !== "string" || !/^[a-f0-9-]{36}$/.test(body.id) || body.decision !== "allow" && body.decision !== "deny") throw new HostedPluginError("invalid_input", "Invalid approval decision", { status: 400 });
+    if (!host.decide) throw new HostedPluginError("hosted_unavailable", "Approvals are not available in this runtime", { status: 503 });
+    return host.decide(body.id, body.decision === "allow");
+  }
+  if (path === "/api/hosted-plugins/secrets") {
+    if (options?.draining) throw new HostedPluginError("host_restarting", "Host is updating; secret changes are fenced", { status: 409 });
+    if (body.auth !== undefined) {
+      if (!host.secretAuth) throw new HostedPluginError("hosted_unavailable", "Browser sign-in is not available in this runtime", { status: 503 });
+      if (body.auth === "start" && typeof body.pluginId === "string" && body.pluginId.length <= 214 && typeof body.name === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(body.name)) return host.secretAuth({ phase: "start", pluginId: body.pluginId, name: body.name });
+      if ((body.auth === "poll" || body.auth === "cancel") && typeof body.deviceId === "string" && /^[a-f0-9-]{36}$/.test(body.deviceId)) return host.secretAuth({ phase: body.auth, deviceId: body.deviceId });
+      throw new HostedPluginError("invalid_input", "Invalid sign-in request", { status: 400 });
+    }
+    if (typeof body.pluginId !== "string" || body.pluginId.length > 214 || typeof body.name !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(body.name)
+      || !(body.value === null || typeof body.value === "string" && body.value.length >= 1 && body.value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(body.value))) throw new HostedPluginError("invalid_input", "Invalid secret request", { status: 400 });
+    if (!host.secret) throw new HostedPluginError("hosted_unavailable", "Secrets are not available in this runtime", { status: 503 });
+    return host.secret(body.pluginId, body.name, body.value);
   }
   if (typeof body.pluginId !== "string" || body.pluginId.length > 214) throw new HostedPluginError("invalid_input", "Invalid plugin identity", {status: 400});
   if (path === "/api/hosted-plugins/manage") {
@@ -45,6 +70,6 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
 }
 export function hostedHttpFailure(error: unknown): { status: number; body: unknown } {
   const detail = failure(error);
-  const status = detail.status ?? (["invalid_input", "unknown_plugin", "invalid_operation", "invalid_version"].includes(detail.code) ? 400 : ["not_installed"].includes(detail.code) ? 404 : ["stale_generation", "plugin_unavailable", "drain_pending", "editor_busy", "version_pinned", "runtime_owned", "storage_busy", "revision_conflict", "file_conflict", "legacy_busy"].includes(detail.code) ? 409 : 500);
+  const status = detail.status ?? (["invalid_input", "unknown_plugin", "invalid_operation", "invalid_version"].includes(detail.code) ? 400 : ["not_installed"].includes(detail.code) ? 404 : ["stale_generation", "approval_required", "plugin_unavailable", "drain_pending", "editor_busy", "version_pinned", "runtime_owned", "storage_busy", "revision_conflict", "file_conflict", "legacy_busy"].includes(detail.code) ? 409 : 500);
   return {status,body:{error:detail.message,errorCode:detail.code,...(detail.reason ? {reason:detail.reason} : {})}};
 }

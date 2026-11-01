@@ -1,68 +1,71 @@
-# Updates & recovery
+# Updates
 
-Finish or explicitly pause work in **all** chats and terminals before updating, and save important changes. Restarting the service ends background tasks; saved history does not keep processes running. Follow the procedure for your actual entry point.
+This page explains how to update pi-webapp for each way of running it, what the stable and preview channels mean, and how to recover if an update doesn't come back.
 
-## npm background launcher (npx / global command)
+Updating restarts the service, which ends running chats and terminals. Before you start, let every chat finish (or pause it), close terminals, and save and close any open drawings.
 
-**Settings → General → App updates** checks npm. When running from an npm package's background launcher, **Update and restart** installs a verified release under `pi-web/releases/` in Pi's data directory, restarts the backend, and reloads the original address.
+## Which update applies to me?
 
-- Both npx and global-command launches are supported; later launches select the managed release.
-- This **does not modify the npm global installation**. The global package version may differ from the running version; check runtime information in Settings.
-- If the new version cannot start, the launcher attempts to restore the previous service. This does not guarantee recovery of active work.
-- New npm packages exactly pin the verified Pi SDK pair (currently 1.3.0); their launcher uses the package-local CLI, not global Pi. Desktop updates also retain their verified SDK pair.
+| You run… | Update with… |
+| --- | --- |
+| `npx pi-webapp` or the global `pi-webapp` command | **Pi Settings → General → App updates** (below) |
+| The desktop app | Business package: the same Settings page. The app shell itself: [manual install](./desktop#update-the-desktop-app). |
+| `/web` inside the Pi terminal | `pi update npm:pi-webapp`, then restart Pi |
+| A source checkout | `git pull`, `npm ci`, `npm run build`, restart |
 
-**Known 0.1.30 → 0.1.31-alpha.5 failure:** alpha.5's wildcard peers can install SDK 1.4.0, but the hosted adapter only admits verified SDK 1.3.0. The log reads `Hosted agent adapter requires verified SDK 1.3.0, got 1.4.0`. This is not slow loading: retrying that release or waiting longer does not help. Wait for a subsequent release containing the exact SDK dependency fix, then check for updates again. Do not delete sessions, modify managed directories, or downgrade global Pi.
+## Update from the page (web launcher and desktop)
 
-### Update preference: stable / preview
+1. Open **Pi Settings → General**. Under **App updates** you see **Current version** and **Target version**. A dot on **Download updates** at the bottom of the sidebar also means a newer version was found.
+2. Click **Check for updates** if you want to refresh the target.
+3. Click **Update and restart**. The status moves through installing and restarting, and the page reconnects at the **same address**, because the new service keeps the old port and access token.
 
-Choose an update preference under **App updates**. It is saved in Pi's data directory, surviving restarts, page reloads and different browsers:
+![Pi Settings → General, with the update controls](/images/settings-general.png)
 
-- **Stable (default)** selects the official release on npm's `latest` tag.
-- **Preview** selects the newer of npm's `latest` and `alpha` versions, including an official release that supersedes an older alpha.
-- Changing the preference **does not install or restart anything**. Review the target, then click **Update and restart**.
-- If the running alpha is newer than the latest stable release, selecting stable shows **Switch to stable and restart**. Confirm the lower target and back up important data first. Incompatible data formats block switching; no automatic data restore or conversion is performed.
-- If the release target or preference changes after checking, installation stops and requires a fresh check rather than silently installing another version.
+What this does and doesn't do:
 
-**Older entry points:** before using channels, finish active work and update the original npx/global launcher to a stable release supporting this feature. Updating only a managed business package does not update the global entry point. Older desktop shells also require a new installer; shells without channel support cannot select alpha. This preference controls the npm **business package**, not the desktop menu's separate GitHub Releases shell-update channel.
+- It downloads a verified release into Pi's data folder (`pi-web/releases/`) and starts it. It **does not** change your npm global installation, so `npm ls -g pi-webapp` can show an older version than the one running. The running version is the one in Settings.
+- Later starts of `npx pi-webapp` or `pi-webapp` pick the updated release automatically.
+- Each release brings the Pi runtime version it was tested with, so updating the app can update Pi's version for the service. Your global `pi`, if you have one, is not touched.
+- If the new version fails to start, the launcher tries to start the previous version again. That restores the service, but not any work that was running.
+- If the target changes or you change the preference between checking and installing, installation stops and asks for a fresh check instead of silently installing something else.
 
-### Desktop build 10 and preview updates
+If the page doesn't come back after a minute or two, see [Troubleshooting](./troubleshooting#the-page-never-returns-after-an-update).
 
-The public `0.1.28 / build 10` shell can update stable business packages but cannot retain an alpha selection across launches. Updating only the backend does not update that shell. Install a shell with channel support once, then select Preview and update online. [Build 11 is available](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b11) and retains preview preferences and selected releases. Settings identifies an incompatible shell and links to desktop downloads.
+## Stable or preview {#channels}
 
-When replacing build 10, finish chats and close terminals, choose “停止服务并退出” (stop service and quit) in the old app, then replace it and start build 11. Attaching the new shell to a still-running old backend does not change its capability flags. If that backend was retained, stop it from its original entry point before starting through the new shell.
+Under **Update preference** choose:
 
-Preview selects the newer of `latest` and `alpha`. For example, stable `0.1.39` supersedes `0.1.39-alpha.1`; a newer alpha must be published before an alpha upgrade is offered.
+- **Stable (recommended)**: follows the release published under npm's `latest` tag.
+- **Preview (including alpha)**: follows the newer of the `latest` and `alpha` tags. Preview releases contain features that are still being tested and may be unstable. A stable release that supersedes an older alpha is offered as an update; an older alpha is never offered as an "upgrade".
 
-### Save-confirmation timeout
+The preference is saved in Pi's data folder, so it survives restarts, reloads and other browsers. **Changing it installs nothing and doesn't restart anything**: review the target, then click **Update and restart**.
 
-`Missing view flush acknowledgement; old version retained` means a plugin view did not acknowledge its save/freeze within 15 seconds, so version switching stopped. Save and close drawings or editors. For disconnected views left after reload, review local copies in the session's Plugin view recovery dialog, retain the recovery record to unblock, then retry. Keep drawings and data directories. Timeout diagnostics identify the pending plugin, session and mount without exposing capability tokens.
+If you're running an alpha that is newer than the latest stable release and select **Stable**, the button reads **Switch to stable and restart**. That installs an older version. Back up important data first. If the data format differs, the switch is blocked; there is no automatic data conversion.
 
-### Source and published versions
+The preference controls the npm package that the service runs. It is separate from the desktop app's own update channel.
 
-The repository version is a release baseline. CI's `scripts/prepare-release.mjs` allocates the next version from npm dist-tags, updates manifests in its temporary checkout, and publishes the verified tarball. The workflow deliberately does not push version commits back to the branch, which is why source remained at `0.1.29` while published versions advanced. This change synchronizes the source baseline to `0.1.39`; future CI releases still increment from npm. The desktop shell also has its own build number in `desktop/release.json`.
+## Update from the Pi terminal (`/web`)
 
-If the page does not return:
-
-```bash
-npx pi-webapp status
-```
-
-Global installs can use `pi-webapp status`. Check `~/.pi/agent/pi-web/launcher.log` (Windows: `%USERPROFILE%\.pi\agent\pi-web\launcher.log`; custom data roots are covered in [configuration](./reference)). Confirm there is no active work before starting through the original entry point. Report versions and sanitized errors. **Do not delete `~/.pi` or manually alter managed-release directories as a repair shortcut.**
-
-## /web inside an existing Pi
-
-This mode shows versions but cannot restart from the web page. Finish work, then use Pi's package update flow for the installed extension, for example outside the Pi terminal:
+In this mode pi-webapp can show its version but can't restart itself. Quit Pi, then update the extension from your normal shell:
 
 ```bash
 pi update npm:pi-webapp
 ```
 
-Use the source saved at installation; check `pi list` and your installed version's `pi update --help`. In current Pi, bare `pi update` updates Pi itself, not the extension. Reload extensions or restart Pi, then enter `/web`. If Pi itself is too old, update it separately; its version is distinct from the pi-webapp extension version.
+Start `pi` again and enter `/web`. Use the source you installed with (check with `pi list`). A bare `pi update` updates Pi itself, not the extension, so name the package. Pi's own version and the extension's version are independent.
 
-## Source checkout
+## Update a source checkout
 
-After updating trusted source, run `npm ci` and `npm run build` in the repository root. For the launcher use `npm run stop` then `npm run start`. With `pi -e .`, rebuild, then enter `/reload` and `/web` inside Pi. Refreshing an old page does not replace the backend bridge.
+```bash
+git pull
+npm ci
+npm run build
+npm run stop
+npm run start
+```
 
-## Desktop test package
+Refreshing an old page doesn't replace backend code: the service has to be restarted. With `pi -e .`, rebuild and then enter `/reload` and `/web` in Pi.
 
-Check desktop and Web runtime versions separately. Test packages without a publisher signature support verified downloads and manual Finder installation, not automatic installation. Quit the old app and stop its owned backend if needed before replacing it; a compatible external Web backend need not stop. See the [desktop guide](./desktop).
+## Desktop notes
+
+The desktop app has two separate things to update: the **shell** (the installed app) and the **business package** (the pi-webapp version it runs). The About dialog (**pi → 关于 pi**) shows the shell version and desktop build number, and Settings shows the running package. See [Desktop app](./desktop#update-the-desktop-app) for the shell, and for how a desktop that reuses a running service picks up preview updates.

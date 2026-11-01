@@ -18,6 +18,7 @@ import { workspacePreviewPath } from "../../../web/src/ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
 import { PluginInteraction, PluginSlot, PluginToolView, useWebPlugins } from "./plugin-runtime.tsx";
 import { useHostedPlugins } from "./hosted/runtime.tsx";
+import { ExecuteApprovalPrompt } from "./hosted/ExecuteApprovalPrompt.tsx";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
 import { drawingRecovery, OFFICIAL_DRAWINGS } from "./legacy-diagrams.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
@@ -126,7 +127,7 @@ export function PiApp() {
     setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && panel.shown && !pluginsOpen && !fullscreen }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
-  const renderMarkdown = useCallback((text: string) => <MarkdownText text={text} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
+  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <MarkdownText text={text} pathImages={pathImages} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
   const send: typeof bridge.send = async (...args) => {
     const sessionId = bridge.session?.sessionId;
     setPreSendError("");
@@ -179,6 +180,8 @@ export function PiApp() {
       onRemove={(id) => navigate(() => bridge.removeWorkspace(id))}
       onSelectSession={(workspaceId, id, path) => navigate(() => bridge.selectSession(workspaceId, id, path))}
       onNewSession={(id) => navigate(() => bridge.newSessionInWorkspace(id))}
+      onRenameSession={(workspaceId, id, path, name) => bridge.renameSession(workspaceId, id, path, name)}
+      onDeleteSession={(workspaceId, id, path) => navigate(() => bridge.deleteSession(workspaceId, id, path))}
     />;
     return options?.fallback ?? null;
   };
@@ -201,7 +204,7 @@ export function PiApp() {
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}

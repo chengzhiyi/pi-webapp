@@ -7,14 +7,17 @@ measurement methodology and local commands.
 
 - `verify-core`: protocol resolution, runner Chrome preflight, type checking,
   build, Node/desktop tests and alpha bootstrap identity verification.
-- `browser (general)`, `browser (workspace)`, `browser (hosted)` and
-  `browser (stress)`: four isolated, single-worker file groups on `ubuntu-24.04`.
+- `changes`: marks PRs that only touch `docs/**` / `docs.yml`; those skip every
+  suite below and `verify` passes directly.
+- `browser (general)`, `browser (workspace)`, `browser (hosted)`,
+  `browser (hosted-ui)` and `browser (stress)`: isolated, single-worker file groups
+  on `ubuntu-24.04`. Stress runs on pushes and manual runs, not on PRs.
   The runner supplies native libraries/fonts and the PTY compiler; Playwright
   downloads only the lockfile-pinned Chromium headless shell, without apt.
   Node 24 and the lockfile remain authoritative. A mandatory live browser preflight
   fails closed rather than repairing the environment with online apt installs.
-- `verify`: the existing required-check name; succeeds only if core and all four
-  browser jobs succeed, forwarding core's protocol-publication output.
+- `verify`: the existing required-check name; succeeds only if core and every
+  browser job in the run succeed (or the PR is docs-only), forwarding core's protocol-publication output.
 - `platform-smoke`: macOS / Windows built-in-only checks, without npm installation.
 - `publish`: still requires `verify`, `platform-smoke`, a non-PR main/alpha ref and
   a published protocol. Exact-source checkout, serialized version selection,
@@ -23,20 +26,21 @@ measurement methodology and local commands.
 ## No missing or duplicate tests
 
 `playwright.ci.config.ts` extends the default config. `workspace-*` files belong
-to workspace, `hosted-stress.*` to stress, other `hosted-*` to hosted, and all other
+to workspace, `hosted-stress.*` to stress, the six named UI files to hosted-ui,
+other `hosted-*` to hosted, and all other
 files to general. New/nested files join exactly one group. A missing/unknown group
 fails immediately. Local `npm run test:browser` still discovers the full suite.
 
-Each group runs once with line + JSON reporters. Hosted/stress acceptance reads
+Each group runs once with line + JSON reporters. Hosted/hosted-ui/stress acceptance reads
 **that execution's report**, rather than rerunning a subset. Missing/malformed
 reports, global errors, non-diagnostic skips, retries and failed real shutdowns
 reject acceptance. The separate public `0.1.0` → `0.1.1` update exercises a distinct
 path. The stress measurement still includes 20 warmups plus 50 measured cycles;
 its test and resources are not parallelized with other files.
 
-Artifacts are `browser-evidence-{general,workspace,hosted,stress}`, containing
+Artifacts are `browser-evidence-{general,workspace,hosted,hosted-ui,stress}`, containing
 `.ci/browser/report.json` and `test-results`. Set
-`PI_WEB_BROWSER_GROUP=general|workspace|hosted|stress` and use
+`PI_WEB_BROWSER_GROUP=general|workspace|hosted|hosted-ui|stress` and use
 `--config=playwright.ci.config.ts` to reproduce a group.
 
 ## Cancellation and release safety

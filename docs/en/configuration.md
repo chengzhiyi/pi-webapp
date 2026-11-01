@@ -1,36 +1,78 @@
-# Models, packages & skills
+# Configuration overview
 
-## Models and authentication
+This page tells you where each setting lives, what it defaults to, and gives a few ready-made combinations.
 
-Open **Settings → Models** for providers, sign-in, and models. Add models, edit display names, context windows, output limits, and input types, or restore built-in defaults. Changes go to Pi's `models.json`. Select the conversation's model and thinking level in the conversation UI.
+pi-webapp has few settings of its own. Most things you'd want to change are in the **Pi Settings** dialog, the **Plugins** page or one environment variable. If a setting you expect isn't here, it probably doesn't exist; for example there is no setting for the port ([FAQ](./faq#can-i-choose-the-port)).
 
-Browser sign-in opens the provider page; follow manual-code prompts if the callback cannot reach Pi. Stored provider authentication can be removed here. Credentials stay in Pi's local `auth.json` and are not returned to the browser: never attach that file to a report. Model usage may incur charges from your provider.
+## Where to change what
 
-## Packages, extensions, skills, and Web plugins differ
+| I want to… | Go to | Default |
+| --- | --- | --- |
+| Connect a provider, add models, add my own endpoint | **Pi Settings → Models** ([Models and providers](./models)) | No provider connected |
+| Change the interface language | **Pi Settings → General → Language** | Your browser's language: Chinese if it starts with `zh`, otherwise English |
+| Switch light or dark | **Pi Settings → General → Appearance** | **System** |
+| Choose stable or preview updates | **Pi Settings → General → Update preference** ([Updates](./updates)) | **Stable (recommended)** |
+| Update the app | **Pi Settings → General → App updates** | Manual |
+| Add a Pi package or extension | **Pi Settings → Packages** ([Packages, skills and plugins](./extensions)) | None added |
+| Add a skill | **Pi Settings → Skills** | Skills Pi discovers on its own |
+| Turn Files, Terminal or Git on or off | **Plugins** in the sidebar | All three on |
+| Install the Excalidraw plugin | **Plugins → Official plugins** ([Diagrams](./diagrams)) | Not installed |
+| Add or remove a workspace | Sidebar ([Sessions and workspaces](./sessions)) | The launch folder and every folder with saved sessions |
+| Move Pi's data folder | `PI_CODING_AGENT_DIR` ([Environment variables](./reference/environment)) | `~/.pi/agent` |
+| Stop the browser opening on start | `PI_WEBAPP_AUTO_OPEN=0` | Opens |
+| Use a proxy | `HTTPS_PROXY` and friends | None |
+| Turn error reporting on | `PI_WEB_SENTRY_ENABLED=true` | Off |
+| Use a different shell in the terminal | `SHELL` (Windows: `COMSPEC`) | Your login shell |
 
-| Term | Purpose and entry point |
+## The Pi Settings dialog
+
+Open it with **Pi Settings** at the bottom of the sidebar. It has four sections:
+
+| Section | What's in it |
 | --- | --- |
-| Pi package | Can contain both extensions and skills. Add npm, Git, or local sources in **Settings → Packages & extensions**. |
-| Pi extension | Pi runtime capabilities; local extensions can also load individually. Loading in other workspace sessions depends on host isolation rules. |
-| Skill | Discovered task guidance. Inspect or manually configure a `SKILL.md` file/directory in **Settings → Skills**. |
-| Web plugin | Web interactions and panels. Bundled Git/Files/Terminal/Diagrams are managed in sidebar **Plugins**; external runtimes remain under **Packages & extensions**. |
+| **General** | **Language** (English or Chinese), **Appearance** (**Light**, **Dark** or **System**), **Update preference**, and **App updates** with the current and target versions and the **Check for updates** and **Update and restart** buttons. |
+| **Models** | Connected providers, **＋ Add provider** and **＋ Add custom provider**. |
+| **Packages** | Installed packages, standalone extensions, **Add package** and **Extension paths**. |
+| **Skills** | Discovered skills and manually configured paths. |
 
-Bundled plugin switches persist globally and require all chats to be idle. Disabling closes related tabs and blocks backend requests. Disabling Terminal requires confirmation and ends all service-owned terminals. **Installing a package is not toggling a bundled plugin.** External plugins do not offer a misleading UI-only switch.
+![Pi Settings → General](/images/settings-general.png)
 
-## Official plugins
+::: warning Language and appearance are remembered by your browser, per address
+They are stored in the browser for the exact address you opened, and that includes the port. After the service restarts on a new port the browser can treat it as a new site and fall back to the defaults. Set them again if that happens.
+:::
 
-Official plugins in sidebar **Plugins** use the same enable/disable switch as built-in capabilities. Choose **Download** first, then enable the installed plugin; use **Update** for installed packages. Switches are unavailable before installation or while status is unknown, and reflect server-confirmed state only.
+## Common combinations
 
-Click a plugin row for its description, installed version, required configuration, update checks and uninstall action; **‹ Plugins** returns to the list. The page refresh button reads both built-in and official plugin status. Excalidraw requires no additional configuration.
+**A quiet background service on a remote machine** (no browser to open, access over SSH):
 
-Installed plugins update with the app. Open editors delay the version switch; immediate reopening requires separate confirmation of the undo-history reset. Disabling or uninstalling saves and closes views first and stops on a failed save, retaining workspace files and plugin data. Failed downloads are not retried automatically and do not discard the current version.
+```bash
+PI_WEBAPP_AUTO_OPEN=0 npx pi-webapp
+```
 
-## Diagrams
+then forward the port as described in [Security → Remote machines](./security#remote-machines).
 
-Ask the agent to draw in the **main chat**. The drawing appears in its tool result; new drawings require no acceptance step. **Edit** opens only the native Excalidraw canvas and toolbar on the right. Request further changes in the main chat; existing-diagram AI edits use **Apply edits / Keep original** in chat, with stale-revision protection. Save/Open/Import, source download, white/transparent PNG export and backup recovery live in Excalidraw's menu. Workspace files use `.excalidraw` and remain conflict-protected. The right-workbench **Excalidraw** entry opens a blank native canvas, without a separate drawing landing page or prompt form.
+**A clean, throwaway setup** for trying things without touching your real sessions or credentials:
 
-The editor is embedded locally, without Excalidraw cloud services. Manual editing works without a model. Browser draft backups are not a substitute for saving files. Images, links, collaboration and headless PNG rendering are not supported. See [Diagrams](../diagrams.md) for boundaries. Rebuild/restart the backend after updating; refreshing the page alone is insufficient.
+```bash
+PI_CODING_AGENT_DIR=/tmp/pi-scratch npx pi-webapp
+```
 
-## When to reload
+It runs as a second, separate service with its own data folder.
 
-After package/extension configuration changes, follow UI feedback and wait for chats to become idle before reloading. A browser refresh is not a backend extension update. Source development requires a rebuild and launcher restart, or `/reload` followed by `/web` inside Pi when using `pi -e .`. See [updates](./updates) and [developer resources](./resources).
+**Behind a company proxy:**
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:3128 NO_PROXY=127.0.0.1,localhost npx pi-webapp
+```
+
+**Keep everything on your machine:** add a [custom provider](./models#custom-provider) that points at a local model server, and leave error reporting off (the default).
+
+**Browser view of the Pi terminal, opened automatically:**
+
+```bash
+PI_WEBAPP_AUTO_OPEN=1 pi
+```
+
+## Applying changes
+
+Changes in the **Pi Settings** dialog and the **Plugins** page apply right away. Environment variables apply only when the service starts: stop it and start it again ([Environment variables](./reference/environment#changing-the-environment)).

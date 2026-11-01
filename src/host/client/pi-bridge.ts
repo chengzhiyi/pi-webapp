@@ -307,6 +307,14 @@ export function usePiBridge() {
       if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
       await post("/api/session/select", { sessionId: session.sessionId, workspaceId, id, path: path ?? "" });
     },
+    async renameSession(workspaceId: string, id: string, path: string | null, name: string) {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/session/rename", { sessionId: session.sessionId, workspaceId, id, path: path ?? "", name });
+    },
+    async deleteSession(workspaceId: string, id: string, path: string | null) {
+      if (!session || connection !== "connected") throw new Error(t("Pi 会话不可用", "Pi session is unavailable"));
+      await post("/api/session/delete", { sessionId: session.sessionId, workspaceId, id, path: path ?? "" });
+    },
     async setModel(provider: string, id: string) {
       if (!session || connection !== "connected") return;
       try { await post("/api/model", { sessionId: session.sessionId, provider, id }); setError(""); }

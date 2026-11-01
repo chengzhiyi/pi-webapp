@@ -1,62 +1,73 @@
-# Documentation maintenance / 文档维护
+# Maintaining the documentation site
 
-Phase A: independent VitePress site, user guides first. **Not publicly deployed.** Public hosting, README/npm/app entry replacement, release provenance, permissions, and npm-publish isolation remain separately authorized phase-B work. Do not publish this commit just to preview the docs: the existing main-push workflow may release the product even for documentation-only changes.
+The user guide is a [VitePress](https://vitepress.dev/) site built from `docs/en/` and deployed to GitHub Pages. Everything else in `docs/` (design notes, release and CI records) is engineering material that is not built into the site.
 
-## Local build and preview
+This file is named `MAINTAINING.md` on purpose: npm can include a nested `README.md` in the package even with an explicit `files` allowlist.
 
-Use Node.js ≥ 22.19. Product dependencies/builds are not prerequisites:
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `docs/en/**` | The English user guide. Published at the site root through a VitePress rewrite (`docs/en/getting-started.md` becomes `/getting-started`). |
+| `docs/public/` | Static files: `logo.svg` and the screenshots in `images/` (English interface) and `images/zh/` (Chinese interface). |
+| `docs/.vitepress/config.mts` | Navigation, sidebar, search, edit links, base path. Add a page here as well as creating the file. |
+| `docs/.vitepress/check-site.mjs` | Post-build check of every link, asset and `#anchor`, and of the list of built pages. |
+| `docs/tests/site.spec.ts` | Browser tests of the built site (navigation, search, dark mode, images, mobile width). |
+| `docs/package.json`, `docs/package-lock.json` | The docs' own dependencies, independent of the product. |
+| `docs/zh/**` | The Chinese translation, published under `/zh/`. See "Translations". |
+| `.github/workflows/docs.yml` | Builds on every docs pull request and deploys from `main`. |
+
+The docs package is separate on purpose: the product's `build`, `prepack`, `check` and `test` do not depend on it, and the npm package's `files` allowlist does not include `docs/en`, `docs/public` or `docs/.vitepress`. After touching `package.json`, check with `npm pack --dry-run --ignore-scripts --json`.
+
+## Commands
+
+From the repository root, after `npm --prefix docs ci`:
 
 ```bash
-npm --prefix docs ci
-npm --prefix docs run build
-npm --prefix docs run check
-npm --prefix docs run preview
+npm run docs:dev        # live preview
+npm run docs:build      # production build; fails on a dead page link
+npm run docs:check      # verifies links, assets, anchors and the page list in the output
+npm run docs:preview    # serve the built site at /
+npm --prefix docs run test:browser   # browser tests; needs a Playwright Chromium (npm --prefix docs exec -- playwright install chromium)
 ```
 
-Open the loopback URL printed by VitePress, with **`/pi-webapp/`** appended. For authoring use `npm --prefix docs run dev`. Stop with Ctrl+C. Build output: `docs/.vitepress/dist`; do not open HTML with `file://` (search and ES modules require HTTP). No hostname in the config claims Pages is enabled.
+Don't open the built HTML with `file://`: search and ES modules need HTTP. Set `DOCS_BASE=/pi-webapp/` to build for the GitHub Pages project path instead of the domain root.
 
-The docs package and lockfile are independent; no root `build`, `prepack`, product dependency, or React/Electron runtime changes. `vitepress` is pinned to 1.6.4. Its Vite 5 dependency has reported dev-server issues; the docs-only override pins Vite **6.4.5** (supported by plugin-vue 5) and is exercised by build/preview/browser checks. Reassess/remove the override on a future compatible VitePress upgrade. Keep servers loopback-only. No third-party search/analytics is configured.
+## Deployment
 
-## Checks
+`docs.yml` runs on pull requests that touch `docs/**` (build and check only), and on pushes to `main` that touch `docs/**` (build, check, deploy). It can also be run by hand from `main`.
+
+One-time setup, which needs repository admin rights: **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until that is enabled the deploy job fails.
+
+The site is served at <https://pi.emath.top>:
+
+1. DNS (at the registrar for `emath.top`): `CNAME  pi  →  chengzhiyi.github.io`. With Cloudflare, keep the record "DNS only" until HTTPS is issued.
+2. **Settings → Pages → Custom domain**: `pi.emath.top`, save, wait for the DNS check, then tick **Enforce HTTPS**. With Actions-based deploys the domain lives in this setting, so no `CNAME` file is needed.
+3. Recommended: verify `emath.top` under the account's **Settings → Pages → Add a domain** (a TXT record) so nobody else can claim a subdomain of it.
+
+`base` in the config is `/` to match the domain root. A build for the old project URL (`https://chengzhiyi.github.io/pi-webapp/`) needs `DOCS_BASE=/pi-webapp/`; once the custom domain is active GitHub redirects that URL to the new one, so the project path is only needed if the domain is removed.
+
+`ci.yml` ignores pushes that only touch `docs/**` or `docs.yml`, so a documentation-only merge deploys the site without running CI or publishing the package. Mixed pushes still run everything.
+
+## Writing rules
+
+- One sentence at the top says what the page solves. Steps first, explanation second.
+- Every command, option, default, path and port is checked against the code or by running it. If a page and the code disagree, the code wins.
+- Quote UI labels exactly, in **bold**. The interface is localized; the docs use the English labels. The launcher's command-line output is Chinese only, so quote it verbatim and translate it.
+- No internal work-item names, RFC numbers or branch names on user pages. Link to engineering documents on GitHub from the Developers page instead.
+- Screenshots live in `docs/public/images/`. Take them with a stand-in model server and a throwaway Pi data folder (`PI_CODING_AGENT_DIR`), never with real credentials, real projects or your own skill list. Keep them under about 100 KB each.
+- Give an `{#id}` to any heading you link to by anchor from another page. `docs:check` fails on a missing anchor.
+
+## Translations
+
+English (`docs/en/`) is the source text. The Chinese translation lives in `docs/zh/` with the same file names, published under `/zh/`; `docs:check` fails if a page exists in only one language. Chinese pages use the Chinese-interface screenshots in `docs/public/images/zh/` and quote interface labels exactly as the Chinese interface shows them (they come from the `t("中文", "English")` pairs in the source). Command output and launcher messages are Chinese in both languages. When you change an English page, change its counterpart in the same pull request. To retake the Chinese screenshots, follow "Writing rules" with the browser locale set to `zh` (`localStorage['pi-web-locale'] = 'zh'`) and Chinese prompts for the stand-in model.
+
+## Checks before merging
 
 ```bash
-npm --prefix docs run build
-npm --prefix docs run check
-# Install Chromium once if Chrome is unavailable:
-npm --prefix docs exec -- playwright install chromium
+npm run docs:build && npm run docs:check
 npm --prefix docs run test:browser
-# Or use the machine's Chrome:
-PI_WEB_TEST_CHROME=true npm --prefix docs run test:browser
-npm --prefix docs audit
-# From the product repository root; never run npm publish for validation:
-npm pack --dry-run --ignore-scripts --json
+npm pack --dry-run --ignore-scripts --json   # no docs/en, docs/public or docs/.vitepress in the file list
 ```
 
-`check` verifies paired language pages, reviewed output pages, every local HTML link/asset, and fragment anchors under the project base. It intentionally does not network-crawl GitHub or validate behavior of model accounts. Browser tests own a bounded loopback preview child process, use no Pi backend or credentials, and cover deep-link reload, language counterpart links, Chinese/English search, keyboard behavior, and 390 px layout. No persistent/public service is started. When a Paperclip execution workspace provides runtime controls, use its managed service for interactive QA.
-
-Inspect npm's file list: docs dependencies, guides, config, tests, cache, and built site must not enter the product package. Keep this file named `MAINTAINING.md`: npm may automatically include a nested `README.md` even with the product's explicit file allowlist. Existing explicitly allowlisted engineering Markdown remains distributed unchanged, except the plugin-entry correction. The existing generic ignore patterns already cover `node_modules`, `dist`, reports, and test-results; `.vitepress/cache` is additionally ignored.
-
-## Content boundary and source map
-
-`index.md` is a language chooser. Both `zh/` and `en/` contain an overview and eleven guide/reference pages. All topics have a real counterpart; adding a page requires matching locale navigation and translation. The root chooser is not a third language in the locale switcher.
-
-| Existing path / fact source | User destination | Treatment |
-| --- | --- | --- |
-| README.md / README.zh-CN.md installation and launcher; bin/pi-webapp.mjs | getting-started, updates, reference | New task-oriented guides; README remains unchanged until a real published URL exists |
-| README sessions/attachments; host client and contracts | sessions, conversation | Verify lifecycle/limits before changing either language |
-| src/plugins/builtin; README; docs/architecture.md | workspace-tools | Scope, shared-worktree write constraints, and terminal permissions stay explicit |
-| src/host/client/PiSettings.tsx, PiProviderSettings.tsx; docs/web-plugins.md | configuration | Sidebar Plugins, not Settings; package installation is not a runtime toggle |
-| docs/desktop.md, docs/desktop-testing.md | desktop | Bilingual user summaries; detailed/operator source remains linked, not duplicated wholesale |
-| docs/sentry.md and runtime config | security, reference | Default-off and explicit opt-in must stay visible; operator upload/triage details remain in GitHub |
-| docs/architecture.md, web-plugins.md, sentry-triage.md, decisions/, spec.md | resources | Existing paths/anchors preserved, excluded from site build/search |
-| Upstream Pi 0.87.1 CLI/package docs | updates | `pi update npm:pi-webapp` targets the extension; bare `pi update` updates Pi itself |
-
-VitePress `srcExclude` lists existing non-site Markdown; `check` fails if any unreviewed HTML page slips into output. Do not copy old specs into the user navigation. Existing engineering links still work in GitHub. The local guide index is `zh/index.md` / `en/index.md`; use the preview server for website-relative links.
-
-## Maintenance responsibilities
-
-- The author of a visible behavior change updates both affected guides or explains why no update is needed. The owner of the touched runtime area checks the documented behavior; no new named team is invented.
-- Installation, updates, privacy/data retention, desktop trust, and plugin boundaries require source-owner review, not only a green build.
-- Use root-manifest version only as **development source metadata**, never as npm-latest proof. A visible development banner appears on every guide. Stable publishing must pin a verified release commit in phase B.
-- No product CI/branch checks, npm publishing, Pages workflow, domain, repository permissions, or application help entry was changed in phase A. Before pushing/merging, explicitly handle docs-only product publication in phase B; mixed product/docs changes must retain product safety checks.
-- Actual first-install/provider authorization, paid model calls, desktop download/Finder trust, external link availability, and Linux/Windows runtime testing require their own environment/authority. Static/browser site tests do not establish those results.
+For installation, update, security, privacy and desktop pages, a source-owner review is needed in addition to a green build.

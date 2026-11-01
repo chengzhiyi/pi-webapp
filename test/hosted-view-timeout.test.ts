@@ -36,3 +36,20 @@ test("a timed-out freeze identifies only the plugin views still missing save con
   assert.equal((await disconnected.request({ operation: "reconcile" })).recovery?.state, "unconfirmed");
   await assert.rejects(coordinator.committed({ generation: 2 }), /before all views freeze/);
 });
+
+test("an owner can list and explicitly discard the view that never acknowledged a freeze", async t => {
+  const pluginId = "@test/drawing-plugin";
+  const coordinator = new HostedViewCoordinator(pluginId, 1, 50, 30);
+  t.after(() => coordinator.dispose());
+  const scope = { ownerId: "owner", workspaceId: "workspace", sessionId: "lost-session" };
+  const identity = { pluginId, sessionId: scope.sessionId, generation: 1, mountId: "lost-preview" };
+  const { viewToken } = await coordinator.handle({ ...identity, operation: "register", kind: "tool" }, scope);
+  await coordinator.handle({ ...identity, viewToken, operation: "change", dirty: false, busy: false }, scope);
+  await assert.rejects(coordinator.freeze(), /Missing view flush acknowledgement/);
+  assert.deepEqual(coordinator.pendingViews("owner").map(view => view.viewToken), [viewToken]);
+  assert.deepEqual(coordinator.pendingViews("someone-else"), []);
+  await assert.rejects(coordinator.handle({ ...identity, viewToken, operation: "discard" } as never, scope), /confirmation required/);
+  await coordinator.handle({ ...identity, viewToken, operation: "discard", confirmation: "discard-unconfirmed-edits" }, scope);
+  assert.deepEqual(coordinator.pendingViews("owner"), []);
+  await coordinator.freeze();
+});

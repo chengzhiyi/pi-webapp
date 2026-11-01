@@ -1,12 +1,99 @@
 import { useEffect, useRef, useState } from "react";
 import { OFFICIAL_HOSTED_PLUGIN, type HostedPluginCard, type HostedPluginCatalog, type HostedManageOperation } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
+import { PendingViews } from "./PendingViews.tsx";
 import { HostedPluginIcon } from "./PluginIcon.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
 import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
+
+/** Browser sign-in (device flow) when the host supports it, else a pre-filled GitHub token page; a pasted token is always accepted. Values are write-only. */
+function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCard; t: (zh: string, en: string) => string; onCatalog(next: HostedPluginCatalog): void; disabled: boolean }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+  const [flow, setFlow] = useState<{ name: string; deviceId: string; userCode: string; verificationUri: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    if (!flow) return;
+    let stop = false;
+    const tick = async () => {
+      while (!stop && alive.current) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        if (stop || !alive.current) return;
+        try {
+          const result = await hostedApi.signIn({ auth: "poll", deviceId: flow.deviceId });
+          if (result.status === "granted" && result.catalog) { onCatalog(result.catalog); setFlow(null); setMessage(t("已授权。", "Authorized.")); return; }
+          if (result.status === "denied" || result.status === "expired") { setFlow(null); setMessage(result.status === "denied" ? t("授权已被拒绝。", "Authorization was denied.") : t("授权已过期，请重试。", "Authorization expired. Try again.")); return; }
+        } catch (cause) { setFlow(null); setMessage(cause instanceof Error ? cause.message : String(cause)); return; }
+      }
+    };
+    void tick();
+    return () => { stop = true; };
+  }, [flow]);
+  if (!card.secrets?.length) return null;
+  const save = async (name: string, value: string | null) => {
+    setMessage("");
+    try { onCatalog(await hostedApi.secret(card.pluginId, name, value)); setValues(previous => ({ ...previous, [name]: "" })); setMessage(value === null ? t("已移除。", "Removed.") : t("已保存。", "Saved.")); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  const start = async (name: string) => {
+    setMessage("");
+    try {
+      const started = await hostedApi.signIn({ auth: "start", pluginId: card.pluginId, name });
+      setCopied(false);
+      setFlow({ name, deviceId: started.deviceId, userCode: started.userCode, verificationUri: started.verificationUri });
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  const copyCode = async (code: string) => {
+    try { await navigator.clipboard.writeText(code); setCopied(true); } catch { setCopied(false); }
+  };
+  const copyAndOpen = (f: { userCode: string; verificationUri: string }) => {
+    window.open(f.verificationUri, "_blank", "noopener,noreferrer");
+    void copyCode(f.userCode);
+  };
+  const cancel = () => { if (flow) void hostedApi.signIn({ auth: "cancel", deviceId: flow.deviceId }).catch(() => {}); setFlow(null); };
+  return <section className={css.configuration}><h2>{t("GitHub 授权", "GitHub authorization")}</h2>
+    <p className={rows.scope}>{t("令牌只保存在本机，由主程序代为发起请求；插件进程和页面永远读不到它。", "The token is stored on this machine and used by the host on the plugin's behalf; plugin code and pages can never read it.")}</p>
+    {card.secrets.map(secret => <div key={secret.name} className={css.configuration}>
+      <div className={css.actions}>
+        <span role="status">{secret.configured ? t("已授权", "Authorized") : t("未授权", "Not authorized")}</span>
+        {secret.signIn === "browser" && <Button variant="outline" size="sm" disabled={disabled || !!flow} onClick={() => void start(secret.name)}>{secret.configured ? t("重新授权", "Re-authorize") : t("在浏览器中授权 GitHub", "Authorize with GitHub")}</Button>}
+        {secret.signIn === "token-page" && secret.createUrl && <Button variant="outline" size="sm" disabled={disabled} onClick={() => window.open(secret.createUrl, "_blank", "noopener,noreferrer")}>{t("打开 GitHub 创建令牌", "Open GitHub to create a token")}</Button>}
+        {secret.configured && <Button variant="outline" size="sm" disabled={disabled} onClick={() => void save(secret.name, null)}>{t("移除", "Remove")}</Button>}
+      </div>
+      {flow?.name === secret.name && <div className={rows.scope} role="status">
+        <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 10 }}>
+          <li>{t("复制下面的验证码", "Copy this code")}
+            <div className={css.actions} style={{ marginTop: 6 }}>
+              <code style={{ fontSize: 28, letterSpacing: 4, fontWeight: 600, padding: "6px 14px", border: "1px solid currentColor", borderRadius: 8, userSelect: "all" }}>{flow.userCode}</code>
+              <Button variant="outline" size="sm" onClick={() => void copyCode(flow.userCode)}>{copied ? t("已复制", "Copied") : t("复制", "Copy")}</Button>
+            </div>
+          </li>
+          <li>{t("打开 GitHub 授权页，粘贴验证码并点击 Authorize", "Open GitHub, paste the code and click Authorize")}
+            <div className={css.actions} style={{ marginTop: 6 }}>
+              <Button size="sm" onClick={() => copyAndOpen(flow)}>{t("复制验证码并打开 GitHub", "Copy code and open GitHub")}</Button>
+            </div>
+          </li>
+        </ol>
+        <div className={css.actions} style={{ marginTop: 10 }}>
+          <span>{t("等待授权中… 完成后这里会自动更新。", "Waiting for authorization… this updates automatically.")}</span>
+          <Button variant="outline" size="sm" onClick={cancel}>{t("取消", "Cancel")}</Button>
+        </div>
+      </div>}
+      <details open={secret.signIn === "token-page" && !secret.configured}><summary>{secret.signIn === "token-page" ? t("创建后在此粘贴令牌（仅限目标仓库的 fine-grained token，Issues、Pull requests、Contents 读写）", "Paste the token here after creating it (fine-grained, limited to the target repository, Issues / Pull requests / Contents read-write)") : t("改用手动粘贴令牌", "Paste a token instead")}</summary>
+        <div className={css.actions}>
+          <input type="password" autoComplete="off" aria-label={secret.name} value={values[secret.name] ?? ""} onChange={event => setValues(previous => ({ ...previous, [secret.name]: event.target.value }))} />
+          <Button variant="outline" size="sm" disabled={disabled || !(values[secret.name] ?? "").trim()} onClick={() => void save(secret.name, (values[secret.name] ?? "").trim())}>{t("保存", "Save")}</Button>
+        </div>
+      </details>
+    </div>)}
+    {message && <p role="status" className={rows.scope}>{message}</p>}
+  </section>;
+}
 
 type Problem = { code?: string; message: string };
 /** One actionable message per failure; raw diagnostics remain inspectable, not repeated. */
@@ -97,7 +184,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   useEffect(() => { onMatchCountChange(shown.length); }, [shown.length, onMatchCountChange]);
   const unavailableControls = busy || reading || disabled || !known || !!catalog.offline;
   function description(card: HostedPluginCard) {
-    return card.contribution?.entry.description[locale] ?? (card.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId
+    return card.contribution?.entry.description[locale] ?? card.description?.[locale] ?? (card.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId
       ? t("绘制、编辑手绘图表，并将图稿保存到工作区。", "Draw and edit hand-drawn diagrams, and save them to your workspace.")
       : t("按需下载安装的官方插件。", "An official plugin available on demand."));
   }
@@ -113,11 +200,15 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   const failureView = (card: HostedPluginCard, detail: boolean) => {
     const failure = failureFor(card), diagnostic = card.updateDiagnostic;
     if (!failure) return null;
-    return <div className={css.error} role="alert">{problemText(failure, card.installed, t)}{detail && <details><summary>{t("诊断信息", "Diagnostics")}</summary><code>{failure.code}</code><p>{failure.message}</p>{diagnostic && <p>{diagnostic.checkedAt} · {diagnostic.hostVersion}</p>}{/lock|owned/i.test(failure.message) && <p>{t("停止所有程序并备份后，按 docs/hosted-update-recovery.md 恢复。此页面不会清锁。", "Stop all hosts and back up data before following docs/hosted-update-recovery.md. This page never clears locks.")}</p>}</details>}</div>;
+    return <div className={css.error} role="alert">{problemText(failure, card.installed, t)}{detail && <details><summary>{t("诊断信息", "Diagnostics")}</summary><code>{failure.code}</code><p>{failure.message}</p>{diagnostic && <p>{diagnostic.checkedAt} · {diagnostic.hostVersion}</p>}{/lock|owned/i.test(failure.message) && <p>{t("停止所有程序并备份后，按 docs/hosted-update-recovery.md 恢复。此页面不会清锁。", "Stop all hosts and back up data before following docs/hosted-update-recovery.md. This page never clears locks.")}</p>}</details>}{detail && failure.code === "view_barrier" && <PendingViews pluginId={card.pluginId} t={t} />}</div>;
   };
   return <section className={css.section} data-hosted-management aria-busy={busy || reading} style={!visible ? { display: "none" } : undefined}>
     {!selected && <h2>{t("官方插件", "Official plugins")} <span>{shown.length}</span></h2>}
     {error && <div role="alert" className={css.error}>{t("无法读取插件状态，请重试。", "Cannot read plugin status. Please retry.")}<details><summary>{t("诊断信息", "Diagnostics")}</summary>{error.message}</details><Button variant="outline" size="sm" disabled={busy || reading || disabled} onClick={() => setRetryRead(value => value + 1)}>{t("重试", "Retry")}</Button></div>}
+    {catalog.dev && <div data-hosted-dev>
+      {catalog.dev.notices.map((item, index) => <div key={index} className={item.level === "info" ? css.notice : css.error} role={item.level === "error" ? "alert" : "status"}><strong>{t("开发模式", "Dev mode")}{item.pluginId ? ` · ${item.pluginId}` : ""}</strong>: {item.message}</div>)}
+      {catalog.dev.sources.map(source => <p key={source.pluginId} className={css.notice} role="status" data-hosted-dev-source={source.pluginId}>{t("开发目录", "Dev directory")} · <code>{source.root}</code> · {source.state}{source.version ? ` ${source.version}` : ""}{source.message ? ` — ${source.message}` : ""}</p>)}
+    </div>}
     {notice && <p className={css.notice} role="status">{notice}</p>}
     {download && <Button variant="outline" onClick={() => {
       void hostedApi.manage({ pluginId: download.pluginId, operation: "cancel-download", downloadId: download.id }).then(() => setNotice(t("已请求取消，已完成的安装不会回滚。", "Cancellation requested; committed installations are not rolled back."))).catch(cause => setOperationError({ id: download.pluginId, problem: problem(cause) }));
@@ -126,8 +217,9 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span><div><strong>{name(selected)}</strong><p>{description(selected)}</p></div>{switchFor(selected)}</div>
       <dl><dt>{t("插件标识", "Plugin ID")}</dt><dd><code>{selected.pluginId}</code></dd><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
       {failureView(selected, true)}
+      <SecretsSection card={selected} t={t} disabled={unavailableControls} onCatalog={next => { setCatalog(next); window.dispatchEvent(new Event("pi:hosted-catalog-changed")); }} />
       <section className={css.configuration}><h2>{t("配置与更新", "Configuration & updates")}</h2>
-        <p className={rows.scope}>{t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.")}</p>
+        <p className={rows.scope}>{selected.icon === "drawing" || selected.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId ? t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.") : t("启用后从工作区侧栏打开。停用或卸载不会删除插件数据。", "Once enabled, open it from the workspace sidebar. Disabling or uninstalling retains plugin data.")}</p>
         <p className={rows.scope}>{t("兼容的插件可独立更新；软件升级仅在协议不兼容时协调插件版本。", "Compatible plugins update independently. App upgrades coordinate plugins only when their protocol is incompatible.")}</p>
         <p className={rows.scope}>{t("停用或卸载前会先保存并关闭相关视图；保存失败时不会继续。", "Disabling or uninstalling first saves and closes related views; a failed save stops the operation.")}</p>
         {selected.pendingVersion && <p className={rows.scope} role="status">{t("关闭编辑器后更新至：", "Close editors to update to: ")}{selected.pendingVersion}</p>}
