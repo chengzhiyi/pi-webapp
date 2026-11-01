@@ -16,11 +16,14 @@ const walk = (dir) => readdirSync(dir).flatMap((name) => {
 assert(existsSync(dist), 'Build the documentation first (npm run docs:build)');
 
 const pages = walk(dist).filter((p) => p.endsWith('.html'));
-const sources = walk(join(docs, 'en')).filter((p) => p.endsWith('.md'))
-  .map((p) => relative(join(docs, 'en'), p).replace(/\.md$/, '.html'));
-const expected = ['404.html', ...sources].sort();
+const guide = (lang) => walk(join(docs, lang)).filter((p) => p.endsWith('.md')).map((p) => relative(join(docs, lang), p)).sort();
+const en = guide('en');
+const zh = guide('zh');
+assert.deepEqual(zh, en, 'Every English page needs a Chinese counterpart in docs/zh, and the other way round');
+// English is published at the root, Chinese under /zh/.
+const expected = ['404.html', ...en.map((p) => p.replace(/\.md$/, '.html')), ...zh.map((p) => `zh/${p.replace(/\.md$/, '.html')}`)].sort();
 assert.deepEqual(pages.map((p) => relative(dist, p)).sort(), expected,
-  'Only pages under docs/en/ may be built (no engineering, operations or archive pages)');
+  'Only pages under docs/en and docs/zh may be built (no engineering, operations or archive pages)');
 
 const decode = (text) => text.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'");
 const ids = new Map(pages.map((p) => [p, new Set([...readFileSync(p, 'utf8').matchAll(/\bid="([^"]+)"/g)].map((m) => decode(m[1])))]));

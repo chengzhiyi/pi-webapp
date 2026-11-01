@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { browserCIGroup } from "./helpers/browser-ci-groups.ts";
 
-const names = ["general", "workspace", "hosted", "stress"] as const;
+const names = ["general", "workspace", "hosted", "hosted-ui", "stress"] as const;
 function matches(group: string, path: string) {
   const config = browserCIGroup(group);
   return (!config.testMatch || (config.testMatch as RegExp).test(path)) && (!config.testIgnore || !(config.testIgnore as RegExp).test(path));
@@ -11,15 +11,16 @@ function matches(group: string, path: string) {
 
 test("CI partitions every browser file exactly once without changing local discovery", async () => {
   const files = (await readdir(new URL("./browser/", import.meta.url))).filter(file => /\.(spec|test)\.[cm]?[jt]sx?$/.test(file));
-  const groups = { general: [] as string[], workspace: [] as string[], hosted: [] as string[], stress: [] as string[] };
+  const groups = { general: [] as string[], workspace: [] as string[], hosted: [] as string[], "hosted-ui": [] as string[], stress: [] as string[] };
   for (const file of files) {
     const included = names.filter(group => matches(group, `/repo/test/browser/${file}`));
     assert.equal(included.length, 1, file);
     groups[included[0]!].push(file);
   }
-  assert.ok(groups.general.length > 0 && groups.workspace.length > 0 && groups.hosted.length > 0);
+  assert.ok(groups.general.length > 0 && groups.workspace.length > 0 && groups.hosted.length > 0 && groups["hosted-ui"].length > 0);
   assert.deepEqual(groups.stress, ["hosted-stress.spec.ts"]);
-  for (const file of ["hosted-production.spec.ts", "hosted-npm.spec.ts"]) assert.ok(groups.hosted.includes(file));
+  for (const file of ["hosted-production.spec.ts", "hosted-transport.spec.ts", "hosted-npm.spec.ts"]) assert.ok(groups.hosted.includes(file));
+  for (const file of ["hosted-parity.spec.ts", "hosted-tool-ui.spec.ts"]) assert.ok(groups["hosted-ui"].includes(file));
   for (const file of ["terminal.spec.ts", "conversation-activity.spec.ts"]) assert.ok(groups.general.includes(file));
   for (const file of ["workspace-git-history.spec.ts", "workspace-files.spec.ts"]) assert.ok(groups.workspace.includes(file));
   assert.equal(Object.values(groups).flat().length, files.length);
@@ -30,26 +31,31 @@ test("CI partitions every browser file exactly once without changing local disco
 test("new files, nested paths and Windows separators cannot fall between groups", () => {
   for (const [group, paths] of Object.entries({
     hosted: ["hosted-new.spec.ts", "/test/browser/nested/hosted-new.test.ts", "C:\\repo\\test\\browser\\hosted-new.spec.ts", "/test/hosted-new.spec.mts"],
+    "hosted-ui": ["hosted-parity.spec.ts", "/test/browser/nested/hosted-tool-ui.test.ts", "C:\\repo\\test\\browser\\hosted-view-recovery.spec.ts"],
     stress: ["hosted-stress.spec.ts", "/test/browser/nested/hosted-stress.test.ts", "C:\\repo\\test\\browser\\hosted-stress.spec.ts"],
     workspace: ["workspace-new.spec.ts", "/test/browser/nested/workspace-new.test.ts", "C:\\repo\\test\\browser\\workspace-new.spec.ts", "/test/workspace-new.spec.mts"],
     general: ["/hosted-folder/terminal.spec.ts", "/test/not-hosted-production.spec.ts", "/workspace-folder/chat.spec.ts", "/test/not-workspace-new.spec.ts", "/test/new.test.ts", "/test/nested/chat.spec.ts"],
   })) {
     for (const path of paths) assert.deepEqual(names.filter(name => matches(name, path)), [group], path);
   }
-  for (const mode of [undefined, "", "typo", "all"]) assert.throws(() => browserCIGroup(mode), /must be general, workspace, hosted or stress/);
+  for (const mode of [undefined, "", "typo", "all"]) assert.throws(() => browserCIGroup(mode), /must be general, workspace, hosted, hosted-ui or stress/);
 });
 
 test("CI reuses hosted evidence, aggregates fail-closed, and only cancels obsolete PR checks", async () => {
   const workflow = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-  assert.match(workflow, /group: \[general, workspace, hosted, stress\]/);
+  assert.match(workflow, /'\["general","workspace","hosted","hosted-ui"\]' \|\| '\["general","workspace","hosted","hosted-ui","stress"\]'/);
   assert.match(workflow, /fail-fast: false/);
   assert.match(workflow, /PLAYWRIGHT_JSON_OUTPUT_NAME: \.ci\/browser\/report\.json/);
   assert.match(workflow, /playwright test --config=playwright\.ci\.config\.ts --reporter=line,json/);
   assert.match(workflow, /verify-hosted-browser-results\.mjs \.ci\/browser\/report\.json "\$\{\{ matrix.group \}\}"/);
-  assert.match(workflow, /if: always\(\) && \(matrix.group == 'hosted' \|\| matrix.group == 'stress'\)/);
+  assert.match(workflow, /if: always\(\) && \(matrix.group == 'hosted' \|\| matrix.group == 'hosted-ui' \|\| matrix.group == 'stress'\)/);
   assert.doesNotMatch(workflow, /playwright test hosted- --reporter/);
   assert.match(workflow, /HOSTED_NPM_UPGRADE_FROM: '0\.1\.0'/);
-  assert.match(workflow, /  verify:\n    if: always\(\)\n    needs: \[verify-core, browser\]/);
+  assert.match(workflow, /  verify:\n    if: always\(\)\n    needs: \[changes, verify-core, browser\]/);
+  assert.match(workflow, /test "\$CHANGES_RESULT" = success\n          if \[ "\$CODE_CHANGED" = false \]/);
+  for (const job of ["verify-core", "browser", "platform-smoke", "ownership-minimum"]) {
+    assert.match(workflow, new RegExp(`\\n  ${job}:\\n    needs: changes\\n    if: needs.changes.outputs.code == 'true'\\n`), job);
+  }
   assert.match(workflow, /test "\$CORE_RESULT" = success/);
   assert.match(workflow, /test "\$BROWSER_RESULT" = success/);
   assert.match(workflow, /protocol_published: \$\{\{ needs.verify-core.outputs.protocol_published \}\}/);

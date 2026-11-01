@@ -8,8 +8,9 @@ const stressTitle = "100-element local switch: 20 warmups + 50 different-version
 
 /** Playwright's body-pass count alone is not full hosted lifecycle acceptance. */
 export function verifyHostedBrowserResults(report, group = "hosted") {
-  if (group !== "hosted" && group !== "stress") throw new Error("Expected hosted or stress report group");
-  const required = group === "stress" ? [stressTitle] : production;
+  if (group !== "hosted" && group !== "hosted-ui" && group !== "stress") throw new Error("Expected hosted, hosted-ui or stress report group");
+  // hosted-ui shares the clean-shutdown gate; production cases run in hosted.
+  const required = group === "stress" ? [stressTitle] : group === "hosted" ? production : [];
   const summary = { bodyPassed: 0, cleanPassed: 0, diagnosticSkipped: 0, failures: [] };
   const seen = new Set();
   if (!report || !Array.isArray(report.suites)) throw new Error("Expected a Playwright JSON report with suites");
@@ -42,7 +43,7 @@ export function verifyHostedBrowserResults(report, group = "hosted") {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.argv.length < 3 || process.argv.length > 4) throw new Error("Usage: node scripts/verify-hosted-browser-results.mjs <playwright-report.json> [hosted|stress]");
+    if (process.argv.length < 3 || process.argv.length > 4) throw new Error("Usage: node scripts/verify-hosted-browser-results.mjs <playwright-report.json> [hosted|hosted-ui|stress]");
     const summary = verifyHostedBrowserResults(JSON.parse(await readFile(process.argv[2], "utf8")), process.argv[3]);
     console.log(JSON.stringify(summary, null, 2));
     if (summary.failures.length) process.exitCode = 1;

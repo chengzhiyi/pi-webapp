@@ -1,21 +1,57 @@
-# 简介与方式选择
+---
+layout: home
+title: pi-webapp 使用指南
 
-pi-webapp 是 Pi 编程 Agent 的本地 Web / 桌面界面。Agent、工具与会话存储仍由 Pi 运行；它不是另一个替代 Pi 的 Agent 服务。
+hero:
+  name: pi-webapp
+  text: Pi 编程代理的工作台
+  tagline: 对话、项目文件、终端和 Git 并排放在一起，在浏览器或桌面应用里使用。代理仍由 Pi 运行，pi-webapp 在它周围补上工作区。
+  actions:
+    - theme: brand
+      text: 快速开始
+      link: /zh/getting-started
+    - theme: alt
+      text: pi-webapp 是什么？
+      link: /zh/introduction
+    - theme: alt
+      text: GitHub
+      link: https://github.com/chengzhiyi/pi-webapp
 
-::: warning 开发版文档
-本指南按仓库源码整理，当前源码清单版本见页脚；未核验 npm latest 或线上部署。界面可能领先于已安装版本。Web 要求 Node.js ≥ 22.19、已有 Pi ≥ 0.87.1；桌面使用包内运行时。
-:::
-
-| 方式 | 适合谁 | 生命周期 |
-| --- | --- | --- |
-| `npx pi-webapp` / 全局命令 | 想直接用浏览器的人，推荐 | Pi 后台运行，关闭网页不停止任务；用 `status` / `stop` 管理 |
-| 已有 Pi 中输入 `/web` | 已在 Pi 终端工作的人 | 与该 Pi 进程绑定，终端退出会结束服务 |
-| pi 桌面测试版 | 明确接受测试限制的 macOS arm64 用户 | 自带 Node/Pi，可复用兼容后台；退出时选择后台处理方式 |
-
-从[安装与首次对话](./getting-started)开始；已经可以聊天则看[会话与工作区](./sessions)、[工具](./workspace-tools)或[常见问题](./troubleshooting)。下载桌面前务必读[测试版限制](./desktop)。
-
-## 不要忽略的边界
-
-- 每个聊天独立运行，切换聊天不等于停止。
-- 终端和 Agent 使用本机用户权限，不是沙箱；Git 改动属于共享工作树。
-- 本地访问地址含令牌，不要分享；Sentry 错误采集默认关闭，需显式开启。见[安全与隐私](./security)。
+features:
+  - icon:
+      src: /icons/terminal.svg
+    title: 一条命令启动
+    details: 在项目目录里运行 <code>npx pi-webapp</code>，连接模型，发出第一条消息。
+    link: /zh/getting-started
+    linkText: 快速开始
+  - icon:
+      src: /icons/layers.svg
+    title: 同时处理多个项目
+    details: 各个会话互不干扰。切换工作区或新建会话时，之前的任务继续在后台运行。
+    link: /zh/sessions
+    linkText: 会话与工作区
+  - icon:
+      src: /icons/panels.svg
+    title: 文件、终端和 Git 就在对话旁边
+    details: 预览文件、使用真实的 Shell、审阅差异，不用离开对话。
+    link: /zh/workspace-tools
+    linkText: 工作区工具
+  - icon:
+      src: /icons/shapes.svg
+    title: 可编辑的图表
+    details: 让 Pi 画架构图或流程图，再在原生 Excalidraw 画布上继续修改。
+    link: /zh/diagrams
+    linkText: 图表
+  - icon:
+      src: /icons/shield.svg
+    title: 你的模型，你的数据
+    details: 自带模型提供方。会话和凭据保存在你本机 Pi 的数据目录里。
+    link: /zh/security
+    linkText: 安全与隐私
+  - icon:
+      src: /icons/help.svg
+    title: 遇到问题？
+    details: 按“现象 → 原因 → 解决办法”整理了大家真正碰到过的问题。
+    link: /zh/troubleshooting
+    linkText: 排错
+---

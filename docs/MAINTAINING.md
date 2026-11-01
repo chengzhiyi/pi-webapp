@@ -1,6 +1,6 @@
 # Maintaining the documentation site
 
-The user guide is a [VitePress](https://vitepress.dev/) site built from `docs/en/` and deployed to GitHub Pages. Everything else in `docs/` (design notes, release and CI records, the older `zh/` pages) is engineering material that is not built into the site.
+The user guide is a [VitePress](https://vitepress.dev/) site built from `docs/en/` and deployed to GitHub Pages. Everything else in `docs/` (design notes, release and CI records) is engineering material that is not built into the site.
 
 This file is named `MAINTAINING.md` on purpose: npm can include a nested `README.md` in the package even with an explicit `files` allowlist.
 
@@ -8,13 +8,13 @@ This file is named `MAINTAINING.md` on purpose: npm can include a nested `README
 
 | Path | What it is |
 | --- | --- |
-| `docs/en/**` | The user guide. Published at the site root through a VitePress rewrite (`docs/en/getting-started.md` becomes `/getting-started`). |
-| `docs/public/` | Static files: `logo.svg` and the screenshots in `images/`. |
+| `docs/en/**` | The English user guide. Published at the site root through a VitePress rewrite (`docs/en/getting-started.md` becomes `/getting-started`). |
+| `docs/public/` | Static files: `logo.svg` and the screenshots in `images/` (English interface) and `images/zh/` (Chinese interface). |
 | `docs/.vitepress/config.mts` | Navigation, sidebar, search, edit links, base path. Add a page here as well as creating the file. |
 | `docs/.vitepress/check-site.mjs` | Post-build check of every link, asset and `#anchor`, and of the list of built pages. |
 | `docs/tests/site.spec.ts` | Browser tests of the built site (navigation, search, dark mode, images, mobile width). |
 | `docs/package.json`, `docs/package-lock.json` | The docs' own dependencies, independent of the product. |
-| `docs/zh/**` | Older Chinese pages, **excluded from the build**. See "Translations". |
+| `docs/zh/**` | The Chinese translation, published under `/zh/`. See "Translations". |
 | `.github/workflows/docs.yml` | Builds on every docs pull request and deploys from `main`. |
 
 The docs package is separate on purpose: the product's `build`, `prepack`, `check` and `test` do not depend on it, and the npm package's `files` allowlist does not include `docs/en`, `docs/public` or `docs/.vitepress`. After touching `package.json`, check with `npm pack --dry-run --ignore-scripts --json`.
@@ -52,7 +52,7 @@ Docs-only pushes to `main` also start `ci.yml`, whose publish job runs on every 
 
 ## Translations
 
-The English guide is the source of truth. A translation goes under `docs/zh/` with a VitePress `locales` entry, and replaces the current `zh/` pages: those predate this guide and are no longer in step with it, which is why `zh/**` is in `srcExclude`. Translate from the stable English text; don't ship a partial translation.
+English (`docs/en/`) is the source text. The Chinese translation lives in `docs/zh/` with the same file names, published under `/zh/`; `docs:check` fails if a page exists in only one language. Chinese pages use the Chinese-interface screenshots in `docs/public/images/zh/` and quote interface labels exactly as the Chinese interface shows them (they come from the `t("中文", "English")` pairs in the source). Command output and launcher messages are Chinese in both languages. When you change an English page, change its counterpart in the same pull request. To retake the Chinese screenshots, follow "Writing rules" with the browser locale set to `zh` (`localStorage['pi-web-locale'] = 'zh'`) and Chinese prompts for the stand-in model.
 
 ## Checks before merging
 
