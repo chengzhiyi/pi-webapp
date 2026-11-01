@@ -228,9 +228,14 @@ export class HostedPluginManager {
       }
     }
     if (recovering && intent) {
+      // Only plugins the pair selected can hold the host pair open. An unrelated plugin that fails
+      // to start (e.g. enabled but not installed) stays visible on its own card and must never fence
+      // future host updates or plugin management.
+      const selected = new Set(intent.selections.map(p => p.id));
+      const blocking = [...this.errors].filter(([id]) => selected.has(id));
       await writePair(this.options.root, { ...intent,
-        phase: this.errors.size ? "required-action" : "reconciled", message: this.errors.size ? [...this.errors].map(([id, detail]) => `${id}: ${detail.message}`).join("; ") : "Current compatible state admitted; no previous state restored" });
-      this.pairAdmittedValue = !this.errors.size;
+        phase: blocking.length ? "required-action" : "reconciled", message: blocking.length ? blocking.map(([id, detail]) => `${id}: ${detail.message}`).join("; ") : "Current compatible state admitted; no previous state restored" });
+      this.pairAdmittedValue = !blocking.length;
     }
   }
   async inventory(): Promise<{ plugins: ManagedHostedPlugin[]; errors: string[] }> {

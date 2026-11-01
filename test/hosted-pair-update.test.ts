@@ -291,3 +291,21 @@ test("pinned real external archive and built worker across two synthetic host pa
   assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /Required action.*data retained/);
   assert.equal(fingerprint(await broker.active()), fingerprint(before));
 });
+
+test("an unrelated plugin's startup failure stays on its card and never fences host updates", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  await f.manager.manage(id, "enable");
+  f.offline();
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  // The plugin is enabled but outside the selected pair, and its code is missing (e.g. a dev plugin never installed).
+  const intentPath = join(pairRoot(f.storage), "intent.json"), indexPath = join(f.storage, "packages", "installed.json");
+  await writeFile(intentPath, JSON.stringify({ ...JSON.parse(await readFile(intentPath, "utf8")), selections: [] }));
+  const index = JSON.parse(await readFile(indexPath, "utf8"));
+  await writeFile(indexPath, JSON.stringify({ ...index, versions: { ...index.versions, [id]: [] } }));
+  await f.restart();
+  assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /not_installed/);
+  assert.equal((await readPair(f.storage))!.phase, "reconciled");
+  assert.equal(f.manager.pairAdmitted, true);
+  await f.manager.setPolicy(id, { updatePolicy: "notify" });
+});
