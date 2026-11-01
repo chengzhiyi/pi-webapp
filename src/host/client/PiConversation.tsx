@@ -499,7 +499,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         <div className={conversationCss.titleRow}>
           <div className={conversationCss.titleCluster}>
             <div className={conversationCss.crumbs}>
-              <span className={`${conversationCss.crumb} ${conversationCss.crumbCurrent}`}>{session.name}</span>
+              <span className={`${conversationCss.crumb} ${conversationCss.crumbCurrent}`}>{session.name || t("新会话", "New chat")}</span>
             </div>
           </div>
           <div className={conversationCss.headerActions}>{rightbarControl}<StateDot state={connection === "connected" ? session.idle ? "done" : "ongoing" : "error"} /><span className="pi-header-state">{connection === "connected" ? session.idle ? t("已连接", "Connected") : t("运行中", "Running") : t("已断开", "Disconnected")}</span></div>

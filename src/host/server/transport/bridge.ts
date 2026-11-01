@@ -64,6 +64,8 @@ export interface BridgeHost {
   newSessionInWorkspace(id: string): Promise<void>;
   removeWorkspace(id: string): Promise<void>;
   selectSession(workspaceId: string, id: string, path: string): Promise<void>;
+  renameSession?(workspaceId: string, id: string, path: string, name: string): Promise<void>;
+  deleteSession?(workspaceId: string, id: string, path: string): Promise<void>;
 }
 
 export interface Bridge {
@@ -365,7 +367,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         res.on("close", () => streams.delete(res));
         return;
       }
-      if (req.method === "POST" && [...pluginRegistry.routes, "/api/desktop/handoff", "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
+      if (req.method === "POST" && [...pluginRegistry.routes, "/api/desktop/handoff", "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/session/rename", "/api/session/delete", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
         if (req.headers.origin !== undefined && req.headers.origin !== origin) {
           json(res, 403, { error: "来源不匹配" });
           return;
@@ -565,6 +567,20 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               json(res, 400, { error: "会话无效" }); return;
             }
             await host.selectSession(body.workspaceId, body.id, body.path);
+            json(res, 202, { accepted: true }); return;
+          }
+          if (path === "/api/session/rename" || path === "/api/session/delete") {
+            if (!("workspaceId" in body) || typeof body.workspaceId !== "string" || !("id" in body) || typeof body.id !== "string" || !("path" in body) || typeof body.path !== "string" || body.path.length > 4096) {
+              json(res, 400, { error: "会话无效" }); return;
+            }
+            if (path === "/api/session/rename") {
+              if (!("name" in body) || typeof body.name !== "string") { json(res, 400, { error: "会话无效" }); return; }
+              if (!host.renameSession) { json(res, 501, { error: "当前服务不支持重命名会话" }); return; }
+              await host.renameSession(body.workspaceId, body.id, body.path, body.name);
+            } else {
+              if (!host.deleteSession) { json(res, 501, { error: "当前服务不支持删除会话" }); return; }
+              await host.deleteSession(body.workspaceId, body.id, body.path);
+            }
             json(res, 202, { accepted: true }); return;
           }
           if (path === "/api/thinking-level") {
