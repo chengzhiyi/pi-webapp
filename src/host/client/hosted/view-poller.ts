@@ -10,6 +10,7 @@ interface Result { reply?: HostedViewReply; failure?: { status: number; body: { 
  */
 export class HostedViewPoller {
   private entries = new Set<Entry>();
+  private releaseLock?: () => void;
   private timer?: ReturnType<typeof setTimeout>;
   private running = false;
   private interval: number;
@@ -21,8 +22,26 @@ export class HostedViewPoller {
     finally { clearTimeout(timeout); }
   }) { this.interval = interval; this.request = request; }
   add(entry: Entry) {
-    this.entries.add(entry); this.schedule(0);
-    return () => { this.entries.delete(entry); if (!this.entries.size && this.timer) { clearTimeout(this.timer); this.timer = undefined; } };
+    this.entries.add(entry); this.holdLock(); this.schedule(0);
+    return () => {
+      this.entries.delete(entry);
+      if (!this.entries.size) { if (this.timer) { clearTimeout(this.timer); this.timer = undefined; } this.releaseLock?.(); }
+    };
+  }
+  /** Chrome's intensive timer throttling (about 1 wake-up a minute for long-hidden tabs) would
+   * outlast the 15 s freeze window, and a Web Lock holder is exempt from it. Best effort only. */
+  private holdLock() {
+    if (this.releaseLock || typeof navigator === "undefined" || !navigator.locks) return;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    this.releaseLock = () => { this.releaseLock = undefined; release(); };
+    void navigator.locks.request(`pi:hosted:view-poller:${crypto.randomUUID()}`, () => held).catch(() => { this.releaseLock = undefined; });
+  }
+  /** A tab returning to the foreground should not wait out a throttled timer. */
+  wake() {
+    if (this.running || !this.entries.size) return;
+    if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
+    this.schedule(0);
   }
   private schedule(delay: number) {
     if (this.running || this.timer || !this.entries.size) return;
@@ -54,3 +73,4 @@ export class HostedViewPoller {
   }
 }
 export const hostedViewPoller = new HostedViewPoller();
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (!document.hidden) hostedViewPoller.wake(); });

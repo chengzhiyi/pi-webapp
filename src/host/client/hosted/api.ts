@@ -1,6 +1,6 @@
 import { accessToken } from "../access-token.ts";
 import { bridgeFetch } from "../telemetry-fetch.ts";
-import type { HostedActionInput, HostedManageInput, HostedPluginCatalog, HostedViewInput, HostedViewReply } from "../../../contracts/hosted-plugins.ts";
+import type { HostedActionInput, HostedManageInput, HostedPluginCatalog, HostedPendingView, HostedViewInput, HostedViewReply } from "../../../contracts/hosted-plugins.ts";
 export async function hostedRequest<T>(path: string, input?: unknown, signal?: AbortSignal): Promise<T> {
   const token = accessToken();
   const { response } = await bridgeFetch(`/api/hosted-plugins${path}`, { method: input === undefined ? "GET" : "POST", credentials: "same-origin", signal,
@@ -16,5 +16,6 @@ export const hostedApi = {
   action: (input: HostedActionInput) => hostedRequest<unknown>("/action", input),
   decide: (id: string, decision: "allow" | "deny") => hostedRequest<HostedPluginCatalog>("/approvals", { id, decision }),
   secret: (pluginId: string, name: string, value: string | null) => hostedRequest<HostedPluginCatalog>("/secrets", { pluginId, name, value }),
+  pendingViews: (pluginId: string) => hostedRequest<{ views: HostedPendingView[] }>("/views", { operation: "list-pending", pluginId }),
   view: (input: HostedViewInput, signal?: AbortSignal) => hostedRequest<HostedViewReply>("/views", input, signal),
 };

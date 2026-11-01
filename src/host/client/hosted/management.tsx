@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { OFFICIAL_HOSTED_PLUGIN, type HostedPluginCard, type HostedPluginCatalog, type HostedManageOperation } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
+import { PendingViews } from "./PendingViews.tsx";
 import { HostedPluginIcon } from "./PluginIcon.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
@@ -135,7 +136,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   const failureView = (card: HostedPluginCard, detail: boolean) => {
     const failure = failureFor(card), diagnostic = card.updateDiagnostic;
     if (!failure) return null;
-    return <div className={css.error} role="alert">{problemText(failure, card.installed, t)}{detail && <details><summary>{t("诊断信息", "Diagnostics")}</summary><code>{failure.code}</code><p>{failure.message}</p>{diagnostic && <p>{diagnostic.checkedAt} · {diagnostic.hostVersion}</p>}{/lock|owned/i.test(failure.message) && <p>{t("停止所有程序并备份后，按 docs/hosted-update-recovery.md 恢复。此页面不会清锁。", "Stop all hosts and back up data before following docs/hosted-update-recovery.md. This page never clears locks.")}</p>}</details>}</div>;
+    return <div className={css.error} role="alert">{problemText(failure, card.installed, t)}{detail && <details><summary>{t("诊断信息", "Diagnostics")}</summary><code>{failure.code}</code><p>{failure.message}</p>{diagnostic && <p>{diagnostic.checkedAt} · {diagnostic.hostVersion}</p>}{/lock|owned/i.test(failure.message) && <p>{t("停止所有程序并备份后，按 docs/hosted-update-recovery.md 恢复。此页面不会清锁。", "Stop all hosts and back up data before following docs/hosted-update-recovery.md. This page never clears locks.")}</p>}</details>}{detail && failure.code === "view_barrier" && <PendingViews pluginId={card.pluginId} t={t} />}</div>;
   };
   return <section className={css.section} data-hosted-management aria-busy={busy || reading} style={!visible ? { display: "none" } : undefined}>
     {!selected && <h2>{t("官方插件", "Official plugins")} <span>{shown.length}</span></h2>}

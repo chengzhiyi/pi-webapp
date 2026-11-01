@@ -209,8 +209,10 @@ test("integration: saving the plugin's dist switches the live plugin without any
   await until("the broken build to be reported", async () => (await integration.inventory()).dev?.sources[0]?.state === "error");
   assert.equal((await card()).version, second.version, "a broken build never replaces the running plugin");
   assert.match((await integration.inventory()).dev!.sources[0]!.message!, /integrity/i);
+  assert.equal((await card()).updateDiagnostic?.status, "failed");
   await edit("body{color:red}");
   await until("recovery after the fix", async () => { const c = await card(); return c.version !== second.version && c.phase === "active"; });
+  assert.equal((await card()).updateDiagnostic?.status, "up-to-date", "a successful sync replaces the earlier failed diagnostic");
 });
 
 test("without developer opt-in the catalog carries no dev information", async t => {

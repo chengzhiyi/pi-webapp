@@ -150,6 +150,9 @@ export class HostedPluginManager {
       await atomicJson(join(this.options.root, "policies", "update-checks.json"), diagnostics);
     });
   }
+  private recordDevSync(id: string, version: string) {
+    return this.recordCheck(id, { status: "up-to-date", version, message: "Developer source installed" });
+  }
   private async check(id: string, current?: string, exact?: string, signal?: AbortSignal): Promise<RegistryRelease> {
     try {
       const release = await this.installer.check(id, current, exact, signal);
@@ -262,7 +265,7 @@ export class HostedPluginManager {
         }
         case "install": {
           const dev = this.devSource(id);
-          if (dev) { const pkg = await dev(signal); return { installed: true, version: pkg.version }; }
+          if (dev) { const pkg = await dev(signal); await this.recordDevSync(id, pkg.version); return { installed: true, version: pkg.version }; }
           const release = await this.check(id, latest, version, signal);
           const pkg = await this.installer.install(id, release, signal); this.available.delete(id);
           await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; enablement unchanged" });
@@ -288,6 +291,8 @@ export class HostedPluginManager {
           const dev = this.devSource(id);
           if (dev) {
             const pkg = await dev(signal), active = await s.broker.active();
+            // A stale failed diagnostic from an earlier attempt must not outlive a later successful sync.
+            await this.recordDevSync(id, pkg.version);
             if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
             if (active.version === pkg.version && !s.pendingVersion) return { unchanged: true, version: pkg.version };
             const result = await this.lifecycle(id, () => s.replace(pkg)); if (!result.pending) this.packages.set(id, pkg); return result;

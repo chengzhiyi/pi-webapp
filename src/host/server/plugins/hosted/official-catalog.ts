@@ -5,7 +5,7 @@ import { compareVersions, satisfiesHost, stableVersion } from "./versions.ts";
 export interface OfficialPlugin {
   id: string;
   name: string;
-  icon?: "drawing";
+  icon?: "drawing" | "github";
   description: { zh: string; en: string };
   registry: string;
   recommendedVersion: string;

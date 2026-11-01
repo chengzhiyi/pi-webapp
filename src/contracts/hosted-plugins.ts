@@ -7,7 +7,7 @@ export interface HostedContribution {
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
   /** Reviewed host artwork key; never arbitrary plugin HTML or executable code. */
-  icon?: "drawing";
+  icon?: "drawing" | "github";
   /** A previous activation/checkpoint remains available after uninstall. */
   hasRetainedData?: boolean;
   /** Catalog blurb, shown before the plugin is enabled. */
@@ -63,6 +63,8 @@ export interface HostedViewRecovery {
   state: "active" | "unconfirmed" | "retained" | "retired" | "absent";
   kind?: HostedMount["kind"]; dirty?: boolean; busy?: boolean;
 }
+/** An authoring view the host still holds for this owner; the token is a capability for its own owner only. */
+export interface HostedPendingView extends HostedViewIdentity { viewToken: string; kind: HostedMount["kind"]; dirty: boolean; busy: boolean }
 export interface HostedViewReply { viewToken: string; commands: HostedViewCommand[]; recovery?: HostedViewRecovery }
 
 export const OFFICIAL_HOSTED_PLUGIN: HostedPluginCard = {

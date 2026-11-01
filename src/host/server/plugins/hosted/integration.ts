@@ -14,8 +14,8 @@ import { parseDeclarations } from "./capabilities/declarations.ts";
 import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
 import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
-
 import { HostedDevWatcher, type HostedDevSources } from "./dev-plugins.ts";
+
 function declaredSecrets(manifest: unknown): string[] { try { return [...parseDeclarations(manifest).secrets]; } catch { return []; } }
 export interface HostedIntegrationOptions extends Omit<HostedManagerOptions, "hooks" | "lifecycle"> {
   /** Single local bearer-authenticated principal, never supplied in a browser body. */
@@ -27,12 +27,12 @@ export interface HostedIntegrationOptions extends Omit<HostedManagerOptions, "ho
   policies?: ReadonlyMap<string, HostedPluginPolicy>;
   /** Pending human approvals, surfaced in the catalog and answered through `handlers.decide`. */
   approvals?: ExecuteApprovals;
-}
   /** Developer opt-in: sources are polled and applied through the normal `update` switch. Absent in production. */
   dev?: HostedDevSources;
   /** Developer status file (read by `pnpm dev` in plugin workspaces). */
   devStatusPath?: string;
   devPollMs?: number;
+}
 /** One process-wide management queue and Agent barrier for ALL hosted plugins. */
 export class HostedPluginIntegration {
   readonly manager: HostedPluginManager;
@@ -50,12 +50,10 @@ export class HostedPluginIntegration {
   private stopping?: Promise<void>;
   private readonly options: HostedIntegrationOptions;
   private readonly trusted: ReadonlyMap<string, HostedPluginPolicy>;
+  private readonly devWatcher?: HostedDevWatcher;
   constructor(options: HostedIntegrationOptions) {
     this.options = options;
-  private readonly devWatcher?: HostedDevWatcher;
     this.trusted = options.policies ?? DEFAULT_POLICIES;
-    this.adapter = new HostedAgentAdapter({
-      policy: (id, scope) => {
     if (options.dev?.enabled) {
       this.devWatcher = new HostedDevWatcher({ sources: options.dev, statusPath: options.devStatusPath, pollMs: options.devPollMs, changed: () => options.changed?.(),
         // The same serialized path as the "Update" button; editors reopen because a developer's own save must not wait on a click.
@@ -65,6 +63,8 @@ export class HostedPluginIntegration {
           return catalog.plugins.find(p => p.pluginId === pluginId)?.installed ? this.manage({ pluginId, operation: "update", reopenEditors: true }) : catalog;
         } } });
     }
+    this.adapter = new HostedAgentAdapter({
+      policy: (id, scope) => {
         // Bindings are created by trusted SDK/TUI factories, including during construction
         // before a candidate is retained. Actual execution always revalidates retained scope.
         const policy = options.policy?.(id, scope);
@@ -130,6 +130,10 @@ export class HostedPluginIntegration {
       decide: (id, allow) => { if (!this.options.approvals) throw new HostedPluginError("hosted_unavailable", "Approvals are not available", { status: 503 }); this.options.approvals.decide(id, allow); return this.inventory(); },
       action: (input, options) => this.action(input, options?.checkpointOnly),
       views: async body => {
+        if (body.operation === "list-pending") {
+          if (typeof body.pluginId !== "string") throw new HostedPluginError("invalid_input", "Invalid plugin identity", { status: 400 });
+          return { views: this.coordinator(body.pluginId).pendingViews(this.options.ownerId) };
+        }
         const input = body as unknown as HostedViewInput;
         const scope = this.scope(input.sessionId);
         // Existing status/flush capabilities must survive supervisor draining;
@@ -233,6 +237,7 @@ export class HostedPluginIntegration {
       this.adapter.thaw();
     });
     this.started = true;
+    this.devWatcher?.start();
   }
   /** Legacy conservative compatibility check, NOT a paired updater. Production SelfUpdater
    * uses manager.hostPair to stage and fence the complete selection/restart transaction. */
@@ -250,7 +255,6 @@ export class HostedPluginIntegration {
     const secrets = new Map<string, Array<{ name: string; configured: boolean }>>();
     for (const p of inventory.plugins) {
       const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
-    this.devWatcher?.start();
       if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => ({ name, configured: await store.has(p.id, name) }))));
     }
     return { ...(this.devWatcher ? { dev: this.devWatcher.info() } : {}), plugins: inventory.plugins.map(p => ({
@@ -298,6 +302,7 @@ export class HostedPluginIntegration {
       } finally { view.allowImmediateReopen(false); }
     });
     this.options.changed?.();
+    this.devWatcher?.invalidate(input.pluginId); // an install/enable/update by hand changes what "synced" means: re-evaluate on the next poll
     return this.inventory();
     } finally { if (download && this.downloads.get(input.pluginId) === download) this.downloads.delete(input.pluginId); }
   }
@@ -315,7 +320,6 @@ export class HostedPluginIntegration {
       this.generation(input.pluginId, input.generation);
       return await this.manager.invoke(input.pluginId, input.generation, { ...request, kind: "action" });
     } finally { release(); }
-    this.devWatcher?.invalidate(input.pluginId); // an install/enable/update by hand changes what "synced" means: re-evaluate on the next poll
   }
   /** Keep the view identities and data generation alive until the launcher commits.
    * The returned undo lease is idempotent and recreates only verified old workers.
@@ -348,6 +352,7 @@ export class HostedPluginIntegration {
   }
   shutdown(): Promise<void> {
     if (this.stopping) return this.stopping;
+    this.devWatcher?.stop();
     if (this.restartResume) {
       // The reversible drain already stopped every worker. Process exit consumes
       // the lease; repeating freeze would wait on the same view barrier twice.
@@ -365,7 +370,6 @@ export class HostedPluginIntegration {
       this.closing = false; this.stopping = undefined; this.adapter.thaw(); this.devWatcher?.start();
       throw error;
     });
-    this.devWatcher?.stop();
     return this.stopping;
   }
 }
