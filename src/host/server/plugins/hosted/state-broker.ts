@@ -155,8 +155,12 @@ export class HostedStateBroker {
     if (!request.scope || typeof request.scope.cwd !== "string" || !request.scope.cwd || typeof request.scope.sessionId !== "string" || !request.scope.sessionId || typeof request.scope.workspaceId !== "string" || !request.scope.workspaceId) throw new HostedPluginError("invalid_scope", "Missing authenticated plugin scope");
     return JSON.stringify([request.scope.workspaceId, request.scope.cwd, request.scope.sessionId]);
   }
-  private statePath(active: ActiveHostedPlugin, request: HostedInvocation, key: string): string {
-    return join(this.root, "states", active.stateRef, `${sha256(this.scopeKey(request) + ":state:" + key)}.json`);
+  /** `workspace` state is shared by every session and scheduled tick of the same authenticated workspace; the default stays per session. */
+  private statePath(active: ActiveHostedPlugin, request: HostedInvocation, key: string, scope: unknown = "session"): string {
+    if (scope !== "session" && scope !== "workspace") throw new HostedPluginError("invalid_input", "Invalid state scope");
+    // A two-element array can never equal the three-element session key.
+    const owner = scope === "workspace" ? (this.scopeKey(request), JSON.stringify([request.scope.workspaceId, request.scope.cwd])) : this.scopeKey(request);
+    return join(this.root, "states", active.stateRef, `${sha256(owner + ":state:" + key)}.json`);
   }
   async call(request: HostedInvocation, method: string, raw: unknown): Promise<unknown> {
     if (!Number.isSafeInteger(request.generation) || !/^[\w-]{1,160}$/.test(request.requestId)) throw new HostedPluginError("invalid_lease", "Invalid invocation lease");
@@ -166,13 +170,13 @@ export class HostedStateBroker {
       const active = await this.assertGeneration(request.generation);
       switch (method) {
         case "state.read": {
-          const value = await readJson<StateEnvelope>(this.statePath(active, request, keyOf(input.key)), MAX_STATE);
+          const value = await readJson<StateEnvelope>(this.statePath(active, request, keyOf(input.key), input.scope), MAX_STATE);
           if (!value) return null;
           this.validateState(value);
           return { revision: value.revision, schema: value.schema, value: value.value };
         }
         case "state.compareAndSwap": {
-          const path = this.statePath(active, request, keyOf(input.key));
+          const path = this.statePath(active, request, keyOf(input.key), input.scope);
           if (!Number.isSafeInteger(input.expectedRevision) || (input.expectedRevision as number) < 0 || input.schema !== active.schema || !Object.hasOwn(input, "value")) throw new HostedPluginError("invalid_input", "Invalid state revision or schema");
           if (JSON.stringify(input.value) === undefined) throw new HostedPluginError("invalid_input", "State value must be JSON serializable");
           const bytes = JSON.stringify(input);

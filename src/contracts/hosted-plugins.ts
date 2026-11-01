@@ -10,6 +10,10 @@ export interface HostedPluginCard {
   icon?: "drawing";
   /** A previous activation/checkpoint remains available after uninstall. */
   hasRetainedData?: boolean;
+  /** Catalog blurb, shown before the plugin is enabled. */
+  description?: { zh: string; en: string };
+  /** Secrets this enabled plugin declares and whether each is stored. Values never leave the host. */
+  secrets?: Array<{ name: string; configured: boolean }>;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;
@@ -17,7 +21,9 @@ export interface HostedPluginCard {
   /** Manifest-only, integrity-qualified served documents, never arbitrary package paths. */
   documentUrl?: string; controllerUrl?: string; contribution?: HostedContribution;
 }
-export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean }
+/** A plugin asked to lift a background session's read-only restriction; only the user can answer. */
+export interface HostedExecuteApproval { id: string; pluginId: string; sessionId: string; title: string }
+export interface HostedPluginCatalog { plugins: HostedPluginCard[]; offline?: boolean; approvals?: HostedExecuteApproval[] }
 export type HostedManageOperation = "install" | "enable" | "disable" | "update" | "uninstall" | "check" | "retry" | "policy" | "cancel-download";
 export interface HostedManageInput { pluginId: string; operation: HostedManageOperation; /** Exact client nonce; cancellation cannot target another request. */ downloadId?: string; version?: string; updatePolicy?: "notify" | "automatic" | "pinned"; /** Explicit user-accepted undo-history reset warning. Never set by default. */ reopenEditors?: boolean }
 export interface HostedActionInput {

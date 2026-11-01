@@ -1,0 +1,42 @@
+# RFC: hosted plugin capabilities (secrets, network, scheduler, sessions)
+
+Status: host core, `HostedPluginManager` wiring, session adapter, production bootstrap, secrets UI, policies, dev-archive install and the first consumer (`@chengzhiyi/pi-github`) implemented and covered by tests (`test/hosted-github-e2e.test.ts`) plus a live smoke run. Pending: execute-approval UI, secrets UI/keychain, generic (non-excalidraw) plugin catalog/integration, workspace-level plugin state. Motivated by `@chengzhiyi/pi-github` (issue -> agent loop), but nothing here is GitHub-specific.
+
+## Principles
+- Plugin code stays in a child process with an allowlisted environment. It never receives secrets and never opens sockets itself.
+- A capability needs **both** the string in `manifest.capabilities` **and** a concrete declaration. Undeclared use is denied by the host.
+- Authority comes from the authenticated invocation (`cwd`, generation), never from plugin input.
+
+## Manifest
+```json
+{ "capabilities": ["secrets","network","scheduler","sessions"],
+  "secrets": [{"name":"github-token"}],
+  "network": {"hosts":["api.github.com"]},
+  "schedules": [{"id":"poll","intervalSec":60,"action":"sync"}] }
+```
+Hosts are exact lowercase DNS names (no wildcards, no IPs). Schedule interval is 30-86400 s.
+
+## Capabilities
+- **secrets**: no read API. The user stores values host-side (`SecretStore`; interim 0600 file store, keychain adapter to follow). Plugins reference a secret by name in `network.fetch`; the host injects `Authorization: Bearer`. This is stricter than the earlier `use(fn)` idea because the token never crosses into the plugin process.
+- **network** `network.fetch {url, method?, headers?, body?, secret?}`: https only, port 443, declared hosts only, no redirects followed, public addresses only (DNS result checked; a resolve-then-connect race remains and needs a pinned dispatcher), 20 s timeout, 2 MiB response cap, caller cannot set Authorization/Cookie/Host, secret value redacted from the body, only a small response header allowlist returned.
+- **scheduler**: declarative, replacing the earlier `ctx.schedule.register`. The host runs a declared `action` on its interval whether or not a panel is open, never overlapping ticks per schedule. Scope for ticks is resolved by the host.
+- **sessions** `sessions.create|send|abort|release|events`: create is plan mode only, `cwd` comes from the invocation, sessions are tagged with the creating plugin, other plugins' sessions are denied, active sessions per plugin are capped (default 3). `events` is cursor-polled to avoid host->plugin push. The host adapter emits `turn_end` (with the last assistant text) and `error`; the plugin decides whether a turn end in planning means a plan is ready. `release` closes the session and frees quota.
+- **Session adapter** (`workspace-sessions-host.ts` over `WorkspaceSessions.createDetached` etc.): plugin sessions are *detached* (created without becoming the foreground session, listed like any retained session so the user can open and steer them), start with only `read/grep/find/ls` active, and regain their original tools only when the mandatory `authorizeExecute(pluginId, sessionId)` callback approves a `mode: "execute"` send. The plugin cannot lift the restriction by itself; what `authorizeExecute` does (UI approval, policy) is a host decision.
+
+## Code
+`src/host/server/plugins/hosted/capabilities/` (`declarations`, `secrets`, `network`, `sessions`, `scheduler`, `broker`). `HostedPluginSupervisor` takes an optional `CapabilityBroker` and authorizes against the **active** package manifest and generation; other methods still go to the state broker. Types are mirrored in `@chengzhiyi/pi-web-protocol` (`pi-extensions`); the host still builds against its vendored protocol snapshot until that is refreshed.
+
+## Bootstrap (done)
+`pi-host.ts` passes `hostedCapabilities(...)` (`capabilities/bootstrap.ts`) into `HostedPluginIntegration`: a `FileSecretStore` under `<hosted root>/capability-secrets`, a lazily-resolved sessions host (WorkspaceSessions is created after the integration), `authorizeExecute` **denying by default**, and `scheduledScope` = active workspace with the synthetic session id `scheduler`. Inert for plugins that declare none of these capabilities (all shipped plugins today).
+
+## Not done
+1. **Execute approval (done)**: `sessions.send {mode:"execute"}` calls `ExecuteApprovals.authorize`, which queues a request and fails with `approval_required` (409); the plugin retries on later ticks. The host UI (`ExecuteApprovalPrompt`, fed by `approvals` in the hosted catalog and refreshed by `hosted_plugins_changed`) shows Allow/Deny; `POST /api/hosted-plugins/approvals {id, decision}` (bearer + same-origin + JSON like other hosted routes, fenced while restarting) is the only way to grant. A grant lasts for that session only and is dropped on `sessions.release`; a denial blocks re-asking for 60 s. A request cannot be answered by another plugin. In-memory only: a host restart clears pending/granted state, which re-asks (fail-closed).
+2. **Plugin installability (host side done)**: reviewed per-plugin trust data now lives in `plugin-policies.ts` (`HostedPluginPolicy`: tools, readonly actions, UI actions, checkpoint actions, contribution), passed to `HostedPluginIntegration` via `policies` next to the catalog. Excalidraw's policy is the built-in default. Still needed for GitHub: a catalog entry + policy (deliberately not registered until the package is publishable, so no dead card appears), a frontend entry in the package, and client-side generality (icon mapping in `PluginIcon.tsx`, excalidraw-only `view-journal.ts`; `state-broker` still restricts `workspace.commit` to `.excalidraw` paths, which is a safe default for plugins that write no files).
+3. **State scope (done)**: `state.read`/`state.compareAndSwap` accept `scope: "workspace"` (default `"session"`). Workspace state is keyed by the authenticated `[workspaceId, cwd]`, so every chat session and scheduled tick of one workspace shares it (CAS on revision still arbitrates); session state is unchanged and isolated. Covered by `test/hosted-workspace-state.test.ts`.
+4. Secrets entry UI (route + settings), OS-keychain `SecretStore`, daily budget, ownership persistence across restarts.
+5. DNS pinning for `network.fetch`; refresh the vendored protocol tgz.
+
+## Added while building the first consumer
+- **Secrets UI/route**: `POST /api/hosted-plugins/secrets {pluginId,name,value|null}` (declared names of an *enabled* plugin only; value never returned); catalog cards expose `secrets: [{name, configured}]`; `management.tsx` renders a write-only token field.
+- **Dev archives**: `PI_WEBAPP_HOSTED_DEV_ARCHIVES="<id>=<path.tgz>;..."` adds a catalog entry (ids known to `dev-plugins.ts` only) and installs/updates from the local archive through the normal extraction/identity/resource validation (`installDevArchive`); no registry, no publisher SRI.
+- **Shutdown bug found by the smoke run**: `integration.lifecycle` cleared the "immediate reopen" consent for *all* plugins after the first plugin finished, so with two catalog plugins a later plugin's open workspace view blocked `stop` ("Close editors before updating"). Fixed (consent cleared only after the whole shutdown); regression `test/hosted-multi-plugin-shutdown.test.ts`. The stop failure reason is now logged to `launcher.log`, and the refusal message names busy/in-flight views.

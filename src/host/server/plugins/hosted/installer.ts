@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { lstat, mkdtemp, readdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, readFile, rename, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentFetch } from "../../../../../bin/http-transport.mjs";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
@@ -209,6 +210,19 @@ export class HostedPluginInstaller {
         return { ...pkg, root: destination };
       } finally { await rm(staging, { recursive: true, force: true }); }
     }, 10_000);
+  }
+  /** Developer-trusted local archive (explicit env opt-in, never the registry). It still goes through the full extraction, identity,
+   * resource and host-range validation of `installArchive`; only the registry download and publisher SRI are replaced by a local hash. */
+  async installDevArchive(id: string, file: string, signal?: AbortSignal): Promise<HostedPackage> {
+    officialPlugin(id, this.catalog);
+    const bytes = await readFile(file);
+    const integrity = "sha512-" + createHash("sha512").update(bytes).digest("base64");
+    const probe = await mkdtemp(join(tmpdir(), "pi-dev-archive-"));
+    try {
+      await extractHostedArchive(bytes, probe);
+      const version = (await validateHostedPackage(probe, id)).version;
+      return await this.installArchive(id, bytes, integrity, version, signal);
+    } finally { await rm(probe, { recursive: true, force: true }); }
   }
   async load(id: string, version: string): Promise<HostedPackage> {
     const plugin = officialPlugin(id, this.catalog);

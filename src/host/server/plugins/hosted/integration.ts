@@ -2,32 +2,30 @@ import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import type { HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
-import type { HostedActionInput, HostedContribution, HostedManageInput, HostedPluginCatalog, HostedViewInput } from "../../../../contracts/hosted-plugins.ts";
+import type { HostedActionInput, HostedManageInput, HostedPluginCatalog, HostedViewInput } from "../../../../contracts/hosted-plugins.ts";
 import { HostedAgentAdapter, type HostedAgentPolicy } from "./agent-adapter.ts";
 import { HostedPluginManager, type HostedManagerOptions } from "./manager.ts";
 import { HostedViewCoordinator, type AuthenticatedViewScope } from "./views.ts";
 import type { HostedBridgeHandlers } from "./routes.ts";
 import { HostedStateBroker } from "./state-broker.ts";
+import { DEFAULT_POLICIES, policyFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import type { ExecuteApprovals } from "./capabilities/execute-approvals.ts";
+import { parseDeclarations } from "./capabilities/declarations.ts";
 import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
 import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
 
-const ID = "@chengzhiyi/pi-excalidraw";
-// Reviewed data from package 6328c63, not imported domain code or frontend authorization.
-const contribution: HostedContribution = {
-  entry: { label: "Excalidraw", description: { zh: "手绘图稿", en: "Editable drawings" }, kind: "workspace" },
-  panels: ["workspace", "editor"], artifactTools: ["excalidraw_create_view", "diagram_create", "diagram_patch"],
-  toolViews: ["excalidraw_create_view", "diagram_create", "diagram_patch"], panelAlias: { prefix: "diagram:", kind: "editor", title: "Excalidraw" },
-};
-const tools = new Map(Object.entries({ excalidraw_read_me: "reference", excalidraw_create_view: "view", diagram_reference: "reference", diagram_create: "create", diagram_read: "read", diagram_patch: "patch" }));
-const actions = new Set(["list", "new", "open", "import", "get", "focus", "sync", "initialize", "accept", "reject", "save"]);
-const checkpoints = new Set(["sync", "get", "list"]);
+function declaredSecrets(manifest: unknown): string[] { try { return [...parseDeclarations(manifest).secrets]; } catch { return []; } }
 export interface HostedIntegrationOptions extends Omit<HostedManagerOptions, "hooks" | "lifecycle"> {
   /** Single local bearer-authenticated principal, never supplied in a browser body. */
   ownerId: string;
   resolveSession(sessionId: string): HostedScope | null;
   policy?(pluginId: string, scope: HostedScope): Omit<HostedAgentPolicy, "enabled"> & { enabled?: boolean };
   changed?(): void;
+  /** Reviewed per-plugin trust data, keyed by catalog id. Defaults to the built-in official policies. */
+  policies?: ReadonlyMap<string, HostedPluginPolicy>;
+  /** Pending human approvals, surfaced in the catalog and answered through `handlers.decide`. */
+  approvals?: ExecuteApprovals;
 }
 /** One process-wide management queue and Agent barrier for ALL hosted plugins. */
 export class HostedPluginIntegration {
@@ -35,7 +33,7 @@ export class HostedPluginIntegration {
   readonly adapter: HostedAgentAdapter;
   readonly handlers: HostedBridgeHandlers;
   private readonly views = new Map<string, HostedViewCoordinator>();
-  private readonly documents = new Map<string, { document: string; controller: string }>();
+  private readonly documents = new Map<string, { document: string; controller: string; secrets: string[] }>();
   private queue: Promise<unknown> = Promise.resolve();
   private switches: Promise<unknown> = Promise.resolve();
   private readonly recovery = new Map<string, unknown>();
@@ -45,8 +43,10 @@ export class HostedPluginIntegration {
   private started = false;
   private stopping?: Promise<void>;
   private readonly options: HostedIntegrationOptions;
+  private readonly trusted: ReadonlyMap<string, HostedPluginPolicy>;
   constructor(options: HostedIntegrationOptions) {
     this.options = options;
+    this.trusted = options.policies ?? DEFAULT_POLICIES;
     this.adapter = new HostedAgentAdapter({
       policy: (id, scope) => {
         // Bindings are created by trusted SDK/TUI factories, including during construction
@@ -70,7 +70,7 @@ export class HostedPluginIntegration {
       hooks: id => ({
       canSwitch: () => this.coordinator(id).canSwitch(),
       validateCandidate: (descriptors: readonly HostedToolDescriptor[]) => {
-        if (descriptors.length !== tools.size) throw new HostedPluginError("unreviewed_tool", "Official tool set changed; review required");
+        if (descriptors.length !== Object.keys(policyFor(this.trusted, id).tools).length) throw new HostedPluginError("unreviewed_tool", "Official tool set changed; review required");
         this.verifyTools(id, descriptors);
         this.adapter.validateChange(id, descriptors);
       },
@@ -85,7 +85,7 @@ export class HostedPluginIntegration {
           this.verifyTools(id, descriptors);
           if (active.enabled) {
             const pkg = await this.manager.installer.load(id, active.version);
-            this.documents.set(id, { document: pkg.manifest.frontend.document.replace(/^\.\//, ""), controller: pkg.manifest.frontend.controller.replace(/^\.\//, "") });
+            this.documents.set(id, { document: pkg.manifest.frontend.document.replace(/^\.\//, ""), controller: pkg.manifest.frontend.controller.replace(/^\.\//, ""), secrets: declaredSecrets(pkg.manifest) });
           } else this.documents.delete(id);
           this.adapter.change(id, descriptors);
           await this.coordinator(id).committed(active);
@@ -103,6 +103,15 @@ export class HostedPluginIntegration {
     }) });
     this.handlers = {
       inventory: () => this.inventory(), manage: input => this.manage(input),
+      secret: async (pluginId, name, value) => {
+        const store = this.options.capabilities?.secrets, declared = this.documents.get(pluginId)?.secrets;
+        if (!store) throw new HostedPluginError("hosted_unavailable", "Secrets are not available", { status: 503 });
+        if (!declared?.includes(name)) throw new HostedPluginError("secret_undeclared", "The enabled plugin does not declare this secret", { status: 404 });
+        if (value === null) await store.delete(pluginId, name); else await store.set(pluginId, name, value);
+        this.options.changed?.();
+        return this.inventory();
+      },
+      decide: (id, allow) => { if (!this.options.approvals) throw new HostedPluginError("hosted_unavailable", "Approvals are not available", { status: 503 }); this.options.approvals.decide(id, allow); return this.inventory(); },
       action: (input, options) => this.action(input, options?.checkpointOnly),
       views: async body => {
         const input = body as unknown as HostedViewInput;
@@ -116,9 +125,9 @@ export class HostedPluginIntegration {
     };
   }
   private verifyTools(id: string, descriptors: readonly HostedToolDescriptor[]) {
-    if (id !== ID) throw new HostedPluginError("unreviewed_plugin", "No trusted tool policy for this package");
+    const policy = policyFor(this.trusted, id);
     for (const tool of descriptors) {
-      if (tools.get(tool.name) !== tool.action || tool.readonly !== ["read", "reference"].includes(tool.action)) throw new HostedPluginError("unreviewed_tool", "Official tool ownership/readonly policy changed; review required");
+      if (!Object.hasOwn(policy.tools, tool.name) || policy.tools[tool.name] !== tool.action || tool.readonly !== policy.readonlyActions.includes(tool.action)) throw new HostedPluginError("unreviewed_tool", "Official tool ownership/readonly policy changed; review required");
     }
   }
   private coordinator(id: string) {
@@ -163,7 +172,9 @@ export class HostedPluginIntegration {
         if (this.recovery.has(id) && !shutdown) throw new HostedPluginError("reconnect_required", "Plugin publication failed; recover this plugin without restarting chat", { status: 503 });
         return result;
       } finally {
-        for (const view of this.views.values()) view.allowImmediateReopen(false);
+        // Host shutdown sets this once for every plugin and clears it only after the last one: a per-plugin
+        // lifecycle must not revoke the consent that a later plugin's freeze still depends on.
+        if (!shutdown) for (const view of this.views.values()) view.allowImmediateReopen(false);
         // Successful host shutdown retains the barrier until process exit. Every
         // failed/non-terminal plugin operation releases base-chat admission.
         if (!shutdown) this.adapter.thaw();
@@ -219,8 +230,15 @@ export class HostedPluginIntegration {
   }
   async inventory(): Promise<HostedPluginCatalog> {
     const inventory = await this.manager.inventory();
+    const store = this.options.capabilities?.secrets;
+    const secrets = new Map<string, Array<{ name: string; configured: boolean }>>();
+    for (const p of inventory.plugins) {
+      const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
+      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => ({ name, configured: await store.has(p.id, name) }))));
+    }
     return { plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
+      description: p.description, ...(secrets.has(p.id) ? { secrets: secrets.get(p.id) } : {}),
       icon: OFFICIAL_PLUGINS.find(plugin => plugin.id === p.id)?.icon,
       hasRetainedData: p.activeVersion !== null,
       phase: this.recovery.has(p.id) ? "reconnect-required" : p.phase,
@@ -230,10 +248,10 @@ export class HostedPluginIntegration {
       ...(p.availableVersion ? { availableVersion: p.availableVersion } : {}), ...(p.pendingVersion ? { pendingVersion: p.pendingVersion } : {}),
       ...(p.generation !== null ? { generation: p.generation } : {}),
       ...(this.recovery.has(p.id) || p.error ? { error: this.recovery.get(p.id) instanceof Error ? (this.recovery.get(p.id) as Error).message : p.error?.message ?? "Recovery required", errorCode: this.recovery.has(p.id) ? "reconnect_required" : p.error?.code } : {}),
-      ...(p.enabled && p.assetBase && this.documents.has(p.id) && p.id === ID ? {
-        documentUrl: p.assetBase + this.documents.get(p.id)!.document, controllerUrl: p.assetBase + this.documents.get(p.id)!.controller, contribution: structuredClone(contribution),
+      ...(p.enabled && p.assetBase && this.documents.has(p.id) && this.trusted.has(p.id) ? {
+        documentUrl: p.assetBase + this.documents.get(p.id)!.document, controllerUrl: p.assetBase + this.documents.get(p.id)!.controller, contribution: structuredClone(this.trusted.get(p.id)!.contribution),
       } : {}),
-    })) };
+    })), ...(this.options.approvals?.pending().length ? { approvals: this.options.approvals.pending() } : {}) };
   }
   private readonly downloads = new Map<string, { id: string; abort: AbortController }>();
   async manage(input: HostedManageInput): Promise<HostedPluginCatalog> {
@@ -268,12 +286,12 @@ export class HostedPluginIntegration {
   }
   private async action(input: HostedActionInput, checkpointOnly = false): Promise<unknown> {
     const scope = this.scope(input.sessionId);
-    if (input.pluginId !== ID || !actions.has(input.action)) throw new HostedPluginError("action_denied", "Action is not reviewed by this host", { status: 403 });
+    if (!this.trusted.get(input.pluginId)?.actions.includes(input.action)) throw new HostedPluginError("action_denied", "Action is not reviewed by this host", { status: 403 });
     const release = this.coordinator(input.pluginId).admitAction(input, this.viewScope(scope));
     try {
       const request = { requestId: randomUUID(), scope, action: input.action, input: input.input ?? {} };
       if (this.adapter.isFrozen || checkpointOnly) {
-        if (this.adapter.isFrozen && checkpoints.has(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
+        if (this.adapter.isFrozen && this.trusted.get(input.pluginId)!.checkpointActions.includes(input.action) && this.coordinator(input.pluginId).authorizesFlush(input, this.viewScope(scope))) return await this.manager.flush(input.pluginId, input.generation, request);
         throw new HostedPluginError("plugin_unavailable", "Only authenticated barrier checkpoint actions are admitted during switching", { status: 409 });
       }
       if (this.recovery.has(input.pluginId)) throw new HostedPluginError("plugin_unavailable", "Plugin publication recovery required", { status: 503 });
@@ -325,6 +343,7 @@ export class HostedPluginIntegration {
       await this.manager.shutdown();
       for (const view of this.views.values()) view.dispose();
     }, true).catch(error => {
+      for (const view of this.views.values()) view.allowImmediateReopen(false);
       this.closing = false; this.stopping = undefined; this.adapter.thaw();
       throw error;
     });

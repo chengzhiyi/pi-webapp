@@ -8,6 +8,28 @@ import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
 import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
 
+/** Write-only token entry: the value goes to the host keychain-like store and is never read back or shown. */
+function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCard; t: (zh: string, en: string) => string; onCatalog(next: HostedPluginCatalog): void; disabled: boolean }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+  if (!card.secrets?.length) return null;
+  const save = async (name: string, value: string | null) => {
+    setMessage("");
+    try { onCatalog(await hostedApi.secret(card.pluginId, name, value)); setValues(previous => ({ ...previous, [name]: "" })); setMessage(value === null ? t("已移除。", "Removed.") : t("已保存。", "Saved.")); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  return <section className={css.configuration}><h2>{t("访问令牌", "Access token")}</h2>
+    <p className={rows.scope}>{t("令牌只保存在本机，由主程序代为发起请求；插件进程和页面永远读不到它。建议使用仅限目标仓库、权限最小的 fine-grained token（Issues、Pull requests、Contents 读写）。", "The token is stored on this machine and used by the host on the plugin's behalf; plugin code and pages can never read it. Use a fine-grained token limited to the target repository (Issues, Pull requests and Contents read/write).")}</p>
+    {card.secrets.map(secret => <div key={secret.name} className={css.actions}>
+      <code>{secret.name}</code> <span role="status">{secret.configured ? t("已配置", "Configured") : t("未配置", "Not configured")}</span>
+      <input type="password" autoComplete="off" aria-label={secret.name} value={values[secret.name] ?? ""} onChange={event => setValues(previous => ({ ...previous, [secret.name]: event.target.value }))} />
+      <Button variant="outline" size="sm" disabled={disabled || !(values[secret.name] ?? "").trim()} onClick={() => void save(secret.name, (values[secret.name] ?? "").trim())}>{t("保存", "Save")}</Button>
+      {secret.configured && <Button variant="outline" size="sm" disabled={disabled} onClick={() => void save(secret.name, null)}>{t("移除", "Remove")}</Button>}
+    </div>)}
+    {message && <p role="status" className={rows.scope}>{message}</p>}
+  </section>;
+}
+
 type Problem = { code?: string; message: string };
 /** One actionable message per failure; raw diagnostics remain inspectable, not repeated. */
 function problemText(problem: Problem, installed: boolean, t: (zh: string, en: string) => string) {
@@ -97,7 +119,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   useEffect(() => { onMatchCountChange(shown.length); }, [shown.length, onMatchCountChange]);
   const unavailableControls = busy || reading || disabled || !known || !!catalog.offline;
   function description(card: HostedPluginCard) {
-    return card.contribution?.entry.description[locale] ?? (card.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId
+    return card.contribution?.entry.description[locale] ?? card.description?.[locale] ?? (card.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId
       ? t("绘制、编辑手绘图表，并将图稿保存到工作区。", "Draw and edit hand-drawn diagrams, and save them to your workspace.")
       : t("按需下载安装的官方插件。", "An official plugin available on demand."));
   }
@@ -126,8 +148,9 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span><div><strong>{name(selected)}</strong><p>{description(selected)}</p></div>{switchFor(selected)}</div>
       <dl><dt>{t("插件标识", "Plugin ID")}</dt><dd><code>{selected.pluginId}</code></dd><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
       {failureView(selected, true)}
+      <SecretsSection card={selected} t={t} disabled={unavailableControls} onCatalog={next => { setCatalog(next); window.dispatchEvent(new Event("pi:hosted-catalog-changed")); }} />
       <section className={css.configuration}><h2>{t("配置与更新", "Configuration & updates")}</h2>
-        <p className={rows.scope}>{t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.")}</p>
+        <p className={rows.scope}>{selected.icon === "drawing" || selected.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId ? t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.") : t("启用后从工作区侧栏打开。停用或卸载不会删除插件数据。", "Once enabled, open it from the workspace sidebar. Disabling or uninstalling retains plugin data.")}</p>
         <p className={rows.scope}>{t("兼容的插件可独立更新；软件升级仅在协议不兼容时协调插件版本。", "Compatible plugins update independently. App upgrades coordinate plugins only when their protocol is incompatible.")}</p>
         <p className={rows.scope}>{t("停用或卸载前会先保存并关闭相关视图；保存失败时不会继续。", "Disabling or uninstalling first saves and closes related views; a failed save stops the operation.")}</p>
         {selected.pendingVersion && <p className={rows.scope} role="status">{t("关闭编辑器后更新至：", "Close editors to update to: ")}{selected.pendingVersion}</p>}

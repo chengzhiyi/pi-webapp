@@ -14,5 +14,7 @@ export const hostedApi = {
   catalog: (signal?: AbortSignal) => hostedRequest<HostedPluginCatalog>("", undefined, signal),
   manage: (input: HostedManageInput) => hostedRequest<HostedPluginCatalog>("/manage", input),
   action: (input: HostedActionInput) => hostedRequest<unknown>("/action", input),
+  decide: (id: string, decision: "allow" | "deny") => hostedRequest<HostedPluginCatalog>("/approvals", { id, decision }),
+  secret: (pluginId: string, name: string, value: string | null) => hostedRequest<HostedPluginCatalog>("/secrets", { pluginId, name, value }),
   view: (input: HostedViewInput, signal?: AbortSignal) => hostedRequest<HostedViewReply>("/views", input, signal),
 };

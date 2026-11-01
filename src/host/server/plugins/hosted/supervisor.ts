@@ -5,6 +5,7 @@ import type { HostedPackage } from "./resources.ts";
 import { HostedRuntimeProcess } from "./runtime-process.ts";
 import { HostedStateBroker, type ActiveHostedPlugin } from "./state-broker.ts";
 import { HostedPluginError } from "./errors.ts";
+import type { CapabilityBroker } from "./capabilities/broker.ts";
 
 export interface HostedSwitchHooks {
   /** Pure precommit policy/ownership validation against the VERIFIED candidate, never the old worker. */
@@ -30,8 +31,9 @@ export class HostedPluginSupervisor {
   readonly broker: HostedStateBroker;
   private readonly workerEntry: string;
   private readonly hooks: HostedSwitchHooks;
-  constructor(broker: HostedStateBroker, workerEntry: string, hooks: HostedSwitchHooks = noViews) {
-    this.broker = broker; this.workerEntry = workerEntry; this.hooks = hooks;
+  private readonly capabilities?: CapabilityBroker;
+  constructor(broker: HostedStateBroker, workerEntry: string, hooks: HostedSwitchHooks = noViews, capabilities?: CapabilityBroker) {
+    this.broker = broker; this.workerEntry = workerEntry; this.hooks = hooks; this.capabilities = capabilities;
   }
   get phase(): HostedRuntimePhase { return this.phaseValue; }
   get pid(): number | undefined { return this.worker?.pid; }
@@ -48,7 +50,14 @@ export class HostedPluginSupervisor {
     const release = await acquireStorageOwnership(this.broker.root, "runtime");
     this.releaseOwnership = async () => { await release(); this.releaseOwnership = null; };
   }
-  private callBroker = (request: HostedInvocation, method: string, input: unknown) => this.broker.call(request, method, input);
+  private callBroker = (request: HostedInvocation, method: string, input: unknown) => {
+    // Declared-capability methods are authorized against the ACTIVE package manifest; everything else is storage.
+    if (this.capabilities?.handles(method)) {
+      if (!this.worker || request.generation !== this.worker.generation) return Promise.reject(new HostedPluginError("stale_generation", "Plugin runtime is not active at this generation"));
+      return this.capabilities.call(this.broker.pluginId, this.worker.package.manifest, request, method, input);
+    }
+    return this.broker.call(request, method, input);
+  };
   invoke(request: Omit<HostedInvocation, "generation">, timeoutMs?: number): Promise<unknown> {
     if (this.phaseValue !== "active" || !this.worker) return Promise.reject(new HostedPluginError("plugin_unavailable", "Plugin is disabled or waiting at a safe switch boundary"));
     return this.worker.invoke({ ...request, generation: this.worker.generation }, timeoutMs);

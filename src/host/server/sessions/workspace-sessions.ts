@@ -43,7 +43,13 @@ interface WorkspaceRuntime {
   streaming: ViewMessage | null;
   networkDiagnostic?: ModelNetworkDiagnostic;
   prompts: EditablePromptQueue;
+  /** Present for sessions created by a hosted plugin: background-only, never selected by creation. */
+  detached?: DetachedState;
 }
+export interface DetachedEvent { seq: number; type: "turn_end" | "error"; text?: string }
+interface DetachedState { owner: string; events: DetachedEvent[]; seq: number; lastText: string; restoreTools: string[] | null }
+const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
+const MAX_DETACHED_EVENTS = 200;
 
 export interface WorkspaceTelemetry {
   enabled(): boolean;
@@ -160,7 +166,7 @@ export class WorkspaceSessions {
     console.error(detail);
     this.publishFor(runtime, { type: "error", message: detail });
   }
-  private async replace(cwd: string, manager: SessionManager, reason: SessionShutdownEvent["reason"]): Promise<void> {
+  private async replace(cwd: string, manager: SessionManager, reason: SessionShutdownEvent["reason"], detachedOwner?: string): Promise<void> {
     const old = this.runtimes.get(manager.getSessionId());
     const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
     const bus = createEventBus();
@@ -176,7 +182,8 @@ export class WorkspaceSessions {
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
       const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null! };
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
+        detached: detachedOwner ? { owner: detachedOwner, events: [], seq: 0, lastText: "", restoreTools: null } : undefined };
       runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {
         const owner = this.runtimes.get(manager.getSessionId()) ?? runtime;
         this.publishFor(owner, { type: "snapshot", session: this.snapshotOf(owner) });
@@ -185,10 +192,23 @@ export class WorkspaceSessions {
       candidate = runtime;
       installModelTransport(session, detail => { runtime.networkDiagnostic = detail; }, () => runtime.operation?.operationId);
       const publish = (event: HostEvent) => this.publishFor(runtime, event);
+      const detached = runtime.detached;
+      const record = (type: DetachedEvent["type"], text?: string) => {
+        if (!detached) return;
+        detached.events.push({ seq: ++detached.seq, type, ...(text === undefined ? {} : { text }) });
+        if (detached.events.length > MAX_DETACHED_EVENTS) detached.events.splice(0, detached.events.length - MAX_DETACHED_EVENTS);
+      };
       runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       let lastStreamAt = 0;
       const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       const offEvents = session.subscribe(event => {
+        if (detached && !runtime.closing) {
+          if (event.type === "message_end" && event.message.role === "assistant") {
+            if (event.message.stopReason === "error") record("error", event.message.errorMessage ?? "Agent response failed");
+            else detached.lastText = event.message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n");
+          }
+          if (event.type === "agent_settled") record("turn_end", detached.lastText);
+        }
         if (!this.disposed && !runtime.closing) {
           const context: DiagnosticFields = { ...runtime.operation, session: this.telemetry.anonymize(session.sessionManager.getSessionId()), piVersion: VERSION, model: session.model ? `${session.model.provider}/${session.model.id}` : null, thinkingLevel: session.thinkingLevel };
           if (event.type === "agent_start") this.telemetry.breadcrumb("agent_start", context);
@@ -235,9 +255,13 @@ export class WorkspaceSessions {
       if (old && (!old.session.isIdle || old.prompts.sending)) throw new Error("Pi 正在运行，请等待当前回复结束");
       if (old) await this.close(old, reason);
       if (this.disposed) throw new Error("工作区服务已关闭");
+      if (runtime.detached) {
+        runtime.detached.restoreTools = session.getActiveToolNames();
+        session.setActiveToolsByName(READ_ONLY_TOOLS);
+      }
       this.runtimes.set(session.sessionManager.getSessionId(), runtime);
       candidate = null;
-      this.activate(runtime);
+      if (runtime.detached) this.onSessionsChanged(); else this.activate(runtime);
     } catch (error) {
       this.hosted?.adapter.releasePending(manager.getSessionId());
       if (candidate) await this.close(candidate, "quit"); else { bus.clear(); await runtimePaths.release(); }
@@ -392,6 +416,50 @@ export class WorkspaceSessions {
     if (!model) throw new Error("模型不可用");
     await runtime.session.setModel(model);
     this.publishFor(runtime, { type: "snapshot", session: this.snapshotOf(runtime) });
+  }
+
+  /** Plugin-owned sessions: created read-only, never activated (the user's view is untouched), listed like any retained session. */
+  createDetached(path: string, owner: string, title: string): Promise<string> {
+    return this.queue.run(async () => {
+      this.ensureAvailable();
+      const canonical = await requireWorkspaceDirectory(path);
+      const manager = SessionManager.create(canonical);
+      await this.replace(canonical, manager, "new", owner);
+      const runtime = this.runtimes.get(manager.getSessionId())!;
+      runtime.session.setSessionName(title);
+      return manager.getSessionId();
+    });
+  }
+  private detachedRuntime(id: string): WorkspaceRuntime | null {
+    const runtime = this.runtimes.get(id);
+    return !this.disposed && runtime?.detached && !runtime.closing ? runtime : null;
+  }
+  detachedOwner(id: string): string | null { return this.detachedRuntime(id)?.detached!.owner ?? null; }
+  detachedCount(owner: string): number { return [...this.runtimes.values()].filter(r => r.detached?.owner === owner && !r.closing).length; }
+  /** `execute` restores the tools the session had before it was restricted; it is the caller's job to have authorized that. */
+  async sendDetached(id: string, text: string, execute: boolean): Promise<void> {
+    const runtime = this.detachedRuntime(id);
+    if (!runtime) throw new Error("Pi 会话不可用");
+    if (execute && runtime.detached!.restoreTools) { runtime.session.setActiveToolsByName(runtime.detached!.restoreTools); runtime.detached!.restoreTools = null; }
+    if (!runtime.session.isIdle || runtime.prompts.length > 0) { runtime.prompts.enqueue(text, [], undefined); this.scheduleQueued(runtime); return; }
+    await this.prompt(runtime, text, []);
+  }
+  async abortDetached(id: string): Promise<void> { await this.detachedRuntime(id)?.session.abort(); }
+  /** Close and forget; frees the owner's quota. */
+  releaseDetached(id: string): Promise<void> {
+    return this.queue.run(async () => {
+      const runtime = this.detachedRuntime(id);
+      if (!runtime) return;
+      this.runtimes.delete(id);
+      if (this.active === runtime) this.active = null;
+      await this.close(runtime, "quit");
+      this.onSessionsChanged();
+    });
+  }
+  detachedEvents(id: string, after: number): { events: DetachedEvent[]; next: number } {
+    const d = this.detachedRuntime(id)?.detached;
+    if (!d) throw new Error("Pi 会话不可用");
+    return { events: d.events.filter(e => e.seq > after), next: d.seq };
   }
 
   dispose(): Promise<void> {

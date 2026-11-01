@@ -1,6 +1,9 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import type { HostedInvocation, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
+import type { HostedInvocation, HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
+import { CapabilityBroker, type CapabilityBrokerOptions } from "./capabilities/broker.ts";
+import { parseDeclarations } from "./capabilities/declarations.ts";
+import { PluginScheduler } from "./capabilities/scheduler.ts";
 import { HostedPluginError, failure } from "./errors.ts";
 import { HostedPluginInstaller } from "./installer.ts";
 import { officialPlugin, type OfficialPlugin, type RegistryRelease, type UpdatePolicy } from "./official-catalog.ts";
@@ -29,6 +32,15 @@ export interface HostedManagerOptions {
   /** Enter the all-Agent settled barrier only for activation/disable, AFTER background preparation. */
   lifecycle?<T>(pluginId: string, operation: () => Promise<T>, shutdown?: boolean): Promise<T>;
   legacy?(id: string): (request: HostedInvocation) => Promise<unknown>;
+  /** Enables network/sessions for plugins that declare them. Without it every capability call is denied. */
+  capabilities?: CapabilityBrokerOptions;
+  /** Host-authenticated scope for scheduled ticks; null skips the tick. The plugin never chooses it. */
+  scheduledScope?(pluginId: string): HostedScope | null;
+  onScheduleError?(pluginId: string, scheduleId: string, error: unknown): void;
+  /** Test seam for timers. */
+  /** Plugin id -> local .tgz (developer opt-in). Those plugins install/update from the file, never the registry. */
+  devArchives?: ReadonlyMap<string, string>;
+  scheduleTimers?: { setInterval(fn: () => void, ms: number): unknown; clearInterval(handle: unknown): void };
 }
 export interface ManagedHostedPlugin {
   id: string; name: string; description: { zh: string; en: string }; official: true;
@@ -49,11 +61,22 @@ export class HostedPluginManager {
   private readonly available = new Map<string, RegistryRelease>();
   private readonly assetLeases = new Map<string, Map<string, number>>();
   private closing = false;
+  private readonly scheduler: PluginScheduler;
   private pairAdmittedValue = false;
   get pairAdmitted(): boolean { return this.pairAdmittedValue; }
   constructor(options: HostedManagerOptions) {
     this.options = options;
     this.installer = new HostedPluginInstaller({ root: join(options.root, "packages"), hostVersion: options.hostVersion, catalog: options.catalog, fetch: options.fetch });
+    const capabilities = options.capabilities ? new CapabilityBroker(options.capabilities) : undefined;
+    this.scheduler = new PluginScheduler({
+      invoke: async (pluginId, schedule) => {
+        const scope = this.closing ? null : options.scheduledScope?.(pluginId) ?? null;
+        if (!scope) return;
+        await this.supervisor(pluginId).invoke({ requestId: randomUUID(), scope, kind: "action", action: schedule.action, input: { schedule: schedule.id } });
+      },
+      onError: (pluginId, schedule, error) => options.onScheduleError?.(pluginId, schedule.id, error),
+      ...options.scheduleTimers,
+    });
     for (const plugin of this.installer.catalog) {
       const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id));
       const hooks = options.hooks(plugin.id);
@@ -64,12 +87,15 @@ export class HostedPluginManager {
         resume: () => hooks.resume(),
         committed: async active => {
           if (active.enabled) {
-            this.packages.set(plugin.id, await this.installer.load(plugin.id, active.version));
+            const pkg = await this.installer.load(plugin.id, active.version);
+            this.packages.set(plugin.id, pkg);
             this.assetTokens.set(plugin.id, randomBytes(24).toString("base64url"));
-          } else { this.packages.delete(plugin.id); this.assetTokens.delete(plugin.id); }
+            try { this.scheduler.start(plugin.id, parseDeclarations(pkg.manifest).schedules); }
+            catch (error) { this.scheduler.stop(plugin.id); this.errors.set(plugin.id, failure(error)); }
+          } else { this.scheduler.stop(plugin.id); this.packages.delete(plugin.id); this.assetTokens.delete(plugin.id); }
           await hooks.committed(active);
         },
-      }));
+      }, capabilities));
     }
   }
   private supervisor(id: string) {
@@ -221,9 +247,12 @@ export class HostedPluginManager {
       const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
       const result = await (async () => { switch (operation) {
         case "check": {
+          if (this.options.devArchives?.has(id)) return { version: latest ?? null, dev: true };
           const release = await this.check(id, latest, undefined, signal); return { version: release.version };
         }
         case "install": {
+          const dev = this.options.devArchives?.get(id);
+          if (dev) { const pkg = await this.installer.installDevArchive(id, dev, signal); return { installed: true, version: pkg.version }; }
           const release = await this.check(id, latest, version, signal);
           const pkg = await this.installer.install(id, release, signal); this.available.delete(id);
           await this.recordCheck(id, { status: "up-to-date", version: pkg.version, message: "Selected compatible release installed; enablement unchanged" });
@@ -246,6 +275,13 @@ export class HostedPluginManager {
         case "disable": await this.lifecycle(id, () => s.disable()); this.packages.delete(id); return { enabled: false };
         case "update": {
           if (!latest) throw new HostedPluginError("not_installed", "Only installed plugins can be updated");
+          const dev = this.options.devArchives?.get(id);
+          if (dev) {
+            const pkg = await this.installer.installDevArchive(id, dev, signal), active = await s.broker.active();
+            if (!active?.enabled) return { installed: true, enabled: false, version: pkg.version };
+            if (active.version === pkg.version && !s.pendingVersion) return { unchanged: true, version: pkg.version };
+            const result = await this.lifecycle(id, () => s.replace(pkg)); if (!result.pending) this.packages.set(id, pkg); return result;
+          }
           const release = await this.check(id, latest, version, signal);
           const active = await s.broker.active();
           if (release.version === latest && (!active?.enabled || active.version === latest) && !s.pendingVersion) return { unchanged: true, version: latest };
@@ -423,6 +459,7 @@ export class HostedPluginManager {
     await Promise.allSettled(this.operations.values());
     try {
       await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
+      this.scheduler.stopAll();
       this.packages.clear(); this.assetTokens.clear();
     } catch (error) { this.closing = false; throw error; }
   }

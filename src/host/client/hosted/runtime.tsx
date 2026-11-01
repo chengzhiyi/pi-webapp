@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LoadedPlugin } from "../plugin-manager.ts";
 import type { WorkbenchPanelProps, ToolViewProps } from "../../../contracts/workbench.ts";
-import type { HostedMount, HostedPluginCard, HostedViewIdentity } from "../../../contracts/hosted-plugins.ts";
+import type { HostedExecuteApproval, HostedMount, HostedPluginCard, HostedViewIdentity } from "../../../contracts/hosted-plugins.ts";
 import { hostedApi } from "./api.ts";
 import { retainHostedCards } from "./catalog.ts";
 import { FrameAdapter, hostedFrames } from "./frame-adapter.ts";
@@ -115,6 +115,7 @@ function definition(card: HostedPluginCard, reconnect: () => void, callbacks: Ho
 export function useHostedPlugins(connected: boolean, sessionId: string | undefined, generation: number, callbacks: HostedCallbacks, locale: "zh" | "en") {
   const recovery = useHostedReconciliation({ sessionId, locale, openRecovered: contentId => callbacks.current.openPanel?.(`diagram:${contentId}`) });
   const [cards, setCards] = useState<HostedPluginCard[]>([]);
+  const [approvals, setApprovals] = useState<HostedExecuteApproval[]>([]);
   const [inactivePlugins, setInactivePlugins] = useState<string[]>([]);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
@@ -125,6 +126,7 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
     window.addEventListener("pi:hosted-catalog-changed", reconnect);
     void hostedApi.catalog(abort.signal).then(catalog => { if (alive) {
       setCards(previous => retainHostedCards(catalog.plugins, previous));
+      setApprovals(catalog.approvals ?? []);
       // Only authoritative disabled/uninstalled state retires owned tabs. Pending
       // updates and failed reads must leave the mounted editor and undo intact.
       if (!catalog.offline) setInactivePlugins(catalog.plugins.filter(card => !card.installed || !card.enabled).map(card => card.pluginId));
@@ -140,5 +142,8 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
   }), [cards, reconnect, callbacks]);
   const controllers = connected && sessionId ? cards.map(card => <HostedFrame key={`${sessionId}/${card.pluginId}/${card.generation}`} card={card} reconnect={reconnect}
     abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))} mount={{ kind: "controller", sessionId, locale, theme: theme() }} open={(_kind, id) => callbacks.current.openPanel?.(`${card.contribution!.panelAlias.prefix}${id}`)} sendMessage={async text => { if (!callbacks.current.sendMessage) throw new Error("Composer unavailable"); await callbacks.current.sendMessage(text); }} />) : null;
-  return { plugins: connected ? plugins : [], inactivePlugins, recovery, controllers, error };
+  const decide = useCallback((id: string, decision: "allow" | "deny") => {
+    void hostedApi.decide(id, decision).then(catalog => setApprovals(catalog.approvals ?? [])).catch(cause => setError(String(cause)));
+  }, []);
+  return { plugins: connected ? plugins : [], inactivePlugins, recovery, controllers, error, approvals, decide };
 }

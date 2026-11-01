@@ -18,6 +18,7 @@ import { workspacePreviewPath } from "../../../web/src/ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
 import { PluginInteraction, PluginSlot, PluginToolView, useWebPlugins } from "./plugin-runtime.tsx";
 import { useHostedPlugins } from "./hosted/runtime.tsx";
+import { ExecuteApprovalPrompt } from "./hosted/ExecuteApprovalPrompt.tsx";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
 import { drawingRecovery, OFFICIAL_DRAWINGS } from "./legacy-diagrams.tsx";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
@@ -201,7 +202,7 @@ export function PiApp() {
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}

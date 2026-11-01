@@ -18,6 +18,9 @@ import { SelfUpdater } from "../updates/self-update.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { HostedPluginIntegration } from "../plugins/hosted/integration.ts";
 import { legacyCheckpointLoader } from "../plugins/hosted/legacy-checkpoints.ts";
+import { hostedCapabilities } from "../plugins/hosted/capabilities/bootstrap.ts";
+import { devPluginsFromEnv } from "../plugins/hosted/dev-plugins.ts";
+import { OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
 import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
@@ -301,8 +304,15 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     const canonical = realpathSync(cwd);
     return { cwd: canonical, sessionId, workspaceId: createHash("sha256").update(canonical).digest("hex") };
   };
+  const hostedRoot = join(getAgentDir(), "pi-web", "hosted");
+  const dev = devPluginsFromEnv();
   shared.hosted ??= new HostedPluginIntegration({
-    root: join(getAgentDir(), "pi-web", "hosted"),
+    root: hostedRoot,
+    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], devArchives: dev.archives } : {}),
+    // Inert for plugins that declare no secrets/network/scheduler/sessions (every shipped plugin today).
+    ...hostedCapabilities({ root: hostedRoot, sessions: () => shared.workspaceSessions, activeWorkspace: () => shared.workspaceSessions?.path ?? null, trustedScope,
+      sessionTitle: id => shared.workspaceSessions?.retainedSessions().find(session => session.sessionId === id)?.name,
+      changed: () => shared.bridge?.publish({ type: "hosted_plugins_changed" }) }),
     hostVersion: (JSON.parse(readFileSync(resolve(webRoot, "../../package.json"), "utf8")) as { version: string }).version,
     packageRoot: resolve(webRoot, "../.."),
     workerEntry: resolve(webRoot, "../../dist/hosted-worker.js"),
@@ -831,7 +841,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
       try {
         await shared.hosted?.shutdown();
         ctx.ui.notify(`pi-webapp-stop: ${JSON.stringify({ id: args, ok: true })}`, "info");
-      } catch {
+      } catch (cause) {
+        // The receipt below carries only ok:false; keep the reason in the launcher log for diagnosis.
+        console.error("pi-webapp: plugin shutdown refused the stop request:", cause);
         ctx.ui.notify(`pi-webapp-stop: ${JSON.stringify({ id: args, ok: false })}`, "warning");
       }
     },
