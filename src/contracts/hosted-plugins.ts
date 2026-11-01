@@ -13,7 +13,9 @@ export interface HostedPluginCard {
   /** Catalog blurb, shown before the plugin is enabled. */
   description?: { zh: string; en: string };
   /** Secrets this enabled plugin declares and whether each is stored. Values never leave the host. */
-  secrets?: Array<{ name: string; configured: boolean }>;
+  secrets?: Array<{ name: string; configured: boolean;
+    /** "browser": host can sign in through GitHub in the user's browser. "token-page": only a pre-filled token page is available. */
+    signIn?: "browser" | "token-page"; createUrl?: string }>;
   version?: string; availableVersion?: string; pendingVersion?: string; generation?: number;
   phase: string; error?: string; errorCode?: string;
   updatePolicy?: "notify" | "automatic" | "pinned"; pinnedVersion?: string;

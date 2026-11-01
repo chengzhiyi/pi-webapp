@@ -11,6 +11,8 @@ export interface HostedBridgeHandlers {
   decide?(id: string, allow: boolean): unknown | Promise<unknown>;
   /** Stores (string) or removes (null) a declared plugin secret. The value is never returned. */
   secret?(pluginId: string, name: string, value: string | null): unknown | Promise<unknown>;
+  /** Browser sign-in for a declared secret (OAuth device flow). Tokens are stored host-side and never returned. */
+  secretAuth?(input: { phase: "start"; pluginId: string; name: string } | { phase: "poll" | "cancel"; deviceId: string }): unknown | Promise<unknown>;
   asset(path: string): Promise<{bytes: Buffer; mime: string} | null>;
 }
 export const HOSTED_API_PATHS = ["/api/hosted-plugins/manage", "/api/hosted-plugins/action", "/api/hosted-plugins/views", "/api/hosted-plugins/approvals", "/api/hosted-plugins/secrets"];
@@ -39,6 +41,12 @@ export async function hostedApi(host: HostedBridgeHandlers | undefined, path: st
   }
   if (path === "/api/hosted-plugins/secrets") {
     if (options?.draining) throw new HostedPluginError("host_restarting", "Host is updating; secret changes are fenced", { status: 409 });
+    if (body.auth !== undefined) {
+      if (!host.secretAuth) throw new HostedPluginError("hosted_unavailable", "Browser sign-in is not available in this runtime", { status: 503 });
+      if (body.auth === "start" && typeof body.pluginId === "string" && body.pluginId.length <= 214 && typeof body.name === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(body.name)) return host.secretAuth({ phase: "start", pluginId: body.pluginId, name: body.name });
+      if ((body.auth === "poll" || body.auth === "cancel") && typeof body.deviceId === "string" && /^[a-f0-9-]{36}$/.test(body.deviceId)) return host.secretAuth({ phase: body.auth, deviceId: body.deviceId });
+      throw new HostedPluginError("invalid_input", "Invalid sign-in request", { status: 400 });
+    }
     if (typeof body.pluginId !== "string" || body.pluginId.length > 214 || typeof body.name !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(body.name)
       || !(body.value === null || typeof body.value === "string" && body.value.length >= 1 && body.value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(body.value))) throw new HostedPluginError("invalid_input", "Invalid secret request", { status: 400 });
     if (!host.secret) throw new HostedPluginError("hosted_unavailable", "Secrets are not available in this runtime", { status: 503 });

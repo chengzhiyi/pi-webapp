@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import type { HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
-import type { HostedActionInput, HostedManageInput, HostedPluginCatalog, HostedViewInput } from "../../../../contracts/hosted-plugins.ts";
+import type { HostedActionInput, HostedManageInput, HostedPluginCard, HostedPluginCatalog, HostedViewInput } from "../../../../contracts/hosted-plugins.ts";
 import { HostedAgentAdapter, type HostedAgentPolicy } from "./agent-adapter.ts";
 import { HostedPluginManager, type HostedManagerOptions } from "./manager.ts";
 import { HostedViewCoordinator, type AuthenticatedViewScope } from "./views.ts";
@@ -11,6 +11,7 @@ import { HostedStateBroker } from "./state-broker.ts";
 import { DEFAULT_POLICIES, policyFor, type HostedPluginPolicy } from "./plugin-policies.ts";
 import type { ExecuteApprovals } from "./capabilities/execute-approvals.ts";
 import { parseDeclarations } from "./capabilities/declarations.ts";
+import { DeviceFlows, secretAuthFor } from "./capabilities/oauth.ts";
 import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
 import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
@@ -43,6 +44,7 @@ export class HostedPluginIntegration {
   private queue: Promise<unknown> = Promise.resolve();
   private switches: Promise<unknown> = Promise.resolve();
   private readonly recovery = new Map<string, unknown>();
+  private readonly deviceFlows = new DeviceFlows();
   private restartPreparation?: Promise<() => Promise<void>>;
   private restartResume?: () => Promise<void>;
   private closing = false;
@@ -126,6 +128,21 @@ export class HostedPluginIntegration {
         if (value === null) await store.delete(pluginId, name); else await store.set(pluginId, name, value);
         this.options.changed?.();
         return this.inventory();
+      },
+      secretAuth: async input => {
+        const store = this.options.capabilities?.secrets;
+        if (!store) throw new HostedPluginError("hosted_unavailable", "Secrets are not available", { status: 503 });
+        if (input.phase === "cancel") { this.deviceFlows.cancel(input.deviceId); return { status: "cancelled" }; }
+        if (input.phase === "start") {
+          const auth = this.documents.get(input.pluginId)?.secrets.includes(input.name) ? secretAuthFor(input.pluginId, input.name) : undefined;
+          if (!auth) throw new HostedPluginError("secret_undeclared", "The enabled plugin does not declare browser sign-in for this secret", { status: 404 });
+          return this.deviceFlows.start(input.pluginId, input.name, auth);
+        }
+        const result = await this.deviceFlows.poll(input.deviceId);
+        if (result.status !== "granted") return { status: result.status };
+        await store.set(result.pluginId, result.name, result.token);
+        this.options.changed?.();
+        return { status: "granted", catalog: await this.inventory() };
       },
       decide: (id, allow) => { if (!this.options.approvals) throw new HostedPluginError("hosted_unavailable", "Approvals are not available", { status: 503 }); this.options.approvals.decide(id, allow); return this.inventory(); },
       action: (input, options) => this.action(input, options?.checkpointOnly),
@@ -252,15 +269,15 @@ export class HostedPluginIntegration {
   async inventory(): Promise<HostedPluginCatalog> {
     const inventory = await this.manager.inventory();
     const store = this.options.capabilities?.secrets;
-    const secrets = new Map<string, Array<{ name: string; configured: boolean }>>();
+    const secrets = new Map<string, NonNullable<HostedPluginCard["secrets"]>>();
     for (const p of inventory.plugins) {
       const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
-      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => ({ name, configured: await store.has(p.id, name) }))));
+      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => { const auth = secretAuthFor(p.id, name); return { name, configured: await store.has(p.id, name), ...(auth ? { signIn: auth.clientId ? "browser" as const : "token-page" as const, ...(auth.createUrl ? { createUrl: auth.createUrl } : {}) } : {}) }; })));
     }
     return { ...(this.devWatcher ? { dev: this.devWatcher.info() } : {}), plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,
       description: p.description, ...(secrets.has(p.id) ? { secrets: secrets.get(p.id) } : {}),
-      icon: OFFICIAL_PLUGINS.find(plugin => plugin.id === p.id)?.icon,
+      icon: (this.options.catalog ?? OFFICIAL_PLUGINS).find(plugin => plugin.id === p.id)?.icon,
       hasRetainedData: p.activeVersion !== null,
       phase: this.recovery.has(p.id) ? "reconnect-required" : p.phase,
       updatePolicy: p.updatePolicy, pinnedVersion: p.pinnedVersion, updateDiagnostic: p.updateDiagnostic,

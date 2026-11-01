@@ -93,7 +93,11 @@ test("GitHub plugin end to end: install, token, plan, human approvals, PR, revie
   await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "install" } as never);
   await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "enable" } as never);
   const enabled = await card();
-  assert.equal(enabled.enabled, true); assert.equal(enabled.contribution?.entry.label, "GitHub"); assert.deepEqual(enabled.secrets, [{ name: "github-token", configured: false }]);
+  assert.equal(enabled.enabled, true); assert.equal(enabled.contribution?.entry.label, "GitHub"); assert.equal(enabled.secrets?.length, 1);
+  const [secret] = enabled.secrets!;
+  assert.deepEqual({ name: secret!.name, configured: secret!.configured }, { name: "github-token", configured: false });
+  assert.ok(secret!.signIn === "browser" || secret!.signIn === "token-page", "the card says how this secret can be authorized");
+  assert.match(secret!.createUrl ?? "", /^https:\/\/github\.com\/settings\/personal-access-tokens\/new\?/);
   assert.equal(ticks.length, 1, "the declared 60s poll schedule was registered");
 
   const act = async (action: string, input: object = {}) => integration.handlers.action({ sessionId: "chat", pluginId: GITHUB_ID, generation: (await card()).generation!, action, input } as never) as Promise<{ config: unknown; tasks: Array<Record<string, any>>; lastError?: string }>;
