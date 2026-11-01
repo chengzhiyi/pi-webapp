@@ -1,8 +1,10 @@
 import { defineConfig } from 'vitepress';
 
 const repo = 'https://github.com/chengzhiyi/pi-webapp';
-// GitHub Pages serves a project site under /<repository>/.
-const base = process.env.DOCS_BASE ?? '/pi-webapp/';
+// The site is served from the root of its own domain. For the project URL
+// (https://chengzhiyi.github.io/pi-webapp/) build with DOCS_BASE=/pi-webapp/.
+const base = process.env.DOCS_BASE ?? '/';
+const siteUrl = 'https://pi.emath.top';
 
 // The English guide lives in docs/en/ and is published at the site root; the
 // Chinese translation lives in docs/zh/ and is published under /zh/.
@@ -83,6 +85,7 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
+  sitemap: { hostname: siteUrl },
   head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }]],
 
   // Publish docs/en/ at the site root. docs/zh/ is already at /zh/. Everything

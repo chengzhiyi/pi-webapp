@@ -8,7 +8,7 @@ export default defineConfig({
   reporter: 'list',
   outputDir: './test-results',
   use: {
-    baseURL: 'http://127.0.0.1:4175/pi-webapp/',
+    baseURL: 'http://127.0.0.1:4175/',
     channel: process.env.PI_WEB_TEST_CHROME === 'true' ? 'chrome' : undefined,
     screenshot: 'only-on-failure',
   },
@@ -19,7 +19,7 @@ export default defineConfig({
   // Bounded test-owned loopback server; no persistent service or public preview.
   webServer: {
     command: 'npm run preview -- --port 4175 --strictPort',
-    url: 'http://127.0.0.1:4175/pi-webapp/',
+    url: 'http://127.0.0.1:4175/',
     reuseExistingServer: false,
     timeout: 30_000,
   },

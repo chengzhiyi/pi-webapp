@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 // output (including #anchors) and that only reviewed user-guide pages are built.
 const docs = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(docs, '.vitepress/dist');
-const base = process.env.DOCS_BASE ?? '/pi-webapp/';
+const base = process.env.DOCS_BASE ?? '/';
 const walk = (dir) => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
   return statSync(path).isDirectory() ? walk(path) : [path];

@@ -165,7 +165,7 @@ Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin
 - **Help and reference:** [Troubleshooting](docs/en/troubleshooting.md) · [FAQ](docs/en/faq.md) · [Command line](docs/en/reference/cli.md) · [Environment variables](docs/en/reference/environment.md)
 - **Contributors:** [Architecture](docs/architecture.md) · [Web plugins](docs/web-plugins.md) · [Desktop builds](docs/desktop.md) · [Developers](docs/en/developers.md)
 
-The guides are also built as a searchable site with `npm run docs:build` (preview it with `npm run docs:dev`, after `npm --prefix docs ci`). They are written as VitePress pages under `docs/en/`; once the site has a public address, these links should point to it.
+The guides are also built as a searchable site with `npm run docs:build` (preview it with `npm run docs:dev`, after `npm --prefix docs ci`). They are written as VitePress pages under `docs/en/` (Chinese in `docs/zh/`) and published at <https://pi.emath.top>.
 
 The guides follow the source tree; installed versions may differ. For desktop availability, use the verified release links above and their release notes.
 

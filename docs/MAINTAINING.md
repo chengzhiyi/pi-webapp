@@ -27,19 +27,27 @@ From the repository root, after `npm --prefix docs ci`:
 npm run docs:dev        # live preview
 npm run docs:build      # production build; fails on a dead page link
 npm run docs:check      # verifies links, assets, anchors and the page list in the output
-npm run docs:preview    # serve the built site (URL ends with /pi-webapp/)
+npm run docs:preview    # serve the built site at /
 npm --prefix docs run test:browser   # browser tests; needs a Playwright Chromium (npm --prefix docs exec -- playwright install chromium)
 ```
 
-Don't open the built HTML with `file://`: search and ES modules need HTTP. Set `DOCS_BASE=/` to build for a root-hosted site instead of `/pi-webapp/`.
+Don't open the built HTML with `file://`: search and ES modules need HTTP. Set `DOCS_BASE=/pi-webapp/` to build for the GitHub Pages project path instead of the domain root.
 
 ## Deployment
 
 `docs.yml` runs on pull requests that touch `docs/**` (build and check only), and on pushes to `main` that touch `docs/**` (build, check, deploy). It can also be run by hand from `main`.
 
-One-time setup, which needs repository admin rights: **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until that is enabled the deploy job fails. The expected address is `https://chengzhiyi.github.io/pi-webapp/`, and `base` in the config must match the path.
+One-time setup, which needs repository admin rights: **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until that is enabled the deploy job fails.
 
-Docs-only pushes to `main` also start `ci.yml`, whose publish job runs on every push to `main`. Look at that before merging documentation alone.
+The site is served at <https://pi.emath.top>:
+
+1. DNS (at the registrar for `emath.top`): `CNAME  pi  →  chengzhiyi.github.io`. With Cloudflare, keep the record "DNS only" until HTTPS is issued.
+2. **Settings → Pages → Custom domain**: `pi.emath.top`, save, wait for the DNS check, then tick **Enforce HTTPS**. With Actions-based deploys the domain lives in this setting, so no `CNAME` file is needed.
+3. Recommended: verify `emath.top` under the account's **Settings → Pages → Add a domain** (a TXT record) so nobody else can claim a subdomain of it.
+
+`base` in the config is `/` to match the domain root. A build for the old project URL (`https://chengzhiyi.github.io/pi-webapp/`) needs `DOCS_BASE=/pi-webapp/`; once the custom domain is active GitHub redirects that URL to the new one, so the project path is only needed if the domain is removed.
+
+`ci.yml` ignores pushes that only touch `docs/**` or `docs.yml`, so a documentation-only merge deploys the site without running CI or publishing the package. Mixed pushes still run everything.
 
 ## Writing rules
 
