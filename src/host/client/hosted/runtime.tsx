@@ -131,7 +131,7 @@ export function useHostedPlugins(connected: boolean, sessionId: string | undefin
       // updates and failed reads must leave the mounted editor and undo intact.
       if (!catalog.offline) setInactivePlugins(catalog.plugins.filter(card => !card.installed || !card.enabled).map(card => card.pluginId));
       setError("");
-    } }).catch(cause => { if (alive) { if (cause.status !== 404) setError(String(cause)); } });
+    } }).catch(() => { /* Read failures are owned by the plugin management page; a global banner would only repeat them outside the layout. Previous cards stay mounted. */ });
     return () => { alive = false; abort.abort(); window.removeEventListener("pi:hosted-catalog-changed", reconnect); };
   }, [connected, sessionId, generation, revision]);
   const definitions = useRef(new WeakMap<HostedPluginCard, LoadedPlugin>());

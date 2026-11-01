@@ -133,7 +133,7 @@ export class HostedPluginManager {
       return {};
     }
     for (const [id, p] of Object.entries(value)) {
-      officialPlugin(id, this.installer.catalog);
+      if (!this.installer.catalog.some(known => known.id === id)) continue; // Retained for the host that owns it.
       if (!p || !["notify", "automatic", "pinned"].includes(p.updatePolicy) || p.updatePolicy === "pinned" && !p.pinnedVersion || p.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(p.pinnedVersion)) throw new HostedPluginError("invalid_storage", "Invalid plugin update policy");
     }
     // Legacy choices no longer constrain software-linked or manual updates.

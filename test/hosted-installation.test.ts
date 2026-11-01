@@ -189,3 +189,15 @@ test("domain RPC failures retain status/reason rather than treating unavailable 
   assert.deepEqual(failure(Object.assign(new Error("missing"),{status:404,reason:"diagram_unavailable"})),{code:"plugin_failed",message:"missing",status:404,reason:"diagram_unavailable"});
   assert.deepEqual(failure(Object.assign(new Error("bad"),{status:200,reason:"invalid reason"})),{code:"plugin_failed",message:"bad"});
 });
+
+test("an installation record for a plugin outside this host's catalog never blocks the known plugins", async t => {
+  const root = await temporary(t), foreign = "@chengzhiyi/pi-dev-only";
+  const record = { version: "0.1.0", digest: "a".repeat(64), integrity: "sha512-" + "A".repeat(86) + "==", directory: `${sha256(foreign)}/0.1.0-${"a".repeat(64)}`, installedAt: "2026-01-01T00:00:00.000Z" };
+  await mkdir(join(root, "packages"), { recursive: true });
+  await writeFile(join(root, "packages", "installed.json"), JSON.stringify({ schema: 1, revision: 3, versions: { [foreign]: [record] } }));
+  const installer = new HostedPluginInstaller({ root: join(root, "packages"), hostVersion: "0.1.50" });
+  const inventory = await installer.inventory();
+  assert.equal(inventory.revision, 3);
+  assert.deepEqual(inventory.versions[foreign], [record]); // retained for the host that owns it
+  assert.equal(inventory.versions[id], undefined);
+});

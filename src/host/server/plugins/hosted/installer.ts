@@ -46,7 +46,9 @@ export class HostedPluginInstaller {
     }
     if (index.schema !== 1 || !Number.isSafeInteger(index.revision) || index.revision < 0 || !index.versions || typeof index.versions !== "object" || Array.isArray(index.versions)) throw new HostedPluginError("invalid_storage", "Invalid plugin installation index");
     for (const [id, versions] of Object.entries(index.versions)) {
-      officialPlugin(id, this.catalog);
+      // Another host sharing this store (e.g. a dev host) may have installed a plugin this host's catalog
+      // lacks. Keep its record and bytes untouched but never let it block the plugins this host does know.
+      if (!this.catalog.some(p => p.id === id)) continue;
       if (!Array.isArray(versions) || versions.length > 16 || new Set(versions.map(v => v.version)).size !== versions.length) throw new HostedPluginError("invalid_storage", "Invalid installed version list");
       for (const version of versions) this.validateRecord(id, version);
     }
