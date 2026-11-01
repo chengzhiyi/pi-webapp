@@ -69,9 +69,7 @@ for (const [width, locale, theme] of [[320, "zh", "dark"], [1440, "en", "light"]
     await h.integration.handlers.views({ ...closed, operation: "change", dirty: false, busy: false });
     await h.integration.handlers.views({ ...closed, operation: "close" });
     pending = await record("unconfirmed-draft");
-    // Freshly written and not yet started: their registration may still be in flight, so
-    // they cannot settle themselves and must stay listed for an explicit decision.
-    const unknown = Array.from({ length: 19 }, (_, index) => ({ ...pending, mountId: `unknown-${index}`, viewToken: `unknown-${index}`, frameStarted: false, createdAt: Date.now() }));
+    const unknown = Array.from({ length: 19 }, (_, index) => ({ ...pending, mountId: `unknown-${index}`, viewToken: `unknown-${index}` }));
     await page.addInitScript(({ key, records }) => { if (location.protocol === "http:") sessionStorage.setItem(key, JSON.stringify(records)); }, { key: journal, records: [closed, pending, ...unknown] });
     const operations: string[] = [];
     let rejectDiscard = false;

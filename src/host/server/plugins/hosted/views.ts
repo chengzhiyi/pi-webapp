@@ -8,8 +8,6 @@ interface View {
   dirty: boolean; busy: boolean; frozen: boolean; commands: HostedViewCommand[];
   activeActions?: number;
   waiter?: () => void;
-  /** Last request from the owning document; live documents poll every few hundred ms. */
-  seenAt: number;
 }
 interface Barrier { id: number; pending: Set<string>; resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
 const fail = (message: string) => Object.assign(new Error(message), { status: 409, code: "view_barrier" });
@@ -30,9 +28,8 @@ export class HostedViewCoordinator {
   private generation: number;
   private pollMs: number;
   private freezeMs: number;
-  private staleMs: number;
-  constructor(pluginId: string, generation: number, pollMs = 20_000, freezeMs = 15_000, staleMs = 120_000) {
-    this.pluginId = pluginId; this.generation = generation; this.pollMs = pollMs; this.freezeMs = freezeMs; this.staleMs = staleMs;
+  constructor(pluginId: string, generation: number, pollMs = 20_000, freezeMs = 15_000) {
+    this.pluginId = pluginId; this.generation = generation; this.pollMs = pollMs; this.freezeMs = freezeMs;
   }
   /** Use only after the host's explicit undo-reset warning has been accepted. */
   allowImmediateReopen(accepted: boolean) { this.immediate = accepted; }
@@ -95,7 +92,7 @@ export class HostedViewCoordinator {
       }
       if ([...this.views.values()].some(view => view.scope.ownerId === scope.ownerId && view.identity.mountId === input.mountId)) throw fail("Duplicate mount");
       // Unknown until initialized and changed/flush is acknowledged; conservative initial dirty state.
-      this.views.set(token, { identity: { pluginId: input.pluginId, sessionId: input.sessionId, generation: input.generation, mountId: input.mountId }, scope: { ...scope }, token, kind: input.kind, initialized: false, dirty: input.kind !== "controller", busy: input.kind !== "controller", frozen: false, commands: [], seenAt: Date.now() });
+      this.views.set(token, { identity: { pluginId: input.pluginId, sessionId: input.sessionId, generation: input.generation, mountId: input.mountId }, scope: { ...scope }, token, kind: input.kind, initialized: false, dirty: input.kind !== "controller", busy: input.kind !== "controller", frozen: false, commands: [] });
       return { viewToken: token, commands: [] };
     }
     if (typeof input.viewToken !== "string" || !input.viewToken || input.viewToken.length > 200) throw fail("Invalid view capability");
@@ -103,17 +100,6 @@ export class HostedViewCoordinator {
     const retained = this.recoveries.get(input.viewToken);
     const closed = this.retired.get(input.viewToken);
     if (closed && !this.sameScope(closed, input, scope)) throw fail("Unknown or stale view capability");
-    if (input.operation === "status") {
-      // Read-only probe for another document's journal: no fence, retirement or acknowledgement.
-      if (view && !this.sameScope(view, input, scope) || retained && !this.sameScope(retained, input, scope)) throw fail("Unknown or stale view capability");
-      if (retained) return { viewToken: input.viewToken, commands: [], recovery: this.recovery(retained, "retained") };
-      if (closed) return { viewToken: input.viewToken, commands: [], recovery: { state: "retired" } };
-      if (!view) return { viewToken: input.viewToken, commands: [], recovery: { state: "absent" } };
-      // A waiting long poll is a live document even though it has not sent a new request.
-      const stale = !view.waiter && Date.now() - view.seenAt > this.staleMs;
-      return { viewToken: view.token, commands: [], recovery: { ...this.recovery(view, this.switching || view.activeActions ? "active" : "unconfirmed"), stale } };
-    }
-    if (view && this.sameScope(view, input, scope) && input.operation !== "reconcile" && input.operation !== "recover") view.seenAt = Date.now();
     if (input.operation === "reconcile" || input.operation === "recover") {
       if (view && !this.sameScope(view, input, scope) || retained && !this.sameScope(retained, input, scope)) throw fail("Unknown or stale view capability");
       if (retained) return { viewToken: input.viewToken, commands: [], recovery: this.recovery(retained, "retained") };

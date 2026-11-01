@@ -54,8 +54,6 @@ export type HostedViewInput = HostedViewIdentity & (
   | { operation: "close"; viewToken: string }
   /** Inspect/reconcile an exact previous-document capability; never a save acknowledgement. */
   | { operation: "reconcile"; viewToken: string }
-  /** Read-only: reports liveness without fencing, retiring or acknowledging anything. */
-  | { operation: "status"; viewToken: string }
   | { operation: "recover"; viewToken: string; confirmation: "retain-unconfirmed-edits" }
   /** A registration that never initialized cannot contain local authoring edits. */
   | { operation: "cancel-initialization"; viewToken: string }
@@ -66,8 +64,6 @@ export interface HostedViewCommand { id: number; type: "freeze" | "resume" | "co
 export interface HostedViewRecovery {
   state: "active" | "unconfirmed" | "retained" | "retired" | "absent";
   kind?: HostedMount["kind"]; dirty?: boolean; busy?: boolean;
-  /** STATUS only: the owning document stopped polling, so no window remains to save or close it. */
-  stale?: boolean;
 }
 /** An authoring view the host still holds for this owner; the token is a capability for its own owner only. */
 export interface HostedPendingView extends HostedViewIdentity { viewToken: string; kind: HostedMount["kind"]; dirty: boolean; busy: boolean }

@@ -6,8 +6,6 @@ export interface UnconfirmedView extends HostedViewIdentity {
   /** Retained for recovery is deliberately different from acknowledged/saved. */
   retained?: boolean;
   frameStarted?: boolean;
-  /** When this document wrote the record; absent on records from older builds. */
-  createdAt?: number;
   /** Found in another window's durable journal; discovery is not consent to retire it. */
   discovered?: boolean;
   backups?: Array<{ key: string; name: string }>;
@@ -25,7 +23,6 @@ function validRecord(value: unknown): value is UnconfirmedView {
     && ["sessionId", "pluginId", "mountId", "viewToken"].every(name => typeof record[name] === "string" && record[name].length > 0 && record[name].length <= 214)
     && Number.isSafeInteger(record.generation) && Number(record.generation) >= 1
     && (record.contentId === undefined || typeof record.contentId === "string")
-    && (record.createdAt === undefined || Number.isSafeInteger(record.createdAt))
     && ["retained", "frameStarted"].every(name => record[name] === undefined || typeof record[name] === "boolean")
     && (record.backups === undefined || Array.isArray(record.backups) && record.backups.every(backup => backup && typeof backup.key === "string" && typeof backup.name === "string"));
 }
@@ -126,7 +123,7 @@ function persist(record: UnconfirmedView) {
 export function rememberView(identity: HostedViewIdentity, viewToken: string, mount: HostedMount) {
   ownTokens.add(viewToken);
   records = records.filter(record => record.viewToken !== viewToken);
-  const record = { ...identity, viewToken, kind: mount.kind, contentId: mount.contentId, frameStarted: false, createdAt: Date.now() };
+  const record = { ...identity, viewToken, kind: mount.kind, contentId: mount.contentId, frameStarted: false };
   records.push(record); persist(record); saveSession();
 }
 export function markViewConnecting(viewToken: string) {
@@ -156,72 +153,6 @@ export async function reconcileView(item: UnconfirmedView): Promise<HostedViewRe
     forgetView(item.viewToken); state = { ...state, state: "retired" };
   }
   if (state?.state === "retired" || state?.state === "absent" && item.kind === "controller") forgetView(item.viewToken);
-  return state;
-}
-/** A REGISTER request cannot still be in flight this long after its record was written. */
-const settledMs = 5 * 60_000;
-const goneCodes = new Set(["invalid_scope", "unknown_plugin"]);
-const officialDrawing = "@chengzhiyi/pi-excalidraw";
-function fingerprint(elements: unknown) {
-  if (!Array.isArray(elements)) return undefined;
-  const live = elements.filter(element => element && typeof element === "object" && !element.isDeleted)
-    .map(element => [String(element.id), element.version, element.versionNonce]);
-  return JSON.stringify(live.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-}
-/** True only when every local copy this record protects equals the drawing the host already saved. */
-async function backupsSaved(item: UnconfirmedView, generation: number | undefined) {
-  if (item.kind === "controller") return true;
-  const drafts = recoveryDrafts(item);
-  if (!drafts.length) return true;
-  if (item.pluginId !== officialDrawing || generation === undefined) return false;
-  for (const draft of drafts) {
-    const id = /^recovery-(.+)\.excalidraw$/.exec(draft.name)?.[1];
-    if (!id) return false;
-    try {
-      const saved = await hostedApi.action({ sessionId: item.sessionId, pluginId: item.pluginId, generation, action: "get", input: { id } }) as { scene?: { elements?: unknown } };
-      const local = fingerprint(JSON.parse(draft.json).elements);
-      if (!local || local !== fingerprint(saved?.scene?.elements)) return false;
-    } catch { return false; }
-  }
-  return true;
-}
-/** Clear records that no longer protect anything, using only read-only probes.
- * Unlike RECONCILE this is safe for another window's records: live documents keep
- * polling, so "absent" or "stale" means no window remains to save, close or register
- * the view. Records whose local drawing copy differs from the saved drawing, and
- * records the user explicitly retained, always stay for an explicit decision. */
-export async function settleView(item: UnconfirmedView, generation?: number, now = Date.now()): Promise<HostedViewRecovery | undefined> {
-  if (item.retained) return { state: "retained" };
-  const settled = item.frameStarted === true || item.createdAt === undefined || now - item.createdAt > settledMs;
-  const retire = async () => {
-    if (!await backupsSaved(item, generation)) return false;
-    forgetView(item.viewToken); return true;
-  };
-  let state: HostedViewRecovery | undefined;
-  try { state = (await hostedApi.view({ ...item, operation: "status" })).recovery; }
-  catch (cause) {
-    const code = (cause as { code?: unknown })?.code;
-    // The session or plugin is gone, so the host holds no view that could still change.
-    if (settled && typeof code === "string" && goneCodes.has(code) && await retire()) return { state: "retired" };
-    // Older hosts have no STATUS; keep the original conservative reconciliation.
-    if (cause instanceof Error && cause.message === "Unknown view operation") return reconcileView(item);
-    throw cause;
-  }
-  if (state?.state === "retired") { forgetView(item.viewToken); return state; }
-  if (state?.state === "absent") {
-    if (settled && await retire()) return { state: "retired" };
-    return settled || item.discovered ? state : reconcileView(item);
-  }
-  if (state?.state === "unconfirmed" && state.stale) {
-    // Its document is gone. Controllers hold no authoring data; a clean view may close normally.
-    if (item.kind === "controller") return reconcileView({ ...item, discovered: false });
-    if (!state.dirty && !state.busy && await backupsSaved(item, generation)) {
-      try { await hostedApi.view({ ...item, operation: "close" }); forgetView(item.viewToken); return { state: "retired" }; }
-      catch { return state; }
-    }
-    return state;
-  }
-  if (state?.state === "unconfirmed" && !item.discovered) return reconcileView(item);
   return state;
 }
 export async function retainViewForRecovery(item: UnconfirmedView): Promise<void> {
