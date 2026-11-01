@@ -19,6 +19,7 @@ Everything lives under Pi's data folder, `~/.pi/agent` on macOS and Linux and `%
     ├── launcher.json
     ├── launcher.log
     ├── workspaces.json
+    ├── trash/
     ├── plugins.json
     ├── attachments/
     ├── hosted/
@@ -35,6 +36,7 @@ Everything lives under Pi's data folder, `~/.pi/agent` on macOS and Linux and `%
 | `pi-web/launcher.json` | State of the running service: PID, version and the **full address with its access token**. Mode `600`. Removed on a clean stop. | **Yes. Never share.** |
 | `pi-web/launcher.log` | Append-only log of launcher events, one JSON object per line. Mode `600`. | Review before sharing. |
 | `pi-web/workspaces.json` | The workspace list, and workspaces you hid. | Reveals project paths. |
+| `pi-web/trash/` | Chats you deleted in the sidebar, moved here with a timestamp prefix instead of being erased. Move a file back under `sessions/` to restore it. | **Yes** |
 | `pi-web/plugins.json` | Which built-in tools are switched on or off. Created when you change a switch. | No |
 | `pi-web/attachments/` | Files you uploaded in chats. | **Yes** |
 | `pi-web/hosted/` | Downloaded plugins (such as Excalidraw), their data, and their policies. | Drawing data may be sensitive. |
@@ -50,7 +52,7 @@ To keep your work, copy `sessions/`, `auth.json`, `models.json`, `settings.json`
 
 ## What you can safely delete
 
-- A single chat: stop the service and delete its `.jsonl` file.
+- A single chat: use **Delete chat** in the sidebar, which moves it to `pi-web/trash/`. Delete the file there to erase it for good.
 - `pi-web/` as a whole: only if you accept forgetting workspaces, attachments, downloaded plugins and update state. Your sessions and credentials are outside it.
 - **Don't** delete the whole data folder, `pi-web/releases/` or `pi-web/hosted/` by hand to "fix" a problem; see [Troubleshooting](../troubleshooting).
 

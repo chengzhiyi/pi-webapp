@@ -58,7 +58,7 @@ Yes. They share Pi's saved sessions, so chats you started in the terminal appear
 
 ### Where are my chats stored? How do I delete one?
 
-In `~/.pi/agent/sessions/`, one file per session ([Files and directories](./reference/files)). pi-webapp has no delete button. To remove a chat, stop the service and delete its file.
+In `~/.pi/agent/sessions/`, one file per session ([Files and directories](./reference/files)). To remove a chat, use the **…** button on its row in the sidebar and choose **Delete chat**. The file moves to `pi-web/trash/` instead of being erased, so you can move it back to restore it ([Sessions and workspaces](./sessions#rename-or-delete-a-chat)).
 
 ### What happens to my files if I remove a workspace?
 

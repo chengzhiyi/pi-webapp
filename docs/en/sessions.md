@@ -16,9 +16,18 @@ A workspace is not a permission boundary. The agent and terminal can reach anyth
 - Click any chat under a workspace to open it. Chats are listed newest first, with a relative time such as `now` or `2min` and a state of **Running** or **Idle**.
 - The search icon next to **Workspaces** searches chats by name and workspaces by path.
 
-A new chat is named after your first message. Until you send one, it shows a placeholder title (currently in Chinese).
+A new chat is named after your first message, and shows **New chat** until you send one. **New session** reuses the workspace's untouched chat instead of creating another, and a chat with nothing in it is listed only while it is open.
 
 Chats run independently. Switching to another chat, workspace or page does not stop one that is working: when you return, its output, history and any waiting interaction are there.
+
+## Rename or delete a chat {#rename-or-delete-a-chat}
+
+Every chat row has a **…** button (**Chat actions for** the chat's name) with two items.
+
+- **Rename** opens a **Rename chat** dialog. Type a name of up to 120 characters and click **Save**. Leave it empty to go back to the first message as the title. The name is stored in Pi's own session file, so the Pi terminal shows it too.
+- **Delete chat** opens **Delete chat?**. Click **Delete** and the chat leaves the list. Its file is **moved**, not erased, to `pi-web/trash/` in the Pi data folder, so you can restore it by moving the file back to its place under `sessions/`. Your project files are not touched.
+
+A chat that is still running can't be deleted: the dialog asks you to wait for the reply to finish. A chat that is open in the Pi terminal (the [`/web` mode](./use-from-pi)) can't be deleted from the browser either; switch the terminal to another chat first. If you delete the chat you are looking at, a fresh chat opens in its place.
 
 ## Add and remove workspaces
 
@@ -58,7 +67,7 @@ Pi stores each session as a JSON Lines file under its data folder, grouped by wo
 ~/.pi/agent/sessions/--Users-you-projects-my-app--/2026-11-01T10-28-05-873Z_01a196a6-f271-75c0-8cb5-7a0839f57917.jsonl
 ```
 
-The folder name is the workspace path with `/` replaced by `-`. pi-webapp has no rename or delete for sessions. To remove one, stop the service and delete its file. Never delete the whole `~/.pi` folder to fix the sidebar: it also holds your credentials and settings ([Files and directories](./reference/files)).
+The folder name is the workspace path with `/` replaced by `-`. Deleting a chat in the sidebar (above) moves its file to `pi-web/trash/`; you can also manage the files yourself while the service is stopped. Never delete the whole `~/.pi` folder to fix the sidebar: it also holds your credentials and settings ([Files and directories](./reference/files)).
 
 ## Several chats in one project
 
