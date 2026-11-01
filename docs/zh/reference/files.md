@@ -19,6 +19,7 @@
     ├── launcher.json
     ├── launcher.log
     ├── workspaces.json
+    ├── trash/
     ├── plugins.json
     ├── attachments/
     ├── hosted/
@@ -35,6 +36,7 @@
 | `pi-web/launcher.json` | 运行中服务的状态：PID、版本，以及**带访问令牌的完整地址**。权限 `600`。正常停止时会被删除。 | **是。绝对不要分享。** |
 | `pi-web/launcher.log` | 只追加的启动器事件日志，每行一个 JSON 对象。权限 `600`。 | 分享前请先检查。 |
 | `pi-web/workspaces.json` | 工作区列表，以及你隐藏的工作区。 | 会暴露项目路径。 |
+| `pi-web/trash/` | 你在侧栏里删除的会话，会带着时间戳前缀移到这里，而不是被抹掉。把文件移回 `sessions/` 下即可恢复。 | **是** |
 | `pi-web/plugins.json` | 哪些内置工具开着或关着。你改动开关时创建。 | 否 |
 | `pi-web/attachments/` | 你在会话里上传的文件。 | **是** |
 | `pi-web/hosted/` | 已下载的插件（比如 Excalidraw）、它们的数据和策略。 | 图稿数据可能敏感。 |
@@ -50,7 +52,7 @@
 
 ## 哪些可以放心删除
 
-- 单个会话：停止服务，删掉它的 `.jsonl` 文件。
+- 单个会话：使用侧栏里的 **删除会话**，它会被移到 `pi-web/trash/`。要彻底删除，再删掉那里的文件。
 - 整个 `pi-web/`：只有当你接受忘掉工作区、附件、已下载的插件和更新状态时才可以。你的会话和凭据在它之外。
 - **不要**为了“修好”问题而手动删除整个数据目录、`pi-web/releases/` 或 `pi-web/hosted/`，见[排错](../troubleshooting)。
 

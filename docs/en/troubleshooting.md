@@ -84,9 +84,9 @@ On a remote machine, [forward the port](./security#remote-machines) instead of e
 
 ### A workspace or chat is missing from the sidebar
 
-**Cause.** You removed the workspace from the list, or its chats are stored under a different Pi data folder (`PI_CODING_AGENT_DIR`).
+**Cause.** You removed the workspace from the list, or its chats are stored under a different Pi data folder (`PI_CODING_AGENT_DIR`). A chat with nothing in it is listed only while it is open, and a chat you deleted is in `pi-web/trash/`.
 
-**Fix.** Click **Add workspace** and choose the folder again. Check [Files and directories](./reference/files) if you use a custom data folder. Removing a workspace never deletes its sessions.
+**Fix.** Click **Add workspace** and choose the folder again. Check [Files and directories](./reference/files) if you use a custom data folder. Removing a workspace never deletes its sessions. To bring back a deleted chat, move its file from `pi-web/trash/` back under `sessions/`.
 
 ## Models and replies {#models}
 
