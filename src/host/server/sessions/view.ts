@@ -109,7 +109,8 @@ export function sessionTitle(name: string | undefined, messages: ViewMessage[]):
   if (explicit) return explicit;
   const firstUser = messages.find((message) => message.role === "user");
   const text = displayUserMessage(firstUser?.blocks.find((block) => block.kind === "text")?.text ?? "").text.replace(/\s+/g, " ").trim();
-  return text ? text.slice(0, 50) : "当前会话";
+  // Untitled chats stay empty here; the browser shows a localized placeholder.
+  return text.slice(0, 50);
 }
 
 export function projectSession(ctx: ExtensionContext, name?: string, pluginIds: readonly string[] = []): SessionView {

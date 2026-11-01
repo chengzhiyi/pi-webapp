@@ -9,6 +9,7 @@ import { contentBlocks, projectSession, PAUSED_ENTRY, type ViewMessage } from ".
 import { WorkspaceRegistry, workspaceRegistryPath, workspaceDirectory, requireWorkspaceDirectory, WorkspaceUnavailableError } from "../workspaces/workspaces.ts";
 import { WorkspaceSessions } from "../sessions/workspace-sessions.ts";
 import { sessionsForWorkspace } from "../sessions/sessions-for-workspace.ts";
+import { moveSessionToTrash } from "../sessions/session-trash.ts";
 import { buildResourceInventory } from "../plugins/config-inventory.ts";
 import { preferBrowserLogin, type LoginMethod } from "../models/provider-login.ts";
 import { addCustomProvider, type CustomProviderInput } from "../models/custom-provider.ts";
@@ -181,15 +182,17 @@ async function workspaceList(): Promise<WorkspaceListView> {
   const tuiPath = tui ? await workspaceDirectory(tui.cwd).catch((cause) => { shared.bridge?.reportError?.(cause, { stage: "workspace_path" }); return null; }) : null;
   const allSessions = await SessionManager.listAll();
   const retained = shared.workspaceSessions?.retainedSessions() ?? [];
-  if (tui && tuiPath) retained.push({ sessionId: tui.sessionId, cwd: tuiPath, path: null, name: tui.name, modified: tui.messages.at(-1)?.timestamp ?? new Date().toISOString(), idle: tui.idle });
+  if (tui && tuiPath) retained.push({ sessionId: tui.sessionId, cwd: tuiPath, path: null, name: tui.name, modified: tui.messages.at(-1)?.timestamp ?? new Date().toISOString(), idle: tui.idle, blank: tui.idle && shared.tuiPrompts.length === 0 && !tui.messages.some((message) => message.role === "user") });
   const sessions: WorkspaceSessionView[] = (await Promise.all(items.map(async (workspace) => {
     const saved = await sessionsForWorkspace(workspace.path, allSessions).catch((cause) => {
       if (cause instanceof WorkspaceUnavailableError) workspace.available = false;
       else shared.bridge?.reportError?.(cause, { stage: "workspace_sessions" });
       return [];
     });
-    const rows: WorkspaceSessionView[] = saved.map((session) => ({ id: session.id, workspaceId: workspace.id, path: session.path, name: session.name || session.firstMessage?.slice(0, 50) || "当前会话", modified: session.modified.toISOString(), idle: true }));
+    const rows: WorkspaceSessionView[] = saved.map((session) => ({ id: session.id, workspaceId: workspace.id, path: session.path, name: session.name || session.firstMessage?.slice(0, 50) || "", modified: session.modified.toISOString(), idle: true }));
     for (const session of retained.filter(session => session.cwd === workspace.path)) {
+      // Empty chats appear only while open, so "New session" never leaves blank rows behind.
+      if (session.blank && session.sessionId !== active.sessionId) continue;
       const index = rows.findIndex(item => item.id === session.sessionId);
       const row = { id: session.sessionId, workspaceId: workspace.id, path: session.path ?? rows[index]?.path ?? null, name: session.name, modified: session.modified, idle: session.idle };
       if (index < 0) rows.unshift(row); else rows[index] = row;
@@ -224,12 +227,25 @@ async function selectWorkspace(id: string, fresh = false): Promise<void> {
     shared.bridge?.publish({ type: "snapshot", session: snapshot() });
   } else {
     if (!shared.workspaceSessions) throw new Error("Pi 工作区服务不可用");
-    await shared.workspaceSessions.open(workspace.path, fresh ? "new" : "continue");
+    // Repeated "new session" clicks reuse the untouched chat instead of piling up empty ones.
+    if (!fresh || !await shared.workspaceSessions.reuseBlank(workspace.path)) await shared.workspaceSessions.open(workspace.path, fresh ? "new" : "continue");
     shared.selected = "sdk";
     shared.activeWorkspaceId = id;
     shared.bridge?.publish({ type: "snapshot", session: snapshot() });
   }
   await publishWorkspaces();
+}
+
+/** A chat may be renamed or deleted only through the workspace that lists it. */
+async function requireSavedOrRetained(workspaceId: string, id: string, path: string) {
+  const workspace = shared.workspaces?.get(workspaceId);
+  if (!workspace) throw new Error("工作区不存在");
+  const canonical = await requireWorkspaceDirectory(workspace.path);
+  if (shared.workspaceSessions?.hasSession(canonical, id)) return workspace;
+  if (shared.current?.sessionManager.getSessionId() === id && await workspaceDirectory(shared.current.cwd) === canonical) return workspace;
+  const saved = await sessionsForWorkspace(canonical);
+  if (!saved.some((item) => item.id === id && item.path === path)) throw new Error("会话不属于该工作区");
+  return workspace;
 }
 
 function sameSession(sessionId: string): ExtensionContext {
@@ -598,6 +614,29 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
               }
               await publishWorkspaces();
             },
+            async renameSession(workspaceId, id, path, name) {
+              const title = name.replace(/\s+/g, " ").trim();
+              if (title.length > 120) throw new Error("会话名称过长");
+              await requireSavedOrRetained(workspaceId, id, path);
+              if (shared.current?.sessionManager.getSessionId() === id && shared.pi) shared.pi.setSessionName(title);
+              else if (!shared.workspaceSessions?.rename(id, title)) SessionManager.open(path).appendSessionInfo(title);
+              if (shared.selected === "tui" && shared.current?.sessionManager.getSessionId() === id) shared.bridge?.publish({ type: "snapshot", session: snapshot() });
+              await publishWorkspaces();
+            },
+            async deleteSession(workspaceId, id, path) {
+              const workspace = await requireSavedOrRetained(workspaceId, id, path);
+              if (shared.current?.sessionManager.getSessionId() === id) throw new Error("该会话正在 Pi 终端中使用，请在终端里切换到其他会话后再删除");
+              const discarded = await shared.workspaceSessions?.discard(id) ?? null;
+              const file = discarded?.path ?? (path || null);
+              if (file) await moveSessionToTrash(file, getAgentDir());
+              if (discarded?.wasActive && shared.selected === "sdk") {
+                await shared.workspaceSessions!.open(workspace.path, "new");
+                shared.selected = "sdk";
+                shared.activeWorkspaceId = workspaceId;
+                shared.bridge?.publish({ type: "snapshot", session: snapshot() });
+              }
+              await publishWorkspaces();
+            },
             async models() {
               if (shared.selected === "sdk") return shared.workspaceSessions?.models() ?? [];
               const active = shared.current;
@@ -771,7 +810,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
               if (shared.selected === "sdk") {
                 const workspace = shared.workspaces?.get(shared.activeWorkspaceId ?? "");
                 if (!workspace) throw new Error("工作区不存在");
-                await shared.workspaceSessions!.open(workspace.path, "new");
+                if (!await shared.workspaceSessions!.reuseBlank(workspace.path)) await shared.workspaceSessions!.open(workspace.path, "new");
                 await publishWorkspaces();
                 return;
               }
@@ -800,6 +839,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           host.newSessionInWorkspace = shared.lifecycle.wrap(host.newSessionInWorkspace);
           host.removeWorkspace = shared.lifecycle.wrap(host.removeWorkspace);
           host.selectSession = shared.lifecycle.wrap(host.selectSession);
+          host.renameSession = shared.lifecycle.wrap(host.renameSession!);
+          host.deleteSession = shared.lifecycle.wrap(host.deleteSession!);
           host.newSession = shared.lifecycle.wrap(host.newSession);
           host.updateConfig = shared.lifecycle.wrap(host.updateConfig);
           shared.bridge = await startBridge(host, webRoot, shared.telemetry);

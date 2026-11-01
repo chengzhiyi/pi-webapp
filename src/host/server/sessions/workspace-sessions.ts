@@ -121,6 +121,17 @@ export class WorkspaceSessions {
     });
   }
 
+  /** Shows the workspace's untouched chat instead of creating another; false when there is none. */
+  reuseBlank(path: string): Promise<boolean> {
+    return this.queue.run(async () => {
+      this.ensureAvailable();
+      const untouched = this.selectedByWorkspace.get(await requireWorkspaceDirectory(path));
+      if (!untouched || !this.blank(untouched)) return false;
+      this.activate(untouched);
+      return true;
+    });
+  }
+
   /** Rebuild immutable extension paths and catalog while retaining session history. */
   reload(): Promise<void> {
     return this.queue.run(async () => {
@@ -142,13 +153,45 @@ export class WorkspaceSessions {
   hasSession(cwd: string, id: string): boolean { return this.runtimes.get(id)?.cwd === cwd; }
   hasWorkspace(cwd: string): boolean { return this.selectedByWorkspace.has(cwd); }
   retainedSessions() {
-    return [...this.runtimes.values()].map(({ session, cwd, prompts }) => {
+    return [...this.runtimes.values()].map((runtime) => {
+      const { session, cwd, prompts } = runtime;
       const branch = session.sessionManager.getBranch();
       const messages = branch.flatMap(entry => { const message = projectEntry(entry); return message ? [message] : []; });
       return {
         sessionId: session.sessionManager.getSessionId(), cwd, path: session.sessionManager.getSessionFile() ?? null, idle: session.isIdle && !prompts.sending,
         name: sessionTitle(session.sessionManager.getSessionName(), messages), modified: branch.at(-1)?.timestamp ?? new Date().toISOString(),
+        blank: this.blank(runtime),
       };
+    });
+  }
+  /** Nothing sent, queued or running: an empty chat the sidebar need not list. */
+  private blank(runtime: WorkspaceRuntime): boolean {
+    return !runtime.detached && !runtime.closing && runtime.session.isIdle && !runtime.prompts.sending && runtime.prompts.length === 0
+      && !runtime.session.sessionManager.getBranch().some(entry => projectEntry(entry)?.role === "user");
+  }
+  /** Names a retained chat; false when this service does not hold it. */
+  rename(id: string, name: string): boolean {
+    const runtime = this.runtimes.get(id);
+    if (!runtime || runtime.closing) return false;
+    if (runtime.detached) throw new Error("插件会话不能重命名或删除");
+    runtime.session.setSessionName(name);
+    return true;
+  }
+  /** Closes a retained chat so its file can be removed; null when this service does not hold it. */
+  discard(id: string): Promise<{ path: string | null; cwd: string; wasActive: boolean } | null> {
+    return this.queue.run(async () => {
+      const runtime = this.runtimes.get(id);
+      if (!runtime || runtime.closing) return null;
+      if (runtime.detached) throw new Error("插件会话不能重命名或删除");
+      if (!runtime.session.isIdle || runtime.prompts.sending || runtime.prompts.length > 0) throw new Error("Pi 正在运行，请等待当前回复结束");
+      const wasActive = this.active === runtime;
+      const path = runtime.session.sessionManager.getSessionFile() ?? null;
+      this.runtimes.delete(id);
+      if (this.selectedByWorkspace.get(runtime.cwd) === runtime) this.selectedByWorkspace.delete(runtime.cwd);
+      if (wasActive) this.active = null;
+      await this.close(runtime, "quit");
+      this.onSessionsChanged();
+      return { path, cwd: runtime.cwd, wasActive };
     });
   }
   private activate(runtime: WorkspaceRuntime): void {

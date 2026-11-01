@@ -3,7 +3,7 @@ import { IconFolderOpen16, IconProjectAddOutline16, StateDot } from "../../../we
 import { IconChevronDownOutline14, IconCloseFill14, IconSearchOutline16, IconFolderClose16, IconNewChatOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { Button } from "../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../web/src/ui/primitives/Modal.tsx";
-import { PiWorkspaceActions } from "./PiWorkspaceActions.tsx";
+import { PiSessionActions, PiWorkspaceActions } from "./PiWorkspaceActions.tsx";
 import { sessionTimeLabel } from "../../../web/src/ui/workspace/session-time.ts";
 import { DirectoryBrowser } from "../../../web/src/ui/workspace/DirectoryBrowser.tsx";
 import type { DirectoryListing, DirectoryPickerKind, SessionView, WorkspaceListView } from "./pi-bridge.ts";
@@ -27,7 +27,11 @@ interface Props {
   onRemove: (id: string) => Promise<void>;
   onSelectSession: (workspaceId: string, id: string, path: string | null) => Promise<void>;
   onNewSession: (workspaceId: string) => Promise<void>;
+  onRenameSession: (workspaceId: string, id: string, path: string | null, name: string) => Promise<void>;
+  onDeleteSession: (workspaceId: string, id: string, path: string | null) => Promise<void>;
 }
+
+interface SessionTarget { workspaceId: string; id: string; path: string | null; name: string; running: boolean }
 
 /** Workspace browser with a header, workspace groups and session rows. */
 const translate = (key: string, params?: Record<string, string>) => {
@@ -41,12 +45,23 @@ const translate = (key: string, params?: Record<string, string>) => {
   return (copy[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => params?.[name] ?? "");
 };
 
-export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = true, expandSidebar, session, workspaces, onAdd, directoryPickerKind, pickDirectory, listDirectory, createDirectory, onRemove, onSelectSession, onNewSession }: Props) {
+export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = true, expandSidebar, session, workspaces, onAdd, directoryPickerKind, pickDirectory, listDirectory, createDirectory, onRemove, onSelectSession, onNewSession, onRenameSession, onDeleteSession }: Props) {
   const locale = useLocale();
   const [now, setNow] = useState(Date.now);
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
+  const [sessionMenuId, setSessionMenuId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
+  const renameInput = useRef<HTMLInputElement>(null);
+  // Runs after the dialog's own focus handling, so typing replaces the current name.
   useEffect(() => {
-    if (!wide) { setWorkspaceMenuId(null); return; }
+    if (!renameTarget) return;
+    const frame = requestAnimationFrame(() => { renameInput.current?.focus(); renameInput.current?.select(); });
+    return () => cancelAnimationFrame(frame);
+  }, [renameTarget]);
+  useEffect(() => {
+    if (!wide) { setWorkspaceMenuId(null); setSessionMenuId(null); return; }
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -137,11 +152,25 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
             </span>
           </div>
           <div id={`${listId}-${workspace.id}`} role="group" aria-label={workspace.title} hidden={!open}>
-          {open && workspaces.sessions.filter((item) => item.workspaceId === workspace.id && (!needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || item.name.toLocaleLowerCase().includes(needle))).map((item) => <button key={item.id} type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${active && session?.sessionId === item.id ? rowsCss.selected : ""}`} title={item.name} aria-label={item.name} aria-describedby={`${listId}-${item.id}-status`} aria-current={active && session?.sessionId === item.id ? "page" : undefined} disabled={disabled || unavailable} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
-            <span className={rowsCss.slot}>{(session?.sessionId === item.id ? !session.idle : item.idle === false) && <StateDot state="ongoing" />}</span><span className={rowsCss.title}>{item.name}</span>
-            <time className={css.sessionTime} dateTime={item.modified} title={item.modified}>{sessionTimeLabel(item.modified, now, locale)}</time>
-            <span id={`${listId}-${item.id}-status`} className={rowsCss.visuallyHidden}>{(session?.sessionId === item.id ? !session.idle : item.idle === false) ? t("运行中", "Running") : t("空闲", "Idle")}</span>
-          </button>)}
+          {open && workspaces.sessions.filter((item) => item.workspaceId === workspace.id && (!needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || item.name.toLocaleLowerCase().includes(needle))).map((item) => {
+            const current = active && session?.sessionId === item.id;
+            const running = session?.sessionId === item.id ? !session.idle : item.idle === false;
+            const title = item.name || t("新会话", "New chat");
+            const target = { workspaceId: workspace.id, id: item.id, path: item.path, name: item.name, running };
+            return <div key={item.id} className={css.sessionLine} data-menu-open={sessionMenuId === item.id || undefined}>
+              <button type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${current ? rowsCss.selected : ""}`} title={title} aria-label={title} aria-describedby={`${listId}-${item.id}-status`} aria-current={current ? "page" : undefined} disabled={disabled || unavailable} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
+                <span className={rowsCss.slot}>{running && <StateDot state="ongoing" />}</span><span className={`${rowsCss.title} ${item.name ? "" : css.untitled}`}>{title}</span>
+                <time className={css.sessionTime} dateTime={item.modified} title={item.modified}>{sessionTimeLabel(item.modified, now, locale)}</time>
+                <span id={`${listId}-${item.id}-status`} className={rowsCss.visuallyHidden}>{running ? t("运行中", "Running") : t("空闲", "Idle")}</span>
+              </button>
+              <span className={css.rowActions}>
+                <PiSessionActions title={title} disabled={disabled || unavailable} open={sessionMenuId === item.id}
+                  onOpenChange={open => setSessionMenuId(open ? item.id : null)}
+                  onRename={() => { setError(""); setRenameValue(item.name); setRenameTarget(target); }}
+                  onDelete={() => { setError(""); setDeleteTarget(target); }} />
+              </span>
+            </div>;
+          })}
           {open && !needle && !workspaces.sessions.some(item => item.workspaceId === workspace.id) && <p className={browserCss.empty}>{t("还没有会话，创建新会话开始", "No sessions yet. Create a session to start.")}</p>}
           </div>
         </div>;
@@ -153,6 +182,19 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
     <Modal open={removeTarget !== null} onClose={() => { if (!busy) setRemoveTarget(null); }} title={t("移除工作区？", "Remove workspace?")} closeLabel={t("关闭", "Close")}
       footer={<><Button variant="outline" disabled={busy} onClick={() => setRemoveTarget(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={disabled} onClick={() => { if (removeTarget) void run(async () => { await onRemove(removeTarget.id); setRemoveTarget(null); }); }}>{t("从列表移除", "Remove from list")}</Button></>}>
       <p>{removeTarget?.title}</p><p>{t("仅从侧栏移除，不删除目录、文件或会话历史。", "Only removes it from the sidebar. Directories, files and session history are not deleted.")}</p>
+      {error && <p role="alert">{error}</p>}
+    </Modal>
+    <Modal open={renameTarget !== null} onClose={() => { if (!busy) setRenameTarget(null); }} title={t("重命名会话", "Rename chat")} closeLabel={t("关闭", "Close")}
+      footer={<><Button variant="outline" disabled={busy} onClick={() => setRenameTarget(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" type="submit" form={`${listId}-rename`} disabled={disabled}>{t("保存", "Save")}</Button></>}>
+      <form id={`${listId}-rename`} onSubmit={(event) => { event.preventDefault(); if (renameTarget) void run(async () => { await onRenameSession(renameTarget.workspaceId, renameTarget.id, renameTarget.path, renameValue); setRenameTarget(null); }); }}>
+        <input className={css.renameInput} aria-label={t("会话名称", "Chat name")} placeholder={t("留空则使用第一条消息", "Leave empty to use the first message")} maxLength={120} ref={renameInput} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+      </form>
+      {error && <p role="alert">{error}</p>}
+    </Modal>
+    <Modal open={deleteTarget !== null} onClose={() => { if (!busy) setDeleteTarget(null); }} title={t("删除会话？", "Delete chat?")} closeLabel={t("关闭", "Close")}
+      footer={<><Button variant="outline" disabled={busy} onClick={() => setDeleteTarget(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={disabled || deleteTarget?.running} onClick={() => { if (deleteTarget) void run(async () => { await onDeleteSession(deleteTarget.workspaceId, deleteTarget.id, deleteTarget.path); setDeleteTarget(null); }); }}>{t("删除", "Delete")}</Button></>}>
+      <p>{deleteTarget?.name || t("新会话", "New chat")}</p>
+      <p>{deleteTarget?.running ? t("Pi 正在运行，请等待当前回复结束后再删除。", "Pi is still working. Wait for the reply to finish before deleting.") : t("会话会从列表中移除，文件移到 Pi 数据目录的 pi-web/trash 中，可手动恢复。项目文件不受影响。", "The chat leaves the list and its file moves to pi-web/trash in the Pi data folder, where you can restore it by hand. Project files are not affected.")}</p>
       {error && <p role="alert">{error}</p>}
     </Modal>
     <DirectoryBrowser open={dialogOpen} busy={busy} listDirectory={listDirectory} createDirectory={createDirectory}

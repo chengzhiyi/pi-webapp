@@ -183,6 +183,7 @@ const expectedMessages = new Set([
   "请先切换到其他工作区", "新会话已取消", "已有登录正在进行", "模型不可用", "模型提供方未配置认证", "当前模型不支持此推理强度",
   "其他提供方的登录正在进行，请先完成或取消当前登录", "当前会话没有暂停的任务", "请先完成当前交互或审批", "请先选择模型", "请先连接当前模型", "插件未启用", "会话运行实例已切换",
   "提供方已存在", "文件超过 20 MB", "请求内容过大", "会话不属于该工作区", "推理强度无效",
+  "会话名称过长", "会话不存在", "插件会话不能重命名或删除", "该会话正在 Pi 终端中使用，请在终端里切换到其他会话后再删除",
 ]);
 export function isExpectedError(cause: unknown): boolean {
   return cause instanceof Error && (cause.name === "AbortError" || expectedMessages.has(cause.message));

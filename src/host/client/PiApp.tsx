@@ -180,6 +180,8 @@ export function PiApp() {
       onRemove={(id) => navigate(() => bridge.removeWorkspace(id))}
       onSelectSession={(workspaceId, id, path) => navigate(() => bridge.selectSession(workspaceId, id, path))}
       onNewSession={(id) => navigate(() => bridge.newSessionInWorkspace(id))}
+      onRenameSession={(workspaceId, id, path, name) => bridge.renameSession(workspaceId, id, path, name)}
+      onDeleteSession={(workspaceId, id, path) => navigate(() => bridge.deleteSession(workspaceId, id, path))}
     />;
     return options?.fallback ?? null;
   };
