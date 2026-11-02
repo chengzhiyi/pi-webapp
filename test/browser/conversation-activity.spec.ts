@@ -165,6 +165,14 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await page.getByRole("button", { name: /^(复制代码|Copy code)$/ }).click();
     await expect(page.getByRole("button", { name: /^(已复制|Copied)$/ })).toBeVisible();
     expect(await page.evaluate(() => (window as Window & { copiedCode?: string }).copiedCode)).toBe("const answer = 42;\n");
+    // The finished reply's copy action takes the same fallback.
+    const copyReply = page.getByRole("button", { name: /^(复制回复|Copy reply)$/ });
+    const earlierReplies = await copyReply.count();
+    session = { ...session, idle: true, streaming: null, messages: [...session.messages, { ...recovered, id: "recovered" }] };
+    bridge.publish({ type: "snapshot", session });
+    await expect(copyReply).toHaveCount(earlierReplies + 1);
+    await copyReply.last().click();
+    await expect.poll(() => page.evaluate(() => (window as Window & { copiedCode?: string }).copiedCode)).toBe("Recovered response\n\n```ts\nconst answer = 42;\n```");
     session = { ...session, sessionId: "other-session", idle: true, messages: [], streaming: null }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toHaveCount(0);
     expect(errors).toEqual([]);
