@@ -31,7 +31,7 @@ for (const fault of ["cancel", "interrupt"] as const) test(`actual management UI
       await manager.getByRole("button", { name: "Cancel download (no rollback after commit)", exact: true }).click();
       await expect.poll(() => cancelled).toBe(true);
     } else stream.error(new Error("connection reset during archive"));
-    await expect(manager.getByRole("alert").first()).toContainText(fault === "cancel" ? /cancel/i : /Cannot reach/);
+    await expect(page.getByRole("alert").first()).toContainText(fault === "cancel" ? /cancel/i : /Cannot reach/);
     await manager.getByRole("button", { name: "Excalidraw (Official)", exact: true }).click();
     if (fault === "interrupt") await expect(manager.getByRole("alert")).toContainText("connection reset");
     await expect(page.getByRole("button", { name: "Refresh plugins", exact: true })).toBeEnabled();

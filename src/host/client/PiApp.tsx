@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "../../../web/src/ui/layout/AppFrame.tsx";
 import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "../../../web/src/ui/layout/columns.ts";
 import { SidebarRoot } from "../../../web/src/ui/sidebar/SidebarRoot.tsx";
-import { PiLogo } from "../../../web/src/ui/primitives/index.ts";
+import { PiLogo, ToastViewport, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconSettingsOutline14, IconSettingsOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
@@ -51,6 +51,7 @@ export function PiApp() {
   const { plugins: v1Plugins, errors: pluginErrors } = useWebPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.plugins, bridge.pluginGeneration);
   const hostedCallbacks = useRef<{ openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> }>({});
   const hosted = useHostedPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.pluginGeneration, hostedCallbacks, locale);
+  useErrorToast("hosted-runtime", hosted.error);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const recovery = useMemo(() => drawingRecovery(() => setPluginsOpen(true)), []);
@@ -204,7 +205,7 @@ export function PiApp() {
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}<ToastViewport closeLabel={t("关闭", "Dismiss")} detailLabel={t("诊断信息", "Diagnostics")} /><ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}

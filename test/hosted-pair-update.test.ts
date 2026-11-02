@@ -160,12 +160,17 @@ test("production integration consumes controlled combination offline without a s
   } finally { await integration.shutdown(); }
 });
 
-test("required upgrade offline failure writes no host pointer; old combination remains usable", async t => {
+test("an offline incompatible plugin never blocks the host update; it starts unavailable with data retained", async t => {
   const f = await fixture(t); await f.manager.installer.installArchive(id, f.old.bytes, integrity(f.old.bytes), "0.1.0"); await f.manager.manage(id, "enable");
   const before = await f.manager.pairSnapshot(); f.offline(); let writes = 0;
-  await assert.rejects(f.manager.hostPair.select("0.2.0", f.nextHost, async () => { writes++; }), /offline/);
-  assert.equal(writes, 0); assert.equal(await readPair(f.storage), null);
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => { writes++; });
+  assert.equal(writes, 1); assert.deepEqual((await readPair(f.storage))!.selections, []);
   assert.deepEqual(await f.manager.pairSnapshot(), before);
+  assert.equal(f.manager.tools.length, 1, "the running plugin keeps working until restart");
+  await f.restart();
+  const card = (await f.manager.inventory()).plugins[0]!;
+  assert.equal(card.activeVersion, "0.1.0"); assert.match(card.error!.message, /Plugin unavailable.*data retained/s);
+  assert.equal(f.manager.tools.length, 0); assert.equal((await readPair(f.storage))!.phase, "reconciled");
   await f.restart("0.1.29"); assert.equal(f.manager.tools.length, 1);
 });
 
@@ -185,7 +190,10 @@ test("absent never downloads; disabled stays disabled; legacy pin joins pair upd
   assert.deepEqual(JSON.parse(await readFile(join(pinned.storage, "policies/policies.json"), "utf8")), { [id]: { updatePolicy: "notify" } });
   const newer = integrationFixture("0.3.0", false, ">=0.1.0 <0.2.0");
   const downgrade = await fixture(t); await downgrade.manager.installer.installArchive(id, newer.bytes, integrity(newer.bytes), "0.3.0");
-  await assert.rejects(downgrade.manager.hostPair.select("0.2.0", downgrade.nextHost, async () => assert.fail("pointer")), /No compatible/);
+  // No plugin downgrade is guessed; the host update proceeds and the plugin is left out of the pair.
+  await downgrade.manager.hostPair.select("0.2.0", downgrade.nextHost, async () => {});
+  assert.deepEqual((await readPair(downgrade.storage))!.selections, []);
+  assert.deepEqual((await downgrade.manager.installer.inventory()).versions[id]!.map(v => v.version), ["0.3.0"]);
 });
 
 test("metadata, preflight drift, restart drift and cross-process owner reject before writes", async t => {
@@ -221,7 +229,8 @@ test("pointer faults before/after commit retain explanatory journal; old and sel
     if (!after) {
       await assert.rejects(readFile(pointer), { code: "ENOENT" });
       await f.restart("0.1.29"); assert.equal(f.manager.tools.length, 1);
-      assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /Required action/);
+      assert.equal((await f.manager.inventory()).plugins[0]!.error, undefined, "a host fallback is not a plugin failure");
+      assert.match((await readPair(f.storage))!.message!, /Selected host not running/);
     }
     f.offline(); await f.restart();
     if (after) {
@@ -229,8 +238,10 @@ test("pointer faults before/after commit retain explanatory journal; old and sel
       assert.equal((await readPair(f.storage))!.phase, "reconciled");
     } else {
       // The old-host startup accepted a newer generation. A stale plan must not replace it.
-      assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.1.0");
-      assert.equal((await readPair(f.storage))!.phase, "required-action");
+      const card = (await f.manager.inventory()).plugins[0]!;
+      assert.equal(card.activeVersion, "0.1.0"); assert.match(card.error!.message, /Plugin unavailable/);
+      // The selected host runs, so the pair settles; the incompatible plugin is only unavailable.
+      assert.equal((await readPair(f.storage))!.phase, "reconciled");
     }
   });
 });
@@ -288,6 +299,37 @@ test("pinned real external archive and built worker across two synthetic host pa
   // Manual native-shell replacement is not an OS installer transaction.
   await f.restart("0.0.1"); assert.equal(f.manager.tools.length, 0);
   assert.deepEqual(await broker.active(), before);
-  assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /Required action.*data retained/);
+  assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /Plugin unavailable.*data retained/);
   assert.equal(fingerprint(await broker.active()), fingerprint(before));
+});
+
+test("a plugin's startup failure stays on its card and never fences host updates", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  await f.manager.manage(id, "enable");
+  f.offline();
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  // The plugin is enabled but outside the selected pair, and its code is missing (e.g. a dev plugin never installed).
+  const intentPath = join(pairRoot(f.storage), "intent.json"), indexPath = join(f.storage, "packages", "installed.json");
+  await writeFile(intentPath, JSON.stringify({ ...JSON.parse(await readFile(intentPath, "utf8")), selections: [] }));
+  const index = JSON.parse(await readFile(indexPath, "utf8"));
+  await writeFile(indexPath, JSON.stringify({ ...index, versions: { ...index.versions, [id]: [] } }));
+  await f.restart();
+  assert.match((await f.manager.inventory()).plugins[0]!.error!.message, /not_installed/);
+  assert.equal((await readPair(f.storage))!.phase, "reconciled");
+  await f.manager.setPolicy(id, { updatePolicy: "notify" });
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+});
+
+test("a settled required-action journal is archived and superseded by the next update; only in-flight updates fence", async t => {
+  const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  await assert.rejects(f.manager.hostPair.stage!("0.2.0", f.nextHost), /selection pending \(0.2.0, selected\)/);
+  const stuck = { ...JSON.parse(await readFile(intentPath, "utf8")), phase: "required-action", message: "old failure" };
+  await writeFile(intentPath, JSON.stringify(stuck));
+  await f.manager.setPolicy(id, { updatePolicy: "notify" });
+  await f.manager.hostPair.stage!("0.2.0", f.nextHost);
+  assert.equal((await readPair(f.storage))!.phase, "prepared");
+  const archived = JSON.parse(await readFile(join(pairRoot(f.storage), "history", `${stuck.id}.json`), "utf8"));
+  assert.equal(archived.phase, "required-action"); assert.match(archived.message, /Superseded by a new update; old failure/);
 });

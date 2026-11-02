@@ -93,6 +93,7 @@ jobs:
       - name: Verify the runner Chrome used by release probes
         timeout-minutes: 1
         run: node scripts/verify-ci-chrome.mjs
+      - run: npm run lint -- --reporter=github
       - run: npm run check
       - run: npm run build
       - run: npm test

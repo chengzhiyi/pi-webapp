@@ -1,6 +1,7 @@
 import { useLocale, textFor } from "../../../web/src/ui/locale/preference.ts";
 import { IconDownloadOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { Tooltip } from "../../../web/src/ui/primitives/Tooltip.tsx";
+import { useErrorToast } from "../../../web/src/ui/primitives/Toast.tsx";
 import { useAppUpdate, type AppUpdateActions } from "../../../web/src/ui/settings/useAppUpdate.ts";
 import { useAppUpdateContext, type AppUpdateController } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import css from "./PiUpdateShortcut.module.css";
@@ -22,11 +23,13 @@ function UpdateShortcutContent({ wide, hideError, controller }: Props & { contro
   const locale = useLocale();
   const t = (zh: string, en: string) => textFor(locale, zh, en);
   const { status, checking, installing, targetVersion, restartTimedOut, error, install } = controller;
+  // Failures surface in the app-wide toast stack, never inline under the sidebar entry.
+  useErrorToast("app-update", hideError ? null : error && t("升级未完成，当前版本和数据已保留。可稍后重试。", "Update did not finish; the current version and data are retained. You can retry."), error ?? undefined, t("诊断信息", "Diagnostics"));
   if (!status?.available || !status.canRestart) return null;
   const label = installing ? t("正在升级…", "Updating…")
     : targetVersion ? t("正在重启…", "Restarting…")
     : status.downgrade ? t("切换到稳定版", "Switch to stable") : t("下载升级", "Download updates");
-  const hint = error || (status.downgrade ? t("按更新偏好切换到稳定版，需要确认后重启", "Switch to stable based on your preference; confirmation and restart required") : t("下载并升级到新版本，服务将短暂重启", "Download and update to the new version; the service will briefly restart"));
+  const hint = (status.downgrade ? t("按更新偏好切换到稳定版，需要确认后重启", "Switch to stable based on your preference; confirmation and restart required") : t("下载并升级到新版本，服务将短暂重启", "Download and update to the new version; the service will briefly restart"));
   return <div className={css.root}>
     <div className={`pi-settings-trigger-row ${wide ? "" : "pi-settings-trigger-rail"}`}>
       <Tooltip label={hint}>
@@ -37,6 +40,5 @@ function UpdateShortcutContent({ wide, hideError, controller }: Props & { contro
       </Tooltip>
     </div>
     {(installing || targetVersion) && <span className={css.srOnly} role="status">{label}</span>}
-    {error && !hideError && <p className={wide ? css.error : css.srOnly} role="alert">{error}</p>}
   </div>;
 }

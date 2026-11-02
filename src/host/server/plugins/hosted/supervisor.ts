@@ -121,7 +121,9 @@ export class HostedPluginSupervisor {
   /** Reversible process handoff. The state pointer and generation do not change.
    * A failed host selection restores the same code/state before resuming exact views.
    */
-  suspendForRestart(timeoutMs = 30_000): Promise<() => Promise<void>> {
+  /** force: the user confirmed the update; views/work that do not drain in time keep their
+   * client-side recovery records and the worker stops anyway. A plugin never refuses an update. */
+  suspendForRestart(timeoutMs = 30_000, force = false): Promise<() => Promise<void>> {
     return this.serialize(async () => {
       const old = this.worker, previous = this.phaseValue;
       const active = await this.broker.active();
@@ -142,9 +144,10 @@ export class HostedPluginSupervisor {
       };
       this.phaseValue = "draining";
       try {
-        if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Plugin work is still draining; current host retained");
-        await this.hooks.freeze();
-        if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Checkpoint work is still draining; current host retained");
+        const tolerate = async (step: () => Promise<void>) => { try { await step(); } catch (error) { if (!force) throw error; } };
+        await tolerate(async () => { if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Plugin work is still draining; current host retained"); });
+        await tolerate(() => this.hooks.freeze());
+        await tolerate(async () => { if (old && !await old.waitForIdle(timeoutMs)) throw new HostedPluginError("drain_pending", "Checkpoint work is still draining; current host retained"); });
         await old?.dispose(); this.worker = null; this.phaseValue = "disabled";
         await this.releaseOwnership?.();
       } catch (error) {

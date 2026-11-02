@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fingerprint, type HostedPairTransaction } from "./hosted-pair.ts";
+import { fingerprint, quarantineJournal, type HostedPairTransaction } from "./hosted-pair.ts";
 import { atomicJson, readJournal, withStorageLock } from "../plugins/hosted/storage.ts";
 import { promisify } from "node:util";
 import { npmCommand } from "../../../../bin/npm-command.mjs";
@@ -62,13 +62,13 @@ export class SelfUpdater {
   private savingPreference = false;
   private restartPending = false;
   private preparedUpdate?: { update: PreparedUpdate; channel: UpdateChannel; select: () => Promise<void> };
-  private readonly beforeRestart?: () => Promise<void | (() => Promise<void>)>;
+  private readonly beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)>;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[], signal?: AbortSignal) => Promise<string>; desktopManaged?: boolean;
     desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
     validateHostedPair?: (version: string, packageRoot: string) => Promise<void>; hostedPair?: HostedPairTransaction;
     /** Drain hosted workers/views while authenticated HTTP is still available, before launcher EOF. */
-    beforeRestart?: () => Promise<void | (() => Promise<void>)> }) {
+    beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)> }) {
     this.agentDir = options.agentDir;
     this.packageRoot = options.packageRoot;
     this.launcherNonce = options.launcherNonce;
@@ -145,16 +145,19 @@ export class SelfUpdater {
 
   private get transactionPath(): string { return join(this.agentDir, "pi-web", "update-transaction.json"); }
   private async transaction(): Promise<UpdateTransaction | null> {
+    let value: UpdateTransaction | null;
+    // An unreadable/invalid record is quarantined (bytes retained), never a permanent update fence.
+    try { value = await readJournal<UpdateTransaction>(this.transactionPath); }
+    catch { await quarantineJournal(this.transactionPath); return null; }
     try {
-      const value = await readJournal<UpdateTransaction>(this.transactionPath);
       if (!value) return null;
       if (value.schema !== 1 || !/^[a-f0-9-]{36}$/.test(value.id) || typeof value.version !== "string" ||
           !["stable", "alpha"].includes(value.channel) || !["downloading", "validating", "prepared", "selecting", "selected", "restart-requested", "committed", "cancelled", "failed"].includes(value.phase) ||
           value.selectionPath !== join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json") ||
           value.selectedDigest !== undefined && !/^[a-f0-9]{64}$/.test(value.selectedDigest) ||
-          value.before !== undefined && value.before !== null && (typeof value.before !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.before))) throw new Error("更新事务记录无效，请保留记录并检查诊断");
+          value.before !== undefined && value.before !== null && (typeof value.before !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.before))) throw new Error("更新事务记录无效");
       return value;
-    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+    } catch { await quarantineJournal(this.transactionPath); return null; }
   }
   private async record(transaction: UpdateTransaction): Promise<void> {
     await mkdir(join(this.agentDir, "pi-web"), { recursive: true });
@@ -293,7 +296,8 @@ export class SelfUpdater {
     const transaction = await this.transaction(), pair = await this.hostedPair?.status?.();
     if (transaction && !["failed", "cancelled", "committed"].includes(transaction.phase)) status.recovery = { version: transaction.version, phase: transaction.phase,
       canCancel: transaction.legacyRecovery ? await this.admittedLegacyRecovery(current) : transaction.phase !== "restart-requested" || await this.admittedFallback(transaction, current) };
-    else if (pair && !["cancelled", "reconciled"].includes(pair.phase)) status.recovery = { version: pair.version, phase: pair.phase,
+    // A settled required-action record is history that the next update supersedes, not unfinished work.
+    else if (pair && !["cancelled", "reconciled", "required-action"].includes(pair.phase)) status.recovery = { version: pair.version, phase: pair.phase,
       canCancel: pair.phase === "prepared" || await this.admittedLegacyRecovery(current) };
     if (this.desktopManaged && !this.desktopPackageUpdates) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
@@ -437,12 +441,13 @@ export class SelfUpdater {
     } finally { this.preparing = false; this.downloadAbort = undefined; }
   }
 
-  async requestRestart(prepared: PreparedUpdate): Promise<void> {
+  /** force: the user confirmed proceeding past plugin views/work that did not drain in time. */
+  async requestRestart(prepared: PreparedUpdate, { force = false }: { force?: boolean } = {}): Promise<void> {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
     let resume: void | (() => Promise<void>) = undefined, restartWritten = false;
     try {
-      resume = await this.beforeRestart?.();
+      resume = await this.beforeRestart?.(force);
       await this.preparedUpdate?.select();
       const writeRestart = async () => {
         const path = join(this.agentDir, "pi-web", "launcher.restart");
