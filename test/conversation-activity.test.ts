@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { conversationActivity, conversationIsWorking } from "../src/host/client/conversation-activity.ts";
 import type { SessionView, ViewMessage } from "../src/host/client/pi-bridge.ts";
+import { formatElapsedSeconds } from "../web/src/ui/chat/format-elapsed.ts";
 
 const session: SessionView = {
   schemaVersion: 1, sessionId: "activity", cwd: "/tmp", name: "Activity", model: "example/model",
   thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [],
 };
 const stream = (blocks: ViewMessage["blocks"]): ViewMessage => ({ id: "stream", role: "assistant", timestamp: "2026-01-01", blocks });
+
+test("formats elapsed activity durations at unit boundaries", () => {
+  assert.equal(formatElapsedSeconds(59), "59s");
+  assert.equal(formatElapsedSeconds(60), "1m 0s");
+  assert.equal(formatElapsedSeconds(3599), "59m 59s");
+  assert.equal(formatElapsedSeconds(3600), "1h 0m 0s");
+});
 
 test("bridges optimistic sending, backend work, and empty stream snapshots", () => {
   assert.equal(conversationActivity(session, null, "connected", true), "sending");

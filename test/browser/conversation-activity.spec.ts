@@ -67,7 +67,7 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     await page.clock.fastForward(12000);
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "12");
-    await expect(activity).toHaveText(width === 1440 ? "Working, 12s elapsed…" : "正在处理，用时 12 秒…");
+    await expect(activity).toHaveText(width === 1440 ? "Working · 12s" : "正在处理 · 12s");
     await expect(activity.locator('[aria-hidden="true"]').first()).toHaveCSS("animation-name", /agent-activity-spin/);
     await expect(elapsed).toHaveAttribute("aria-hidden", "true");
     // Compare the icon with the copy and both text spans, catching inherited
