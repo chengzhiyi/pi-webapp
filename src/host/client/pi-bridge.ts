@@ -126,6 +126,9 @@ export function usePiBridge() {
                 }
                 if (event.type === "stream") {
                   const active = event.message !== null;
+                  // A new assistant response proves that a transient model failure
+                  // is already being retried; do not keep its duplicate composer alert.
+                  if (active) setError("");
                   if (active !== streamingActive) breadcrumb(active ? "stream_start" : "stream_end");
                   streamingActive = active;
                   setStreaming(event.message);

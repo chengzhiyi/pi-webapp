@@ -67,7 +67,7 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     await page.clock.fastForward(12000);
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "12");
-    await expect(activity).toHaveText(width === 1440 ? "Working, 12s elapsed…" : "正在处理，用时 12 秒…");
+    await expect(activity).toHaveText(width === 1440 ? "Working · 12s" : "正在处理 · 12s");
     await expect(activity.locator('[aria-hidden="true"]').first()).toHaveCSS("animation-name", /agent-activity-spin/);
     await expect(elapsed).toHaveAttribute("aria-hidden", "true");
     // Compare the icon with the copy and both text spans, catching inherited
@@ -122,6 +122,8 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(page.getByRole("alert")).toContainText("Fixture send failed");
     await expect(activity).toHaveCount(0);
     await expect(editor).toHaveText("Failed request");
+    await page.getByRole("button", { name: /^(关闭错误|Dismiss error)$/ }).click();
+    await expect(page.locator(".pi-error")).toHaveCount(0);
     rejectSend = false; releaseSend = undefined;
     await editor.press("Enter");
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
@@ -139,9 +141,18 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: "Model failed" }] };
     bridge.publish({ type: "snapshot", session });
-    await expect(page.getByRole("alert")).toContainText("Model failed");
+    bridge.publish({ type: "error", message: "Model failed" });
+    await expect(page.locator(".pi-model-error")).toContainText("Model failed");
+    await expect(page.locator(".pi-error")).toContainText("Model failed");
     await expect(activity).toHaveCount(0);
-    session = { ...session, sessionId: "other-session", messages: [] }; bridge.publish({ type: "snapshot", session });
+    // A retry clears both stale presentations as soon as Pi produces a new response.
+    const recovered = message("stream", "Recovered response");
+    session = { ...session, idle: false, streaming: recovered };
+    bridge.publish({ type: "stream", message: recovered });
+    await expect(page.locator(".pi-model-error")).toHaveCount(0);
+    await expect(page.locator(".pi-error")).toHaveCount(0);
+    await expect(page.getByText("Recovered response", { exact: true })).toBeVisible();
+    session = { ...session, sessionId: "other-session", idle: true, messages: [], streaming: null }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
