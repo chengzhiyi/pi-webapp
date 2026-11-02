@@ -22,9 +22,16 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
   const { status, checking, installing, cancelling, targetVersion, restartTimedOut, error, check, install, changeChannel, cancel } = props.controller;
 
   const client = desktopClient(navigator.userAgent);
+  const upToDate = Boolean(status?.latest && !status.available && !checking);
   const summary = status
-    ? `${t("当前版本", "Current version")} ${status.current}${status.latest ? ` · ${t("目标版本", "Target version")} ${status.latest}` : ""}`
+    ? <>{t("当前版本", "Current version")} {status.current}{status.available && status.latest
+      ? ` → ${status.latest}`
+      : upToDate && <> · <span role="status">{t("已是最新版本", "Up to date")}</span></>}</>
     : checking ? t("正在读取版本…", "Reading version…") : t("暂时无法读取版本", "Version unavailable");
+  // Diagnostics stay folded unless the window, launcher or shell disagree in a way the user must act on.
+  const shellMismatch = Boolean(client && status?.desktopShell && String(client.build) !== status.desktopShell.build);
+  const needsAttention = shellMismatch || Boolean(status?.launcherHandoff?.required || status?.requiresDesktopUpgrade || (status?.launcher && !status.launcher.releaseChannels));
+  const hasDiagnostics = Boolean(client || status?.launcher || status?.desktopShell);
 
   return <section className={css.group} aria-label={t("应用更新", "App updates")}>
     {status?.channel && props.setUpdateChannel && <div className={css.preference}>
@@ -39,9 +46,6 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
       <div className={css.details}>
         <div className={css.title}>{t("应用更新", "App updates")}</div>
         <p className={css.summary}>{summary}</p>
-        {client && <p className={css.summary}>{t("当前桌面窗口", "Current desktop window")} {client.version} · build {client.build}</p>}
-        {status?.launcher && <p className={css.summary}>{t("后台启动器", "Backend launcher")} {status.launcher.version} · {t("体验版持久化", "Preview persistence")} {status.launcher.releaseChannels ? t("支持", "supported") : t("不支持", "unsupported")}</p>}
-        {status?.desktopShell && <p className={css.summary}>{t("后台启动时的桌面外壳", "Desktop shell at backend startup")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
       </div>
       <div className={css.actions}>
         {status?.available && status.canRestart && !targetVersion && !restartTimedOut && <Button variant="primary" disabled={installing || checking} onClick={() => { void install(); }}>{installing ? t("正在安装…", "Installing…") : status.downgrade ? t("切换到稳定版并重启", "Switch to stable and restart") : t("升级并重启", "Update and restart")}</Button>}
@@ -56,8 +60,6 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
         : <p>{t("安全交接入口从桌面 build 14 开始提供。build 12 已支持体验版，但缺少旧共享后台交接功能；无需重复安装 build 12。", "The safe handoff action is available from desktop build 14. Build 12 supports preview releases but lacks shared-backend handoff; reinstalling build 12 will not help.")} <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载支持安全交接的桌面版本", "Get a desktop release with safe handoff")}</a></p>}
       {!status.launcherHandoff.supported && <p>{t("当前后台还缺少安全交接协议：请先选择稳定版并升级业务包，再从桌面菜单重试交接。", "This backend lacks the safe handoff protocol: first update its business package on Stable, then retry from the desktop menu.")}</p>}
     </div>}
-    {status?.desktopShell && <p className={css.note}>{t("共享后台可能由旧版桌面启动。当前窗口的桌面版本请查看菜单「pi → 关于 pi」。业务包升级不会替换桌面应用。", "A shared backend may have been started by an older desktop. For this window’s desktop version, see pi → About pi. Updating the business package does not replace the desktop app.")}</p>}
-    {status?.latest && !status.available && !checking && <p className={css.note} role="status">{t("已是最新版本", "Up to date")}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
     {status?.requiresDesktopUpgrade && <p className={css.note}>
       <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载新版桌面应用", "Download desktop update")}</a>
@@ -66,5 +68,12 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
     {targetVersion && <p className={css.note} role="status">{t("正在重启并等待新版连接…", "Restarting and waiting for the new version…")}</p>}
     {error && <p className={css.error} role="alert">{error}</p>}
     {error?.includes("Missing view flush acknowledgement") && <p className={css.note}>{t("插件视图尚未确认保存。请保存并关闭绘图或编辑器；若视图已失联，请先在插件恢复记录中处理未确认的编辑，再重试升级。", "A plugin view has not confirmed its save. Save and close drawings or editors; if a view disconnected, review its unconfirmed edits in plugin recovery before retrying.")}</p>}
+    {hasDiagnostics && <details className={css.diagnostics} open={needsAttention}>
+      <summary>{t("版本详情", "Version details")}</summary>
+      {client && <p className={css.summary}>{t("当前桌面窗口", "Current desktop window")} {client.version} · build {client.build}</p>}
+      {status?.launcher && <p className={css.summary}>{t("后台启动器", "Backend launcher")} {status.launcher.version} · {t("体验版持久化", "Preview persistence")} {status.launcher.releaseChannels ? t("支持", "supported") : t("不支持", "unsupported")}</p>}
+      {status?.desktopShell && <p className={css.summary}>{t("后台启动时的桌面外壳", "Desktop shell at backend startup")} {status.desktopShell.version} · build {status.desktopShell.build}</p>}
+      {status?.desktopShell && <p className={css.note}>{t("共享后台可能由旧版桌面启动。当前窗口的桌面版本请查看菜单「pi → 关于 pi」。业务包升级不会替换桌面应用。", "A shared backend may have been started by an older desktop. For this window’s desktop version, see pi → About pi. Updating the business package does not replace the desktop app.")}</p>}
+    </details>}
   </section>;
 }

@@ -83,6 +83,10 @@ for (const capable of [false, true]) {
       await expect(page.getByRole("button", { name: /^(检查更新|Check for updates)$/ })).toBeEnabled();
       await expect(page.getByText(/^(已是最新版本|Up to date)$/)).toHaveCount(0);
       if (capable) {
+        // Nothing disagrees here, so the shell diagnostics stay folded until asked for.
+        const shellLine = page.getByText(/(后台启动时的桌面外壳|Desktop shell at backend startup) 0\.1\.16 · build 10/);
+        await expect(shellLine).toBeHidden();
+        await page.getByText(/^(版本详情|Version details)$/).click();
         await expect(page.getByText(/(后台启动时的桌面外壳|Desktop shell at backend startup) 0\.1\.16 · build 10/)).toBeVisible();
         await expect(page.getByText(/共享后台可能由旧版桌面启动|A shared backend may have been started by an older desktop/)).toBeVisible();
         await expect(page.getByRole("button", { name: /^(升级并重启|Update and restart)$/ })).toBeEnabled();

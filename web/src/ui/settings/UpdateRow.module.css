@@ -38,6 +38,16 @@
 .note { color: var(--dsw-alias-label-secondary); }
 .error { color: var(--dsw-alias-state-error-primary); }
 
+.diagnostics > summary {
+  width: fit-content;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.diagnostics[open] > summary { margin-bottom: 4px; }
+
 .actions {
   display: flex;
   flex: none;
