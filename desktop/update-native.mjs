@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { localize as t } from "./locale.mjs";
 
 const execute = promisify(execFile);
 export async function hasPublisherSignature(appPath, run = execute) {
@@ -20,7 +21,7 @@ export async function hasPublisherSignature(appPath, run = execute) {
  */
 export async function stageNativeUpdate(autoUpdater, manifest, zipPath, { timeoutMs = 120000 } = {}) {
   const size = (await stat(zipPath)).size;
-  if (size !== manifest.updateAsset.bytes) throw new Error("暂存更新文件大小无效");
+  if (size !== manifest.updateAsset.bytes) throw new Error(t("暂存更新文件大小无效", "Invalid staged update file size"));
   const token = randomBytes(32).toString("hex");
   const sockets = new Set();
   const server = createServer((request, response) => {
@@ -52,10 +53,10 @@ export async function stageNativeUpdate(autoUpdater, manifest, zipPath, { timeou
         error ? reject(error) : resolve();
       };
       // Do not include raw native error messages: they can contain the private feed URL.
-      const failed = () => finish(new Error("系统拒绝此桌面更新（签名、权限或暂存失败）。原应用未替换；可重启桌面后重试或手动安装。"));
+      const failed = () => finish(new Error(t("系统拒绝此桌面更新（签名、权限或暂存失败）。原应用未替换；可重启桌面后重试或手动安装。", "The system rejected this desktop update (signature, permission, or staging failure). The existing app was not replaced. Restart the desktop app and retry, or install manually.")));
       const downloaded = () => finish();
-      const unavailable = () => finish(new Error("系统未接受目标更新，请重启桌面后重试"));
-      const timer = setTimeout(() => finish(new Error("系统校验更新超时。原应用未替换；请重启桌面后重试。")), timeoutMs);
+      const unavailable = () => finish(new Error(t("系统未接受目标更新，请重启桌面后重试", "The system did not accept the target update. Restart the desktop app and retry.")));
+      const timer = setTimeout(() => finish(new Error(t("系统校验更新超时。原应用未替换；请重启桌面后重试。", "System update verification timed out. The existing app was not replaced. Restart the desktop app and retry."))), timeoutMs);
       autoUpdater.once("error", failed); autoUpdater.once("update-downloaded", downloaded); autoUpdater.once("update-not-available", unavailable);
       try {
         autoUpdater.setFeedURL({ url: `http://127.0.0.1:${server.address().port}/${token}/feed`, serverType: "json" });
@@ -72,11 +73,11 @@ export async function assertDesktopInstallSafe(backend) {
   if (!backend) return;
   const state = await backend.readState();
   if (!state) return;
-  if (state.starting || !Number.isInteger(state.pid) || !state.nonce) throw new Error("后台正在启动或身份未知，暂不能安装桌面更新");
+  if (state.starting || !Number.isInteger(state.pid) || !state.nonce) throw new Error(t("后台正在启动或身份未知，暂不能安装桌面更新", "The backend is starting or its identity is unknown, so the desktop update cannot be installed yet"));
   if (!backend.isAlive(state.pid)) return;
-  if (backend.owned || state.runtimeKind !== "npm") throw new Error("桌面内置后台仍在运行。请先完成所有聊天任务和终端操作，再从原入口执行 pi-webapp stop；保持此桌面窗口打开，然后重新选择“检查桌面更新”安装。更新器不会停止任务或后台。");
+  if (backend.owned || state.runtimeKind !== "npm") throw new Error(t("桌面内置后台仍在运行。请先完成所有聊天任务和终端操作，再从原入口执行 pi-webapp stop；保持此桌面窗口打开，然后重新选择“检查桌面更新”安装。更新器不会停止任务或后台。", "The bundled desktop backend is still running. Finish all chat tasks and terminal operations, run pi-webapp stop from the original entry point, keep this desktop window open, and select Check for Desktop Updates again to install. The updater will not stop tasks or the backend."));
   const next = await backend.readState();
   if (next?.pid !== state.pid || next?.nonce !== state.nonce || next?.runtimeKind !== "npm" || next?.url !== state.url) {
-    throw new Error("后台在安装检查期间发生变化，请重新检查；未停止任何服务");
+    throw new Error(t("后台在安装检查期间发生变化，请重新检查；未停止任何服务", "The backend changed during the installation check. Check again; no services were stopped."));
   }
 }
