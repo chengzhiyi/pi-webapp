@@ -277,6 +277,16 @@ async function candidateRestart(name: string, nextScript: string, prepare?: (age
   return { directory, agentDir, env, first, candidate, outcome, statePath, nextLauncher };
 }
 
+/** A rollback restarts the previous version; wait for it before stopping so teardown never races it. */
+async function previousServiceBack(f: Awaited<ReturnType<typeof candidateRestart>>) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const state = await readFile(f.statePath, "utf8").then(JSON.parse, () => null);
+    if (state?.url && state.nonce !== f.first.nonce) return state;
+    await delay(100);
+  }
+  return null;
+}
+
 test("launcher owns the candidate upgrade: it selects the pointer and commits when the new launcher reports ready", { skip: process.platform === "win32" }, async () => {
   const f = await candidateRestart("pi-web-candidate-", "process.exit(0);");
   try {
@@ -295,11 +305,7 @@ test("launcher rolls back a candidate that fails health admission: exact previou
     assert.equal(f.outcome?.phase, "rolled-back");
     assert.match(f.outcome?.message ?? "", /failed to start \(launcher exit code 3\); previous version restored/);
     assert.equal(await readFile(join(f.agentDir, "pi-web", "update.json"), "utf8"), previous);
-    let recovered = null;
-    for (let attempt = 0; attempt < 80 && !recovered; attempt++) {
-      const state = await readFile(f.statePath, "utf8").then(JSON.parse, () => null);
-      if (state?.url && state.nonce !== f.first.nonce) recovered = state; else await delay(100);
-    }
+    const recovered = await previousServiceBack(f);
     assert.equal(recovered?.url, f.first.url, "the previous version serves the same address again");
     assert.ok(existsSync(join(f.agentDir, "pi-web", "upgrade", "history", `${f.candidate.id}-rolled-back.json`)));
   } finally { run(["stop"], f.env); await rm(f.directory, { recursive: true, force: true }); }
@@ -312,5 +318,6 @@ test("launcher rollback never overwrites a pointer another client changed meanwh
     assert.equal(f.outcome?.phase, "rolled-back");
     assert.match(f.outcome?.message ?? "", /changed by another client and left as is/);
     assert.equal(await readFile(join(f.agentDir, "pi-web", "update.json"), "utf8"), foreign);
+    assert.ok(await previousServiceBack(f), "the previous version is restarted");
   } finally { run(["stop"], f.env); await rm(f.directory, { recursive: true, force: true }); }
 });
