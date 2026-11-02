@@ -4,17 +4,16 @@ import remarkGfm from "remark-gfm";
 import { localize as t } from "../../../web/src/ui/locale/preference.ts";
 import { useMarkdownDelegate } from "../../../web/src/ui/shared/primitives/markdown/MarkdownDelegate.tsx";
 import { parseFileLink } from "../../../web/src/ui/shared/primitives/markdown/file-link.ts";
+import { writeClipboard } from "../../../web/src/ui/shared/primitives/clipboard.ts";
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const code = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   return <div className="pi-code-block">
     <div className="pi-code-toolbar"><button type="button" onClick={async () => {
-      try {
-        await navigator.clipboard.writeText(code.current?.textContent ?? "");
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1800);
-      } catch { setCopied(false); }
+      const ok = await writeClipboard(code.current?.textContent ?? "");
+      setCopied(ok);
+      if (ok) window.setTimeout(() => setCopied(false), 1800);
     }}>{copied ? t("已复制", "Copied") : t("复制代码", "Copy code")}</button></div>
     <pre ref={code}>{children}</pre>
   </div>;
