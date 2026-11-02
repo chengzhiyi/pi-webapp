@@ -1,4 +1,4 @@
-import { app, autoUpdater, BrowserWindow, dialog, Menu, shell, session } from "electron";
+import { app, autoUpdater, BrowserWindow, clipboard, dialog, Menu, shell, session } from "electron";
 import { access, readFile } from "node:fs/promises";
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -9,6 +9,7 @@ import { connectBackend } from "./connect.mjs";
 import { DesktopUpdater } from "./updater.mjs";
 import { configureLocalExport } from "./downloads.mjs";
 import { confirmDesktopQuit } from "./quit.mjs";
+import { showContextMenu } from "./context-menu.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
@@ -43,6 +44,7 @@ function showWindow() {
   window.on("page-title-updated", event => event.preventDefault());
   window.once("ready-to-show", () => window?.show());
   window.webContents.setUserAgent(`${window.webContents.getUserAgent()} PiDesktop/${app.getVersion()} PiDesktopBuild/${release.buildNumber}`);
+  window.webContents.on("context-menu", (_event, params) => showContextMenu(params, { Menu, clipboard, window }));
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url === "pi-desktop://launcher-handoff") { void requestLauncherHandoff(); return { action: "deny" }; }
     void openExternal(url);
