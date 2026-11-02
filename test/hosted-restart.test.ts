@@ -93,9 +93,11 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly dra
     const reject = rejectFirst && attempt === 0;
     assert.equal((await post("hosted-plugins/views", { ...view, operation: "ack", commandId: freeze.id, ok: !reject, ...(reject ? { error: "test flush refused" } : {}) })).status, 200);
     const result = await update;
-    assert.equal(result.status, reject ? 400 : 202);
+    assert.equal(result.status, reject ? 409 : 202);
     if (reject) {
-      assert.match((await result.json()).error, /test flush refused/);
+      // A refused flush is never a hard refusal: the user is asked to confirm, the retry reuses the download.
+      const body = await result.json();
+      assert.equal(body.reason, "update_confirm_required"); assert.match(body.error, /插件视图未确认保存/);
       await assert.rejects(readFile(marker), { code: "ENOENT" });
       assert.deepEqual(await readFile(lock), lockBefore);
       assert.equal(f.integration.adapter.isFrozen, false);
@@ -118,7 +120,7 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly dra
   } finally { await next.shutdown(); }
 });
 
-test("pending pair retains the real startup ownership error and never reclaims a dead PID lock", async t => {
+test("a startup ownership error stays on the plugin card, never fences updates and never reclaims a dead PID lock", async t => {
   const f = await fixture(t), nextHost = join(f.root, "next");
   await hostPackage(nextHost, "0.1.33", f.worker);
   await f.integration.manager.hostPair.select("0.1.33", nextHost, async () => {});
@@ -132,11 +134,13 @@ test("pending pair retains the real startup ownership error and never reclaims a
     const card = (await next.inventory()).plugins[0]!;
     assert.equal(card.phase, "disabled"); assert.equal(card.errorCode, "runtime_owned");
     assert.match(card.error!, /Another host owns.*offline hosted-recovery/s);
-    assert.match((await readPair(f.storage))!.message!, /runtime_owned/);
+    const pair = (await readPair(f.storage))!;
+    assert.equal(pair.phase, "reconciled"); assert.match(pair.message!, /runtime_owned/);
     assert.equal(f.registry(), registry, "startup reconciliation must not overwrite the error with its own pair fence");
     assert.equal(await readFile(lock, "utf8"), bytes);
     assert.deepEqual(await f.broker.active(), before);
-    await assert.rejects(next.manager.hostPair.select("0.1.33", nextHost, async () => assert.fail("must not select")), /0.1.33, required-action.*runtime_owned/s);
+    // The host update path stays open; only this plugin is unavailable.
+    await next.manager.hostPair.select("0.1.33", nextHost, async () => {});
   } finally { await next.shutdown(); }
   assert.equal(createHash("sha256").update(await readFile(lock)).digest("hex"), createHash("sha256").update(bytes).digest("hex"));
 });

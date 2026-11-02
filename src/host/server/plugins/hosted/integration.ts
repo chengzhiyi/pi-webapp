@@ -341,14 +341,14 @@ export class HostedPluginIntegration {
   /** Keep the view identities and data generation alive until the launcher commits.
    * The returned undo lease is idempotent and recreates only verified old workers.
    */
-  prepareRestart(): Promise<() => Promise<void>> {
+  prepareRestart(force = false): Promise<() => Promise<void>> {
     if (this.restartPreparation) return this.restartPreparation;
     this.restartPreparation = this.enqueue(async () => {
       this.closing = true; this.devWatcher?.stop();
       try {
         await this.adapter.freeze();
         for (const view of this.views.values()) view.allowImmediateReopen(true);
-        const restore = await this.manager.suspendForRestart();
+        const restore = await this.manager.suspendForRestart(force);
         let restored = false;
         const resume = async () => {
           if (restored) return;

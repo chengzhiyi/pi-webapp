@@ -16,7 +16,8 @@ export function createTerminalPlugin(): ServerPlugin {
     metadata,
     routes: ["create", "attach", "input", "resize", "close"].map(action => `/api/terminal/${action}`),
     handle: context => terminalRoute(context.path, context.body, context.res, context.snapshot, registry, streams),
-    restartBlocker: () => registry.size ? "请先关闭所有终端，再升级并重启后台" : null,
+    restartBlocker: () => registry.size ? `有 ${registry.size} 个终端正在运行，升级会关闭它们` : null,
+    releaseForRestart: clear,
     disable: clear,
     async close() { await clear(); await registry.close(); },
   };

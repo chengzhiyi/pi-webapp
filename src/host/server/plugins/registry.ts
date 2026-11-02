@@ -80,9 +80,16 @@ export class ServerPluginRegistry {
     for (const plugin of this.plugins) { const failure = plugin.requestFailure?.(error); if (failure) return failure; }
     return null;
   }
+  /** Short-lived plugin operations only; these finish on their own. */
   restartBlocker() {
-    if (this.changing || [...this.running.values()].some(count => count > 0)) return "插件操作正在进行，请完成后再升级";
-    return this.plugins.map(plugin => plugin.restartBlocker?.()).find(Boolean) ?? null;
+    return this.changing || [...this.running.values()].some(count => count > 0) ? "插件操作正在进行，请完成后再升级" : null;
+  }
+  /** Things the user confirms away (open terminals); a plugin never refuses an update outright. */
+  restartConfirmations(): string[] {
+    return this.plugins.flatMap(plugin => plugin.restartBlocker?.() ?? []);
+  }
+  async releaseForRestart() {
+    await Promise.all(this.plugins.filter(plugin => plugin.restartBlocker?.()).map(plugin => plugin.releaseForRestart?.()));
   }
   async close() { await Promise.all(this.plugins.map(plugin => plugin.close?.())); }
 }
