@@ -15,6 +15,8 @@ test("formats elapsed activity durations at unit boundaries", () => {
   assert.equal(formatElapsedSeconds(60), "1m 0s");
   assert.equal(formatElapsedSeconds(3599), "59m 59s");
   assert.equal(formatElapsedSeconds(3600), "1h 0m 0s");
+  assert.equal(formatElapsedSeconds(86399), "23h 59m 59s");
+  assert.equal(formatElapsedSeconds(86400), "1d 0h 0m 0s");
 });
 
 test("bridges optimistic sending, backend work, and empty stream snapshots", () => {
