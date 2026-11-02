@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { DesktopConnectionError, localAddress } from "../backend.mjs";
 import { connectBackend } from "../connect.mjs";
@@ -11,6 +12,13 @@ const builder = createRequire(import.meta.url)("../builder.cjs");
 
 test("the locale helper ships inside the desktop application", () => {
   assert.ok(builder.files.includes("locale.mjs"));
+});
+
+test("the Electron locale is read only after the app is ready", async () => {
+  const source = await readFile(new URL("../main.mjs", import.meta.url), "utf8");
+  const ready = source.indexOf("void app.whenReady().then(async () => {");
+  const initialize = source.indexOf("setDesktopLocale(app.getLocale());");
+  assert.ok(ready >= 0 && initialize > ready, "locale initialization must run inside app.whenReady()");
 });
 
 test("native text follows the operating-system locale", () => {

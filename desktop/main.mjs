@@ -14,7 +14,6 @@ import { localize as t, setDesktopLocale } from "./locale.mjs";
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
 const appName = release.productName;
-setDesktopLocale(app.getLocale());
 // Keep the pre-rename Electron profile/instance lock, but respect isolated test profiles.
 if (!app.commandLine.hasSwitch("user-data-dir")) {
   const profile = join(app.getPath("appData"), "Pi Webapp");
@@ -160,6 +159,7 @@ else {
   app.on("window-all-closed", () => { if (!startup && !quitting) void requestQuit(); });
   // Let the ESM entry finish evaluating before Electron emits ready.
   void app.whenReady().then(async () => {
+  setDesktopLocale(app.getLocale());
   // Packaged macOS uses the bundle's ICNS; development otherwise inherits Electron's Dock icon.
   if (!app.isPackaged && process.platform === "darwin") app.dock.setIcon(iconPath);
   // Device permissions remain denied; only current trusted local export blobs may download.
