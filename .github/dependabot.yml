@@ -16,6 +16,9 @@ updates:
       # Electron majors change the desktop runtime and need a manual upgrade.
       - dependency-name: electron
         update-types: ["version-update:semver-major"]
+      # Node typings track the engines minimum (>=22.19.0), not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
