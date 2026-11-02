@@ -1,9 +1,43 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
-import { basename, dirname, extname, join } from 'node:path';
+import { readFile, realpath, writeFile, unlink } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, parse, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DefaultPackageManager, getAgentDir, SettingsManager } from '@earendil-works/pi-coding-agent';
 
 const leases = new Map<string, number>();
+
+async function hostPackageRoot(): Promise<string | null> {
+  let directory = dirname(fileURLToPath(import.meta.url));
+  while (directory !== parse(directory).root) {
+    try {
+      const pkg = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { name?: unknown };
+      if (pkg.name === 'pi-webapp') return realpath(directory);
+    } catch { /* Keep walking towards the package root. */ }
+    directory = dirname(directory);
+  }
+  return null;
+}
+
+function inside(root: string, path: string): boolean {
+  const rest = relative(root, path);
+  return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest));
+}
+
+/** Load configured Pi extensions, but never recurse into this host's own extension. */
+export async function sessionRuntimePaths(cwd: string, webRoots: readonly string[], projectTrusted: boolean) {
+  const settingsManager = SettingsManager.create(cwd, undefined, { projectTrusted });
+  const manager = new DefaultPackageManager({ cwd, agentDir: getAgentDir(), settingsManager });
+  const resolved = await manager.resolve();
+  const ownRoot = await hostPackageRoot();
+  const configured: string[] = [];
+  for (const item of resolved.extensions) {
+    if (!item.enabled || item.path.startsWith('builtin:')) continue;
+    const path = await realpath(item.path);
+    if (ownRoot && inside(ownRoot, path)) continue;
+    configured.push(path);
+  }
+  return pluginRuntimePaths(cwd, [...webRoots, ...configured]);
+}
 
 /** Compiled ESM entrypoints otherwise survive runtime replacement in Node's cache. */
 export async function pluginRuntimePaths(cwd: string, roots: readonly string[]) {
@@ -18,9 +52,11 @@ export async function pluginRuntimePaths(cwd: string, roots: readonly string[]) 
       else { leases.delete(path); await unlink(path).catch(() => {}); }
     }
   };
+  const seen = new Set<string>();
   try {
     for (const item of resolved.extensions) {
-      if (!item.enabled) continue;
+      if (!item.enabled || seen.has(item.path)) continue;
+      seen.add(item.path);
       const extension = extname(item.path);
       if (!['.js', '.mjs'].includes(extension)) { paths.push(item.path); continue; }
       const bytes = await readFile(item.path);
