@@ -154,6 +154,9 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
       await page.getByRole("button", { name: "Hosted test", exact: true }).click();
       const expandRight = page.getByRole("button", { name: "Expand right sidebar", exact: true });
       if (await expandRight.isVisible()) await expandRight.click();
+      // The host refuses to close a view with an action in flight ("View action still
+      // in flight"); close only once every view has settled, as a user would retry.
+      await expect.poll(() => [...(integration as any).views.values()].every((coordinator: any) => [...coordinator.views.values()].every((view: any) => !view.activeActions && !view.busy)), { timeout: 10_000 }).toBe(true);
       await page.locator(`[data-dockkit-tab="${tabId}"]`).hover();
       await page.locator(`[data-dockkit-tab-close="${tabId}"]`).click();
       await expect(page.locator('iframe[title="Excalidraw editor"]')).toHaveCount(0);

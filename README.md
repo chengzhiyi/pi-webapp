@@ -171,8 +171,11 @@ The guides follow the source tree; installed versions may differ. For desktop av
 
 ### Develop locally
 
+Before opening a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ```bash
 npm ci
+npm run lint
 npm run check
 npm test
 npm run start   # Build and launch the local service

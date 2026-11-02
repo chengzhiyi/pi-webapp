@@ -17,3 +17,6 @@ dist/
 /.ci/
 /.desktop/
 /desktop-release/
+
+# A symlinked node_modules is not matched by "node_modules/".
+/docs/node_modules

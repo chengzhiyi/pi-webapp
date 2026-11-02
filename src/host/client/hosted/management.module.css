@@ -2,6 +2,7 @@
 .section h2 { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
 .section h2 span { color: var(--dsw-alias-label-tertiary); font-weight: 400; padding-left: 5px; }
 .section p { margin: 0; }
+.attention { color: var(--dsw-alias-state-error-primary); }
 .notice { color: var(--dsw-alias-state-success-primary); }
 .error { color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; font-size: 12px; line-height: 18px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

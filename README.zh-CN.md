@@ -171,8 +171,11 @@ pi
 
 ### 本地开发
 
+提交 Pull Request 前，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ```bash
 npm ci
+npm run lint
 npm run check
 npm test
 npm run start   # 构建并启动本地服务
