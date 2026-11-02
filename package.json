@@ -103,7 +103,7 @@
     "@sentry/vite-plugin": "5.4.0",
     "@types/katex": "^0.16.7",
     "@types/mdast": "^4.0.4",
-    "@types/node": "22.19.19",
+    "@types/node": "26.6.6",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "electron": "44.9.0",
