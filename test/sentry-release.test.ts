@@ -109,6 +109,18 @@ test("both sides require JavaScript containing a matching release and build iden
   }
 });
 
+test("release and build identity are accepted in any minifier quote style", async () => {
+  for (const quote of ["'", "`"]) {
+    const f = await fixture();
+    try {
+      const changed = `const release=${quote}${expected.release}${quote};const buildId=${quote}${expected.buildId}${quote};/* sentry-dbid-${browserId} */`;
+      await put(f.archiveRoot, "browser/assets/index.js", changed);
+      await put(f.packageRoot, "web/dist/assets/index.js", changed);
+      assert.deepEqual(await verifyPackageArtifacts(f.packageRoot, f.archiveRoot), expected, `quote ${quote}`);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
 function resolvedEvent(side: "node" | "browser") {
   const id = side === "node" ? nodeId : browserId;
   const original = side === "node" ? "app:///dist/extension.js" : "app:///assets/index.js";
