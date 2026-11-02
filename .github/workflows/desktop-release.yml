@@ -47,11 +47,11 @@ jobs:
       DESKTOP_EXPECTED_PLATFORM: ${{ matrix.platform }}
       DESKTOP_EXPECTED_ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -134,14 +134,14 @@ jobs:
         run: |
           export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
           node scripts/desktop-release.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: verified-desktop-${{ matrix.target }}
           path: .desktop/release-assets/*
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: desktop-smoke-evidence-${{ matrix.target }}
@@ -158,14 +158,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: verified-desktop-*
           path: .desktop/incoming
@@ -175,7 +175,7 @@ jobs:
         run: |
           export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
           node scripts/desktop-release.mjs --assemble
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: verified-desktop-bundle
           path: .desktop/release-assets/*
@@ -191,14 +191,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: verified-desktop-bundle
           path: .desktop/release-assets
