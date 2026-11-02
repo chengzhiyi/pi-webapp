@@ -3,8 +3,8 @@
 
 /**
  * Write text to the host clipboard, preferring the async Clipboard API and
- * falling back to `execCommand('copy')` on hosts (jsdom, insecure contexts)
- * that omit it.
+ * falling back to `execCommand('copy')` when the async API is unavailable or
+ * rejected by the host's permission policy.
  * @param text - the exact text to place on the clipboard.
  * @returns true only when the host accepted the write.
  */
@@ -17,8 +17,7 @@ export async function writeClipboard(text: string): Promise<boolean> {
       await navigator.clipboard.writeText(text)
       return true
     } catch {
-      // Denied permissions / iframe policy — do not claim success.
-      return false
+      // Denied permissions / iframe policy — a user-gesture copy may still work.
     }
   }
   // jsdom and older hosts: best-effort execCommand path when present.
@@ -29,6 +28,9 @@ export async function writeClipboard(text: string): Promise<boolean> {
     ? document.execCommand.bind(document)
     : undefined
   if (exec === undefined) return false
+  // select() moves focus to the textarea; hand it back so a terminal or the
+  // clicked control keeps receiving keys after the copy.
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
   const el = document.createElement('textarea')
   el.value = text
   el.setAttribute('readonly', '')
@@ -42,6 +44,7 @@ export async function writeClipboard(text: string): Promise<boolean> {
     return false
   } finally {
     el.remove()
+    previous?.focus({ preventScroll: true })
   }
   /* oxlint-enable typescript/no-deprecated */
 }

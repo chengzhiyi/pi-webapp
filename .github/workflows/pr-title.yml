@@ -1,0 +1,34 @@
+name: PR title
+
+# Pull requests into alpha are squash-merged, so the title becomes the commit
+# message. Release PRs from alpha to main keep their merge commits and are exempt.
+on:
+  pull_request:
+    branches: [alpha]
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            test
+            docs
+            build
+            ci
+            chore
+            style
+            revert
+          requireScope: false

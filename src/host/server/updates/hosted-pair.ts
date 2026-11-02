@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, realpath } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { atomicJson, boundedRead, readJournal, withStorageLock } from "../plugins/hosted/storage.ts";
 import { HostedPluginError } from "../plugins/hosted/errors.ts";
@@ -57,15 +57,23 @@ export async function candidateHost(version: string, root: string): Promise<stri
   if (!worker) throw new HostedPluginError("host_pair_required", "Candidate worker missing");
   return fingerprint([bytes.toString("base64"), worker.toString("base64"), await hostTree(root)]);
 }
+/** Move an unreadable journal aside (bytes retained for diagnosis) so it can never brick updates. */
+export async function quarantineJournal(path: string): Promise<void> {
+  await rename(path, `${path}.corrupt-${Date.now()}`).catch(error => { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; });
+}
+const validIntent = (intent: PairIntent) => intent.schema === 1 && /^[a-f0-9-]{36}$/.test(intent.id) && typeof intent.version === "string" &&
+  typeof intent.packageRoot === "string" && /^[a-f0-9]{64}$/.test(intent.hostDigest) &&
+  /^[a-f0-9]{64}$/.test(intent.fingerprint) && Array.isArray(intent.selections) &&
+  !intent.selections.some(p => !p || typeof p.id !== "string" || typeof p.version !== "string" || !/^[a-f0-9]{64}$/.test(p.digest) || !Object.hasOwn(p, "before")) &&
+  !(intent.selection && (typeof intent.selection.path !== "string" || !/^[a-f0-9]{64}$/.test(intent.selection.digest))) &&
+  ["prepared", "selecting", "selected", "restart-requested", "reconciled", "cancelled", "required-action"].includes(intent.phase);
 export async function readPair(root: string): Promise<PairIntent | null> {
-  let intent = await readJournal<PairIntent>(join(pairRoot(root), "intent.json"));
-  if (intent && (intent.schema !== 1 || !/^[a-f0-9-]{36}$/.test(intent.id) || typeof intent.version !== "string" ||
-      typeof intent.packageRoot !== "string" || !/^[a-f0-9]{64}$/.test(intent.hostDigest) ||
-      !/^[a-f0-9]{64}$/.test(intent.fingerprint) || !Array.isArray(intent.selections) ||
-      intent.selections.some(p => !p || typeof p.id !== "string" || typeof p.version !== "string" || !/^[a-f0-9]{64}$/.test(p.digest) || !Object.hasOwn(p, "before")) ||
-      intent.selection && (typeof intent.selection.path !== "string" || !/^[a-f0-9]{64}$/.test(intent.selection.digest)) ||
-      !["prepared", "selecting", "selected", "restart-requested", "reconciled", "cancelled", "required-action"].includes(intent.phase))) {
-    throw new HostedPluginError("host_pair_required", "Invalid host pair journal; preserve data and inspect intent.json with all owners stopped");
+  const path = join(pairRoot(root), "intent.json");
+  let intent: PairIntent | null, readable = true;
+  try { intent = await readJournal<PairIntent>(path); } catch { intent = null; readable = false; }
+  if (!readable || intent && !validIntent(intent)) {
+    // An unreadable/foreign journal is quarantined, never a permanent update fence.
+    await quarantineJournal(path); return null;
   }
   if (intent) {
     const { lifecyclePhase, ...record } = intent;
@@ -84,9 +92,12 @@ export async function writePair(root: string, intent: PairIntent): Promise<void>
   await atomicJson(join(pairRoot(root), "intent.json"), compatible);
 }
 export const pendingPair = (intent: PairIntent | null) => intent && !["prepared", "reconciled", "cancelled"].includes(intent.phase);
+/** Only an update actually between pointer write and restart admission fences management.
+ * A settled "required-action" record is history: it never blocks plugins or the next update. */
+export const inFlightPair = (intent: PairIntent | null) => intent && ["selecting", "selected", "restart-requested"].includes(intent.phase);
 export async function assertPairIdle(root: string): Promise<void> {
   const intent = await readPair(root);
-  if (intent && pendingPair(intent)) throw new HostedPluginError("host_pair_required", `Host pair selection pending (${intent.version}, ${intent.phase}): ${intent.message ?? "restart selected host, or stop all owners and inspect host-pair/intent.json"}; data retained`);
+  if (intent && inFlightPair(intent)) throw new HostedPluginError("host_pair_required", `Host pair selection pending (${intent.version}, ${intent.phase}): ${intent.message ?? "restart selected host, or stop all owners and inspect host-pair/intent.json"}; data retained`);
 }
 /** A disk owner fence spans preparation, revalidation and pointer selection. The journal then
  * fences management across the process exit; abandoned locks are never reclaimed by PID. */
@@ -108,7 +119,8 @@ export function pairTransaction(root: string, prepare: (version: string, signal?
     stage: (version, packageRoot, signal) => withStorageLock(pairRoot(root), async () => {
       await assertPairIdle(root);
       const previous = await readPair(root);
-      if (previous) await retain(previous.phase === "prepared" ? { ...previous, phase: "cancelled", message: "Superseded before version selection; no code or data changed" } : previous);
+      if (previous) await retain(previous.phase === "prepared" ? { ...previous, phase: "cancelled", message: "Superseded before version selection; no code or data changed" }
+        : previous.phase === "required-action" ? { ...previous, message: `Superseded by a new update; ${previous.message ?? "no message"}` } : previous);
       await writePair(root, await prepareIntent(version, packageRoot, signal));
     }),
     cancel: (version, packageRoot, restoreSelection) => withStorageLock(pairRoot(root), async () => {

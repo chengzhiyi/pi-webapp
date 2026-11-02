@@ -9,7 +9,7 @@ The UI screenshots illustrate the real pi-webapp interface using **seeded demo c
 | `terminal.png` | Terminal tool panel: actual Node test execution in the disposable project, with two passing tests. |
 | `excalidraw.png` | Actual optional Excalidraw plugin tool card, with a seeded hand-drawn workflow and native Edit entry. Captured at 2× density, not a fabricated UI or live model transcript. |
 | `architecture-zh.png` | User-supplied hand-drawn architecture image, embedded directly in the Chinese README. Preserve this original when regenerating SVGs. |
-| `architecture-en.png` | High-resolution English architecture image, embedded directly in the English README. |
+| `architecture-en.png` | User-supplied English hand-drawn architecture image (2840 × 2280), embedded directly in the English README. Preserve this original when regenerating SVGs. |
 | `architecture-en.svg` / `architecture-zh.svg` | Editable vector counterparts using the same layered composition; the Chinese PNG retains the supplied hand-drawn styling. No remote fonts, scripts, or embedded private data. |
 
 ## Regenerate screenshots
@@ -48,7 +48,7 @@ Regenerate both localized SVGs from their shared layout and copy:
 node scripts/generate-readme-architecture.mjs
 ```
 
-READMEs embed PNGs for image-renderer compatibility; keep the workbench, Git, and terminal screenshots visible as well. The Chinese PNG is the user's supplied original, not a generated SVG export. To refresh the English PNG, render `architecture-en.svg` at 2× pixel density (2800 × 2240) with a browser screenshot. Verify all five embedded images load in each README.
+READMEs embed PNGs for image-renderer compatibility; keep the workbench, Git, and terminal screenshots visible as well. Both architecture PNGs are user-supplied hand-drawn originals, not generated SVG exports. Do not overwrite them when regenerating the vector counterparts. Verify all five embedded images load in each README.
 
 Edit the generator rather than the generated SVGs. Keep both languages, dimensions, and palette in sync; check responsibilities against the current source and `docs/architecture.md`. The diagrams include accessible titles/descriptions and use only local text and vector shapes. Validate XML and browser rendering, including text bounds, after regeneration. Same-layer placement does not imply sequential calls; process boundaries do not imply security sandboxes.
 

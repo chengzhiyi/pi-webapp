@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { withinDialogFocusScope } from './dialog-focus-scope.ts'
 
 /** Focus containment for the topmost dialog; nested dialogs keep their own Escape. */
-export function useDialogFocus(ref: RefObject<HTMLElement>, open: boolean, onClose: () => void) {
+export function useDialogFocus(ref: RefObject<HTMLElement | null>, open: boolean, onClose: () => void) {
   const close = useRef(onClose)
   close.current = onClose
   useEffect(() => {

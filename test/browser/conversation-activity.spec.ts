@@ -67,7 +67,7 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     await page.clock.fastForward(12000);
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "12");
-    await expect(activity).toHaveText(width === 1440 ? "Working, 12s elapsed…" : "正在处理，用时 12 秒…");
+    await expect(activity).toHaveText(width === 1440 ? "Working · 12s" : "正在处理 · 12s");
     await expect(activity.locator('[aria-hidden="true"]').first()).toHaveCSS("animation-name", /agent-activity-spin/);
     await expect(elapsed).toHaveAttribute("aria-hidden", "true");
     // Compare the icon with the copy and both text spans, catching inherited
@@ -122,6 +122,8 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(page.getByRole("alert")).toContainText("Fixture send failed");
     await expect(activity).toHaveCount(0);
     await expect(editor).toHaveText("Failed request");
+    await page.getByRole("button", { name: /^(关闭错误|Dismiss error)$/ }).click();
+    await expect(page.locator(".pi-error")).toHaveCount(0);
     rejectSend = false; releaseSend = undefined;
     await editor.press("Enter");
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
@@ -139,9 +141,45 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: "Model failed" }] };
     bridge.publish({ type: "snapshot", session });
-    await expect(page.getByRole("alert")).toContainText("Model failed");
+    bridge.publish({ type: "error", message: "Model failed" });
+    await expect(page.locator(".pi-model-error")).toContainText("Model failed");
+    await expect(page.locator(".pi-error")).toContainText("Model failed");
     await expect(activity).toHaveCount(0);
-    session = { ...session, sessionId: "other-session", messages: [] }; bridge.publish({ type: "snapshot", session });
+    // A retry clears both stale presentations as soon as Pi produces a new response.
+    const recovered = message("stream", "Recovered response\n\n```ts\nconst answer = 42;\n```");
+    session = { ...session, idle: false, streaming: recovered };
+    bridge.publish({ type: "stream", message: recovered });
+    await expect(page.locator(".pi-model-error")).toHaveCount(0);
+    await expect(page.locator(".pi-error")).toHaveCount(0);
+    await expect(page.getByText("Recovered response", { exact: true })).toBeVisible();
+    // Model code blocks and replies still copy when Electron denies the async Clipboard API.
+    await page.evaluate(() => {
+      Object.assign(window, { copiedText: "" });
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("Clipboard denied")) } });
+      document.execCommand = command => {
+        if (command !== "copy") return false;
+        Object.assign(window, { copiedText: (document.activeElement as HTMLTextAreaElement | null)?.value ?? "" });
+        return true;
+      };
+    });
+    const copiedText = () => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText);
+    const copyCode = page.locator(".pi-code-toolbar button");
+    await copyCode.click();
+    await expect(copyCode).toHaveText(/^(已复制|Copied)$/);
+    expect(await copiedText()).toBe("const answer = 42;\n");
+    // The fallback's temporary textarea hands focus back to the clicked control.
+    await expect(copyCode).toBeFocused();
+    // The finished reply's copy action takes the same fallback.
+    const copyReply = page.getByRole("button", { name: /^(复制回复|Copy reply)$/ });
+    const earlierReplies = await copyReply.count();
+    session = { ...session, idle: true, streaming: null, messages: [...session.messages, { ...recovered, id: "recovered" }] };
+    bridge.publish({ type: "snapshot", session });
+    await expect(copyReply).toHaveCount(earlierReplies + 1);
+    await copyReply.last().click();
+    await expect.poll(copiedText).toBe("Recovered response\n\n```ts\nconst answer = 42;\n```");
+    // The reply button relabels itself once the fallback write succeeds, and keeps focus.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toMatch(/^(已复制|Copied)$/);
+    session = { ...session, sessionId: "other-session", idle: true, messages: [], streaming: null }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {

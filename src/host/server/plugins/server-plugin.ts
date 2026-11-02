@@ -21,7 +21,10 @@ export interface ServerPlugin {
   coordinateStart?<T>(cwd: string, operation: () => Promise<T>): Promise<T>;
   requestFailure?(error: unknown): { status: number; body: { error: string; errorCode: string; reason: string } } | null;
   /** Explain why restarting the shared backend would interrupt live resources. */
+  /** A reason the user should confirm before an update restart (e.g. open terminals). Never a hard block. */
   restartBlocker?(): string | null;
+  /** Release what restartBlocker reported, after the user confirmed the update. */
+  releaseForRestart?(): Promise<void>;
   disable?(): Promise<void>;
   close?(): Promise<void>;
 }

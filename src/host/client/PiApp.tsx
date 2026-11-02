@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "../../../web/src/ui/layout/AppFrame.tsx";
 import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "../../../web/src/ui/layout/columns.ts";
 import { SidebarRoot } from "../../../web/src/ui/sidebar/SidebarRoot.tsx";
-import { PiLogo } from "../../../web/src/ui/primitives/index.ts";
+import { PiLogo, ToastViewport, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconSettingsOutline14, IconSettingsOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { PiConversation } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
@@ -51,6 +51,7 @@ export function PiApp() {
   const { plugins: v1Plugins, errors: pluginErrors } = useWebPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.plugins, bridge.pluginGeneration);
   const hostedCallbacks = useRef<{ openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> }>({});
   const hosted = useHostedPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.pluginGeneration, hostedCallbacks, locale);
+  useErrorToast("hosted-runtime", hosted.error);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const recovery = useMemo(() => drawingRecovery(() => setPluginsOpen(true)), []);
@@ -198,13 +199,13 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={preSendError || bridge.error} onSend={send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={() => navigate(bridge.newSession)} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderToolView={(call, result, running) => <PluginToolView plugins={plugins} props={pluginProps} call={call} result={result} running={running} />} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage recovery={hosted.recovery} getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
+    if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={preSendError || bridge.error} onDismissError={() => { setPreSendError(""); bridge.clearError(); }} onSend={send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={() => navigate(bridge.newSession)} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderToolView={(call, result, running) => <PluginToolView plugins={plugins} props={pluginProps} call={call} result={result} running={running} />} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage recovery={hosted.recovery} getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
     // Management hides the dock, but must not destroy a live iframe before its flush barrier.
     // Keeping realms mounted also preserves native undo while an update is pending.
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <AppUpdateProvider actions={bridge}>{hosted.controllers}{hosted.error && <p role="alert">{hosted.error}</p>}<ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}<ToastViewport closeLabel={t("关闭", "Dismiss")} detailLabel={t("诊断信息", "Diagnostics")} /><ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} /><AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}

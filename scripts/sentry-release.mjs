@@ -13,6 +13,8 @@ async function files(root, prefix = "") {
   return output.sort();
 }
 export const sha256 = data => createHash("sha256").update(data).digest("hex");
+/** Minifiers pick their own quote style (esbuild emits "…", Oxc emits `…`), so accept any plain string literal. */
+const hasStringLiteral = (code, value) => [JSON.stringify(value), `'${value}'`, `\`${value}\``].some(literal => code.includes(literal));
 
 export async function verifyPackageArtifacts(packageRoot, archiveRoot) {
   const info = JSON.parse(await readFile(join(archiveRoot, "build-info.json"), "utf8"));
@@ -37,7 +39,7 @@ export async function verifyPackageArtifacts(packageRoot, archiveRoot) {
       const map = JSON.parse(await readFile(join(archiveRoot, side, `${file}.map`), "utf8"));
       if (map.debug_id !== id || map.debugId !== id || map.version !== 3) throw new Error(`${side}: source map Debug ID mismatch`);
       output[`${side}DebugIds`].push(id);
-      if (code.includes(JSON.stringify(info.release)) && code.includes(JSON.stringify(info.buildId))) identityFound = true;
+      if (hasStringLiteral(code, info.release) && hasStringLiteral(code, info.buildId)) identityFound = true;
     }
     if (!identityFound || output[`${side}DebugIds`].length === 0) throw new Error(`${side}: JavaScript lacks the archived release/build identity`);
     output[`${side}DebugIds`].sort();

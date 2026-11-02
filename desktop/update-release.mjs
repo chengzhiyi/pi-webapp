@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { localize as t } from "./locale.mjs";
 import { open, rm } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -12,9 +13,9 @@ const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export function compareDesktop(a, b) {
   const parts = value => {
-    if (!versionPattern.test(value.version) || !Number.isSafeInteger(value.build) || value.build < 1) throw new Error("桌面版本信息无效");
+    if (!versionPattern.test(value.version) || !Number.isSafeInteger(value.build) || value.build < 1) throw new Error(t("桌面版本信息无效", "Invalid desktop version information"));
     const result = [...value.version.split(".").map(Number), value.build];
-    if (!result.every(Number.isSafeInteger)) throw new Error("桌面版本信息无效");
+    if (!result.every(Number.isSafeInteger)) throw new Error(t("桌面版本信息无效", "Invalid desktop version information"));
     return result;
   };
   const first = parts(a); const second = parts(b);
@@ -25,10 +26,10 @@ export function compareDesktop(a, b) {
 function assetUrl(tag, name) { return `${releasesUrl}/download/${tag}/${name}`; }
 function validDownload(value) {
   const url = new URL(value);
-  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) throw new Error("更新下载地址无效");
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) throw new Error(t("更新下载地址无效", "Invalid update download URL"));
   if (url.hostname === "github.com" && url.pathname.startsWith(`/${repository}/releases/download/`)) return url;
   if (url.hostname === "release-assets.githubusercontent.com") return url;
-  throw new Error("拒绝非官方更新下载地址");
+  throw new Error(t("拒绝非官方更新下载地址", "Refusing an unofficial update download URL"));
 }
 
 async function downloadResponse(url, fetchRequest, signal) {
@@ -38,24 +39,24 @@ async function downloadResponse(url, fetchRequest, signal) {
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get("location");
       await response.body?.cancel();
-      if (!location) throw new Error("更新下载重定向无效");
+      if (!location) throw new Error(t("更新下载重定向无效", "Invalid update download redirect"));
       url = new URL(location, url).href;
       continue;
     }
-    if (response.status !== 200) { await response.body?.cancel(); throw new Error("更新下载失败，请稍后重试"); }
+    if (response.status !== 200) { await response.body?.cancel(); throw new Error(t("更新下载失败，请稍后重试", "Update download failed. Try again later.")); }
     return response;
   }
-  throw new Error("更新下载重定向过多");
+  throw new Error(t("更新下载重定向过多", "Too many update download redirects"));
 }
 
 async function jsonResponse(response, limit = 2 * 1024 ** 2) {
-  if (!response.body) throw new Error("更新信息为空");
+  if (!response.body) throw new Error(t("更新信息为空", "Update information is empty"));
   const reader = response.body.getReader(); const chunks = []; let bytes = 0;
   try {
     while (true) {
       const item = await reader.read(); if (item.done) break;
       bytes += item.value.length;
-      if (bytes > limit) throw new Error("更新信息过大");
+      if (bytes > limit) throw new Error(t("更新信息过大", "Update information is too large"));
       chunks.push(Buffer.from(item.value));
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -64,7 +65,7 @@ async function jsonResponse(response, limit = 2 * 1024 ** 2) {
 
 function validateAsset(asset, name) {
   if (asset?.name !== name || !Number.isSafeInteger(asset.bytes) || asset.bytes < 1 || asset.bytes > maxAssetBytes
-      || !/^[a-f0-9]{64}$/.test(asset.sha256)) throw new Error("更新文件信息无效");
+      || !/^[a-f0-9]{64}$/.test(asset.sha256)) throw new Error(t("更新文件信息无效", "Invalid update file information"));
   return asset;
 }
 
@@ -73,15 +74,15 @@ export function validateManifest(manifest, release, arch) {
   // macOS receipt, then apply the same strict schema-1 installation checks.
   if (manifest.schemaVersion === 2) {
     const targets = manifest.targets?.filter(target => target.target === `mac-${arch}`);
-    if (targets?.length !== 1 || !Array.isArray(manifest.assets)) throw new Error("更新发布缺少唯一的目标平台");
+    if (targets?.length !== 1 || !Array.isArray(manifest.assets)) throw new Error(t("更新发布缺少唯一的目标平台", "The update release does not have exactly one target platform"));
     const target = targets[0];
     for (const key of ["repository", "productName", "version", "build", "tag", "sourceCommit", "prerelease"]) {
-      if (target[key] !== manifest[key]) throw new Error("更新平台与发布来源不一致");
+      if (target[key] !== manifest[key]) throw new Error(t("更新平台与发布来源不一致", "The update platform does not match its release source"));
     }
     for (const asset of [target.asset, target.updateAsset].filter(Boolean)) {
       const published = manifest.assets.filter(value => value.name === asset.name);
       if (published.length !== 1 || published[0].bytes !== asset.bytes || published[0].sha256 !== asset.sha256) {
-        throw new Error("更新平台与发布文件不一致");
+        throw new Error(t("更新平台与发布文件不一致", "The update platform does not match the release files"));
       }
     }
     manifest = target;
@@ -91,14 +92,14 @@ export function validateManifest(manifest, release, arch) {
   if (manifest.schemaVersion !== 1 || manifest.repository !== repository || manifest.productName !== "pi"
       || manifest.platform !== "darwin" || manifest.arch !== arch || manifest.tag !== tag || release.tag_name !== tag
       || manifest.prerelease !== release.prerelease || typeof manifest.unsigned !== "boolean"
-      || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit)) throw new Error("更新发布信息与安装目标不一致");
+      || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit)) throw new Error(t("更新发布信息与安装目标不一致", "The update release information does not match the installation target"));
   const prefix = `pi-${manifest.version}-desktop.${manifest.build}-mac-${arch}`;
   validateAsset(manifest.asset, `${prefix}.dmg`);
   if (manifest.updateAsset) validateAsset(manifest.updateAsset, `${prefix}.zip`);
   for (const asset of [manifest.asset, manifest.updateAsset].filter(Boolean)) {
     const remote = release.assets?.find(item => item.name === asset.name);
     if (!remote || remote.state !== "uploaded" || remote.size !== asset.bytes
-        || remote.browser_download_url !== assetUrl(tag, asset.name)) throw new Error("更新发布缺少匹配的安装文件");
+        || remote.browser_download_url !== assetUrl(tag, asset.name)) throw new Error(t("更新发布缺少匹配的安装文件", "The update release is missing a matching installer"));
   }
   return Object.freeze({ ...manifest, asset: Object.freeze({ ...manifest.asset }),
     updateAsset: manifest.updateAsset ? Object.freeze({ ...manifest.updateAsset }) : undefined });
@@ -106,12 +107,12 @@ export function validateManifest(manifest, release, arch) {
 
 /** Explicit desktop test channel, including prereleases; npm's latest is unrelated. */
 export async function checkDesktopRelease(current, { arch = process.arch, fetchRequest = fetch } = {}) {
-  if (arch !== "arm64") throw new Error("当前桌面更新渠道仅支持 macOS Apple Silicon；其他平台请前往 Releases");
+  if (arch !== "arm64") throw new Error(t("当前桌面更新渠道仅支持 macOS Apple Silicon；其他平台请前往 Releases", "This desktop update channel only supports macOS Apple Silicon. Visit Releases for other platforms."));
   const response = await fetchRequest(api, { redirect: "error", signal: AbortSignal.timeout(15000),
     headers: { Accept: "application/vnd.github+json", "User-Agent": "pi-desktop-updater" } });
-  if (!response.ok) { await response.body?.cancel(); throw new Error("无法检查 GitHub 桌面更新（可能达到访问频率限制），请稍后重试"); }
+  if (!response.ok) { await response.body?.cancel(); throw new Error(t("无法检查 GitHub 桌面更新（可能达到访问频率限制），请稍后重试", "Could not check GitHub for desktop updates (the rate limit may have been reached). Try again later.")); }
   const releases = await jsonResponse(response);
-  if (!Array.isArray(releases)) throw new Error("桌面更新列表无效");
+  if (!Array.isArray(releases)) throw new Error(t("桌面更新列表无效", "Invalid desktop update list"));
   const candidates = [];
   for (const release of releases) {
     if (release.draft || typeof release.prerelease !== "boolean") continue;
@@ -129,23 +130,23 @@ export async function checkDesktopRelease(current, { arch = process.arch, fetchR
 
 /** Stream to a private, fresh file. Failed or cancelled downloads are never staged. */
 export async function downloadDesktopAsset(manifest, asset, destination, { fetchRequest = fetch, signal = AbortSignal.timeout(15 * 60 * 1000), onProgress = () => {} } = {}) {
-  if (asset !== manifest.asset && asset !== manifest.updateAsset) throw new Error("未知更新文件");
+  if (asset !== manifest.asset && asset !== manifest.updateAsset) throw new Error(t("未知更新文件", "Unknown update file"));
   validateAsset(asset, asset.name);
   const digest = createHash("sha256"); let bytes = 0; let file;
   try {
     const response = await downloadResponse(assetUrl(manifest.tag, asset.name), fetchRequest, signal);
-    if (!response.body) throw new Error("更新文件为空");
+    if (!response.body) throw new Error(t("更新文件为空", "The update file is empty"));
     const length = response.headers.get("content-length");
-    if (length !== null && Number(length) !== asset.bytes) { await response.body.cancel(); throw new Error("更新文件大小不匹配"); }
+    if (length !== null && Number(length) !== asset.bytes) { await response.body.cancel(); throw new Error(t("更新文件大小不匹配", "The update file size does not match")); }
     const verify = new Transform({ transform(chunk, _encoding, callback) {
       bytes += chunk.length;
-      if (bytes > asset.bytes) { callback(new Error("更新文件大小超出发布声明")); return; }
+      if (bytes > asset.bytes) { callback(new Error(t("更新文件大小超出发布声明", "The update file exceeds the published size"))); return; }
       digest.update(chunk); onProgress(bytes / asset.bytes); callback(null, chunk);
     } });
     try { file = await open(destination, "wx", 0o600); }
     catch (error) { await response.body.cancel(); throw error; }
     await pipeline(Readable.fromWeb(response.body), verify, file.createWriteStream(), { signal });
-    if (bytes !== asset.bytes || digest.digest("hex") !== asset.sha256) throw new Error("更新文件 SHA-256 校验失败，未安装");
+    if (bytes !== asset.bytes || digest.digest("hex") !== asset.sha256) throw new Error(t("更新文件 SHA-256 校验失败，未安装", "Update file SHA-256 verification failed; nothing was installed"));
     return destination;
   } catch (error) {
     if (file) { await file.close().catch(() => {}); await rm(destination, { force: true }); }

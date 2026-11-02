@@ -56,8 +56,8 @@ jobs:
     outputs:
       protocol_published: ${{ steps.protocol.outputs.published }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -66,13 +66,13 @@ jobs:
         run: node scripts/sync-protocol-dependency.mjs --probe
       - name: Check out protocol source for initial verification
         if: steps.protocol.outputs.published == 'false'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: chengzhiyi/pi-extensions
           ref: e719070a1d407319841a9a23287e402265a63b8a
           path: .ci/pi-extensions
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.protocol.outputs.published == 'false'
         with:
           package_json_file: .ci/pi-extensions/package.json
@@ -93,6 +93,7 @@ jobs:
       - name: Verify the runner Chrome used by release probes
         timeout-minutes: 1
         run: node scripts/verify-ci-chrome.mjs
+      - run: npm run lint -- --reporter=github
       - run: npm run check
       - run: npm run build
       - run: npm test
@@ -121,8 +122,8 @@ jobs:
     env:
       PI_WEB_BROWSER_GROUP: ${{ matrix.group }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -132,13 +133,13 @@ jobs:
         run: node scripts/sync-protocol-dependency.mjs --probe
       - name: Check out protocol source for initial verification
         if: steps.protocol.outputs.published == 'false'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: chengzhiyi/pi-extensions
           ref: e719070a1d407319841a9a23287e402265a63b8a
           path: .ci/pi-extensions
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.protocol.outputs.published == 'false'
         with:
           package_json_file: .ci/pi-extensions/package.json
@@ -186,7 +187,7 @@ jobs:
           mkdir -p .ci/release
           npm pack --ignore-scripts --json --pack-destination .ci/release > .ci/release/pack.json
           node scripts/verify-sentry-release.mjs --telemetry-disabled --pack-manifest .ci/release/pack.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: browser-evidence-${{ matrix.group }}
@@ -230,8 +231,8 @@ jobs:
       group: ${{ github.workflow }}-smoke-${{ matrix.os }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           package-manager-cache: false
@@ -244,8 +245,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.19.0'
           package-manager-cache: false
@@ -265,11 +266,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Never replace the verified source with a newer branch tip.
           ref: ${{ github.sha }}
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org

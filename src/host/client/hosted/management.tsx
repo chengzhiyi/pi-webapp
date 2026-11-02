@@ -5,6 +5,8 @@ import { PendingViews } from "./PendingViews.tsx";
 import { HostedPluginIcon } from "./PluginIcon.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
+import { showToast } from "../../../../web/src/ui/primitives/Toast.tsx";
+import { writeClipboard } from "../../../../web/src/ui/shared/primitives/clipboard.ts";
 import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
 import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
@@ -49,7 +51,7 @@ function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCa
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
   };
   const copyCode = async (code: string) => {
-    try { await navigator.clipboard.writeText(code); setCopied(true); } catch { setCopied(false); }
+    setCopied(await writeClipboard(code));
   };
   const copyAndOpen = (f: { userCode: string; verificationUri: string }) => {
     window.open(f.verificationUri, "_blank", "noopener,noreferrer");
@@ -197,6 +199,13 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
     const unavailable = !card.installed && !!failure && ["metadata_not_found", "tarball_not_found", "no_compatible_version"].includes(failure.code ?? "");
     return <Button variant="outline" size="sm" disabled={unavailableControls || unavailable} onClick={() => request(card, card.pendingVersion ? "retry" : card.installed ? "update" : "install")}>{card.pendingVersion ? t("应用待更新版本", "Apply pending update") : card.installed ? t("更新", "Update") : unavailable ? t("暂不可下载", "Unavailable") : card.hasRetainedData || seenInstalled.current.has(card.pluginId) ? t("重新安装", "Reinstall") : t("下载", "Download")}</Button>;
   };
+  // On the list, operation failures go to the app-wide toast stack; rows keep a one-word marker
+  // and the detail page keeps the full diagnostics, so errors never reflow the list layout.
+  useEffect(() => {
+    if (!operationError || selected) return;
+    const card = cards.find(item => item.pluginId === operationError.id);
+    showToast({ key: `hosted-operation-${operationError.id}`, message: `${card ? `${name(card)}：` : ""}${problemText(operationError.problem, !!card?.installed, t)}`, detail: [operationError.problem.code, operationError.problem.message].filter(Boolean).join(": "), detailLabel: t("诊断信息", "Diagnostics") });
+  }, [operationError]);
   const failureView = (card: HostedPluginCard, detail: boolean) => {
     const failure = failureFor(card), diagnostic = card.updateDiagnostic;
     if (!failure) return null;
@@ -231,9 +240,8 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       </section>
     </div> : <ul className={rows.cards}>{shown.map(card => <li className={rows.card} key={card.pluginId} data-hosted-card={card.pluginId}>
       <span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={card} size={30} /></span>
-      <div className={rows.cardMain}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button><p>{description(card)}</p><small><span className={rows.dot} data-enabled={known && card.enabled} />{busy ? t("正在应用…", "Applying…") : status(card)}</small>
+      <div className={rows.cardMain}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button><p>{description(card)}</p><small><span className={rows.dot} data-enabled={known && card.enabled} />{busy ? t("正在应用…", "Applying…") : status(card)}{!busy && failureFor(card) && <span className={css.attention}>{t(" · 需要处理", " · Needs attention")}</span>}</small>
         {card.pendingVersion ? <small>{t("关闭编辑器后更新至：", "Close editors to update to: ")}{card.pendingVersion}</small> : card.availableVersion && card.availableVersion !== card.version && <small>{t("可用版本：", "Available release: ")}{card.availableVersion}</small>}
-        {failureView(card, false)}
       </div>
       <div className={`${rows.cardEnd} ${css.rowActions}`}>{downloadFor(card)}{switchFor(card)}<span aria-hidden="true">›</span></div>
     </li>)}</ul>}
