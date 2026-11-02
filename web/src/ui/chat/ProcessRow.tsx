@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { ViewBlock, ViewMessage, ViewUsage } from "../../../../src/host/client/pi-bridge.ts";
 import { DisclosureRow } from "../primitives/DisclosureRow.tsx";
 import { TerminalBlock } from "../primitives/TerminalBlock.tsx";
+import { useCopyFeedback } from "../primitives/use-copy-feedback.ts";
 import { IconChevronDownOutline14, IconCodeOutline16, IconCopyOutline16, IconDatabaseOutline16 } from "../primitives/icons/index.tsx";
 import toolCss from "./ToolRow.module.css";
 import processCss from "./TurnProcess.module.css";
@@ -10,7 +11,6 @@ import usageCss from "./TurnUsagePanel.module.css";
 import dialogCss from "./stat-dialog.module.css";
 import actionsCss from "./MessageIconActions.module.css";
 import { localize as t } from "../locale/preference.ts";
-import { writeClipboard } from "../shared/primitives/clipboard.ts";
 
 function toolSummary(block: ViewBlock): string {
   try {
@@ -110,9 +110,9 @@ export function UsagePill({ usage, model }: { usage: ViewUsage; model: string | 
 export function TurnActions({ text, timestamp, usage, model }: {
   text: string; timestamp?: string; usage: ViewUsage | null; model: string | null;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, onCopy } = useCopyFeedback(text);
   return <div className={actionsCss.actions}>
-    {text && <button className={actionsCss.action} type="button" aria-label={copied ? t("已复制", "Copied") : t("复制回复", "Copy reply")} onClick={() => { void writeClipboard(text).then(ok => { if (!ok) return; setCopied(true); window.setTimeout(() => setCopied(false), 1000); }); }}><IconCopyOutline16 /></button>}
+    {text && <button className={actionsCss.action} type="button" aria-label={copied ? t("已复制", "Copied") : t("复制回复", "Copy reply")} onClick={onCopy}><IconCopyOutline16 /></button>}
     {usage && <UsagePill usage={usage} model={model} />}
     {timestamp && <time className={actionsCss.timeEnd} dateTime={timestamp}>{new Date(timestamp).toLocaleTimeString(t("zh-CN", "en-US"), { hour: "2-digit", minute: "2-digit" })}</time>}
   </div>;

@@ -169,8 +169,14 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     expect(await copiedText()).toBe("const answer = 42;\n");
     // The fallback's temporary textarea hands focus back to the clicked control.
     await expect(copyCode).toBeFocused();
-    await page.getByRole("button", { name: /^(复制回复|Copy reply)$/ }).first().click();
-    await expect.poll(copiedText).toBe("Done");
+    // The finished reply's copy action takes the same fallback.
+    const copyReply = page.getByRole("button", { name: /^(复制回复|Copy reply)$/ });
+    const earlierReplies = await copyReply.count();
+    session = { ...session, idle: true, streaming: null, messages: [...session.messages, { ...recovered, id: "recovered" }] };
+    bridge.publish({ type: "snapshot", session });
+    await expect(copyReply).toHaveCount(earlierReplies + 1);
+    await copyReply.last().click();
+    await expect.poll(copiedText).toBe("Recovered response\n\n```ts\nconst answer = 42;\n```");
     // The reply button relabels itself once the fallback write succeeds, and keeps focus.
     await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toMatch(/^(已复制|Copied)$/);
     session = { ...session, sessionId: "other-session", idle: true, messages: [], streaming: null }; bridge.publish({ type: "snapshot", session });
