@@ -48,6 +48,7 @@ interface Props {
   streaming: ViewMessage | null;
   connection: ConnectionState;
   error: string;
+  onDismissError: () => void;
   onSend: (text: string, attachments: string[], delivery?: PromptDelivery) => Promise<void>;
   onUpdateQueuedPrompt: (id: string, revision: number, action: QueuedPromptAction) => Promise<void>;
   onLoadImage: (messageId: string, index: number) => Promise<Blob>;
@@ -99,8 +100,8 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   );
 }
 
-function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, renderToolView, artifactTools, viewTools, running = false, cwd }: {
-  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; renderToolView: Props["renderToolView"]; artifactTools: readonly string[]; viewTools: readonly string[]; running?: boolean; cwd?: string;
+function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, renderToolView, artifactTools, viewTools, running = false, cwd, superseded = false }: {
+  turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; renderToolView: Props["renderToolView"]; artifactTools: readonly string[]; viewTools: readonly string[]; running?: boolean; cwd?: string; superseded?: boolean;
 }) {
   const lastAssistant = [...turn.messages].reverse().find((message) => message.role === "assistant" && message.blocks.some((block) => block.kind === "text" && block.text.trim()));
   const answerBlocks = lastAssistant?.blocks.filter((block) => block.kind === "text") ?? [];
@@ -118,7 +119,11 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
   const messageCount = new Set(process.filter(({ block }) => block.kind !== "toolCall").map(({ message }) => message.id)).size;
   const answer = answerBlocks.map((block) => block.text).join("\n");
   const expanded = running || open;
-  const failures = turn.messages.filter((message) => message.role === "assistant" && message.error);
+  const [dismissedFailures, setDismissedFailures] = useState<ReadonlySet<string>>(new Set());
+  const failedMessages = turn.messages.filter((message) => message.role === "assistant" && message.error);
+  const latestAssistant = [...turn.messages].reverse().find((message) => message.role === "assistant");
+  const recovered = superseded || Boolean(latestAssistant && !latestAssistant.error && latestAssistant.id !== failedMessages.at(-1)?.id);
+  const failures = recovered ? [] : failedMessages.filter((message) => !dismissedFailures.has(message.id));
   return <div className="pi-turn" data-turn={turn.index}>
     {turn.messages.filter((message) => message.role === "user" || message.role === "notice").map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
     {process.length > 0 && <>
@@ -130,7 +135,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
     {toolViewCalls(turn.messages, viewTools).map(({ key, call }) => <div key={key} data-tool-view={call.toolName}>{renderToolView?.(call, call.toolCallId ? results.get(call.toolCallId) : undefined, running && !results.has(call.toolCallId ?? ""))}</div>)}
     {answerBlocks.length > 0 && lastAssistant && <PiMessage message={{ ...lastAssistant, blocks: answerBlocks }} results={results} loadImage={loadImage} running={lastAssistant.id === "stream"} />}
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
-    {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><strong>{t("模型请求失败", "Model request failed")}</strong><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
+    {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><div className="pi-model-error-title"><strong>{t("模型请求失败", "Model request failed")}</strong><button type="button" className="pi-error-dismiss" aria-label={t("关闭错误", "Dismiss error")} onClick={() => setDismissedFailures(current => new Set(current).add(message.id))}>×</button></div><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
     {!running && failures.length === 0 && (lastAssistant || (turn.usage && turn.usage.totalTokens > 0)) && <TurnActions text={answer} timestamp={lastAssistant?.timestamp} usage={turn.usage} model={lastAssistant?.model ?? model} />}
     {renderPluginSlot("turn.tail", { id: turn.id, completed: !running, messageIds: turn.messages.map((message) => message.id), toolCallIds: turn.messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)) })}
   </div>;
@@ -444,7 +449,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   );
 }
 
-export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
+export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -513,7 +518,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="" onScroll={onScroll} onWheel={onWheel}>
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
-              {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
+              {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
               {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
@@ -524,7 +529,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {composerInteraction}
               <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
               {transcript.error && <div className="pi-error" role="alert">{transcript.error}<button onClick={transcript.retry}>Retry view cleanup</button></div>}
-              {error && <div className="pi-error" role="alert">{error}</div>}
+              {error && <div className="pi-error pi-error-dismissible" role="alert"><span>{error}</span><button type="button" className="pi-error-dismiss" aria-label={t("关闭错误", "Dismiss error")} onClick={onDismissError}>×</button></div>}
             </div>
           </div>
           {showLatest && <div className={chatCss.toBottomSlot}>
