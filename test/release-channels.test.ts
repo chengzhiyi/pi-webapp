@@ -6,6 +6,7 @@ import test from "node:test";
 import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { readDesktopRelease } from "../desktop/managed-release.mjs";
+import { readCandidate, selectCandidate } from "../bin/upgrade-transaction.mjs";
 
 async function fixture(t: test.TestContext, { current = "0.1.29", dataVersion = 1, desktop = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "pi-channel 中文 "));
@@ -105,6 +106,11 @@ for (const desktop of [false, true]) {
     f.setDataVersion(1);
     const prepared = await f.updater.prepare(request);
     await f.updater.requestRestart(prepared);
+    // The host only names the candidate; the launcher selects it with the downgrade consent it carries.
+    const candidate = (await readCandidate(f.agentDir))!;
+    assert.equal(candidate.downgrade, true);
+    await assert.rejects(readFile(join(f.agentDir, "pi-web", desktop ? "desktop-update.json" : "update.json")), { code: "ENOENT" });
+    await selectCandidate({ agentDir: f.agentDir, desktop, currentVersion: "0.2.0-alpha.3", candidate });
     const selection = JSON.parse(await readFile(join(f.agentDir, "pi-web", desktop ? "desktop-update.json" : "update.json"), "utf8"));
     assert.equal(selection.version, "0.1.29"); assert.equal(selection.launcher, prepared.launcher);
     if (desktop) {

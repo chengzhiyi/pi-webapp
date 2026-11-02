@@ -49,6 +49,7 @@ export class HostedPluginIntegration {
   private restartResume?: () => Promise<void>;
   private closing = false;
   private started = false;
+  private starting?: Promise<void>;
   private stopping?: Promise<void>;
   private readonly options: HostedIntegrationOptions;
   private readonly trusted: ReadonlyMap<string, HostedPluginPolicy>;
@@ -220,7 +221,21 @@ export class HostedPluginIntegration {
     this.switches = result.catch(() => {});
     return result.catch(error => { if (shutdown) this.adapter.thaw(); throw error; });
   }
-  async start(): Promise<void> {
+  /** Host health admission waits for plugins at most `timeoutMs`. A slow or hung plugin start keeps
+   * running in the background and reports on its own card; it never fails the host's startup. */
+  async admit(timeoutMs: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = this.start().then(() => true);
+    started.catch(() => {});
+    try { return await Promise.race([started, new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), timeoutMs); timer.unref?.(); })]); }
+    finally { clearTimeout(timer); }
+  }
+  start(): Promise<void> {
+    // One start at a time; a failed start can be retried by the next session start.
+    this.starting ??= this.startOnce().catch(error => { this.starting = undefined; throw error; });
+    return this.starting;
+  }
+  private async startOnce(): Promise<void> {
     if (this.started) return;
     await this.adapter.verifyCompatibility();
     for (const plugin of this.options.catalog ?? OFFICIAL_PLUGINS) {

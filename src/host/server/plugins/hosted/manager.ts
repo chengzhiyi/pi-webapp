@@ -13,7 +13,7 @@ import { hostedAsset, type HostedPackage } from "./resources.ts";
 import { atomicJson, boundedRead, readJson, withStorageLock } from "./storage.ts";
 import { compareVersions } from "./versions.ts";
 import { readFile } from "node:fs/promises";
-import { activePair, candidateHost, inFlightPair, pairRoot, pairTransaction, readPair, writePair, type PairIntent } from "../../updates/hosted-pair.ts";
+import { activePair, candidateHost, inFlightPair, pairRoot, readPair, writePair, type PairIntent } from "../../updates/hosted-pair.ts";
 
 interface Policy { updatePolicy: UpdatePolicy; pinnedVersion?: string }
 export interface UpdateDiagnostic {
@@ -410,11 +410,10 @@ export class HostedPluginManager {
   async pairSnapshot(): Promise<unknown> {
     return { policies: await this.policies(), active: await Promise.all(this.installer.catalog.map(async p => [p.id, await this.supervisor(p.id).broker.active()])) };
   }
-  get hostPair() { return pairTransaction(this.options.root, (version, signal) => this.prefetchForHost(version, signal), () => this.pairSnapshot()); }
   /** Best effort, before a host update: download a release compatible with the target host for each
    * installed plugin whose installed versions do not support it. Nothing is activated; failures are
    * recorded on the plugin's own diagnostics and never reach the host update. */
-  private async prefetchForHost(hostVersion: string, signal?: AbortSignal): Promise<void> {
+  async prefetchForHost(hostVersion: string, signal?: AbortSignal): Promise<void> {
     const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog, fetch: this.options.fetch });
     const inventory = await this.installer.inventory();
     for (const plugin of this.installer.catalog) {

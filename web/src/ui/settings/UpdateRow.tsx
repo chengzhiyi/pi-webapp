@@ -64,6 +64,7 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
       <p>{t("以下插件在新版本中暂时不可用（不影响升级，数据保留）：", "These plugins will be unavailable on the new version (the update is not blocked; their data is kept):")}</p>
       <ul>{status.pluginWarnings.map(warning => <li key={warning.pluginId}>{warning.pluginId}: {warning.message}</li>)}</ul>
     </div>}
+    {status?.lastFailure && !installing && !targetVersion && <p className={css.note}>{t(`上次升级到 ${status.lastFailure.version} 未完成，已保留当前版本：`, `The last update to ${status.lastFailure.version} did not complete; the current version was kept: `)}{status.lastFailure.message}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
     {status?.requiresDesktopUpgrade && <p className={css.note}>
       <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载新版桌面应用", "Download desktop update")}</a>

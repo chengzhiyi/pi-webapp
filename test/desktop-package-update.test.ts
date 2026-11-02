@@ -6,6 +6,12 @@ import test from "node:test";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { desktopPeerSpecs, verifyDesktopPackage } from "../src/host/server/updates/desktop-package.ts";
 import { dependencyRoot, desktopUpdatePath, readDesktopRelease } from "../desktop/managed-release.mjs";
+import { readCandidate, selectCandidate } from "../bin/upgrade-transaction.mjs";
+
+/** What the supervising launcher does with an accepted restart request. */
+async function launcherSelects(agentDir: string, currentVersion: string) {
+  await selectCandidate({ agentDir, desktop: true, currentVersion, candidate: (await readCandidate(agentDir))! });
+}
 
 async function installedPackage(prefix: string, version: string) {
   const root = join(prefix, "node_modules", "pi-webapp");
@@ -51,6 +57,8 @@ test("capable desktop checks npm, stages outside the app, pins peers and persist
     assert.equal(verifications, 1);
     assert.equal(await readDesktopRelease(agentDir, "0.1.0"), null);
     await updater.requestRestart(first);
+    assert.equal(await readDesktopRelease(agentDir, "0.1.0"), null, "the host never selects; the launcher does");
+    await launcherSelects(agentDir, "0.1.0");
     assert.equal((await readDesktopRelease(agentDir, "0.1.0"))?.launcher, first.launcher);
     assert.equal(await readFile(join(packageRoot, "package.json"), "utf8"), original);
     await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
@@ -61,7 +69,7 @@ test("capable desktop checks npm, stages outside the app, pins peers and persist
 
     latest = "0.3.0";
     const next = new SelfUpdater({ ...options, packageRoot: dirname(dirname(first.launcher)) });
-    const second = await next.prepare(); await next.requestRestart(second);
+    const second = await next.prepare(); await next.requestRestart(second); await launcherSelects(agentDir, "0.2.0");
     const selection = JSON.parse(await readFile(desktopUpdatePath(agentDir), "utf8"));
     assert.equal(selection.version, "0.3.0");
     assert.equal(selection.previous.launcher, first.launcher);
@@ -148,7 +156,7 @@ test("desktop download installs the target release's declared exact SDK pair ins
     const install = calls.find(args => args[0] === "install")!;
     assert.ok(install.includes("@earendil-works/pi-coding-agent@1.4.0"));
     assert.ok(install.includes("@earendil-works/pi-ai@1.4.0"));
-    await updater.requestRestart(prepared);
+    await updater.requestRestart(prepared); await launcherSelects(join(root, "agent"), "0.1.0");
     assert.equal((await readDesktopRelease(join(root, "agent"), "0.1.0"))!.version, "0.2.0");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

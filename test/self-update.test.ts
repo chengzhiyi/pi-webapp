@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { SelfUpdater, compareVersions } from "../src/host/server/updates/self-update.ts";
+import { readCandidate } from "../bin/upgrade-transaction.mjs";
 
 test("update checks run npm without PATH in directories containing spaces and Chinese characters", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi npm 中文 & "));
@@ -113,13 +114,13 @@ test("installs a checked npm array release before requesting a supervised restar
     await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
     assert.deepEqual(await updater.prepare(), prepared, "preparation is idempotent without a pointer write");
     await updater.requestRestart(prepared);
-    const manifest = JSON.parse(await readFile(join(agentDir, "pi-web", "update.json"), "utf8"));
-    assert.equal(manifest.version, "0.2.0");
-    assert.equal(manifest.launcher, prepared.launcher);
+    // The launcher, not the host, writes the pointer when it accepts this request.
+    await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
+    const candidate = (await readCandidate(agentDir))!;
+    assert.equal(candidate.version, "0.2.0"); assert.equal(candidate.launcher, prepared.launcher);
     await assert.rejects(updater.prepare(), /正在重启/);
     const restart = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.restart"), "utf8"));
-    assert.equal(restart.nonce, "nonce-a");
-    assert.equal(restart.launcher, prepared.launcher);
+    assert.deepEqual(restart, { nonce: "nonce-a", candidate: candidate.id });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

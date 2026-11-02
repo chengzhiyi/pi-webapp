@@ -2,12 +2,13 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fingerprint, quarantineJournal, type HostedPairTransaction } from "./hosted-pair.ts";
-import { atomicJson, readJournal, withStorageLock } from "../plugins/hosted/storage.ts";
+import { join } from "node:path";
+import { quarantineJournal } from "./hosted-pair.ts";
+import { atomicJson, readJournal } from "../plugins/hosted/storage.ts";
 import { promisify } from "node:util";
 import { npmCommand } from "../../../../bin/npm-command.mjs";
-import { desktopProtocolVersion, readDesktopRelease, validateDesktopRelease, writeDesktopRelease } from "../../../../desktop/managed-release.mjs";
+import { desktopProtocolVersion, validateDesktopRelease } from "../../../../desktop/managed-release.mjs";
+import { readCandidate, readUpgradeTransaction, retireCandidate, writeCandidate } from "../../../../bin/upgrade-transaction.mjs";
 import { launcherHandoffProtocol, readHandoff, writeHandoff } from "../../../../desktop/launcher-handoff.mjs";
 import { desktopPeerSpecs, exactSdkPeerSpecs, verifyDesktopPackage } from "./desktop-package.ts";
 
@@ -18,12 +19,15 @@ export { compareVersions } from "../../../../desktop/release-version.mjs";
 import type { UpdateChannel, UpdateRequest, UpdateStatus } from "../../../contracts/bridge-contract.ts";
 export type { UpdateStatus } from "../../../contracts/bridge-contract.ts";
 export interface PreparedUpdate { version: string; launcher: string }
+/** Host-side record of download/validation work. "selecting"/"selected" are only ever read from
+ * releases before 0.1.51: the launcher now owns pointer selection, admission and rollback. */
 interface UpdateTransaction {
   schema: 1; id: string; phase: "downloading" | "validating" | "prepared" | "selecting" | "selected" | "restart-requested" | "committed" | "cancelled" | "failed";
   version: string; channel: UpdateChannel; packageRoot?: string;
   selectionPath: string; before?: string | null; selectedDigest?: string; message?: string; ownerNonce?: string;
   legacyRecovery?: boolean;
 }
+const terminal = (phase: UpdateTransaction["phase"]) => ["committed", "cancelled", "failed"].includes(phase);
 
 function dataVersion(pkg: { piWebappDataVersion?: unknown }): number {
   // Releases predating this contract use data format 1 (no app-owned migrations).
@@ -54,20 +58,24 @@ export class SelfUpdater {
   private readonly targetPeerSpecs: (version: string) => Promise<string[]>;
   private readonly verifyPackage: typeof verifyDesktopPackage;
   private readonly pluginWarnings?: (version: string) => Promise<Array<{ pluginId: string; message: string }>>;
-  private readonly hostedPair?: HostedPairTransaction;
+  private readonly prefetchPlugins?: (version: string, signal?: AbortSignal) => Promise<void>;
   private preparing = false;
   private preparation?: Promise<PreparedUpdate>;
   private cancellation?: Promise<void>;
   private downloadAbort?: AbortController;
   private savingPreference = false;
   private restartPending = false;
-  private preparedUpdate?: { update: PreparedUpdate; channel: UpdateChannel; select: () => Promise<void> };
+  private preparedUpdate?: { id: string; update: PreparedUpdate; channel: UpdateChannel };
+  /** The transaction this process is working on; every other record is history to settle. */
+  private ownTransaction?: string;
   private readonly beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)>;
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[], signal?: AbortSignal) => Promise<string>; desktopManaged?: boolean;
     desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
     /** Plugins unavailable on a target version. Shown before updating; never a gate. */
-    pluginWarnings?: (version: string) => Promise<Array<{ pluginId: string; message: string }>>; hostedPair?: HostedPairTransaction;
+    pluginWarnings?: (version: string) => Promise<Array<{ pluginId: string; message: string }>>;
+    /** Best-effort download of plugin releases compatible with the target. Failures never reach the update. */
+    prefetchPlugins?: (version: string, signal?: AbortSignal) => Promise<void>;
     /** Drain hosted workers/views while authenticated HTTP is still available, before launcher EOF. */
     beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)> }) {
     this.agentDir = options.agentDir;
@@ -87,7 +95,7 @@ export class SelfUpdater {
     };
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
     this.pluginWarnings = options.pluginWarnings;
-    this.hostedPair = options.hostedPair;
+    this.prefetchPlugins = options.prefetchPlugins;
     this.beforeRestart = options.beforeRestart;
   }
 
@@ -106,7 +114,7 @@ export class SelfUpdater {
     if (this.preparing || this.restartPending || this.savingPreference || this.cancellation || this.preparedUpdate) throw new Error("升级或启动器交接正在进行中");
     await this.runningVersion();
     const transaction = await this.transaction();
-    if (transaction && !["committed", "cancelled", "failed"].includes(transaction.phase)) throw new Error("请先完成或取消未完成的业务包更新，再交接启动器");
+    if (transaction && !terminal(transaction.phase)) throw new Error("请先完成或取消未完成的业务包更新，再交接启动器");
     const statePath = join(this.agentDir, "pi-web", "launcher.json");
     const owner = JSON.parse(await readFile(statePath, "utf8"));
     const matches = (state: typeof owner) => state.nonce === nonce && state.pid === owner.pid && state.runtimeKind === "desktop" && state.launcherHandoffProtocol === 1;
@@ -136,10 +144,20 @@ export class SelfUpdater {
     return pkg.version;
   }
 
+  /** Settles a record no live operation of this process owns. Nothing here can fence an update:
+   * the running version commits its own switch, everything else is history the next update supersedes. */
   async runningVersion(): Promise<string> {
     const current = await this.current(), transaction = await this.transaction();
-    if (transaction?.phase === "restart-requested" && transaction.version === current && (!this.hostedPair || (await this.hostedPair.status?.())?.phase === "reconciled")) {
-      await this.record({ ...transaction, phase: "committed", message: "Selected host is running and hosted protocol health admission completed" });
+    if (!transaction || terminal(transaction.phase) || transaction.id === this.ownTransaction) return current;
+    if (transaction.version === current && ["selecting", "selected", "restart-requested"].includes(transaction.phase)) {
+      await this.record({ ...transaction, phase: "committed", message: "Selected version is running" });
+    } else if (transaction.phase === "restart-requested") {
+      const outcome = await readUpgradeTransaction(this.agentDir);
+      await this.record({ ...transaction, phase: "failed", message: outcome?.id === transaction.id && outcome.phase === "rolled-back" && outcome.message
+        ? outcome.message : "The launcher did not start the new version; current version kept" });
+    } else {
+      await retireCandidate(this.agentDir, transaction.id, "superseded");
+      await this.record({ ...transaction, phase: "failed", message: `Interrupted while ${transaction.phase} in an earlier run; superseded, current version kept` });
     }
     return current;
   }
@@ -150,55 +168,23 @@ export class SelfUpdater {
     // An unreadable/invalid record is quarantined (bytes retained), never a permanent update fence.
     try { value = await readJournal<UpdateTransaction>(this.transactionPath); }
     catch { await quarantineJournal(this.transactionPath); return null; }
-    try {
-      if (!value) return null;
-      if (value.schema !== 1 || !/^[a-f0-9-]{36}$/.test(value.id) || typeof value.version !== "string" ||
-          !["stable", "alpha"].includes(value.channel) || !["downloading", "validating", "prepared", "selecting", "selected", "restart-requested", "committed", "cancelled", "failed"].includes(value.phase) ||
-          value.selectionPath !== join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json") ||
-          value.selectedDigest !== undefined && !/^[a-f0-9]{64}$/.test(value.selectedDigest) ||
-          value.before !== undefined && value.before !== null && (typeof value.before !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.before))) throw new Error("更新事务记录无效");
-      return value;
-    } catch { await quarantineJournal(this.transactionPath); return null; }
+    if (!value) return null;
+    if (value.schema !== 1 || !/^[a-f0-9-]{36}$/.test(value.id) || typeof value.version !== "string" ||
+        !["stable", "alpha"].includes(value.channel) || !["downloading", "validating", "prepared", "selecting", "selected", "restart-requested", "committed", "cancelled", "failed"].includes(value.phase) ||
+        typeof value.selectionPath !== "string") { await quarantineJournal(this.transactionPath); return null; }
+    return value;
   }
   private async record(transaction: UpdateTransaction): Promise<void> {
     await mkdir(join(this.agentDir, "pi-web"), { recursive: true });
     await atomicJson(this.transactionPath, transaction);
-    if (["failed", "cancelled", "committed"].includes(transaction.phase)) {
+    if (terminal(transaction.phase)) {
       const directory = join(this.agentDir, "pi-web", "update-history"); await mkdir(directory, { recursive: true });
       await atomicJson(join(directory, `${transaction.id}-${transaction.phase}.json`), transaction);
     }
   }
-  /** A different nonce is not evidence that an older launcher stopped. Recovery
-   * requires both its exact rollback bytes and this backend's current launcher
-   * receipt. PID liveness/expiry is never used to steal an update transaction.
-   */
-  private async admittedFallback(transaction: UpdateTransaction, current?: string): Promise<boolean> {
-    if (!transaction.ownerNonce || !this.launcherNonce || transaction.ownerNonce === this.launcherNonce || transaction.before === undefined) return false;
-    const version = current ?? await this.current();
-    if (transaction.version === version) return false;
-    try {
-      const owner = await readJournal<{ nonce?: string; version?: string; piPid?: number }>(join(this.agentDir, "pi-web", "launcher.json"));
-      if (owner?.nonce !== this.launcherNonce || owner.version !== version || owner.piPid !== process.pid) return false;
-      let pointer: string | null;
-      try { pointer = (await readFile(transaction.selectionPath)).toString("base64"); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false; pointer = null; }
-      return pointer === transaction.before;
-    } catch { return false; }
-  }
-  /** Legacy selected has no durable handoff phase. Only the published current
-   * backend may recover it, and a live restart marker makes acceptance ambiguous.
-   */
-  private async admittedLegacyRecovery(current?: string): Promise<boolean> {
-    if (!this.launcherNonce) return false;
-    try {
-      const owner = await readJournal<{ nonce?: string; version?: string; piPid?: number }>(join(this.agentDir, "pi-web", "launcher.json"));
-      if (owner?.nonce !== this.launcherNonce || owner.piPid !== process.pid || owner.version !== (current ?? await this.current())) return false;
-      try { await access(join(this.agentDir, "pi-web", "launcher.restart")); return false; }
-      catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
-    } catch { return false; }
-  }
-  /** Cancel only this process's uncommitted handoff, compare-and-swap the pointer,
-   * and retain both the transaction and all plugin data for inspection/recovery. */
+
+  /** Cancels this host's own download or prepared candidate. Once the launcher holds the restart
+   * request, the launcher owns the outcome (it admits the new version or rolls back by itself). */
   async cancel(): Promise<void> {
     if (this.cancellation) return this.cancellation;
     const cancellation = this.cancelUpdate(); this.cancellation = cancellation;
@@ -207,57 +193,12 @@ export class SelfUpdater {
 
   private async cancelUpdate(): Promise<void> {
     if (this.savingPreference) throw new Error("偏好保存中，请稍后取消");
+    if (this.restartPending) throw new Error("重启已交给启动器；新版本启动失败时会自动恢复当前版本");
     if (this.preparing) { this.downloadAbort?.abort(new Error("Update cancelled")); await this.preparation?.catch(() => {}); }
-    let transaction = await this.transaction();
-    if (!transaction || ["cancelled", "failed", "committed"].includes(transaction.phase)) {
-      // Upgrade legacy selected journals without deleting them or guessing a plugin rollback.
-      const intent = await this.hostedPair?.status?.();
-      if (intent && !["cancelled", "reconciled", "prepared"].includes(intent.phase)) {
-        if (!await this.admittedLegacyRecovery()) throw new Error("旧事务恢复需要当前后台的归属收据，且不能中断启动器已接受的交接");
-        const selectionPath = join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json");
-        if (!intent.selection || intent.selection.path !== selectionPath) throw new Error("旧升级事务缺少版本选择收据，请保留记录并检查恢复诊断");
-        const bytes = await readFile(selectionPath);
-        if (fingerprint(bytes.toString("base64")) !== intent.selection.digest) throw new Error("旧升级选择已变化，恢复未覆盖其他操作");
-        const selected = JSON.parse(bytes.toString("utf8")), current = await this.current();
-        const currentLauncher = join(this.packageRoot, "bin", "pi-webapp.mjs"); await access(currentLauncher);
-        const previous = selected.previous?.version === current && selected.previous.launcher === currentLauncher ? selected.previous
-          : this.desktopManaged ? await validateDesktopRelease(this.agentDir, { version: current, launcher: currentLauncher, desktopProtocolVersion })
-          : { version: current, launcher: currentLauncher, baseVersion: selected.baseVersion ?? current };
-        transaction = { schema: 1, id: intent.id, phase: "selected", version: intent.version, channel: await this.channel(), packageRoot: intent.packageRoot,
-          selectionPath, before: Buffer.from(JSON.stringify(previous)).toString("base64"), selectedDigest: intent.selection.digest,
-          ownerNonce: this.launcherNonce, legacyRecovery: true };
-        await this.record(transaction);
-      } else if (intent?.phase === "prepared") await this.hostedPair?.cancel?.(intent.version, intent.packageRoot);
-    }
-    if (!transaction || ["cancelled", "failed", "committed"].includes(transaction.phase)) {
-      const intent = await this.hostedPair?.status?.();
-      if (intent?.phase === "prepared") await this.hostedPair?.cancel?.(intent.version, intent.packageRoot);
-      this.preparedUpdate = undefined; this.restartPending = false; return;
-    }
-    if (transaction.legacyRecovery && !await this.admittedLegacyRecovery()) throw new Error("旧事务恢复的后台归属或交接状态已变化，请从当前运行实例恢复");
-    if (transaction.phase === "restart-requested" && !await this.admittedFallback(transaction)) throw new Error("重启已交给启动器；当前入口没有已确认回退的归属收据，不能取消其他运行实例的交接");
-    const selectedTransaction = transaction;
-    const restoreSelection = async () => {
-      if (selectedTransaction.legacyRecovery && !await this.admittedLegacyRecovery()) throw new Error("旧事务恢复的归属或交接收据已变化，取消未覆盖其他运行实例");
-      if (selectedTransaction.phase === "restart-requested" && !await this.admittedFallback(selectedTransaction)) throw new Error("重启交接的归属或回退收据已变化，取消未覆盖其他运行实例");
-      if (!selectedTransaction.selectedDigest) return;
-      let bytes: Buffer | null;
-      try { bytes = await readFile(selectedTransaction.selectionPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; bytes = null; }
-      // The pointer write may have failed before rename, or the launcher may
-      // already have restored these exact bytes. Either case needs no overwrite.
-      if ((bytes?.toString("base64") ?? null) === selectedTransaction.before) return;
-      if (!bytes || fingerprint(bytes.toString("base64")) !== selectedTransaction.selectedDigest) throw new Error("版本选择已被其他操作更改，取消未覆盖该选择；当前数据已保留");
-      if (selectedTransaction.before === null) await rm(selectedTransaction.selectionPath);
-      else if (typeof selectedTransaction.before === "string") {
-        const temporary = `${selectedTransaction.selectionPath}.${randomUUID()}.tmp`;
-        try { await writeFile(temporary, Buffer.from(selectedTransaction.before, "base64"), { mode: 0o600 }); await rename(temporary, selectedTransaction.selectionPath); }
-        finally { await rm(temporary, { force: true }); }
-      } else throw new Error("缺少旧版本选择收据，不能自动恢复；请保留事务记录");
-    };
-    if (this.hostedPair?.cancel) await this.hostedPair.cancel(transaction.version, transaction.packageRoot, restoreSelection);
-    else await withStorageLock(join(this.agentDir, "pi-web", "update-control"), restoreSelection);
-    await this.record({ ...transaction, phase: "cancelled", message: "更新已取消；原版本及插件数据保留" });
-    this.preparedUpdate = undefined; this.restartPending = false;
+    const transaction = await this.transaction(), candidate = await readCandidate(this.agentDir);
+    if (candidate && (!transaction || candidate.id === transaction.id)) await retireCandidate(this.agentDir, candidate.id, "cancelled");
+    if (transaction && !terminal(transaction.phase)) await this.record({ ...transaction, phase: "cancelled", message: "更新已取消；原版本及插件数据保留" });
+    this.preparedUpdate = undefined;
   }
 
   private get preferencePath(): string { return join(this.agentDir, "pi-web", "update-preferences.json"); }
@@ -294,12 +235,9 @@ export class SelfUpdater {
     const status: UpdateStatus = { current, channel, latest: null, available: false, canRestart: Boolean(this.launcherNonce) && !sourceCheckout };
     if (this.desktopManaged) { status.launcher = this.launcherIdentity(); status.launcherHandoff = { supported: status.launcher.handoffProtocol === 1, required: !this.desktopReleaseChannels }; }
     if (this.desktopManaged) status.desktopShell = { version: process.env.PI_WEBAPP_DESKTOP_VERSION ?? "unknown", build: process.env.PI_WEBAPP_DESKTOP_BUILD ?? "unknown" };
-    const transaction = await this.transaction(), pair = await this.hostedPair?.status?.();
-    if (transaction && !["failed", "cancelled", "committed"].includes(transaction.phase)) status.recovery = { version: transaction.version, phase: transaction.phase,
-      canCancel: transaction.legacyRecovery ? await this.admittedLegacyRecovery(current) : transaction.phase !== "restart-requested" || await this.admittedFallback(transaction, current) };
-    // A settled required-action record is history that the next update supersedes, not unfinished work.
-    else if (pair && !["cancelled", "reconciled", "required-action"].includes(pair.phase)) status.recovery = { version: pair.version, phase: pair.phase,
-      canCancel: pair.phase === "prepared" || await this.admittedLegacyRecovery(current) };
+    const transaction = await this.transaction();
+    if (transaction && !terminal(transaction.phase)) status.recovery = { version: transaction.version, phase: transaction.phase, canCancel: transaction.phase !== "restart-requested" };
+    else if (transaction?.phase === "failed" && transaction.message) status.lastFailure = { version: transaction.version, message: transaction.message };
     if (this.desktopManaged && !this.desktopPackageUpdates) return { ...status, canRestart: false, requiresDesktopUpgrade: true,
       reason: "当前桌面外壳尚不支持业务包在线更新，请先安装新版桌面应用。" };
     if (this.desktopManaged && channel === "alpha" && !this.desktopReleaseChannels) return { ...status, canRestart: false,
@@ -308,6 +246,9 @@ export class SelfUpdater {
         : "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。请先切回稳定版并升级业务包，再使用 build 14 或更新桌面菜单安全切换启动器；已安装新版桌面无需重复安装。" };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
+    if (this.desktopManaged && this.desktopPackageUpdates) {
+      if (status.canRestart) status.reason = "业务包更新安装到用户目录，不修改 pi.app。请先结束所有聊天任务并关闭终端，再升级并重启后台。";
+    }
     try {
       const result: unknown = JSON.parse((await this.runNpm(["view", "pi-webapp", channel === "alpha" ? "dist-tags" : "dist-tags.latest", "--json", "--prefer-online"])).trim());
       // npm 12 wraps scalar/object JSON results in an array.
@@ -334,8 +275,6 @@ export class SelfUpdater {
         status.requiresDesktopUpgrade = true;
         status.reason = "当前桌面外壳尚不支持切回低于内置包的版本，请先安装支持更新通道的新版桌面应用。";
       }
-      // Only worth saying when there is something to install.
-      if (this.desktopManaged && this.desktopPackageUpdates && status.available && status.canRestart) status.reason = "升级会重启后台，请先结束所有聊天任务并关闭终端。";
     } catch (error) {
       throw new Error(`检查 npm 更新失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -348,6 +287,8 @@ export class SelfUpdater {
     try { return await preparation; } finally { this.preparation = undefined; }
   }
 
+  /** Download and validate only, then write the candidate. The host selects nothing and holds no
+   * cross-process lock; the launcher decides whether the candidate becomes the running version. */
   private async prepareUpdate(request?: UpdateRequest): Promise<PreparedUpdate> {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新，请先安装新版桌面应用");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
@@ -355,8 +296,7 @@ export class SelfUpdater {
     if (this.restartPending) throw new Error("升级已完成，正在重启");
     if (this.cancellation) throw new Error("升级取消正在进行中");
     if (this.preparing || this.savingPreference) throw new Error("升级或偏好保存正在进行中");
-    // A refused flush leaves the selected pair intact. Retry that exact selection,
-    // not a second download/select transaction blocked by our own pending journal.
+    // A refused flush leaves the candidate intact. Retry that exact candidate, not a second download.
     if (this.preparedUpdate) {
       if (request && (request.version !== this.preparedUpdate.update.version || request.channel !== this.preparedUpdate.channel)) {
         const status = await this.check();
@@ -377,8 +317,8 @@ export class SelfUpdater {
       const releaseDir = await mkdtemp(join(await realpath(releases), `${status.latest}-`));
       const selectionPath = join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json");
       let transaction: UpdateTransaction = { schema: 1, id: randomUUID(), phase: "downloading", version: status.latest, channel: status.channel ?? "stable", selectionPath, ownerNonce: this.launcherNonce };
+      this.ownTransaction = transaction.id;
       await this.record(transaction);
-      let selectionAttempted = false;
       try {
         const peers = this.desktopManaged ? await this.targetPeerSpecs(status.latest) : [];
         await this.runNpm(["install", `pi-webapp@${status.latest}`, ...peers, "--prefix", releaseDir, "--ignore-scripts", "--no-save", "--no-audit", "--no-fund", ...(this.desktopManaged ? ["--engine-strict"] : [])], this.downloadAbort.signal);
@@ -391,54 +331,21 @@ export class SelfUpdater {
         if (status.downgrade && dataVersion(pkg) !== dataVersion(currentPackage)) throw new Error("数据格式不兼容，不能直接切回旧版。请先备份并按恢复指南操作。");
         const launcher = join(installed, "bin", "pi-webapp.mjs");
         await Promise.all([launcher, join(installed, "dist", "extension.js"), join(installed, "web", "dist", "index.html")].map((path) => access(path)));
-        const desktopSelection = this.desktopManaged ? await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion }) : null;
-        if (this.desktopManaged) await this.verifyPackage(this.packageRoot, installed);
-        const writeSelection = async () => {
-          let before: Buffer | null;
-          try { before = await readFile(selectionPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; before = null; }
-          transaction = { ...transaction, phase: "selecting", before: before?.toString("base64") ?? null }; await this.record(transaction);
-          selectionAttempted = true;
-          if (this.desktopManaged) {
-            const selected = desktopSelection!;
-            const saved = await readDesktopRelease(this.agentDir, status.current);
-            const previous = saved?.version === status.current ? saved : null;
-            const fallbackVersion = process.env.PI_WEBAPP_DESKTOP_VERSION ?? saved?.fallbackVersion ?? status.current;
-            const selection = { ...selected, ...((status.downgrade || saved?.fallbackVersion) ? { fallbackVersion } : {}), ...(previous ? { previous } : {}) };
-            transaction = { ...transaction, selectedDigest: fingerprint(Buffer.from(JSON.stringify(selection)).toString("base64")) }; await this.record(transaction);
-            await writeDesktopRelease(this.agentDir, selection);
-          } else {
-            const stateDir = join(this.agentDir, "pi-web");
-            const temporary = join(stateDir, `update.${randomUUID()}.tmp`);
-            try {
-              let saved;
-              try { saved = JSON.parse(await readFile(join(stateDir, "update.json"), "utf8")); } catch { /* First managed release. */ }
-              const baseVersion = saved?.baseVersion ?? status.current;
-              const previous = saved?.version === status.current ? saved : undefined;
-              // Keep only one rollback entry, never a recursively growing chain.
-              if (previous) delete previous.previous;
-              const selection = { version: status.latest, launcher, baseVersion, ...((status.downgrade || saved?.allowDowngrade === true) ? { allowDowngrade: true } : {}), ...(previous ? { previous } : {}) };
-              transaction = { ...transaction, selectedDigest: fingerprint(Buffer.from(JSON.stringify(selection)).toString("base64")) }; await this.record(transaction);
-              await writeFile(temporary, JSON.stringify(selection), { mode: 0o600 });
-              await rename(temporary, join(stateDir, "update.json"));
-            } finally { await rm(temporary, { force: true }); }
-          }
-          const path = join(this.agentDir, "pi-web", this.desktopManaged ? "desktop-update.json" : "update.json");
-          return { path, digest: fingerprint((await readFile(path)).toString("base64")) };
-        };
-        if (this.hostedPair?.stage) await this.hostedPair.stage(status.latest, installed, this.downloadAbort.signal);
+        if (this.desktopManaged) {
+          await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion });
+          await this.verifyPackage(this.packageRoot, installed);
+        }
+        // Plugins are never part of the decision: prefetch is best effort and its failures stay on plugin cards.
+        await this.prefetchPlugins?.(status.latest, this.downloadAbort.signal).catch(() => {});
         this.downloadAbort.signal.throwIfAborted();
+        await writeCandidate(this.agentDir, { id: transaction.id, version: status.latest, launcher, packageRoot: installed, channel: status.channel ?? "stable", downgrade: !!status.downgrade });
         transaction = { ...transaction, phase: "prepared" }; await this.record(transaction);
-        this.preparedUpdate = { update: { version: status.latest, launcher }, channel: status.channel ?? "stable", select: async () => {
-          if (this.hostedPair) await this.hostedPair.select(status.latest!, installed, writeSelection);
-          else await withStorageLock(join(this.agentDir, "pi-web", "update-control"), writeSelection);
-          transaction = { ...transaction, phase: "selected" }; await this.record(transaction);
-        } };
+        this.preparedUpdate = { id: transaction.id, update: { version: status.latest, launcher }, channel: status.channel ?? "stable" };
         return { version: status.latest, launcher };
       } catch (error) {
-        // A failed write can be an acknowledged-on-disk rename. Retain potentially selected
-        // code and journal for recovery rather than leaving a dangling launcher pointer.
-        if (!selectionAttempted) await rm(releaseDir, { recursive: true, force: true });
-        // Keep the actual cause: a pair fence or npm error must not be recorded as a generic download failure.
+        // Nothing was selected: the downloaded release is not referenced by any pointer.
+        await rm(releaseDir, { recursive: true, force: true });
+        // Keep the actual cause: a fence or npm error must not be recorded as a generic download failure.
         const cause = (error instanceof Error ? error.message : String(error)).slice(0, 500);
         await this.record({ ...transaction, phase: this.downloadAbort.signal.aborted ? "cancelled" : "failed", message: this.downloadAbort.signal.aborted ? "下载已取消；当前版本及插件数据保留" : `下载或验证失败：${cause}；当前版本和插件数据保留` });
         throw error;
@@ -450,31 +357,35 @@ export class SelfUpdater {
   async requestRestart(prepared: PreparedUpdate, { force = false }: { force?: boolean } = {}): Promise<void> {
     if (this.desktopManaged && !this.desktopPackageUpdates) throw new Error("当前桌面应用不支持业务包在线更新");
     if (!this.launcherNonce) throw new Error("当前页面无法自动重启 Pi");
+    const staged = this.preparedUpdate;
+    if (!staged || staged.update.version !== prepared.version || staged.update.launcher !== prepared.launcher) throw new Error("没有已准备的更新，请重新检查更新");
     let resume: void | (() => Promise<void>) = undefined, restartWritten = false;
+    const path = join(this.agentDir, "pi-web", "launcher.restart");
     try {
       resume = await this.beforeRestart?.(force);
-      await this.preparedUpdate?.select();
-      const writeRestart = async () => {
-        const path = join(this.agentDir, "pi-web", "launcher.restart");
-        const transaction = await this.transaction();
-        if (transaction) await this.record({ ...transaction, phase: "restart-requested" });
-        try { await writeFile(path, JSON.stringify({ nonce: this.launcherNonce, launcher: prepared.launcher }), { mode: 0o600, flag: "wx" }); restartWritten = true; }
-        catch (error) {
-          // A write error can occur after bytes reached disk. Never undo an accepted handoff.
-          try { const marker = JSON.parse(await readFile(path, "utf8")); restartWritten = marker.nonce === this.launcherNonce && marker.launcher === prepared.launcher; } catch {}
-          if (!restartWritten) throw error;
+      if ((await readCandidate(this.agentDir))?.id !== staged.id) throw new Error("更新候选已过期或被替换，请重新检查更新");
+      const transaction = await this.transaction();
+      if (transaction?.id === staged.id) await this.record({ ...transaction, phase: "restart-requested" });
+      // Only the live launcher's own nonce is meaningful; another nonce's marker is stale, kept aside.
+      try {
+        const existing = JSON.parse(await readFile(path, "utf8"));
+        if (existing?.nonce !== this.launcherNonce) {
+          const history = join(this.agentDir, "pi-web", "restart-history"); await mkdir(history, { recursive: true, mode: 0o700 });
+          await rename(path, join(history, `stale-${randomUUID()}.json`));
         }
-      };
-      if (this.hostedPair) await this.hostedPair.restart(prepared.version, dirname(dirname(prepared.launcher)), writeRestart);
-      else await writeRestart();
+      } catch { /* No marker, or unreadable: the exclusive write below decides. */ }
+      try { await writeFile(path, JSON.stringify({ nonce: this.launcherNonce, candidate: staged.id }), { mode: 0o600, flag: "wx" }); restartWritten = true; }
+      catch (error) {
+        // A write error can occur after bytes reached disk. Never undo an accepted handoff.
+        try { const marker = JSON.parse(await readFile(path, "utf8")); restartWritten = marker.nonce === this.launcherNonce && marker.candidate === staged.id; } catch {}
+        if (!restartWritten) throw error;
+      }
       this.restartPending = true;
     } catch (error) {
       if (restartWritten) { this.restartPending = true; return; }
-      this.restartPending = false;
       const transaction = await this.transaction();
-      if (transaction?.phase === "restart-requested") await this.record({ ...transaction, phase: "selected", message: "Restart marker was not accepted; reverting owned selection" });
-      const staged = this.preparedUpdate;
-      try { await this.cancel(); this.preparedUpdate = staged; } finally { if (resume) await resume(); }
+      if (transaction?.id === staged.id && transaction.phase === "restart-requested") await this.record({ ...transaction, phase: "prepared" });
+      if (resume) await resume();
       throw error;
     }
   }
