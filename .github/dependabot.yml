@@ -19,6 +19,11 @@ updates:
       # Node typings track the engines minimum (>=22.19.0), not the newest Node.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # undici 8 dispatchers reject the legacy handlers sent by Node's built-in fetch
+      # (bundled undici 7), which bin/http-transport.mjs pairs them with. Upgrade
+      # once the supported Node versions ship undici 8.
+      - dependency-name: undici
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
