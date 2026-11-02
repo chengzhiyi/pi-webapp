@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { writeClipboard } from './clipboard.ts'
+import { writeClipboard } from '../shared/primitives/clipboard.ts'
 
 /** How long the `copied` flag stays true after a successful write, in ms. */
 const COPIED_FEEDBACK_MS = 1000

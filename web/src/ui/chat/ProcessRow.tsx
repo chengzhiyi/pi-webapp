@@ -10,6 +10,7 @@ import usageCss from "./TurnUsagePanel.module.css";
 import dialogCss from "./stat-dialog.module.css";
 import actionsCss from "./MessageIconActions.module.css";
 import { localize as t } from "../locale/preference.ts";
+import { writeClipboard } from "../shared/primitives/clipboard.ts";
 
 function toolSummary(block: ViewBlock): string {
   try {
@@ -111,7 +112,7 @@ export function TurnActions({ text, timestamp, usage, model }: {
 }) {
   const [copied, setCopied] = useState(false);
   return <div className={actionsCss.actions}>
-    {text && <button className={actionsCss.action} type="button" aria-label={copied ? t("已复制", "Copied") : t("复制回复", "Copy reply")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1000); }); }}><IconCopyOutline16 /></button>}
+    {text && <button className={actionsCss.action} type="button" aria-label={copied ? t("已复制", "Copied") : t("复制回复", "Copy reply")} onClick={() => { void writeClipboard(text).then(ok => { if (!ok) return; setCopied(true); window.setTimeout(() => setCopied(false), 1000); }); }}><IconCopyOutline16 /></button>}
     {usage && <UsagePill usage={usage} model={model} />}
     {timestamp && <time className={actionsCss.timeEnd} dateTime={timestamp}>{new Date(timestamp).toLocaleTimeString(t("zh-CN", "en-US"), { hour: "2-digit", minute: "2-digit" })}</time>}
   </div>;

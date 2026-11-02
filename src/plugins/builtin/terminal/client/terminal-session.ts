@@ -4,6 +4,7 @@ import { accessToken } from "../../../../host/client/access-token.ts";
 import { bridgeFetch, bridgeJson } from "../../../../host/client/telemetry-fetch.ts";
 import { HttpError } from "../../../../host/client/http-error.ts";
 import type { TerminalFrame } from "../contract/terminal.ts";
+import { writeClipboard } from "../../../../../web/src/ui/shared/primitives/clipboard.ts";
 
 export interface TerminalState { phase: "starting" | "connected" | "disconnected" | "failed" | "exited"; exitCode?: number; reason?: string }
 
@@ -53,7 +54,7 @@ export class TerminalSession {
     // Ctrl/Cmd+C copies when text is selected; otherwise Ctrl+C still reaches the shell as SIGINT.
     this.terminal.attachCustomKeyEventHandler(event => {
       if (event.type === "keydown" && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "c" && this.terminal.hasSelection()) {
-        void navigator.clipboard?.writeText(this.terminal.getSelection()).catch(() => {});
+        void writeClipboard(this.terminal.getSelection());
         return false;
       }
       return true;
