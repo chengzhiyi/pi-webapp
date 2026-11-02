@@ -18,7 +18,8 @@ for (const locale of ["zh", "en"] as const) for (const width of [390, 1440]) tes
     let failDiscard = false;
     await page.route("**/api/hosted-plugins/views", async route => {
       const request = route.request().postDataJSON();
-      if (request.operation !== "reconcile") writes.push(request);
+      // RECONCILE and STATUS are read-only probes, not writes.
+      if (request.operation !== "reconcile" && request.operation !== "status") writes.push(request);
       const failed = failDiscard && request.operation === "discard";
       await route.fulfill({ status: failed ? 503 : 200, contentType: "application/json", body: JSON.stringify(failed ? { error: "offline" } : { commands: [], recovery: { state: "unconfirmed" } }) });
     });
@@ -86,7 +87,8 @@ test("a newly opened window exposes a durable drawing recovery copy and waits fo
   let reopened: typeof page | undefined;
   try {
     await context.route("**/api/hosted-plugins/views", async route => {
-      const body = route.request().postDataJSON(); operations.push(body);
+      // STATUS is a read-only liveness probe; only state-changing operations count.
+      const body = route.request().postDataJSON(); if (body.operation !== "status") operations.push(body);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({ commands: [], recovery: { state: body.operation === "recover" ? "retained" : "unconfirmed" } }) });
     });
     await page.goto(bridge.url);

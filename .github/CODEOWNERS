@@ -1,0 +1,10 @@
+# Reviewers requested automatically for pull requests. Later matching lines win.
+*                     @chengzhiyi
+
+# Release, CI and packaging changes affect every user and every publish.
+/.github/             @chengzhiyi
+/scripts/             @chengzhiyi
+/desktop/             @chengzhiyi
+/package.json         @chengzhiyi
+/package-lock.json    @chengzhiyi
+/src/contracts/       @chengzhiyi

@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**", "web/src/**", "test/**", "scripts/**", "desktop/**", "bin/**", "*.ts", "!**/dist", "!desktop/runtime-manifest", "!**/*.css"]
+  },
+  // Lint only. The codebase uses a deliberate dense style that a formatter would rewrite;
+  // .editorconfig covers the basics.
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      // Project style: non-null assertions after explicit checks and string concatenation are accepted.
+      "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
+      // Baseline debt: these rules had existing violations when lint was introduced, so they warn
+      // instead of failing CI. Fix a rule's violations, then delete its line here to make it an error.
+      "a11y": {
+        "noAutofocus": "warn",
+        "noNoninteractiveElementToInteractiveRole": "warn",
+        "noNoninteractiveTabindex": "warn",
+        "noStaticElementInteractions": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useAriaActivedescendantWithTabindex": "warn",
+        "useAriaPropsForRole": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "useButtonType": "warn",
+        "useFocusableInteractive": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useSemanticElements": "warn"
+      },
+      "correctness": {
+        "noComponentHookFactories": "warn",
+        "noEmptyPattern": "warn",
+        "noUnsafeFinally": "warn",
+        "noUnsafeOptionalChaining": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "security": { "noDangerouslySetInnerHtml": "warn" },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noAssignInExpressions": "warn",
+        "noControlCharactersInRegex": "warn",
+        "noImplicitAnyLet": "warn",
+        "noNonNullAssertedOptionalChain": "warn",
+        "noShadowRestrictedNames": "warn",
+        "useIterableCallbackReturn": "warn"
+      }
+    }
+  }
+}

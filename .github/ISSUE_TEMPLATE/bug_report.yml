@@ -1,0 +1,48 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: pi-webapp version
+      description: Shown under Settings as the current version, or run `npm ls -g pi-webapp`.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: How do you run it?
+      options:
+        - Browser (npm / pi extension)
+        - Desktop app
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS, browser and Node.js version
+      placeholder: macOS 15.4, Chrome 140, Node 24.1
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove tokens, keys and private paths before pasting.
+      render: shell
