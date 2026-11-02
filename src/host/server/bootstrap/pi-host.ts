@@ -532,6 +532,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             hosted: shared.hosted?.handlers,
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
               hostedPair: shared.hosted!.manager.hostPair,
+              pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
               beforeRestart: force => shared.hosted!.prepareRestart(force) }),
             snapshot,
             busyGitWorkspaces: () => {

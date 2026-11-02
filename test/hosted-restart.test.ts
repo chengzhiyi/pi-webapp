@@ -135,7 +135,7 @@ test("a startup ownership error stays on the plugin card, never fences updates a
     assert.equal(card.phase, "disabled"); assert.equal(card.errorCode, "runtime_owned");
     assert.match(card.error!, /Another host owns.*offline hosted-recovery/s);
     const pair = (await readPair(f.storage))!;
-    assert.equal(pair.phase, "reconciled"); assert.match(pair.message!, /runtime_owned/);
+    assert.equal(pair.phase, "reconciled"); assert.doesNotMatch(pair.message!, /runtime_owned/, "plugin errors never enter the host-update journal");
     assert.equal(f.registry(), registry, "startup reconciliation must not overwrite the error with its own pair fence");
     assert.equal(await readFile(lock, "utf8"), bytes);
     assert.deepEqual(await f.broker.active(), before);

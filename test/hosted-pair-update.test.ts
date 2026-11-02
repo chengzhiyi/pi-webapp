@@ -85,7 +85,8 @@ test("npm and desktop business-package updater stage required pair, keep old run
     f.offline(); const manager = await f.restart();
     assert.equal((await manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
     assert.equal(manager.tools.length, 1); assert.equal((await readPair(f.storage))!.phase, "reconciled");
-    assert.deepEqual(f.calls(), { downloads: 1, registry: 2 });
+    // A plugin policy change between staging and selection no longer forces a second registry preflight.
+    assert.deepEqual(f.calls(), { downloads: 1, registry: 1 });
     await f.restart(); assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
   });
 });
@@ -197,13 +198,15 @@ test("absent never downloads; disabled stays disabled; legacy pin joins pair upd
   assert.deepEqual((await downgrade.manager.installer.inventory()).versions[id]!.map(v => v.version), ["0.3.0"]);
 });
 
-test("metadata, preflight drift, restart drift and cross-process owner reject before writes", async t => {
+test("plugin drift never refuses selection or restart; host metadata/tampering and cross-process owners still do", async t => {
   const f = await fixture(t); await writeFile(join(f.nextHost, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.2.0" }));
   await assert.rejects(candidateHost("0.2.0", f.nextHost), /explicit hosted/);
   await host(f.nextHost, "0.2.0", f.worker);
-  let state = 1;
-  const pair = pairTransaction(f.storage, async () => { state++; return []; }, async () => state);
-  await assert.rejects(pair.select("0.2.0", f.nextHost, async () => assert.fail("pointer")), /changed during preflight/);
+  let state = 1, pointers = 0;
+  const drifting = pairTransaction(f.storage, async () => { state++; return []; }, async () => state, async () => { throw new Error("staged plugin vanished"); });
+  await drifting.select("0.2.0", f.nextHost, async () => { pointers++; });
+  assert.equal(pointers, 1, "plugin policy/activation drift during preflight does not refuse the host");
+  await drifting.cancel("0.2.0", f.nextHost, async () => {});
   await withStorageLock(pairRoot(f.storage), async () => {
     const storageUrl = new URL("../src/host/server/plugins/hosted/storage.ts", import.meta.url).href;
     const script = `const {withStorageLock}=await import(${JSON.stringify(storageUrl)}); try {await withStorageLock(process.argv[1],async()=>{},50);process.exit(2)} catch(e){if(e.code!=="storage_busy")throw e}`;
@@ -211,8 +214,12 @@ test("metadata, preflight drift, restart drift and cross-process owner reject be
   });
   const stable = pairTransaction(f.storage, async () => [], async () => state);
   await stable.select("0.2.0", f.nextHost, async () => {}); state++;
-  await assert.rejects(stable.restart("0.2.0", f.nextHost, async () => assert.fail("restart")), /changed/);
-  state--; await writeFile(join(f.nextHost, "dist/hosted-worker.js"), "tampered");
+  let restarts = 0;
+  await stable.restart("0.2.0", f.nextHost, async () => { restarts++; });
+  assert.equal(restarts, 1, "a plugin change after selection does not refuse the restart");
+  await stable.cancel("0.2.0", f.nextHost, async () => {});
+  await stable.select("0.2.0", f.nextHost, async () => {});
+  await writeFile(join(f.nextHost, "dist/hosted-worker.js"), "tampered");
   await assert.rejects(stable.restart("0.2.0", f.nextHost, async () => assert.fail("restart")), /changed/);
   await writeFile(join(f.nextHost, "dist/hosted-worker.js"), f.worker);
   await writeFile(join(f.nextHost, "bin/pi-webapp.mjs"), "// changed launcher; never executed");
@@ -241,8 +248,8 @@ test("pointer faults before/after commit retain explanatory journal; old and sel
       // The old-host startup accepted a newer generation. A stale plan must not replace it.
       const card = (await f.manager.inventory()).plugins[0]!;
       assert.equal(card.activeVersion, "0.1.0"); assert.match(card.error!.message, /Plugin unavailable/);
-      // The selected host runs, so the pair settles; the incompatible plugin is only unavailable.
-      assert.equal((await readPair(f.storage))!.phase, "reconciled");
+      // The fallback host already ended this attempt; the incompatible plugin is only unavailable.
+      assert.equal((await readPair(f.storage))!.phase, "cancelled");
     }
   });
 });
@@ -370,4 +377,27 @@ test("offline settle-pair clears a stale required-action left by an older host, 
   await assert.rejects(settleStoppedPair(f.storage, report.fingerprint, STOPPED_CONFIRMATION), /changed since inspection/, "a fingerprint is never reused");
   await f.manager.hostPair.stage!("0.2.0", f.nextHost);
   assert.equal((await readPair(f.storage))!.phase, "prepared");
+});
+
+test("plugin management is never refused by the pair journal, even mid-selection", async t => {
+  const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  assert.equal((await readPair(f.storage))!.phase, "selected");
+  await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
+  await f.manager.manage(id, "enable"); assert.equal(f.manager.tools.length, 1);
+  await f.manager.setPolicy(id, { updatePolicy: "notify" });
+  await f.manager.manage(id, "disable"); assert.equal(f.manager.tools.length, 0);
+  await f.manager.manage(id, "uninstall");
+  assert.equal((await f.manager.inventory()).plugins[0]!.installed, false);
+  assert.equal((await readPair(f.storage))!.phase, "selected", "plugin actions never rewrite host-update state");
+});
+
+test("startup re-encodes an old host's raw required-action so 0.1.50-era hosts can update past it", async t => {
+  const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  await writeFile(intentPath, JSON.stringify({ ...JSON.parse(await readFile(intentPath, "utf8")), phase: "required-action", message: "plugin startup failed (not_installed)" }));
+  await f.restart("0.1.29");
+  const disk = JSON.parse(await readFile(intentPath, "utf8"));
+  assert.equal(legacyPending(disk.phase), false); assert.equal(disk.lifecyclePhase, "required-action");
+  assert.equal((await readPair(f.storage))!.phase, "required-action");
 });

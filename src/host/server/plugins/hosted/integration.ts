@@ -256,15 +256,9 @@ export class HostedPluginIntegration {
     this.started = true;
     this.devWatcher?.start();
   }
-  /** Legacy conservative compatibility check, NOT a paired updater. Production SelfUpdater
-   * uses manager.hostPair to stage and fence the complete selection/restart transaction. */
-  async validateHostUpdate(version: string, packageRoot: string): Promise<void> {
-    await this.enqueue(async () => {
-      if (await this.manager.validateHostUpdate(version)) {
-        try { await access(join(packageRoot, "dist", "hosted-worker.js")); }
-        catch { throw new HostedPluginError("host_pair_required", "Selected host has no hosted worker; keep current host/plugin pair"); }
-      }
-    });
+  /** Plugins that would be unavailable on a host version: shown before an update, never blocking it. */
+  hostUpdateWarnings(version: string): Promise<Array<{ pluginId: string; message: string }>> {
+    return this.manager.hostUpdateWarnings(version);
   }
   async inventory(): Promise<HostedPluginCatalog> {
     const inventory = await this.manager.inventory();

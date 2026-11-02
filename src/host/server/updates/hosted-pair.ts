@@ -111,12 +111,23 @@ export function pairTransaction(root: string, prepare: (version: string, signal?
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await atomicJson(join(directory, `${intent.id}.json`), intent);
   };
+  /** Staged plugin versions are advisory. A plugin that cannot be prepared, or whose state changes
+   * meanwhile, is dropped from the selection and loads its current version on the new host. */
+  const advisorySelections = async (version: string, signal?: AbortSignal): Promise<PairSelection[]> => {
+    try {
+      const selections = await prepare(version, signal);
+      await validate(version, selections);
+      return selections;
+    } catch (error) { signal?.throwIfAborted(); return []; }
+  };
   const prepareIntent = async (version: string, packageRoot: string, signal?: AbortSignal): Promise<PairIntent> => {
-    const hostDigest = await candidateHost(version, packageRoot), before = fingerprint(await snapshot());
-    const selections = await prepare(version, signal); signal?.throwIfAborted();
-    if (fingerprint(await snapshot()) !== before) throw new HostedPluginError("host_pair_changed", "Plugin policy/activation changed during preflight; recheck update");
-    await validate(version, selections);
-    return { schema: 1, id: randomUUID(), phase: "prepared", version, packageRoot, hostDigest, fingerprint: before, selections };
+    const hostDigest = await candidateHost(version, packageRoot);
+    const selections = await advisorySelections(version, signal); signal?.throwIfAborted();
+    return { schema: 1, id: randomUUID(), phase: "prepared", version, packageRoot, hostDigest, fingerprint: fingerprint(await snapshot()), selections };
+  };
+  const currentSelections = async (intent: PairIntent): Promise<PairIntent> => {
+    try { await validate(intent.version, intent.selections); return intent; }
+    catch { return { ...intent, selections: [] }; }
   };
   return {
     status: () => readPair(root),
@@ -140,14 +151,13 @@ export function pairTransaction(root: string, prepare: (version: string, signal?
     select: (version, packageRoot, writeSelection) => withStorageLock(pairRoot(root), async () => {
       await assertPairIdle(root);
       const staged = await readPair(root);
-      const intent = staged?.phase === "prepared" && staged.version === version && staged.packageRoot === packageRoot && staged.fingerprint === fingerprint(await snapshot())
-        ? staged : await prepareIntent(version, packageRoot);
-      const { hostDigest, selections } = intent, before = intent.fingerprint;
+      const intent = await currentSelections(staged?.phase === "prepared" && staged.version === version && staged.packageRoot === packageRoot
+        ? { ...staged, fingerprint: fingerprint(await snapshot()) } : await prepareIntent(version, packageRoot));
       await writePair(root, intent);
-      await validate(version, selections);
-      if (await candidateHost(version, packageRoot) !== hostDigest || fingerprint(await snapshot()) !== before) {
-        await writePair(root, { ...intent, phase: "required-action", message: "Preflight changed; host pointer not written" });
-        throw new HostedPluginError("host_pair_changed", "Preflight changed; host pointer not written");
+      // Only the candidate host itself can refuse selection; plugin state never does.
+      if (await candidateHost(version, packageRoot) !== intent.hostDigest) {
+        await writePair(root, { ...intent, phase: "cancelled", message: "Candidate host changed before selection; host pointer not written" });
+        throw new HostedPluginError("host_pair_changed", "Candidate host changed before selection; host pointer not written");
       }
       // Ambiguous pointer write failures retain candidate and intent; never delete possibly selected code.
       await writePair(root, { ...intent, phase: "selecting" });
@@ -155,18 +165,16 @@ export function pairTransaction(root: string, prepare: (version: string, signal?
       await writePair(root, { ...intent, phase: "selected", ...(selection ? { selection } : {}) });
     }),
     restart: (version, packageRoot, writeRestart) => withStorageLock(pairRoot(root), async () => {
-      const intent = await readPair(root);
-      if (!intent || intent.phase !== "selected" || intent.version !== version || intent.packageRoot !== packageRoot ||
-          intent.hostDigest !== await candidateHost(version, packageRoot) || intent.fingerprint !== fingerprint(await snapshot())) {
-        throw new HostedPluginError("host_pair_changed", "Selected pair changed; restart refused, inspect pair journal");
+      const selected = await readPair(root);
+      if (!selected || selected.phase !== "selected" || selected.version !== version || selected.packageRoot !== packageRoot ||
+          selected.hostDigest !== await candidateHost(version, packageRoot)) {
+        throw new HostedPluginError("host_pair_changed", "Selected host changed; restart refused, inspect pair journal");
       }
-      if (intent.selection && fingerprint((await readFile(intent.selection.path)).toString("base64")) !== intent.selection.digest) {
+      if (selected.selection && fingerprint((await readFile(selected.selection.path)).toString("base64")) !== selected.selection.digest) {
         throw new HostedPluginError("host_pair_changed", "Host selection pointer changed; restart refused");
       }
-      await validate(version, intent.selections);
-      if (intent.hostDigest !== await candidateHost(version, packageRoot) || intent.fingerprint !== fingerprint(await snapshot())) {
-        throw new HostedPluginError("host_pair_changed", "Selected pair changed during restart validation");
-      }
+      // Plugin changes since selection only drop the advisory staged versions; they never refuse the restart.
+      const intent = await currentSelections(selected.fingerprint === fingerprint(await snapshot()) ? selected : { ...selected, selections: [] });
       await writePair(root, { ...intent, phase: "restart-requested", message: "Restart authorized; awaiting launcher receipt and selected host health admission" });
       await writeRestart();
     }),

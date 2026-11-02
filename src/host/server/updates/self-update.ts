@@ -53,7 +53,7 @@ export class SelfUpdater {
   private readonly desktopReleaseChannels: boolean;
   private readonly targetPeerSpecs: (version: string) => Promise<string[]>;
   private readonly verifyPackage: typeof verifyDesktopPackage;
-  private readonly validateHostedPair?: (version: string, packageRoot: string) => Promise<void>;
+  private readonly pluginWarnings?: (version: string) => Promise<Array<{ pluginId: string; message: string }>>;
   private readonly hostedPair?: HostedPairTransaction;
   private preparing = false;
   private preparation?: Promise<PreparedUpdate>;
@@ -66,7 +66,8 @@ export class SelfUpdater {
 
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[], signal?: AbortSignal) => Promise<string>; desktopManaged?: boolean;
     desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
-    validateHostedPair?: (version: string, packageRoot: string) => Promise<void>; hostedPair?: HostedPairTransaction;
+    /** Plugins unavailable on a target version. Shown before updating; never a gate. */
+    pluginWarnings?: (version: string) => Promise<Array<{ pluginId: string; message: string }>>; hostedPair?: HostedPairTransaction;
     /** Drain hosted workers/views while authenticated HTTP is still available, before launcher EOF. */
     beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)> }) {
     this.agentDir = options.agentDir;
@@ -85,7 +86,7 @@ export class SelfUpdater {
       return exactSdkPeerSpecs(value);
     };
     this.verifyPackage = options.verifyPackage ?? verifyDesktopPackage;
-    this.validateHostedPair = options.validateHostedPair;
+    this.pluginWarnings = options.pluginWarnings;
     this.hostedPair = options.hostedPair;
     this.beforeRestart = options.beforeRestart;
   }
@@ -323,6 +324,11 @@ export class SelfUpdater {
       // A channel switch may intentionally select an older stable release.
       // Downgrades are actionable, never automatic, and require prepare() consent.
       status.available = channel === "stable" ? compareVersions(latest, current) !== 0 : compareVersions(latest, current) > 0;
+      if (status.available && this.pluginWarnings) {
+        // Advisory only: a plugin can never decide whether the host updates.
+        const warnings = await this.pluginWarnings(latest).catch(() => []);
+        if (warnings.length) status.pluginWarnings = warnings;
+      }
       if (this.desktopManaged && status.downgrade && !this.desktopReleaseChannels && compareVersions(latest, process.env.PI_WEBAPP_DESKTOP_VERSION ?? current) < 0) {
         status.canRestart = false;
         status.requiresDesktopUpgrade = true;
@@ -385,8 +391,6 @@ export class SelfUpdater {
         if (status.downgrade && dataVersion(pkg) !== dataVersion(currentPackage)) throw new Error("数据格式不兼容，不能直接切回旧版。请先备份并按恢复指南操作。");
         const launcher = join(installed, "bin", "pi-webapp.mjs");
         await Promise.all([launcher, join(installed, "dist", "extension.js"), join(installed, "web", "dist", "index.html")].map((path) => access(path)));
-        // Both npm launcher and desktop-package selection use the same precommit gate.
-        await this.validateHostedPair?.(status.latest, installed);
         const desktopSelection = this.desktopManaged ? await validateDesktopRelease(this.agentDir, { version: status.latest, launcher, desktopProtocolVersion }) : null;
         if (this.desktopManaged) await this.verifyPackage(this.packageRoot, installed);
         const writeSelection = async () => {
