@@ -265,7 +265,8 @@ for (const readiness of ["ready", "pending"] as const) test(`closing update sett
       await expect.poll(() => f.browserEvents.length).toBe(1);
       expect(f.browserEvents[0]?.contexts?.diagnostic).toMatchObject({ stage: "update_restart", code: "update_restart_timeout" });
       await page.getByRole("button", { name: /^(Pi 设置|Pi Settings)$/ }).click();
-      await expect(page.getByRole("alert")).toContainText(/新版未能及时就绪|The new version was not ready in time/);
+      // The settings row keeps the specific reason; the app-wide toast only says the update did not finish.
+      await expect(page.getByRole("region", { name: /^(应用更新|App updates)$/ }).getByRole("alert")).toContainText(/新版未能及时就绪|The new version was not ready in time/);
       release(); await page.clock.fastForward(120_000);
       expect(reloads).toBe(0);
       expect(f.browserEvents).toHaveLength(1);
