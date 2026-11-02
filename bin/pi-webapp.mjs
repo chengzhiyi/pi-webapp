@@ -432,9 +432,10 @@ async function serve(pi, args) {
  * previous pointer and restart this release. Every outcome, with its real cause, goes to history. */
 async function upgradeInto(candidate, runLauncher) {
   const base = { id: candidate.id, version: candidate.version, from: packageVersion };
+  // Retire the candidate before recording an outcome, so anyone who sees the outcome sees it consumed.
   const recover = async (message) => {
-    await recordUpgradeTransaction(agentDir, { ...base, phase: "rolled-back", message }).catch(() => {});
     await retireCandidate(agentDir, candidate.id, "rolled-back").catch(() => {});
+    await recordUpgradeTransaction(agentDir, { ...base, phase: "rolled-back", message }).catch(() => {});
     console.error(`pi-webapp: ${message}`);
     if (await runLauncher(launcher) !== 0) console.error(`pi-webapp: 旧版恢复失败。日志：${logPath}`);
   };
@@ -449,8 +450,8 @@ async function upgradeInto(candidate, runLauncher) {
   }
   const code = await runLauncher(candidate.launcher);
   if (code === 0) {
-    await recordUpgradeTransaction(agentDir, { ...base, phase: "committed", message: "New version reported ready" }).catch(() => {});
     await retireCandidate(agentDir, candidate.id, "committed").catch(() => {});
+    await recordUpgradeTransaction(agentDir, { ...base, phase: "committed", message: "New version reported ready" }).catch(() => {});
     return;
   }
   const restored = await rollbackSelection(selection).catch(() => false);
