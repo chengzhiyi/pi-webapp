@@ -1,6 +1,6 @@
 /** Stable tab siblings in one horizontal Grid, including viewport-positioned floats. */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { MutableRefObject, ReactNode } from 'react'
+import type { RefObject, ReactNode } from 'react'
 import clsx from 'clsx'
 import type { DockIntents } from '../contract/adapter.ts'
 import type { LayoutState, PaneNode, TabId, TabRecord } from '../contract/types.ts'
@@ -31,7 +31,7 @@ interface TabHostProps extends LayoutProps {
   readonly pane: PaneNode
   readonly column: number
   readonly floats: ReturnType<typeof useFloatGestures>
-  readonly focusRequest: MutableRefObject<{ readonly tabId: TabId; readonly origin: Element | null } | undefined>
+  readonly focusRequest: RefObject<{ readonly tabId: TabId; readonly origin: Element | null } | undefined>
 }
 
 /** A tab's ancestors stay identical across selection, pane moves and floating. */
@@ -117,7 +117,7 @@ function TabHost({ state, callbacks, intents, tab, pane, column, floats, focusRe
  */
 export function TabLayout(props: LayoutProps): ReactNode {
   const { state, callbacks, preview } = props
-  const focusRequest = useRef<{ readonly tabId: TabId; readonly origin: Element | null }>()
+  const focusRequest = useRef<{ readonly tabId: TabId; readonly origin: Element | null } | undefined>(undefined)
   const tabCallbacks: PaneCallbacks = {
     ...callbacks,
     onFocusTab: (tabId) => {
