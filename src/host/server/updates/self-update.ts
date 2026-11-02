@@ -307,9 +307,6 @@ export class SelfUpdater {
         : "当前后台仍由旧桌面启动器管理，尚不支持体验版持久化。请先切回稳定版并升级业务包，再使用 build 14 或更新桌面菜单安全切换启动器；已安装新版桌面无需重复安装。" };
     if (sourceCheckout) status.reason = "当前从源码目录运行。网页升级仅支持 npm 安装的版本，以免覆盖本地代码。";
     else if (!status.canRestart) status.reason = "当前页面由 Pi 终端打开，无法从网页自动重启 Pi；请使用 pi-webapp 启动器。";
-    if (this.desktopManaged && this.desktopPackageUpdates) {
-      if (status.canRestart) status.reason = "业务包更新安装到用户目录，不修改 pi.app。请先结束所有聊天任务并关闭终端，再升级并重启后台。";
-    }
     try {
       const result: unknown = JSON.parse((await this.runNpm(["view", "pi-webapp", channel === "alpha" ? "dist-tags" : "dist-tags.latest", "--json", "--prefer-online"])).trim());
       // npm 12 wraps scalar/object JSON results in an array.
@@ -331,6 +328,8 @@ export class SelfUpdater {
         status.requiresDesktopUpgrade = true;
         status.reason = "当前桌面外壳尚不支持切回低于内置包的版本，请先安装支持更新通道的新版桌面应用。";
       }
+      // Only worth saying when there is something to install.
+      if (this.desktopManaged && this.desktopPackageUpdates && status.available && status.canRestart) status.reason = "升级会重启后台，请先结束所有聊天任务并关闭终端。";
     } catch (error) {
       throw new Error(`检查 npm 更新失败：${error instanceof Error ? error.message : String(error)}`);
     }
