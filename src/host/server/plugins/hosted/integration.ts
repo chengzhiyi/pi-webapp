@@ -237,11 +237,8 @@ export class HostedPluginIntegration {
       if (this.recovery.size) return;
       const marker = join(this.options.root, "host-version.json");
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
-        // Controlled selection already staged/admitted this exact combination offline.
-        // Do not immediately replace it with a second registry-derived startup selection.
-        const synchronized = this.manager.pairAdmitted
-          ? !(await this.manager.inventory()).plugins.some(plugin => plugin.updateDiagnostic?.status === "failed")
-          : await this.manager.reconcileHostUpgrade();
+        // Per plugin: compatible installed code is kept; only a real range conflict consults the registry.
+        const synchronized = await this.manager.reconcileHostUpgrade();
         if (synchronized) {
           await privateDirectory(this.options.root);
           await atomicJson(marker, { version: this.options.hostVersion });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, stat, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
@@ -12,7 +12,7 @@ import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/install
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
 import { atomicJson, withStorageLock } from "../src/host/server/plugins/hosted/storage.ts";
-import { candidateHost, fingerprint, pairRoot, pairTransaction, readPair, writePair } from "../src/host/server/updates/hosted-pair.ts";
+import { activePair, candidateHost, fingerprint, PAIR_STALE_MS, pairRoot, pairTransaction, readPair, writePair } from "../src/host/server/updates/hosted-pair.ts";
 import { inspectStoppedStorage, settleStoppedPair, STOPPED_CONFIRMATION } from "../src/host/server/plugins/hosted/stopped-recovery.ts";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
@@ -95,7 +95,7 @@ test("paired software update retains compatible independent plugin without consu
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
   await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
-  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.1.0");
+  assert.deepEqual((await readPair(f.storage))!.selections, [], "plugins are never staged with the host");
   assert.deepEqual(f.calls(), { downloads: 0, registry: 0 });
   await f.restart();
   assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.1.0");
@@ -123,7 +123,7 @@ test("paired software update offline retains compatible code without a spurious 
   const f = await fixture(t), compatible = integrationFixture("0.1.0", false, ">=0.1.0 <1.0.0");
   await f.manager.installer.installArchive(id, compatible.bytes, integrity(compatible.bytes), "0.1.0");
   f.offline(); await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
-  assert.equal((await readPair(f.storage))!.selections[0]!.version, "0.1.0");
+  assert.deepEqual((await readPair(f.storage))!.selections, [], "plugins are never staged with the host");
   assert.equal((await f.manager.inventory()).plugins[0]!.updateDiagnostic, undefined);
   await f.restart();
   assert.equal((await f.manager.inventory()).plugins[0]!.version, "0.1.0");
@@ -203,21 +203,21 @@ test("plugin drift never refuses selection or restart; host metadata/tampering a
   await assert.rejects(candidateHost("0.2.0", f.nextHost), /explicit hosted/);
   await host(f.nextHost, "0.2.0", f.worker);
   let state = 1, pointers = 0;
-  const drifting = pairTransaction(f.storage, async () => { state++; return []; }, async () => state, async () => { throw new Error("staged plugin vanished"); });
+  const drifting = pairTransaction(f.storage, async () => { state++; throw new Error("plugin prefetch failed"); }, async () => state);
   await drifting.select("0.2.0", f.nextHost, async () => { pointers++; });
-  assert.equal(pointers, 1, "plugin policy/activation drift during preflight does not refuse the host");
-  await drifting.cancel("0.2.0", f.nextHost, async () => {});
+  assert.equal(pointers, 1, "plugin drift or a failed plugin prefetch never refuses the host");
+  await drifting.cancel!("0.2.0", f.nextHost, async () => {});
   await withStorageLock(pairRoot(f.storage), async () => {
     const storageUrl = new URL("../src/host/server/plugins/hosted/storage.ts", import.meta.url).href;
     const script = `const {withStorageLock}=await import(${JSON.stringify(storageUrl)}); try {await withStorageLock(process.argv[1],async()=>{},50);process.exit(2)} catch(e){if(e.code!=="storage_busy")throw e}`;
     await promisify(execFile)(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script, pairRoot(f.storage)], { timeout: 15000 });
   });
-  const stable = pairTransaction(f.storage, async () => [], async () => state);
+  const stable = pairTransaction(f.storage, async () => {}, async () => state);
   await stable.select("0.2.0", f.nextHost, async () => {}); state++;
   let restarts = 0;
   await stable.restart("0.2.0", f.nextHost, async () => { restarts++; });
   assert.equal(restarts, 1, "a plugin change after selection does not refuse the restart");
-  await stable.cancel("0.2.0", f.nextHost, async () => {});
+  await stable.cancel!("0.2.0", f.nextHost, async () => {});
   await stable.select("0.2.0", f.nextHost, async () => {});
   await writeFile(join(f.nextHost, "dist/hosted-worker.js"), "tampered");
   await assert.rejects(stable.restart("0.2.0", f.nextHost, async () => assert.fail("restart")), /changed/);
@@ -245,10 +245,10 @@ test("pointer faults before/after commit retain explanatory journal; old and sel
       assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.2.0");
       assert.equal((await readPair(f.storage))!.phase, "reconciled");
     } else {
-      // The old-host startup accepted a newer generation. A stale plan must not replace it.
+      // The fallback host already ended this attempt. The selected host then picks the installed
+      // release that supports it, per plugin, without any staged plan.
       const card = (await f.manager.inventory()).plugins[0]!;
-      assert.equal(card.activeVersion, "0.1.0"); assert.match(card.error!.message, /Plugin unavailable/);
-      // The fallback host already ended this attempt; the incompatible plugin is only unavailable.
+      assert.equal(card.activeVersion, "0.2.0"); assert.equal(card.error, undefined);
       assert.equal((await readPair(f.storage))!.phase, "cancelled");
     }
   });
@@ -332,7 +332,7 @@ test("a plugin's startup failure stays on its card and never fences host updates
 test("a settled required-action journal is archived and superseded by the next update; only in-flight updates fence", async t => {
   const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
   await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
-  await assert.rejects(f.manager.hostPair.stage!("0.2.0", f.nextHost), /selection pending \(0.2.0, selected\)/);
+  await assert.rejects(f.manager.hostPair.stage!("0.2.0", f.nextHost), /0\.2\.0 is in progress \(selected\)/);
   const stuck = { ...JSON.parse(await readFile(intentPath, "utf8")), phase: "required-action", message: "old failure" };
   await writeFile(intentPath, JSON.stringify(stuck));
   await f.manager.setPolicy(id, { updatePolicy: "notify" });
@@ -400,4 +400,30 @@ test("startup re-encodes an old host's raw required-action so 0.1.50-era hosts c
   const disk = JSON.parse(await readFile(intentPath, "utf8"));
   assert.equal(legacyPending(disk.phase), false); assert.equal(disk.lifecyclePhase, "required-action");
   assert.equal((await readPair(f.storage))!.phase, "required-action");
+});
+
+test("an in-flight pair journal that stops making progress is abandoned and superseded, with history kept", async t => {
+  const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  await assert.rejects(f.manager.hostPair.stage!("0.2.0", f.nextHost), /in progress/, "a live switch still fences a second one");
+  const live = JSON.parse(await readFile(intentPath, "utf8"));
+  // A record written by an older host has no updatedAt: its file time decides.
+  const { updatedAt: _omitted, ...legacy } = live;
+  await writeFile(intentPath, JSON.stringify(legacy));
+  const old = new Date(Date.now() - PAIR_STALE_MS - 60_000);
+  await utimes(intentPath, old, old);
+  assert.equal(activePair(await readPair(f.storage)), false);
+  await f.manager.hostPair.stage!("0.2.0", f.nextHost);
+  assert.equal((await readPair(f.storage))!.phase, "prepared");
+  const history = JSON.parse(await readFile(join(pairRoot(f.storage), "history", `${live.id}.json`), "utf8"));
+  assert.equal(history.phase, "cancelled"); assert.match(history.message, /Abandoned after no progress/);
+});
+
+test("a corrupt or unknown-schema pair journal is quarantined and never fences the next update", async t => {
+  for (const bytes of ["{not json", JSON.stringify({ schema: 7, phase: "selected" })]) {
+    const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
+    await mkdir(pairRoot(f.storage), { recursive: true }); await writeFile(intentPath, bytes);
+    await f.manager.hostPair.stage!("0.2.0", f.nextHost);
+    assert.equal((await readPair(f.storage))!.phase, "prepared");
+  }
 });
