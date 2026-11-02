@@ -6,6 +6,7 @@ import { HostedPluginIcon } from "./PluginIcon.tsx";
 import { Button } from "../../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../../web/src/ui/primitives/Modal.tsx";
 import { showToast } from "../../../../web/src/ui/primitives/Toast.tsx";
+import { writeClipboard } from "../../../../web/src/ui/shared/primitives/clipboard.ts";
 import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
 import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
@@ -50,7 +51,7 @@ function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCa
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
   };
   const copyCode = async (code: string) => {
-    try { await navigator.clipboard.writeText(code); setCopied(true); } catch { setCopied(false); }
+    setCopied(await writeClipboard(code));
   };
   const copyAndOpen = (f: { userCode: string; verificationUri: string }) => {
     window.open(f.verificationUri, "_blank", "noopener,noreferrer");

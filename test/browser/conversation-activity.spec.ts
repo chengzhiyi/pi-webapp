@@ -152,19 +152,23 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(page.locator(".pi-model-error")).toHaveCount(0);
     await expect(page.locator(".pi-error")).toHaveCount(0);
     await expect(page.getByText("Recovered response", { exact: true })).toBeVisible();
-    // Model code blocks still copy when Electron denies the async Clipboard API.
+    // Model code blocks and replies still copy when Electron denies the async Clipboard API.
     await page.evaluate(() => {
-      Object.assign(window, { copiedCode: "" });
+      Object.assign(window, { copiedText: "" });
       Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("Clipboard denied")) } });
       document.execCommand = command => {
         if (command !== "copy") return false;
-        Object.assign(window, { copiedCode: (document.activeElement as HTMLTextAreaElement | null)?.value ?? "" });
+        Object.assign(window, { copiedText: (document.activeElement as HTMLTextAreaElement | null)?.value ?? "" });
         return true;
       };
     });
-    await page.getByRole("button", { name: /^(复制代码|Copy code)$/ }).click();
-    await expect(page.getByRole("button", { name: /^(已复制|Copied)$/ })).toBeVisible();
-    expect(await page.evaluate(() => (window as Window & { copiedCode?: string }).copiedCode)).toBe("const answer = 42;\n");
+    const copiedText = () => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText);
+    const copyCode = page.locator(".pi-code-toolbar button");
+    await copyCode.click();
+    await expect(copyCode).toHaveText(/^(已复制|Copied)$/);
+    expect(await copiedText()).toBe("const answer = 42;\n");
+    // The fallback's temporary textarea hands focus back to the clicked control.
+    await expect(copyCode).toBeFocused();
     // The finished reply's copy action takes the same fallback.
     const copyReply = page.getByRole("button", { name: /^(复制回复|Copy reply)$/ });
     const earlierReplies = await copyReply.count();
@@ -172,7 +176,9 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     bridge.publish({ type: "snapshot", session });
     await expect(copyReply).toHaveCount(earlierReplies + 1);
     await copyReply.last().click();
-    await expect.poll(() => page.evaluate(() => (window as Window & { copiedCode?: string }).copiedCode)).toBe("Recovered response\n\n```ts\nconst answer = 42;\n```");
+    await expect.poll(copiedText).toBe("Recovered response\n\n```ts\nconst answer = 42;\n```");
+    // The reply button relabels itself once the fallback write succeeds, and keeps focus.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toMatch(/^(已复制|Copied)$/);
     session = { ...session, sessionId: "other-session", idle: true, messages: [], streaming: null }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toHaveCount(0);
     expect(errors).toEqual([]);
