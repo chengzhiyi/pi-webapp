@@ -7,12 +7,13 @@ import { desktopProtocolVersion, readDesktopRelease, rollbackDesktopRelease } fr
 import { randomUUID } from "node:crypto";
 import { readHandoff, readHandoffIntent, writeHandoffIntent } from "./launcher-handoff.mjs";
 import { observeStopOutcome } from "./stop-outcome.mjs";
+import { localize as t } from "./locale.mjs";
 
 export function localAddress(value) {
   const url = new URL(value);
   if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port || url.username || url.password
       || url.pathname !== "/" || url.search || !/^[A-Za-z0-9_-]{32}$/.test(url.hash.slice(1))) {
-    throw new Error("后端返回了无效的本地地址");
+    throw new Error(t("后端返回了无效的本地地址", "The backend returned an invalid local address"));
   }
   return url;
 }
@@ -130,12 +131,12 @@ export class DesktopBackend {
       });
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel();
-        throw new DesktopConnectionError("authentication-failed", "已有本地服务的认证失败。请从原 Web 入口检查服务；未停止或修改该服务。");
+        throw new DesktopConnectionError("authentication-failed", t("已有本地服务的认证失败。请从原 Web 入口检查服务；未停止或修改该服务。", "Authentication with the existing local service failed. Check the service from its original web entry point; it was not stopped or modified."));
       }
       if (!response.ok) {
         await response.body?.cancel();
         if (path !== "/api/update/version" && [404, 405].includes(response.status)) {
-          throw new DesktopConnectionError("legacy-incompatible", "已有旧版服务缺少桌面所需的会话/事件接口。可在浏览器继续使用；不会停止或升级该服务。", url.href);
+          throw new DesktopConnectionError("legacy-incompatible", t("已有旧版服务缺少桌面所需的会话/事件接口。可在浏览器继续使用；不会停止或升级该服务。", "The existing older service does not provide the session/event interfaces required by the desktop app. You can continue in the browser; the service will not be stopped or upgraded."), url.href);
         }
         throw new Error("unhealthy response");
       }
@@ -143,41 +144,41 @@ export class DesktopBackend {
     } catch (error) {
       if (error instanceof DesktopConnectionError) throw error;
       // Fetch/redirect errors can contain URLs: never expose their raw messages/tokens.
-      throw new DesktopConnectionError("health-failed", "本地服务健康检查失败或连接超时。请检查原服务后重试；未停止或修改该服务。");
+      throw new DesktopConnectionError("health-failed", t("本地服务健康检查失败或连接超时。请检查原服务后重试；未停止或修改该服务。", "The local service health check failed or timed out. Check the original service and retry; it was not stopped or modified."));
     }
   }
 
   async validate(state) {
     let url;
     try { url = localAddress(state.url); }
-    catch { throw new DesktopConnectionError("invalid-address", "已有服务的本地地址无效；不会连接或接管未知服务。"); }
+    catch { throw new DesktopConnectionError("invalid-address", t("已有服务的本地地址无效；不会连接或接管未知服务。", "The existing service has an invalid local address. The desktop app will not connect to or take over an unknown service.")); }
     const result = await this.request(url, "/api/update/version");
     let current; let protocol;
     try { const identity = await result.json(); current = identity.current; protocol = identity.desktopProtocolVersion; }
-    catch { throw new DesktopConnectionError("health-failed", "本地服务健康检查返回无效数据；未停止或修改该服务。"); }
+    catch { throw new DesktopConnectionError("health-failed", t("本地服务健康检查返回无效数据；未停止或修改该服务。", "The local service health check returned invalid data; the service was not stopped or modified.")); }
     const browserUrl = typeof current === "string" ? url.href : undefined;
-    if (typeof current !== "string") throw new DesktopConnectionError("health-failed", "无法确认已有服务版本；未停止或修改该服务。");
+    if (typeof current !== "string") throw new DesktopConnectionError("health-failed", t("无法确认已有服务版本；未停止或修改该服务。", "Could not confirm the existing service version; it was not stopped or modified."));
     const compatibleProtocol = state.desktopProtocolVersion === desktopProtocolVersion && protocol === desktopProtocolVersion;
     const migration = migrationVersions.has(current) && state.version === current && state.bridgeVersion === 1
       && state.runtimeKind === "npm" && state.desktopProtocolVersion === undefined && protocol === undefined;
     if ((current !== this.version && !compatibleProtocol && !migration) || (state.version !== undefined && state.version !== current)) {
-      const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : "未知";
-      throw new DesktopConnectionError("version-incompatible", `尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, browserUrl);
+      const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : t("未知", "unknown");
+      throw new DesktopConnectionError("version-incompatible", t(`尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, `Compatibility between these versions has not been verified, or the launch metadata does not match the actual backend version. Bundled desktop backend: ${safeVersion(this.version)}; existing backend: ${safeVersion(current)}. Check for desktop updates or continue using the original service in the browser; the backend will not be stopped or upgraded automatically.`), browserUrl);
     }
     if ((state.desktopProtocolVersion !== undefined && state.desktopProtocolVersion !== desktopProtocolVersion)
         || (protocol !== undefined && protocol !== desktopProtocolVersion)) {
-      throw new DesktopConnectionError("protocol-incompatible", "后台使用不支持的桌面连接协议，请更新桌面外壳。", browserUrl);
+      throw new DesktopConnectionError("protocol-incompatible", t("后台使用不支持的桌面连接协议，请更新桌面外壳。", "The backend uses an unsupported desktop connection protocol. Update the desktop shell."), browserUrl);
     }
     if (state.bridgeVersion === 1 && state.version === current && !migration) return state;
     if (state.bridgeVersion === 1 && !migration) {
-      throw new DesktopConnectionError("metadata-incomplete", "已有服务的启动器兼容信息不完整。可在浏览器继续使用原服务；不会接管或停止它。", browserUrl);
+      throw new DesktopConnectionError("metadata-incomplete", t("已有服务的启动器兼容信息不完整。可在浏览器继续使用原服务；不会接管或停止它。", "The existing service has incomplete launcher compatibility information. You can continue using it in the browser; the desktop app will not take over or stop it."), browserUrl);
     }
     if (state.bridgeVersion !== undefined && !migration) {
-      throw new DesktopConnectionError("protocol-incompatible", "已有服务使用不支持的启动器协议。可在浏览器继续使用原服务；桌面不会自动停止或升级它。", browserUrl);
+      throw new DesktopConnectionError("protocol-incompatible", t("已有服务使用不支持的启动器协议。可在浏览器继续使用原服务；桌面不会自动停止或升级它。", "The existing service uses an unsupported launcher protocol. You can continue using it in the browser; the desktop app will not stop or upgrade it automatically."), browserUrl);
     }
     if ((!legacyVersions.has(current) && !migration) || !Number.isInteger(state.pid) || state.pid < 1
         || typeof state.nonce !== "string" || !state.nonce) {
-      throw new DesktopConnectionError("legacy-unverified", "已有服务缺少兼容标记，无法确认其启动器身份。可在浏览器继续使用；不会接管或停止该服务。", browserUrl);
+      throw new DesktopConnectionError("legacy-unverified", t("已有服务缺少兼容标记，无法确认其启动器身份。可在浏览器继续使用；不会接管或停止该服务。", "The existing service has no compatibility marker, so its launcher identity cannot be confirmed. You can continue in the browser; the desktop app will not take over or stop the service."), browserUrl);
     }
     // Read-only wire probes; never write metadata, create a chat, or claim ownership.
     try {
@@ -195,7 +196,7 @@ export class DesktopBackend {
       if (first?.type !== "snapshot" || !sessionCompatible(first.session)) throw new Error("incompatible snapshot event");
     } catch (error) {
       if (error instanceof DesktopConnectionError) throw error;
-      throw new DesktopConnectionError("legacy-incompatible", "已有旧版服务缺少兼容标记，且会话/事件协议检查未通过。可在浏览器继续使用原服务；桌面不会停止或升级它。", browserUrl);
+      throw new DesktopConnectionError("legacy-incompatible", t("已有旧版服务缺少兼容标记，且会话/事件协议检查未通过。可在浏览器继续使用原服务；桌面不会停止或升级它。", "The existing older service has no compatibility marker and failed the session/event protocol checks. You can continue using it in the browser; the desktop app will not stop or upgrade it."), browserUrl);
     }
     return state;
   }
@@ -221,7 +222,7 @@ export class DesktopBackend {
           || !this.isAlive(state.pid)) continue;
       return validated;
     }
-    throw new Error("已有服务启动超时。请查看 pi-web/launcher.log；桌面端不会接管未知进程。");
+    throw new Error(t("已有服务启动超时。请查看 pi-web/launcher.log；桌面端不会接管未知进程。", "Timed out waiting for the existing service to start. Check pi-web/launcher.log; the desktop app will not take over an unknown process."));
   }
 
   async connect() {
@@ -235,12 +236,12 @@ export class DesktopBackend {
         const receipt = await readHandoff(this.agentDir);
         if (receipt?.nonce !== intent.nonce || receipt.requestId !== intent.requestId || receipt.pid !== intent.pid
             || receipt.phase !== "stopped" || this.isAlive(intent.pid))
-          throw new Error("旧启动器交接结果尚未确认，未启动第二个后台。请检查交接收据和日志；原数据已保留。");
-        if ((selected ?? this.bundled).version !== intent.version) throw new Error("中断交接的业务包选择已变化，未自动切换版本；请检查恢复记录");
+          throw new Error(t("旧启动器交接结果尚未确认，未启动第二个后台。请检查交接收据和日志；原数据已保留。", "The previous launcher handoff has not been confirmed, so a second backend was not started. Check the handoff receipt and logs; the original data is preserved."));
+        if ((selected ?? this.bundled).version !== intent.version) throw new Error(t("中断交接的业务包选择已变化，未自动切换版本；请检查恢复记录", "The app package selection changed while the handoff was interrupted. The version was not switched automatically; check the recovery record."));
       }
       Object.assign(this, selected ?? this.bundled);
       const successor = await this.launch({ previousUrl: intent.url });
-      if (!this.owned || successor.pid !== this.child?.pid || successor.url !== intent.url) throw new Error("交接恢复遇到其他启动器，未认领该实例");
+      if (!this.owned || successor.pid !== this.child?.pid || successor.url !== intent.url) throw new Error(t("交接恢复遇到其他启动器，未认领该实例", "Another launcher was found during handoff recovery; its instance was not claimed"));
       if (!intent.completed && !intent.cancelled) {
         await this.validateHandoffSuccessor(successor, intent.url);
         await writeHandoffIntent(this.agentDir, { ...intent, completed: true });
@@ -267,10 +268,10 @@ export class DesktopBackend {
     } finally { closeSync(fd); }
     try {
       const message = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => finish(new Error("桌面后端启动超时")), this.timeoutMs);
+        const timer = setTimeout(() => finish(new Error(t("桌面后端启动超时", "Timed out starting the desktop backend"))), this.timeoutMs);
         const onMessage = value => finish(null, value);
-        const onError = () => finish(new Error("无法启动随包 Node 运行环境"));
-        const onExit = () => finish(new Error("后端在就绪前退出，请查看启动日志"));
+        const onError = () => finish(new Error(t("无法启动随包 Node 运行环境", "Could not start the bundled Node runtime")));
+        const onExit = () => finish(new Error(t("后端在就绪前退出，请查看启动日志", "The backend exited before becoming ready. Check the startup logs.")));
         const finish = (error, value) => {
           clearTimeout(timer);
           this.child.off("message", onMessage);
@@ -286,10 +287,10 @@ export class DesktopBackend {
         // Another launcher may have claimed the shared lock while we spawned.
         const winner = await this.existing();
         if (winner && winner.pid !== this.child.pid) { this.state = winner; return winner; }
-        throw new Error("无法启动桌面后端，请查看启动日志");
+        throw new Error(t("无法启动桌面后端，请查看启动日志", "Could not start the desktop backend. Check the startup logs."));
       }
       const state = await this.readState();
-      if (!state || state.pid !== this.child.pid || state.url !== message.url) throw new Error("后端启动状态校验失败");
+      if (!state || state.pid !== this.child.pid || state.url !== message.url) throw new Error(t("后端启动状态校验失败", "Backend startup state validation failed"));
       this.owned = true;
       this.state = await this.validate(state);
       return this.state;
@@ -301,7 +302,7 @@ export class DesktopBackend {
         this.owned = true;
         this.state = current;
         try { await this.stop(); }
-        catch { throw new Error("启动失败且后台清理未完成，请查看启动日志或使用 pi-webapp stop 停止该服务。"); }
+        catch { throw new Error(t("启动失败且后台清理未完成，请查看启动日志或使用 pi-webapp stop 停止该服务。", "Startup failed and backend cleanup did not complete. Check the startup logs or use pi-webapp stop to stop the service.")); }
       } else this.child.kill("SIGTERM");
       throw error;
     } finally {
@@ -317,24 +318,24 @@ export class DesktopBackend {
         || identity.launcher?.releaseChannels !== true || identity.launcher.version !== successor.version
         || identity.launcher.desktopShell?.build !== this.env.PI_WEBAPP_DESKTOP_BUILD
         || identity.launcher.desktopShell?.version !== this.env.PI_WEBAPP_DESKTOP_VERSION)
-      throw new Error("新后台未通过原地址及通道能力验证，请保留当前窗口并检查日志");
+      throw new Error(t("新后台未通过原地址及通道能力验证，请保留当前窗口并检查日志", "The new backend failed validation of the original address and channel capabilities. Keep this window open and check the logs."));
   }
 
   /** Explicitly transfer an idle shared backend to this shell's runtime.
    * HTTP owns the chat/terminal/real-save gate; no ordinary stop or signals. */
   async handoff() {
-    if (this.handingOff) throw new Error("启动器交接正在进行中");
+    if (this.handingOff) throw new Error(t("启动器交接正在进行中", "A launcher handoff is already in progress"));
     this.handingOff = true;
     try {
       await this.refresh();
       const old = await this.readState();
-      if (!this.state || old?.nonce !== this.state.nonce || old?.pid !== this.state.pid || old?.url !== this.state.url || !this.isAlive(old.pid)) throw new Error("后台归属已变化，请重新检查后再交接");
+      if (!this.state || old?.nonce !== this.state.nonce || old?.pid !== this.state.pid || old?.url !== this.state.url || !this.isAlive(old.pid)) throw new Error(t("后台归属已变化，请重新检查后再交接", "Backend ownership has changed. Check again before handing off."));
       await this.validate(old);
-      if (old.runtimeKind !== "desktop" || old.launcherHandoffProtocol !== 1) throw new Error("旧后台尚无安全交接协议。请先切回稳定版升级业务包，再从此菜单重试；无需重复安装当前桌面，现有任务保持运行。");
+      if (old.runtimeKind !== "desktop" || old.launcherHandoffProtocol !== 1) throw new Error(t("旧后台尚无安全交接协议。请先切回稳定版升级业务包，再从此菜单重试；无需重复安装当前桌面，现有任务保持运行。", "The existing backend does not yet support safe handoff. Switch back to the stable channel to update the app package, then retry from this menu. You do not need to reinstall the current desktop app; existing tasks keep running."));
       // Validate the selected package BEFORE draining the current service. Never
       // silently downgrade an installed business package to this shell's bundle.
       const selected = await readDesktopRelease(this.agentDir, this.bundled.version) ?? (this.bundled.version === old.version ? this.bundled : null);
-      if (!selected || selected.version !== old.version) throw new Error("当前业务包选择记录未通过验证或版本不一致，交接未执行；请先完成稳定版业务包更新");
+      if (!selected || selected.version !== old.version) throw new Error(t("当前业务包选择记录未通过验证或版本不一致，交接未执行；请先完成稳定版业务包更新", "The current app package selection failed validation or has a different version. Handoff was not performed; complete the stable app package update first."));
       const url = localAddress(old.url), requestId = randomUUID();
       const intent = { protocol: 1, nonce: old.nonce, requestId, pid: old.pid, version: old.version, url: old.url, phase: "requested" };
       await writeHandoffIntent(this.agentDir, intent);
@@ -345,10 +346,10 @@ export class DesktopBackend {
         if (!response.ok) {
           await writeHandoffIntent(this.agentDir, { ...intent, cancelled: true });
           const reply = await response.json().catch(() => null);
-          throw new Error(typeof reply?.error === "string" ? reply.error : "后台未接受安全交接，请先升级稳定版业务包");
+          throw new Error(typeof reply?.error === "string" ? reply.error : t("后台未接受安全交接，请先升级稳定版业务包", "The backend did not accept the safe handoff. Update the stable app package first."));
         }
         const reply = await response.json();
-        if (!reply?.accepted || reply.protocol !== 1 || reply.requestId !== requestId) throw new Error("启动器交接响应身份不一致");
+        if (!reply?.accepted || reply.protocol !== 1 || reply.requestId !== requestId) throw new Error(t("启动器交接响应身份不一致", "The launcher handoff response identity does not match"));
       } catch (error) {
         // A lost HTTP response is not a failed drain, nor is it permission to
         // start a second owner. Only this exact durable request can be resumed.
@@ -358,10 +359,10 @@ export class DesktopBackend {
       const deadline = Date.now() + this.timeoutMs;
       while (Date.now() < deadline) {
         const receipt = await readHandoff(this.agentDir);
-        if (receipt?.nonce !== old.nonce || receipt.requestId !== requestId || receipt.pid !== old.pid) throw new Error("启动器交接收据已变化；未启动或停止其他实例");
-        if (["failed", "refused"].includes(receipt.phase)) throw new Error("旧启动器未确认正常退出，交接未完成。原始数据和恢复记录已保留，请检查日志。");
+        if (receipt?.nonce !== old.nonce || receipt.requestId !== requestId || receipt.pid !== old.pid) throw new Error(t("启动器交接收据已变化；未启动或停止其他实例", "The launcher handoff receipt changed; no other instances were started or stopped"));
+        if (["failed", "refused"].includes(receipt.phase)) throw new Error(t("旧启动器未确认正常退出，交接未完成。原始数据和恢复记录已保留，请检查日志。", "The previous launcher did not confirm a normal exit, so the handoff is incomplete. The original data and recovery records are preserved; check the logs."));
         const current = await this.readState();
-        if (current && (current.nonce !== old.nonce || current.pid !== old.pid)) throw new Error("另一启动器已接管服务，未覆盖该实例，请重新检查");
+        if (current && (current.nonce !== old.nonce || current.pid !== old.pid)) throw new Error(t("另一启动器已接管服务，未覆盖该实例，请重新检查", "Another launcher has taken over the service. Its instance was not overwritten; check again."));
         if (receipt.phase === "stopped" && !this.isAlive(old.pid) && !current) {
           this.owned = false;
           Object.assign(this, selected);
@@ -372,7 +373,7 @@ export class DesktopBackend {
         }
         await delay(100);
       }
-      throw new Error("启动器交接仍在等待旧进程正常退出；未强制停止或启动第二个后台，请保留当前窗口并检查日志");
+      throw new Error(t("启动器交接仍在等待旧进程正常退出；未强制停止或启动第二个后台，请保留当前窗口并检查日志", "The launcher handoff is still waiting for the previous process to exit normally. Nothing was forcibly stopped and no second backend was started. Keep this window open and check the logs."));
     } finally { this.handingOff = false; }
   }
 
@@ -392,7 +393,7 @@ export class DesktopBackend {
     if (!this.owned || !this.state) return;
     await this.refresh();
     const current = await this.readState();
-    if (current?.starting) throw new Error("后台状态暂不可读，未确认停止；请稍后重试，原后台已保留");
+    if (current?.starting) throw new Error(t("后台状态暂不可读，未确认停止；请稍后重试，原后台已保留", "The backend state is temporarily unreadable and stopping was not confirmed. Try again later; the original backend is preserved."));
     if (current?.pid !== this.state.pid || current?.nonce !== this.state.nonce || !this.isAlive(current.pid)) return;
     await writeFile(this.stopPath, this.state.nonce, { mode: 0o600 });
     // A view flush alone can take 15s. Share the CLI's 40s drain budget and
@@ -405,9 +406,9 @@ export class DesktopBackend {
         return next && this.isAlive(next.pid) ? next : null;
       }, this.stopPath, this.state.nonce);
       if (outcome === "stopped") { this.owned = false; return; }
-      if (outcome === "refused") throw new Error("停止已取消：插件保存或释放未完成，后台及数据已保留。请保存并关闭绘图或编辑器；失联视图请先处理插件恢复记录，再重试。");
+      if (outcome === "refused") throw new Error(t("停止已取消：插件保存或释放未完成，后台及数据已保留。请保存并关闭绘图或编辑器；失联视图请先处理插件恢复记录，再重试。", "Stop cancelled: a plugin has not finished saving or releasing resources. The backend and data are preserved. Save and close drawings or editors. For disconnected views, resolve the plugin recovery records before retrying."));
       await delay(100);
     }
-    throw new Error("停止后端超时，应用尚未退出。请查看启动日志后重试。");
+    throw new Error(t("停止后端超时，应用尚未退出。请查看启动日志后重试。", "Timed out stopping the backend; the app has not quit. Check the startup logs and retry."));
   }
 }

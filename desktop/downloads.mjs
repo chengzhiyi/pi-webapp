@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { sameDocument } from "./backend.mjs";
+import { localize as t } from "./locale.mjs";
 
 /** Only local drawing-export blobs from the app's current trusted document may download.
  * The native save dialog remains the user's destination/overwrite consent boundary.
@@ -18,7 +19,7 @@ export function configureLocalExport(event, item, contents, { expectedContents, 
     const extension = match[1].toLowerCase(), mime = item.getMimeType().toLowerCase();
     const allowed = { png: ["image/png"], svg: ["image/svg+xml"], excalidraw: ["application/json"], json: ["application/json"] };
     if (!allowed[extension]?.includes(mime)) return deny();
-    item.setSaveDialogOptions({ title: "导出图稿", defaultPath: join(downloadsPath, name), filters: [{ name: "Drawing export", extensions: [extension] }], properties: ["showOverwriteConfirmation", "createDirectory"] });
+    item.setSaveDialogOptions({ title: t("导出图稿", "Export Drawing"), defaultPath: join(downloadsPath, name), filters: [{ name: "Drawing export", extensions: [extension] }], properties: ["showOverwriteConfirmation", "createDirectory"] });
     return true;
   } catch { return deny(); }
 }
