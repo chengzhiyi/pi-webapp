@@ -1,7 +1,8 @@
-import { lstat, readdir, rename } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "./resources.ts";
-import { atomicJson, boundedRead, isOwnershipMarker, readJournal } from "./storage.ts";
+import { atomicJson, boundedRead, isOwnershipMarker, readJournal, withStorageLock } from "./storage.ts";
+import { pairRoot, readPair, writePair } from "../../updates/hosted-pair.ts";
 import { HostedStateBroker, type ActiveHostedPlugin } from "./state-broker.ts";
 import { HostedPluginError } from "./errors.ts";
 
@@ -78,4 +79,29 @@ export async function recoverStoppedLocks(root: string, expectedFingerprint: str
   for (const lock of locks) await rename(join(root, lock.path), join(root, `recovered-${expectedFingerprint}-${lock.path}.json`));
   await atomicJson(join(root, `recovery-${expectedFingerprint}.json`), { version: 1, fingerprint: expectedFingerprint, locks, confirmation, recoveredAt: new Date().toISOString() });
   return { recovered: locks.map(f => f.path), fingerprint: expectedFingerprint };
+}
+
+/** Settles a stale required-action pair journal that a host up to 0.1.50 refuses to update past.
+ * Only required-action is settled: an in-flight selection still needs Cancel unfinished update.
+ * The original record is retained in history; no pointer, plugin code or plugin data changes.
+ */
+export async function settleStoppedPair(hostedRoot: string, expectedFingerprint: string, confirmation: string) {
+  if (confirmation !== STOPPED_CONFIRMATION || !/^[a-f0-9]{64}$/.test(expectedFingerprint)) throw new HostedPluginError("confirmation_required", "Explicit stopped-owner and verified-backup confirmation required");
+  const root = pairRoot(hostedRoot), report = await inspectStoppedStorage(root);
+  if (report.fingerprint !== expectedFingerprint) throw new HostedPluginError("recovery_changed", "Storage changed since inspection; nothing settled, inspect again");
+  const inspected = report.files.find(f => f.path === "intent.json");
+  if (!inspected) throw new HostedPluginError("invalid_input", "No host pair journal to settle");
+  return withStorageLock(root, async () => {
+    const bytes = await boundedRead(join(root, "intent.json"), 2 * 1024 * 1024);
+    if (!bytes || sha256(bytes) !== inspected.sha256) throw new HostedPluginError("recovery_changed", "Host pair journal changed since inspection; nothing settled, inspect again");
+    const intent = await readPair(hostedRoot);
+    if (intent?.phase !== "required-action") throw new HostedPluginError("invalid_input", `Only a required-action journal can be settled offline (found ${intent?.phase ?? "unreadable journal, now quarantined"})`);
+    const target = join(root, "history", `${intent.id}-settled-${expectedFingerprint}.json`);
+    if (await boundedRead(target, 2 * 1024 * 1024)) throw new HostedPluginError("recovery_changed", "Recovery evidence already exists");
+    await mkdir(join(root, "history"), { recursive: true, mode: 0o700 });
+    await atomicJson(target, intent);
+    await writePair(hostedRoot, { ...intent, phase: "reconciled", message: `Settled offline by operator; current host and plugin data retained. Was: ${intent.message ?? "no message"}` });
+    await atomicJson(join(root, `recovery-${expectedFingerprint}.json`), { version: 1, fingerprint: expectedFingerprint, settled: intent.id, confirmation, recoveredAt: new Date().toISOString() });
+    return { settled: intent.id, version: intent.version, fingerprint: expectedFingerprint };
+  });
 }

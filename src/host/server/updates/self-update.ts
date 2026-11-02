@@ -434,7 +434,9 @@ export class SelfUpdater {
         // A failed write can be an acknowledged-on-disk rename. Retain potentially selected
         // code and journal for recovery rather than leaving a dangling launcher pointer.
         if (!selectionAttempted) await rm(releaseDir, { recursive: true, force: true });
-        await this.record({ ...transaction, phase: this.downloadAbort.signal.aborted ? "cancelled" : "failed", message: this.downloadAbort.signal.aborted ? "下载已取消；当前版本及插件数据保留" : "下载或验证失败；当前版本和插件数据保留" });
+        // Keep the actual cause: a pair fence or npm error must not be recorded as a generic download failure.
+        const cause = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+        await this.record({ ...transaction, phase: this.downloadAbort.signal.aborted ? "cancelled" : "failed", message: this.downloadAbort.signal.aborted ? "下载已取消；当前版本及插件数据保留" : `下载或验证失败：${cause}；当前版本和插件数据保留` });
         throw error;
       }
     } finally { this.preparing = false; this.downloadAbort = undefined; }

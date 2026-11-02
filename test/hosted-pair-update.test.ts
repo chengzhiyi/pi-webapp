@@ -12,7 +12,8 @@ import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/install
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
 import { atomicJson, withStorageLock } from "../src/host/server/plugins/hosted/storage.ts";
-import { candidateHost, fingerprint, pairRoot, pairTransaction, readPair } from "../src/host/server/updates/hosted-pair.ts";
+import { candidateHost, fingerprint, pairRoot, pairTransaction, readPair, writePair } from "../src/host/server/updates/hosted-pair.ts";
+import { inspectStoppedStorage, settleStoppedPair, STOPPED_CONFIRMATION } from "../src/host/server/plugins/hosted/stopped-recovery.ts";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
 
@@ -332,4 +333,41 @@ test("a settled required-action journal is archived and superseded by the next u
   assert.equal((await readPair(f.storage))!.phase, "prepared");
   const archived = JSON.parse(await readFile(join(pairRoot(f.storage), "history", `${stuck.id}.json`), "utf8"));
   assert.equal(archived.phase, "required-action"); assert.match(archived.message, /Superseded by a new update; old failure/);
+});
+
+// Hosts up to 0.1.50 fence every update on any disk phase outside this list.
+const legacyPending = (phase: string) => !["prepared", "reconciled", "cancelled"].includes(phase);
+
+test("a settled required-action is written in a disk phase that older hosts never treat as in flight", async t => {
+  const f = await fixture(t), intentPath = join(pairRoot(f.storage), "intent.json");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  await writePair(f.storage, { ...(await readPair(f.storage))!, phase: "required-action", message: "plugin failed" });
+  const disk = JSON.parse(await readFile(intentPath, "utf8"));
+  assert.equal(disk.phase, "reconciled"); assert.equal(disk.lifecyclePhase, "required-action");
+  assert.equal(legacyPending(disk.phase), false, "an older fallback host can still update past it");
+  assert.equal((await readPair(f.storage))!.phase, "required-action");
+  await f.manager.hostPair.stage!("0.2.0", f.nextHost);
+  assert.equal((await readPair(f.storage))!.phase, "prepared");
+});
+
+test("offline settle-pair clears a stale required-action left by an older host, and nothing else", async t => {
+  const f = await fixture(t), root = pairRoot(f.storage), intentPath = join(root, "intent.json");
+  await f.manager.hostPair.select("0.2.0", f.nextHost, async () => {});
+  const selected = await inspectStoppedStorage(root);
+  await assert.rejects(settleStoppedPair(f.storage, selected.fingerprint, STOPPED_CONFIRMATION), /Only a required-action journal/);
+  assert.equal((await readPair(f.storage))!.phase, "selected", "an in-flight selection is never settled offline");
+  // An older host writes the raw phase directly, which it then refuses to update past.
+  const stuck = { ...JSON.parse(await readFile(intentPath, "utf8")), phase: "required-action", message: "plugin startup failed (not_installed)" };
+  await writeFile(intentPath, JSON.stringify(stuck));
+  const report = await inspectStoppedStorage(root);
+  await assert.rejects(settleStoppedPair(f.storage, report.fingerprint, "yes"), /confirmation/);
+  await assert.rejects(settleStoppedPair(f.storage, selected.fingerprint, STOPPED_CONFIRMATION), /changed since inspection/);
+  assert.deepEqual(await settleStoppedPair(f.storage, report.fingerprint, STOPPED_CONFIRMATION), { settled: stuck.id, version: "0.2.0", fingerprint: report.fingerprint });
+  const disk = JSON.parse(await readFile(intentPath, "utf8"));
+  assert.equal(disk.phase, "reconciled"); assert.equal(legacyPending(disk.phase), false);
+  assert.match(disk.message, /Settled offline.*not_installed/);
+  assert.equal(JSON.parse(await readFile(join(root, "history", `${stuck.id}-settled-${report.fingerprint}.json`), "utf8")).phase, "required-action", "the original record is retained");
+  await assert.rejects(settleStoppedPair(f.storage, report.fingerprint, STOPPED_CONFIRMATION), /changed since inspection/, "a fingerprint is never reused");
+  await f.manager.hostPair.stage!("0.2.0", f.nextHost);
+  assert.equal((await readPair(f.storage))!.phase, "prepared");
 });

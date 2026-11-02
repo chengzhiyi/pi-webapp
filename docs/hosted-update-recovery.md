@@ -130,6 +130,30 @@ Restart one owner only after recovery. Confirm inventory, enabled intent, active
 version/generation and latest drawing revisions; compare workspace hashes to the
 verified backup. The UI explains the offline recovery path for lock errors.
 
+### Stale required-action pair journal (hosts up to 0.1.50)
+
+Hosts up to 0.1.50 rewrite `host-pair/intent.json` as `required-action` on every
+startup in which an enabled plugin fails to load (for example a developer source
+missing from `installed.json`). Those hosts then refuse every update with
+`Host pair selection pending (<version>, required-action)`, including updates that
+contain the fix, and plugin management is refused too. Newer hosts store a settled
+record as `reconciled` with `lifecyclePhase: "required-action"`, which no host fences.
+
+To unstick an older install, quit Pi completely, back up the hosted root
+(`~/.pi/agent/pi-web/hosted`), then run the recovery CLI from a newer package or a
+source checkout:
+
+```sh
+node dist/hosted-recovery.js inspect "$HOSTED_ROOT/host-pair"
+node dist/hosted-recovery.js settle-pair "$HOSTED_ROOT" "$FINGERPRINT" "$CONFIRMATION"
+```
+
+Only a `required-action` journal is settled; an in-flight `selecting`/`selected`/
+`restart-requested` record is refused (use **Cancel unfinished update**). The original
+record is kept as `history/<id>-settled-<fingerprint>.json`. No pointer, plugin code
+or plugin data changes. The broken plugin stays unavailable on its card until it is
+reinstalled or disabled, but it no longer blocks the update.
+
 ## Fault matrix and reproducible evidence
 
 New `test/hosted-update-recovery.test.ts` runs 14 cases. SIGKILL cases use real

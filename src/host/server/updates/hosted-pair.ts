@@ -11,7 +11,7 @@ export interface PairIntent {
   schema: 1; id: string; phase: "prepared" | "selecting" | "selected" | "restart-requested" | "reconciled" | "cancelled" | "required-action";
   version: string; packageRoot: string; hostDigest: string; fingerprint: string;
   selections: PairSelection[]; selection?: { path: string; digest: string }; message?: string;
-  lifecyclePhase?: "cancelled" | "restart-requested";
+  lifecyclePhase?: "cancelled" | "restart-requested" | "required-action";
 }
 export interface HostedPairTransaction {
   stage?(version: string, packageRoot: string, signal?: AbortSignal): Promise<void>;
@@ -78,16 +78,20 @@ export async function readPair(root: string): Promise<PairIntent | null> {
   if (intent) {
     const { lifecyclePhase, ...record } = intent;
     intent = { ...record, phase: record.phase === "selected" && lifecyclePhase === "restart-requested" ? "restart-requested"
-      : record.phase === "reconciled" && lifecyclePhase === "cancelled" ? "cancelled" : record.phase };
+      : record.phase === "reconciled" && lifecyclePhase === "cancelled" ? "cancelled"
+      : record.phase === "reconciled" && lifecyclePhase === "required-action" ? "required-action" : record.phase };
   }
   return intent;
 }
 /** Keep schema-1's disk phase grammar readable by an older fallback host.
  * Additive lifecycle detail never makes rollback binaries reject the journal.
+ * A settled required-action is stored as "reconciled": hosts up to 0.1.50 treat a raw
+ * required-action as an in-flight update and refuse every later update, including the fix.
  */
 export async function writePair(root: string, intent: PairIntent): Promise<void> {
   const { lifecyclePhase: _prior, ...record } = intent;
   const compatible = record.phase === "cancelled" ? { ...record, phase: "reconciled", lifecyclePhase: "cancelled" }
+    : record.phase === "required-action" ? { ...record, phase: "reconciled", lifecyclePhase: "required-action" }
     : record.phase === "restart-requested" ? { ...record, phase: "selected", lifecyclePhase: "restart-requested" } : record;
   await atomicJson(join(pairRoot(root), "intent.json"), compatible);
 }
