@@ -87,6 +87,27 @@ test("search empty state, visible focus, disclosure semantics and safe workspace
   } finally { await f.bridge.close(); }
 });
 
+test("workspace and chat rows open their existing actions on right click", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const f = await fixture(page);
+  try {
+    await workspace(page, "Workspace B").click({ button: "right" });
+    const workspaceMenu = page.getByRole("menu", { name: /Workspace B 的工作区操作|Workspace actions for Workspace B/ });
+    await expect(workspaceMenu).toBeVisible();
+    await expect(workspaceMenu.getByRole("menuitem", { name: /从列表移除工作区|Remove workspace from list/ })).toBeEnabled();
+    await page.keyboard.press("Escape");
+
+    await workspace(page, "Chat A").click({ button: "right" });
+    const chatMenu = page.getByRole("menu", { name: /Chat A 的会话操作|Chat actions for Chat A/ });
+    await expect(chatMenu).toBeVisible();
+    await expect(chatMenu.getByRole("menuitem", { name: /重命名|Rename/ })).toBeEnabled();
+    await expect(chatMenu.getByRole("menuitem", { name: /删除会话|Delete chat/ })).toBeEnabled();
+    await chatMenu.getByRole("menuitem", { name: /重命名|Rename/ }).click();
+    await expect(page.getByRole("dialog", { name: /重命名会话|Rename chat/ })).toBeVisible();
+    expect(f.removed()).toBe(0);
+  } finally { await f.bridge.close(); }
+});
+
 for (const theme of ["light", "dark"] as const) {
   test(`DSH sidebar visual contract in ${theme} theme`, async ({ page }, testInfo) => {
     await page.addInitScript(theme => localStorage.setItem("pi-web-theme", theme), theme);

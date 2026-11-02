@@ -141,7 +141,13 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
         const open = expanded.has(workspace.id) || !!needle;
         return <div key={workspace.id} className={css.group} role="listitem">
           <div className={css.workspaceLine} data-menu-open={workspaceMenuId === workspace.id || undefined}>
-            <button type="button" className={`${rowsCss.projectRow} ${css.workspaceButton}`} aria-expanded={open} aria-controls={`${listId}-${workspace.id}`} title={workspace.path} disabled={busy} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(workspace.id)) next.delete(workspace.id); else next.add(workspace.id); return next; })}>
+            <button type="button" className={`${rowsCss.projectRow} ${css.workspaceButton}`} aria-expanded={open} aria-controls={`${listId}-${workspace.id}`} title={workspace.path} disabled={busy} onContextMenu={event => {
+              if (disabled) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setSessionMenuId(null);
+              setWorkspaceMenuId(workspace.id);
+            }} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(workspace.id)) next.delete(workspace.id); else next.add(workspace.id); return next; })}>
               <span className={rowsCss.slot} aria-hidden="true"><span data-workspace-leading="folder" className={`${css.folder} ${active ? css.folderActive : ""}`}>{open ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />}</span><span data-workspace-leading="chevron" className={`${css.chevron} ${open ? css.chevronOpen : ""}`}><IconChevronDownOutline14 size={14} /></span></span><span className={`${rowsCss.title} ${css.workspaceTitle}`}>{workspace.title}</span>
               {unavailable && <span className={css.unavailable}>{t("不可用", "Unavailable")}</span>}
             </button>
@@ -158,7 +164,13 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
             const title = item.name || t("新会话", "New chat");
             const target = { workspaceId: workspace.id, id: item.id, path: item.path, name: item.name, running };
             return <div key={item.id} className={css.sessionLine} data-menu-open={sessionMenuId === item.id || undefined}>
-              <button type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${current ? rowsCss.selected : ""}`} title={title} aria-label={title} aria-describedby={`${listId}-${item.id}-status`} aria-current={current ? "page" : undefined} disabled={disabled || unavailable} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
+              <button type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${current ? rowsCss.selected : ""}`} title={title} aria-label={title} aria-describedby={`${listId}-${item.id}-status`} aria-current={current ? "page" : undefined} disabled={disabled || unavailable} onContextMenu={event => {
+                if (disabled || unavailable) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setWorkspaceMenuId(null);
+                setSessionMenuId(item.id);
+              }} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
                 <span className={rowsCss.slot}>{running && <StateDot state="ongoing" />}</span><span className={`${rowsCss.title} ${item.name ? "" : css.untitled}`}>{title}</span>
                 <time className={css.sessionTime} dateTime={item.modified} title={item.modified}>{sessionTimeLabel(item.modified, now, locale)}</time>
                 <span id={`${listId}-${item.id}-status`} className={rowsCss.visuallyHidden}>{running ? t("运行中", "Running") : t("空闲", "Idle")}</span>
