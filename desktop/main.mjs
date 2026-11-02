@@ -10,6 +10,7 @@ import { DesktopUpdater } from "./updater.mjs";
 import { configureLocalExport } from "./downloads.mjs";
 import { confirmDesktopQuit } from "./quit.mjs";
 import { showContextMenu } from "./context-menu.mjs";
+import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
@@ -76,10 +77,18 @@ async function openExternal(value) {
   const url = externalAddress(value);
   if (!url) return; // Never dispatch file:, javascript:, shell:, or custom OS protocols.
   if (backendUrl && new URL(url).origin === new URL(backendUrl).origin) return;
-  const answer = await dialog.showMessageBox({ type: "question", title: t("在浏览器中打开链接？", "Open link in browser?"),
-    message: t("此链接将交给系统默认浏览器。", "This link will open in your default browser."), detail: url, buttons: [t("取消", "Cancel"), t("打开浏览器", "Open Browser")],
-    defaultId: 0, cancelId: 0, noLink: true });
-  if (answer.response === 1 && !quitting) await shell.openExternal(url).catch(() => {
+  if (!isDocsAddress(url)) {
+    const answer = await dialog.showMessageBox({ type: "question", title: t("在浏览器中打开链接？", "Open link in browser?"),
+      message: t("此链接将交给系统默认浏览器。", "This link will open in your default browser."), detail: url, buttons: [t("取消", "Cancel"), t("打开浏览器", "Open Browser")],
+      defaultId: 0, cancelId: 0, noLink: true });
+    if (answer.response !== 1) return;
+  }
+  await openInBrowser(url);
+}
+
+async function openInBrowser(url) {
+  if (quitting) return;
+  await shell.openExternal(url).catch(() => {
     if (!askingQuit && !quitting) dialog.showErrorBox(t("无法打开链接", "Could not open link"), t("请检查默认浏览器设置。", "Check your default browser settings."));
   });
 }
@@ -149,6 +158,13 @@ function installMenu() {
       { role: "togglefullscreen" },
       { label: t("在浏览器中打开", "Open in Browser"), click: () => { if (backendUrl) void shell.openExternal(backendUrl); } },
       { label: t("打开日志目录", "Open Log Folder"), click: () => { if (backend) void shell.openPath(dirname(backend.logPath)); } },
+    ] },
+    { label: t("帮助", "Help"), role: "help", submenu: [
+      { label: t(`${appName} 文档`, `${appName} Documentation`), click: () => void openInBrowser(docsUrl("home", t("zh", "en"))) },
+      { label: t("快速开始", "Quick Start"), click: () => void openInBrowser(docsUrl("quickStart", t("zh", "en"))) },
+      { label: t("故障排查", "Troubleshooting"), click: () => void openInBrowser(docsUrl("troubleshooting", t("zh", "en"))) },
+      { type: "separator" },
+      { label: t("在 GitHub 上反馈问题", "Report an Issue on GitHub"), click: () => void openInBrowser(issuesUrl) },
     ] },
   ]));
 }
