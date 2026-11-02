@@ -1,10 +1,10 @@
 import { createContext, type RefObject } from 'react'
 
 /** React ownership follows portals even when their DOM lives outside a dialog. */
-export const DialogFocusOwner = createContext<RefObject<HTMLElement> | null>(null)
-const layers = new Map<HTMLElement, RefObject<HTMLElement>>()
+export const DialogFocusOwner = createContext<RefObject<HTMLElement | null> | null>(null)
+const layers = new Map<HTMLElement, RefObject<HTMLElement | null>>()
 
-export function registerDialogFocusLayer(layer: HTMLElement, owner: RefObject<HTMLElement>) {
+export function registerDialogFocusLayer(layer: HTMLElement, owner: RefObject<HTMLElement | null>) {
   layers.set(layer, owner)
   return () => { layers.delete(layer) }
 }
