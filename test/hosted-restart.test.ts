@@ -9,6 +9,7 @@ import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integ
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
 import { readPair } from "../src/host/server/updates/hosted-pair.ts";
 import { SelfUpdater } from "../src/host/server/updates/self-update.ts";
+import { readCandidate } from "../bin/upgrade-transaction.mjs";
 import { startBridge } from "../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
 import { acquireStorageOwnership } from "../src/host/server/plugins/hosted/storage.ts";
@@ -45,7 +46,7 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly dra
   const f = await fixture(t), { host } = terminalHost(f.root);
   let installs = 0;
   const updater = new SelfUpdater({ agentDir: f.root, packageRoot: f.oldHost, launcherNonce: "test-nonce", desktopManaged: false,
-    hostedPair: f.integration.manager.hostPair, beforeRestart: () => f.integration.prepareRestart(),
+    beforeRestart: () => f.integration.prepareRestart(),
     runNpm: async args => {
       if (args[0] === "view") return '"0.1.33"';
       installs++;
@@ -102,28 +103,28 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly dra
       assert.deepEqual(await readFile(lock), lockBefore);
       assert.equal(f.integration.adapter.isFrozen, false);
       assert.equal((await post("hosted-plugins/action", { ...action, action: "list" })).status, 200);
-      assert.equal((await readPair(f.storage))!.phase, "cancelled");
+      assert.equal((await readCandidate(f.root))?.version, "0.1.33", "the validated candidate is kept for the retry");
       await assert.rejects(updater.prepare({ version: "0.1.34", channel: "stable" }), /目标或偏好已变化/);
     }
   }
-  assert.equal(installs, 1, "retry must reuse the retained selection, never bypass or replace its journal");
+  assert.equal(installs, 1, "retry must reuse the retained candidate, never download again");
   await (await acquireStorageOwnership(f.broker.root, "runtime"))();
   assert.deepEqual(await f.broker.active(), before, "shutdown preserves enabled intent, active generation and stateRef");
   const restart = JSON.parse(await readFile(marker, "utf8")); assert.equal(restart.nonce, "test-nonce");
   await f.integration.shutdown(); // session_shutdown after pre-restart drain is idempotent.
-  const pair = (await readPair(f.storage))!;
-  const next = new HostedPluginIntegration({ ...f.options, hostVersion: "0.1.33", packageRoot: pair.packageRoot });
+  const candidate = (await readCandidate(f.root))!;
+  assert.equal(restart.candidate, candidate.id);
+  const next = new HostedPluginIntegration({ ...f.options, hostVersion: "0.1.33", packageRoot: candidate.packageRoot });
   try {
     await next.start();
     assert.equal((await next.inventory()).plugins[0]!.phase, "active");
-    assert.equal((await readPair(f.storage))!.phase, "reconciled");
+    assert.equal(await readPair(f.storage), null, "the host never writes a host-pair journal");
   } finally { await next.shutdown(); }
 });
 
 test("a startup ownership error stays on the plugin card, never fences updates and never reclaims a dead PID lock", async t => {
   const f = await fixture(t), nextHost = join(f.root, "next");
   await hostPackage(nextHost, "0.1.33", f.worker);
-  await f.integration.manager.hostPair.select("0.1.33", nextHost, async () => {});
   await f.integration.shutdown();
   const lock = join(f.broker.root, "runtime.lock"), bytes = '{"pid":2147483647,"ownerId":"abandoned-test-owner"}';
   await writeFile(lock, bytes);
@@ -134,13 +135,17 @@ test("a startup ownership error stays on the plugin card, never fences updates a
     const card = (await next.inventory()).plugins[0]!;
     assert.equal(card.phase, "disabled"); assert.equal(card.errorCode, "runtime_owned");
     assert.match(card.error!, /Another host owns.*offline hosted-recovery/s);
-    const pair = (await readPair(f.storage))!;
-    assert.equal(pair.phase, "reconciled"); assert.match(pair.message!, /runtime_owned/);
-    assert.equal(f.registry(), registry, "startup reconciliation must not overwrite the error with its own pair fence");
+    assert.equal(await readPair(f.storage), null, "plugin errors never enter host-update state");
+    assert.equal(f.registry(), registry, "startup reconciliation must not overwrite the error with a registry check");
     assert.equal(await readFile(lock, "utf8"), bytes);
     assert.deepEqual(await f.broker.active(), before);
     // The host update path stays open; only this plugin is unavailable.
-    await next.manager.hostPair.select("0.1.33", nextHost, async () => {});
+    const updater = new SelfUpdater({ agentDir: f.root, packageRoot: nextHost, launcherNonce: "next-nonce", desktopManaged: false,
+      pluginWarnings: version => next.hostUpdateWarnings(version), runNpm: async args => {
+        if (args[0] === "view") return '"0.1.34"';
+        await hostPackage(join(args[args.indexOf("--prefix") + 1]!, "node_modules/pi-webapp"), "0.1.34", f.worker); return "";
+      } });
+    await updater.requestRestart(await updater.prepare());
   } finally { await next.shutdown(); }
   assert.equal(createHash("sha256").update(await readFile(lock)).digest("hex"), createHash("sha256").update(bytes).digest("hex"));
 });

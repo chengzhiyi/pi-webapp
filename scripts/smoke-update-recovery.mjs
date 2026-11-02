@@ -100,7 +100,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "General", exact: true }).click();
   await page.getByRole("button", { name: "Update preference", exact: true }).click();
   await page.getByRole("menuitemradio", { name: "Preview (including alpha)", exact: true }).click();
-  await expect(page.getByRole("region", { name: "App updates", exact: true })).toContainText(`Target version ${target}`);
+  await expect(page.getByRole("region", { name: "App updates", exact: true })).toContainText(`→ ${target}`);
   let status = await request("/api/update");
   assert.equal(status.channel, "alpha"); assert.equal(status.latest, target);
   const reloaded = page.waitForEvent("load", { timeout: 45_000 });
@@ -127,10 +127,11 @@ try {
   await waitVersion(working, alpha.piPid);
   status = await request("/api/update");
   assert.equal(status.current, working); assert.equal(status.channel, "alpha");
-  assert.ok(status.recovery?.canCancel, "failed launch must expose an owned recovery action");
-  await request("/api/update/cancel", { sessionId: await sessionId() });
+  // The launcher rolled back by itself: nothing is left to cancel, and the real cause is reported.
+  assert.equal(status.recovery, undefined, "a rolled-back launch leaves no unfinished update behind");
+  assert.match(status.lastFailure?.message ?? "", /failed to start \(launcher exit code/);
   assert.equal((await request("/api/hosted-plugins")).plugins[0].installed, false);
-  evidence.results.push({ case: "candidate startup failure, actual launcher fallback, exact journal cancellation, old host usable", pass: true });
+  evidence.results.push({ case: "candidate startup failure, launcher-owned rollback with recorded cause, old host usable", pass: true });
   target = "0.2.0-alpha.3"; await configure(false);
   const fallback = await state();
   await request("/api/update", { sessionId: await sessionId(), channel: "alpha", version: target });

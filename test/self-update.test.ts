@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { SelfUpdater, compareVersions } from "../src/host/server/updates/self-update.ts";
+import { readCandidate } from "../bin/upgrade-transaction.mjs";
 
 test("update checks run npm without PATH in directories containing spaces and Chinese characters", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi npm 中文 & "));
@@ -82,15 +83,13 @@ test("installs a checked npm array release before requesting a supervised restar
   const packageRoot = join(root, "source");
   const agentDir = join(root, "agent");
   const calls: string[][] = [];
-  let rejectPair = true, pairChecks = 0;
+  let warningChecks = 0;
   try {
     await mkdir(packageRoot);
     await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.0" }));
-    const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", validateHostedPair: async (version, candidate) => {
-      pairChecks++; assert.equal(version, "0.2.0");
-      assert.equal(JSON.parse(await readFile(join(candidate, "package.json"), "utf8")).version, version);
-      await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")));
-      if (rejectPair) throw new Error("injected incompatible hosted pair");
+    const warning = { pluginId: "@chengzhiyi/pi-github", message: "Plugin is not installed" };
+    const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", pluginWarnings: async version => {
+      warningChecks++; assert.equal(version, "0.2.0"); return [warning];
     }, runNpm: async (args) => {
       calls.push(args);
       if (args[0] === "view") return '["0.2.0"]';
@@ -105,26 +104,23 @@ test("installs a checked npm array release before requesting a supervised restar
       await writeFile(join(installed, "web", "dist", "index.html"), "");
       return "";
     } });
-    assert.deepEqual(await updater.check(), { current: "0.1.0", channel: "stable", downgrade: false, latest: "0.2.0", available: true, canRestart: true });
-    await assert.rejects(updater.prepare(), /incompatible hosted pair/);
-    await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")));
-    await assert.rejects(readFile(join(agentDir, "pi-web", "launcher.restart")));
-    rejectPair = false;
+    assert.deepEqual(await updater.check(), { current: "0.1.0", channel: "stable", downgrade: false, latest: "0.2.0", available: true, canRestart: true, pluginWarnings: [warning] });
+    // A plugin warning is shown before updating; it never blocks preparation.
     const prepared = await updater.prepare();
-    assert.equal(pairChecks, 2);
+    assert.equal(warningChecks, 2);
     assert.equal(prepared.version, "0.2.0");
-    assert.equal(calls.filter((args) => args[0] === "install").length, 2);
+    assert.equal(calls.filter((args) => args[0] === "install").length, 1);
     assert.equal(calls.find((args) => args[0] === "install")?.[1], "pi-webapp@0.2.0");
     await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
     assert.deepEqual(await updater.prepare(), prepared, "preparation is idempotent without a pointer write");
     await updater.requestRestart(prepared);
-    const manifest = JSON.parse(await readFile(join(agentDir, "pi-web", "update.json"), "utf8"));
-    assert.equal(manifest.version, "0.2.0");
-    assert.equal(manifest.launcher, prepared.launcher);
+    // The launcher, not the host, writes the pointer when it accepts this request.
+    await assert.rejects(readFile(join(agentDir, "pi-web", "update.json")), { code: "ENOENT" });
+    const candidate = (await readCandidate(agentDir))!;
+    assert.equal(candidate.version, "0.2.0"); assert.equal(candidate.launcher, prepared.launcher);
     await assert.rejects(updater.prepare(), /正在重启/);
     const restart = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.restart"), "utf8"));
-    assert.equal(restart.nonce, "nonce-a");
-    assert.equal(restart.launcher, prepared.launcher);
+    assert.deepEqual(restart, { nonce: "nonce-a", candidate: candidate.id });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

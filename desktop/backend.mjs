@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { readHandoff, readHandoffIntent, writeHandoffIntent } from "./launcher-handoff.mjs";
 import { observeStopOutcome } from "./stop-outcome.mjs";
 import { localize as t } from "./locale.mjs";
+import { resetUpgradeState } from "./reset-upgrade.mjs";
 
 export function localAddress(value) {
   const url = new URL(value);
@@ -377,6 +378,21 @@ export class DesktopBackend {
     } finally { this.handingOff = false; }
   }
 
+  /** Escape route owned by the shell: stop this desktop's backend, move every business-package
+   * upgrade record aside (never deleted) and start the bundled version. A backend this shell does not
+   * own is never stopped; the reset refuses until it has exited. */
+  async resetUpgrade({ force = false } = {}) {
+    if (this.handingOff) throw new Error(t("启动器交接正在进行中", "A launcher handoff is already in progress"));
+    await this.refresh();
+    if (this.owned) await this.stop({ force });
+    const current = await this.readState();
+    if (current?.pid && this.isAlive(current.pid)) throw new Error(t("另一个后台仍在运行（不是本桌面启动的）。请先运行 pi-webapp stop 停止它，再重试；未做任何更改。", "Another backend not started by this desktop is still running. Stop it with pi-webapp stop, then retry; nothing was changed."));
+    const reset = await resetUpgradeState(this.agentDir);
+    this.owned = false; this.state = undefined;
+    Object.assign(this, this.bundled);
+    return { ...reset, state: await this.connect() };
+  }
+
   /** A supervised package restart keeps the URL/token, but changes the owner nonce.
    * Only adopt this desktop's authenticated successor; never claim a shared service.
    */
@@ -389,13 +405,14 @@ export class DesktopBackend {
     this.state = await this.validate(current);
   }
 
-  async stop() {
+  /** force: the user confirmed skipping plugin save confirmations (unsaved plugin edits may be lost). */
+  async stop({ force = false } = {}) {
     if (!this.owned || !this.state) return;
     await this.refresh();
     const current = await this.readState();
     if (current?.starting) throw new Error(t("后台状态暂不可读，未确认停止；请稍后重试，原后台已保留", "The backend state is temporarily unreadable and stopping was not confirmed. Try again later; the original backend is preserved."));
     if (current?.pid !== this.state.pid || current?.nonce !== this.state.nonce || !this.isAlive(current.pid)) return;
-    await writeFile(this.stopPath, this.state.nonce, { mode: 0o600 });
+    await writeFile(this.stopPath, force ? `${this.state.nonce} force` : this.state.nonce, { mode: 0o600 });
     // A view flush alone can take 15s. Share the CLI's 40s drain budget and
     // distinguish an explicit refusal from a still-pending shutdown.
     const deadline = Date.now() + 40000;

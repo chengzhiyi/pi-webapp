@@ -52,18 +52,19 @@ test("independent pending update waits for editors without undo reset", async t 
   card = (await manager.inventory()).plugins[0]!; assert.equal(card.activeVersion, "0.2.0"); assert.equal(card.pendingVersion, null);
 });
 
-test("future-host gate refuses incompatible pinned/disabled pairs and missing worker, without registry access", async t => {
+test("future-host compatibility is a per-plugin warning list, never a gate, and never touches the registry", async t => {
   const options = await fixture(t), pkg = integrationFixture(); let calls = 0;
   const integration = new HostedPluginIntegration({ ...options, hostVersion: "0.1.29", ownerId: "local", resolveSession: () => null, fetch: (async () => { calls++; throw new Error("offline"); }) as typeof fetch });
   t.after(async () => { await integration.shutdown(); await rm(options.root, { recursive: true, force: true }); });
   await integration.start();
-  const candidate = join(options.root, "candidate"); await mkdir(candidate);
-  await integration.validateHostUpdate("0.2.0", candidate); // absent does not require editor support
+  assert.deepEqual(await integration.hostUpdateWarnings("1.0.0"), [], "absent plugins never warn");
   await integration.manager.installer.installArchive(id, pkg.bytes, integrity(pkg.bytes), "0.1.0");
-  await integration.manager.setPolicy(id, { updatePolicy: "pinned", pinnedVersion: "0.1.0" });
-  await assert.rejects(integration.validateHostUpdate("1.0.0", candidate), /Host update blocked/);
-  await assert.rejects(integration.validateHostUpdate("0.2.0", candidate), /no hosted worker/);
-  assert.equal(calls, 0); assert.equal((await integration.inventory()).plugins[0]!.enabled, false);
+  assert.deepEqual(await integration.hostUpdateWarnings("1.0.0"), [], "disabled plugins never warn");
+  await integration.manager.manage(id, "enable");
+  assert.deepEqual(await integration.hostUpdateWarnings("0.2.0"), []);
+  const [warning, ...rest] = await integration.hostUpdateWarnings("1.0.0");
+  assert.equal(rest.length, 0); assert.equal(warning!.pluginId, id); assert.match(warning!.message, /unavailable after the update/);
+  assert.equal(calls, 0); assert.equal((await integration.inventory()).plugins[0]!.enabled, true);
 });
 
 test("incompatible pinned runtime never starts after host change and keeps required action visible", async t => {

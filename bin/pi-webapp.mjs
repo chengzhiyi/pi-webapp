@@ -15,6 +15,7 @@ import { compareVersions, parseVersion } from "../desktop/release-version.mjs";
 import { desktopProtocolVersion, desktopUpdatePath, readDesktopRelease, rollbackDesktopRelease } from "../desktop/managed-release.mjs";
 
 import { launcherHandoffProtocol, readHandoff, writeHandoff } from "../desktop/launcher-handoff.mjs";
+import { readCandidate, recordUpgradeTransaction, retireCandidate, rollbackSelection, selectCandidate } from "./upgrade-transaction.mjs";
 
 const minimum = [0, 87, 1];
 const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -244,10 +245,22 @@ async function serve(pi, args) {
       }
       try {
         const request = JSON.parse(await readFile(restartPath, "utf8"));
+        if (request.nonce !== nonce || (runtimeKind === "desktop" && !desktopPackages)) return;
+        if (typeof request.candidate === "string") {
+          // The host only names its validated candidate. Selection, admission and rollback are ours.
+          const candidate = await readCandidate(agentDir);
+          if (stopping || epoch !== stopEpoch) return;
+          if (candidate?.id === request.candidate && existsSync(candidate.launcher)) {
+            restartRequest = { ...request, launcher: candidate.launcher, candidate };
+            shutdown("restart_request");
+          }
+          return;
+        }
+        // Legacy form: the pointer was already selected by the host that wrote this marker.
         const prepared = JSON.parse(await readFile(updatePath, "utf8"));
         const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : prepared;
         if (stopping || epoch !== stopEpoch) return;
-        if ((runtimeKind !== "desktop" || desktopPackages) && request.nonce === nonce && request.launcher === selected?.launcher && existsSync(request.launcher)) {
+        if (request.launcher === selected?.launcher && existsSync(request.launcher)) {
           restartRequest = request;
           shutdown("restart_request");
         }
@@ -404,13 +417,45 @@ async function serve(pi, args) {
           next.once("exit", (code) => resolveExit(code ?? 1));
         });
       };
-      if (await runLauncher(restartRequest.launcher) !== 0) {
+      if (restartRequest.candidate) await upgradeInto(restartRequest.candidate, runLauncher);
+      else if (await runLauncher(restartRequest.launcher) !== 0) {
         await clearManagedLauncher(restartRequest.launcher);
         console.error("pi-webapp: 新版启动失败，正在恢复旧版服务");
         if (await runLauncher(launcher) !== 0) console.error(`pi-webapp: 旧版恢复失败。日志：${logPath}`);
       }
     } finally { closeSync(fd); }
   }
+}
+
+/** The launcher-owned upgrade transaction: select the candidate's pointer, admit the new host only
+ * when its launcher reports ready (plugins are not part of admission), otherwise restore the exact
+ * previous pointer and restart this release. Every outcome, with its real cause, goes to history. */
+async function upgradeInto(candidate, runLauncher) {
+  const base = { id: candidate.id, version: candidate.version, from: packageVersion };
+  // Retire the candidate before recording an outcome, so anyone who sees the outcome sees it consumed.
+  const recover = async (message) => {
+    await retireCandidate(agentDir, candidate.id, "rolled-back").catch(() => {});
+    await recordUpgradeTransaction(agentDir, { ...base, phase: "rolled-back", message }).catch(() => {});
+    console.error(`pi-webapp: ${message}`);
+    if (await runLauncher(launcher) !== 0) console.error(`pi-webapp: 旧版恢复失败。日志：${logPath}`);
+  };
+  let selection;
+  try {
+    selection = await selectCandidate({ agentDir, desktop: desktopPackages, currentVersion: packageVersion, candidate });
+    await recordUpgradeTransaction(agentDir, { ...base, phase: "selected" });
+  } catch (error) {
+    if (selection) await rollbackSelection(selection).catch(() => {});
+    await recover(`Version ${candidate.version} was not selected: ${error instanceof Error ? error.message : String(error)}; current version kept`);
+    return;
+  }
+  const code = await runLauncher(candidate.launcher);
+  if (code === 0) {
+    await retireCandidate(agentDir, candidate.id, "committed").catch(() => {});
+    await recordUpgradeTransaction(agentDir, { ...base, phase: "committed", message: "New version reported ready" }).catch(() => {});
+    return;
+  }
+  const restored = await rollbackSelection(selection).catch(() => false);
+  await recover(`Version ${candidate.version} failed to start (launcher exit code ${code}); ${restored ? "previous version restored" : "version selection was changed by another client and left as is"}. Log: ${logPath}`);
 }
 
 async function clearManagedLauncher(path) {

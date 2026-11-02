@@ -31,10 +31,10 @@ source:
 
 | Module | Owns | Does not own |
 | --- | --- | --- |
-| Desktop shell | Native window, installer/signature checks, launch capabilities | Plugin state or drawing save acknowledgements |
-| Launcher | Child process, selected package pointer, readiness/fallback | Browser drafts or SDK tool policy |
-| Host update coordinator | Download/verify/stage/select/restart transaction and cancellation journal | Plugin implementation or view-local save semantics |
-| Plugin manager | Verified installed packages, one supervisor per plugin | Base chat lifetime or native installer |
+| Desktop shell | Native window, installer/signature checks, launch capabilities, the "reset update state" escape route | Plugin state or drawing save acknowledgements |
+| Launcher | Child process; the upgrade transaction: pointer selection, health admission, rollback | Browser drafts, SDK tool policy or plugin state |
+| Host update coordinator | Check, download, validate, write the candidate, request a restart | The pointer, any cross-process lock, or plugin state |
+| Plugin manager | Verified installed packages, one supervisor per plugin, per-plugin host compatibility | Whether the host updates, base chat lifetime or native installer |
 | Plugin supervisor | Worker lifetime, generation and broker custody | Release-channel preference |
 | View coordinator | Exact view capabilities, authoring barriers, recovery quarantine | Claiming a lost document saved its draft |
 | SDK adapter | Capability qualification, dynamic tool registration and permissions | Declaring compatibility from a version string |
@@ -79,29 +79,89 @@ model setup after a reconnect does not destroy the pending upgrade observation.
 This was reproduced with the built application and real launcher: the backend
 had restarted into alpha while the old Settings-owned observer had unmounted.
 
-The host obtains a reversible restart lease before selecting another package.
-All genuine authoring view checkpoints finish while authenticated HTTP is still
+The host obtains a reversible restart lease before it requests a restart. All
+genuine authoring view checkpoints finish while authenticated HTTP is still
 available. The lease suspends workers without changing their active pointers,
-data schemas, generations or asset identities.
+data schemas, generations or asset identities. If the restart request cannot be
+written, undo recreates the verified old worker at the same generation and resumes
+the same live views. Real process exit consumes the lease instead of freezing twice.
+A view that never confirms its save asks the user once; a confirmed retry proceeds.
 
-If selection/restart fails, undo recreates the verified old worker at the same
-generation, after reacquiring custody and comparing the exact active pointer.
-It resumes the same live views. If another owner advanced state, undo refuses to
-overwrite it. Real process exit consumes the lease instead of freezing twice.
-
-`update-transaction.json` records download, validation, preparation, selection,
-handoff and health commit, retaining terminal histories. Preparation never writes
-the host pointer. Cancellation restores a pointer only against its exact owned
-receipt; a second live host cannot cancel another launcher's accepted handoff.
-Cross-process fallback cancellation additionally checks the current launcher
-identity and exact restored pointer bytes. Pair schema-1 disk phases retain the
-old grammar with additive lifecycle metadata so an older binary can still read
-the journal after fallback.
+The transaction after that point belongs to the launcher; see the upgrade contract
+below.
 
 Plugin publication recovery is scoped by plugin ID. Its writes and tools remain
 denied until recovery, while base-chat admission is released. Freeze failures and
 settlement timeouts release admission too. Recovery never rolls a committed data
 generation back or unregisters permissions to make a test pass.
+
+## Upgrade contract (0.1.51 and later)
+
+**Layering.** Desktop shell → launcher → host → plugins, from most to least stable.
+Upgrade decisions flow only from a more stable layer to a less stable one. Plugins
+never take part in deciding whether, or to which version, the host upgrades. The
+version being upgraded never judges its successor beyond checking the downloaded
+package is the requested, complete release.
+
+**Host** (`SelfUpdater`): check, download into `pi-web/releases/<version>-*`,
+validate, prefetch plugin releases compatible with the target (best effort), write
+`pi-web/upgrade/candidate.json`, and after the reversible drain write
+`launcher.restart` as `{ nonce, candidate }`. It writes no pointer, no host-pair
+journal and takes no cross-process lock. `update-transaction.json` is host-local
+history (downloading → validating → prepared → restart-requested → committed or
+failed) whose failure messages carry the real cause. A record this process does not
+own, from an earlier run or an earlier version, is settled as history the next time
+the host checks; it never fences an update.
+
+**Launcher** (`bin/upgrade-transaction.mjs`, run by `bin/pi-webapp.mjs`): on a
+candidate restart it writes the pointer (`update.json` or `desktop-update.json`)
+with the running version as its single rollback entry, records `selected` in
+`pi-web/upgrade/transaction.json`, starts the candidate's launcher, and admits the
+new version when that launcher reports ready. Otherwise it restores the exact
+previous pointer bytes (only while the pointer is still the one it wrote, never over
+another client's change), records `rolled-back` with the cause, and restarts the
+previous version. Outcomes go to `pi-web/upgrade/history/`. The host reports the last
+failure in Settings.
+
+**Health admission excludes plugins.** Session start waits at most 10 seconds for
+plugin startup and then continues; a slow or hung plugin keeps starting in the
+background and reports on its own card.
+
+**Plugins are checked per plugin** against the host range each release declares.
+At startup the active version is used when it supports the running host, otherwise
+the newest installed version that does; failing both, the plugin is unavailable
+with its data retained. Before an update, Settings lists plugins that would be
+unavailable (`pluginWarnings`); the list never blocks. Plugin install, enable,
+disable, update and uninstall queue per plugin and use only that plugin's storage
+locks; no host-update record fences them.
+
+**All persisted upgrade state fails open.** Every record carries `schema: 1`. An
+unreadable, unknown-schema or invalid record is renamed aside (bytes kept) and read
+as absent; a candidate older than 24 hours is treated as expired. A restart marker
+from another launcher nonce is moved to `restart-history/` instead of blocking the
+exclusive write. Kernel-custody storage locks are released by the OS on process
+exit and never reclaimed by PID guesses.
+
+**Compatibility with older hosts.** Hosts up to 0.1.50 stop updating whenever
+`hosted/host-pair/intent.json` holds a raw `required-action` or an in-flight phase,
+and they refuse candidates whose `package.json` lacks `piWebappHostedRuntime`
+(protocol 2, runtimeProtocol 1, pairJournal 1, ownershipProtocol 2 and the five
+capabilities). This package keeps that metadata (a test pins it). New hosts never
+start a switch in the pair journal; at startup they settle any record an older host
+left (reconciled when its selected host runs, cancelled otherwise) and re-encode a
+settled `required-action` as `reconciled` + `lifecyclePhase` so an older fallback
+host can update past it.
+
+**Escape routes, from most stable down.**
+
+1. Desktop shell menu *Reset Update State and Use Bundled Version…*: stops the
+   backend this shell started (with an explicit force when a plugin view never
+   confirms its save), moves every upgrade record into
+   `pi-web/upgrade-reset/<time>/` with a receipt, and starts the bundled version.
+   It never stops a backend it does not own and deletes nothing.
+2. Offline CLI `settle-pair` (`dist/hosted-recovery.js`) for an install already
+   stuck on an older host without a capable shell; see
+   [hosted update recovery](hosted-update-recovery.md).
 
 ## Verification interpretation
 

@@ -60,6 +60,11 @@ function UpdateRowContent(props: AppUpdateActions & { controller: AppUpdateContr
         : <p>{t("安全交接入口从桌面 build 14 开始提供。build 12 已支持体验版，但缺少旧共享后台交接功能；无需重复安装 build 12。", "The safe handoff action is available from desktop build 14. Build 12 supports preview releases but lacks shared-backend handoff; reinstalling build 12 will not help.")} <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载支持安全交接的桌面版本", "Get a desktop release with safe handoff")}</a></p>}
       {!status.launcherHandoff.supported && <p>{t("当前后台还缺少安全交接协议：请先选择稳定版并升级业务包，再从桌面菜单重试交接。", "This backend lacks the safe handoff protocol: first update its business package on Stable, then retry from the desktop menu.")}</p>}
     </div>}
+    {status?.available && !!status.pluginWarnings?.length && <div className={css.note}>
+      <p>{t("以下插件在新版本中暂时不可用（不影响升级，数据保留）：", "These plugins will be unavailable on the new version (the update is not blocked; their data is kept):")}</p>
+      <ul>{status.pluginWarnings.map(warning => <li key={warning.pluginId}>{warning.pluginId}: {warning.message}</li>)}</ul>
+    </div>}
+    {status?.lastFailure && !installing && !targetVersion && <p className={css.note}>{t(`上次升级到 ${status.lastFailure.version} 未完成，已保留当前版本：`, `The last update to ${status.lastFailure.version} did not complete; the current version was kept: `)}{status.lastFailure.message}</p>}
     {status?.reason && <p className={css.note}>{status.reason}</p>}
     {status?.requiresDesktopUpgrade && <p className={css.note}>
       <a href="https://github.com/chengzhiyi/pi-webapp/releases" target="_blank" rel="noreferrer">{t("下载新版桌面应用", "Download desktop update")}</a>

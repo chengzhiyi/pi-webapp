@@ -7,6 +7,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import { readCandidate, readUpgradeTransaction, writeCandidate } from "../bin/upgrade-transaction.mjs";
 
 const launcher = fileURLToPath(new URL("../bin/pi-webapp.mjs", import.meta.url));
 const extension = fileURLToPath(new URL("../dist/extension.js", import.meta.url));
@@ -253,4 +255,69 @@ test("launcher restores the previous service if the prepared release cannot star
     run(["stop"], env);
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+async function candidateRestart(name: string, nextScript: string, prepare?: (agentDir: string) => Promise<void>) {
+  const directory = await mkdtemp(join(tmpdir(), name));
+  const agentDir = join(directory, "agent"), nextLauncher = join(directory, "next-launcher.mjs");
+  const env = { ...process.env, PATH: directory, PI_WEBAPP_AUTO_OPEN: "0", PI_CODING_AGENT_DIR: agentDir,
+    PI_TEST_ARGS: join(directory, "args"), PI_TEST_RPC_QUERY: join(directory, "rpc-query"), PI_TEST_RPC_INPUT: join(directory, "rpc-input"), PI_TEST_UPDATE: join(agentDir, "pi-web", "update.json") };
+  await fakePi(join(directory, "pi"));
+  await writeFile(nextLauncher, nextScript);
+  assert.equal(run([], env).status, 0);
+  const statePath = join(agentDir, "pi-web", "launcher.json"), first = JSON.parse(await readFile(statePath, "utf8"));
+  await prepare?.(agentDir);
+  const candidate = await writeCandidate(agentDir, { id: randomUUID(), version: "0.2.0", launcher: nextLauncher, packageRoot: directory, channel: "stable", downgrade: false });
+  await writeFile(join(agentDir, "pi-web", "launcher.restart"), JSON.stringify({ nonce: first.nonce, candidate: candidate.id }));
+  let outcome = null;
+  for (let attempt = 0; attempt < 100 && !outcome; attempt++) {
+    const record = await readUpgradeTransaction(agentDir).catch(() => null);
+    if (record && record.phase !== "selected") outcome = record; else await delay(100);
+  }
+  return { directory, agentDir, env, first, candidate, outcome, statePath, nextLauncher };
+}
+
+/** A rollback restarts the previous version; wait for it before stopping so teardown never races it. */
+async function previousServiceBack(f: Awaited<ReturnType<typeof candidateRestart>>) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const state = await readFile(f.statePath, "utf8").then(JSON.parse, () => null);
+    if (state?.url && state.nonce !== f.first.nonce) return state;
+    await delay(100);
+  }
+  return null;
+}
+
+test("launcher owns the candidate upgrade: it selects the pointer and commits when the new launcher reports ready", { skip: process.platform === "win32" }, async () => {
+  const f = await candidateRestart("pi-web-candidate-", "process.exit(0);");
+  try {
+    assert.equal(f.outcome?.phase, "committed"); assert.equal(f.outcome?.id, f.candidate.id);
+    const pointer = JSON.parse(await readFile(join(f.agentDir, "pi-web", "update.json"), "utf8"));
+    assert.equal(pointer.version, "0.2.0"); assert.equal(pointer.launcher, f.nextLauncher);
+    assert.equal(await readCandidate(f.agentDir), null, "a consumed candidate is retired, kept in history");
+    assert.ok(existsSync(join(f.agentDir, "pi-web", "upgrade", "history", `${f.candidate.id}-candidate-committed.json`)));
+  } finally { run(["stop"], f.env); await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("launcher rolls back a candidate that fails health admission: exact previous pointer, real cause, previous service", { skip: process.platform === "win32" }, async () => {
+  const previous = JSON.stringify({ version: "0.1.9", launcher: "/previous/bin/pi-webapp.mjs", baseVersion: "0.1.0", marker: "exact bytes" });
+  const f = await candidateRestart("pi-web-candidate-rollback-", "process.exit(3);", async agentDir => { await writeFile(join(agentDir, "pi-web", "update.json"), previous); });
+  try {
+    assert.equal(f.outcome?.phase, "rolled-back");
+    assert.match(f.outcome?.message ?? "", /failed to start \(launcher exit code 3\); previous version restored/);
+    assert.equal(await readFile(join(f.agentDir, "pi-web", "update.json"), "utf8"), previous);
+    const recovered = await previousServiceBack(f);
+    assert.equal(recovered?.url, f.first.url, "the previous version serves the same address again");
+    assert.ok(existsSync(join(f.agentDir, "pi-web", "upgrade", "history", `${f.candidate.id}-rolled-back.json`)));
+  } finally { run(["stop"], f.env); await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("launcher rollback never overwrites a pointer another client changed meanwhile", { skip: process.platform === "win32" }, async () => {
+  const foreign = JSON.stringify({ version: "0.9.0", launcher: "/another/client" });
+  const f = await candidateRestart("pi-web-candidate-foreign-", `import { writeFileSync } from "node:fs"; writeFileSync(process.env.PI_TEST_UPDATE, ${JSON.stringify(foreign)}); process.exit(4);`);
+  try {
+    assert.equal(f.outcome?.phase, "rolled-back");
+    assert.match(f.outcome?.message ?? "", /changed by another client and left as is/);
+    assert.equal(await readFile(join(f.agentDir, "pi-web", "update.json"), "utf8"), foreign);
+    assert.ok(await previousServiceBack(f), "the previous version is restarted");
+  } finally { run(["stop"], f.env); await rm(f.directory, { recursive: true, force: true }); }
 });

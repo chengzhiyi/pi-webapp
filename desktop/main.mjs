@@ -32,6 +32,7 @@ let bundledPiVersion = "unknown";
 let quitting = false;
 let askingQuit = false;
 let handingOff = false;
+let resetting = false;
 let startup = true;
 
 function showWindow() {
@@ -104,6 +105,7 @@ function showQuitMessage(options) {
 async function requestQuit() {
   if (askingQuit || quitting) return;
   if (handingOff) { await showQuitMessage({ message: t("正在安全交接后台启动器，请等待正常退出和重新连接。", "The backend launcher is being handed off safely. Wait for it to exit and reconnect."), buttons: [t("确定", "OK")] }); return; }
+  if (resetting) { await showQuitMessage({ message: t("正在清理升级状态并重启后台，请稍候。", "Resetting update state and restarting the backend. Please wait."), buttons: [t("确定", "OK")] }); return; }
   if (startup) return; // Finish acquiring ownership before permitting shutdown.
   if (updater?.busy) {
     await showQuitMessage({ message: t("桌面更新正在处理，请等待下载或系统校验完成后再退出。", "A desktop update is in progress. Wait for the download or system verification to finish before quitting."), buttons: [t("确定", "OK")] });
@@ -119,7 +121,7 @@ async function requestQuit() {
 }
 
 async function requestLauncherHandoff() {
-  if (startup || quitting || askingQuit || handingOff || updater?.busy || !backend) return;
+  if (startup || quitting || askingQuit || handingOff || resetting || updater?.busy || !backend) return;
   handingOff = true;
   try {
     const answer = await showQuitMessage({ type: "question", title: t("安全切换后台启动器", "Switch Backend Launcher Safely"),
@@ -136,6 +138,35 @@ async function requestLauncherHandoff() {
   finally { handingOff = false; }
 }
 
+/** Shell-level escape route: works no matter what the installed business package does. */
+async function requestUpgradeReset() {
+  if (startup || quitting || askingQuit || handingOff || resetting || updater?.busy || !backend) return;
+  resetting = true;
+  try {
+    const answer = await showQuitMessage({ type: "warning", title: t("清理升级状态", "Reset Update State"),
+      message: t(`清理业务包升级状态，并用桌面内置版本 ${backend.bundled.version} 重新启动后台？`, `Reset app package update state and restart the backend with the bundled version ${backend.bundled.version}?`),
+      detail: t("用于升级卡住或新版本无法启动时。会先停止本桌面启动的后台，再把升级记录（版本选择、候选包、交接与旧版升级日志）移到 pi-web/upgrade-reset 下保存，不删除任何文件。聊天、设置、插件代码和数据不受影响；之后可在设置中重新检查更新。", "Use this when an update is stuck or a new version cannot start. The backend this desktop started is stopped first, then update records (version selection, candidate, handoff and legacy update journals) are moved into pi-web/upgrade-reset; nothing is deleted. Chats, settings, plugin code and data are not affected; you can check for updates again in Settings afterwards."),
+      buttons: [t("取消", "Cancel"), t("清理并恢复内置版本", "Reset and Use Bundled Version")], defaultId: 0, cancelId: 0, noLink: true });
+    if (answer.response !== 1 || quitting) return;
+    let result;
+    try { result = await backend.resetUpgrade(); }
+    catch (error) {
+      if (!/停止已取消|Stop cancelled/.test(error.message)) throw error;
+      const forced = await showQuitMessage({ type: "warning", message: t("插件视图尚未确认保存，后台拒绝停止。", "A plugin view has not confirmed its save, so the backend refused to stop."),
+        detail: t("可以先保存并关闭绘图或编辑器后重试；或强制停止（插件中未保存的编辑可能丢失）。", "Save and close drawings or editors and retry, or force the stop (unsaved plugin edits may be lost)."),
+        buttons: [t("取消", "Cancel"), t("强制停止并清理", "Force Stop and Reset")], defaultId: 0, cancelId: 0, noLink: true });
+      if (forced.response !== 1 || quitting) return;
+      result = await backend.resetUpgrade({ force: true });
+    }
+    backendUrl = localAddress(result.state.url).href;
+    if (window && !window.isDestroyed()) await window.loadURL(backendUrl); else showWindow();
+    await showQuitMessage({ type: "info", message: t("升级状态已清理", "Update state reset"),
+      detail: result.folder ? t(`已移走 ${result.moved.length} 项记录到：${result.folder}\n当前运行内置版本 ${result.state.version}。`, `Moved ${result.moved.length} records to: ${result.folder}\nNow running the bundled version ${result.state.version}.`)
+        : t(`没有需要清理的升级记录。当前运行内置版本 ${result.state.version}。`, `There were no update records to reset. Now running the bundled version ${result.state.version}.`), buttons: [t("好", "OK")] });
+  } catch (error) { await showQuitMessage({ type: "warning", message: t("升级状态未清理", "Update state not reset"), detail: error.message, buttons: [t("好", "OK")] }); }
+  finally { resetting = false; }
+}
+
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: appName, submenu: [
@@ -147,6 +178,7 @@ function installMenu() {
       } },
       { label: t("安全切换到当前桌面启动器…", "Switch to Current Desktop Launcher Safely…"), click: () => void requestLauncherHandoff() },
       { label: t("检查桌面更新…", "Check for Desktop Updates…"), click: () => { if (!startup && !handingOff) void updater?.run(); } },
+      { label: t("清理升级状态并恢复内置版本…", "Reset Update State and Use Bundled Version…"), click: () => void requestUpgradeReset() },
       { label: t("取消桌面更新下载", "Cancel Desktop Update Download"), click: () => updater?.cancelDownload() },
       { type: "separator" }, { label: t("退出…", "Quit…"), accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
     ] },
