@@ -92,7 +92,7 @@ The desktop menus are currently in Chinese. The ones you are likely to use:
 | **窗口 → 在浏览器中打开** | Open the service in your browser |
 | **窗口 → 打开日志目录** | Open the folder with the service log |
 
-Right-click selected text to copy it. Editable fields offer the standard undo, cut, copy, paste and select-all actions, and links offer **Copy Link Address**.
+Right-click selected text to copy it. Editable fields offer the standard undo, cut, copy, paste and select-all actions, and links offer **Copy Link Address**. Right-click a workspace or chat row to open the same actions menu as its **…** button.
 
 ## Quit
 
