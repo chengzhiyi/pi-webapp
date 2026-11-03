@@ -11,6 +11,7 @@ import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/install
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
 import { hostedId as id, integrationFixture, integrity } from "./helpers/hosted-integration-fixture.ts";
 import { acquireStorageOwnership } from "../src/host/server/plugins/hosted/storage.ts";
+import { slowTest } from "./helpers/slow-test.ts";
 
 const exec = promisify(execFile);
 const launcher = fileURLToPath(new URL("../bin/pi-webapp.mjs", import.meta.url));
@@ -83,7 +84,7 @@ test("real RPC launcher stop releases hosted ownership so restart can open and u
   } finally { await run("stop").catch(() => {}); await rm(root, { recursive: true, force: true }); }
 });
 
-test("stop --force exits even while a view never confirms its save, and plain stop still refuses", { timeout: 90_000 }, async t => {
+test("stop --force exits even while a view never confirms its save, and plain stop still refuses", { ...slowTest, timeout: 90_000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "hosted-launcher-force-")), agentDir = join(root, "agent"), storage = join(agentDir, "pi-web/hosted");
   const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEBAPP_PI_CLI: cli, PI_WEBAPP_AUTO_OPEN: "0" };
   for (const key of ["PI_WEBAPP_RESTART_PORT", "PI_WEBAPP_RESTART_TOKEN", "PI_WEBAPP_LAUNCHER_NONCE", "PI_WEBAPP_PLUGIN_DEV_ROOTS"]) delete env[key as keyof typeof env];
