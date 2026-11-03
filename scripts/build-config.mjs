@@ -18,9 +18,20 @@ export function nodeSourceMapPlugin(output) {
 // on the final files, before Sentry's writeBundle upload hook, then verify again
 // before archiving. Never inject a new ID: it must match the shipped JS.
 export async function prepareSourceMaps(directory, repairMissing = false) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const names = new Set(entries.map(entry => entry.name));
+  for (const entry of entries) {
     const file = resolve(directory, entry.name);
     if (entry.isDirectory()) { await prepareSourceMaps(file, repairMissing); continue; }
+    if (entry.name.endsWith(".js") && !names.has(`${entry.name}.map`)) {
+      // Bundler-generated chunks such as Rolldown's interop runtime have no original sources
+      // and no map. Give them an empty map carrying their Debug ID so every shipped asset is
+      // archived and verifiable; their frames simply stay unsymbolicated.
+      const id = (await readFile(file, "utf8")).match(/sentry-dbid-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)?.[1];
+      if (!repairMissing || !id) throw new Error(`Missing source map for ${entry.name}`);
+      await writeFile(`${file}.map`, JSON.stringify({ version: 3, file: entry.name, sources: [], names: [], mappings: "", debug_id: id, debugId: id }));
+      continue;
+    }
     if (!entry.name.endsWith(".js.map")) continue;
     const code = await readFile(file.slice(0, -4), "utf8");
     const id = code.match(/sentry-dbid-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)?.[1];
