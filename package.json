@@ -1,6 +1,6 @@
 {
   "name": "pi-webapp",
-  "version": "0.1.39",
+  "version": "0.1.52",
   "type": "module",
   "piWebappDesktopProtocol": 1,
   "piWebappDataVersion": 1,
