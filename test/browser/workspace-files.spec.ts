@@ -13,7 +13,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
   await mkdir(other);
   await mkdir(join(cwd, "src"));
   await writeFile(join(cwd, "src", "main.ts"), "export const message = 'Hello files';\n");
-  await writeFile(join(cwd, "README.md"), "# Workspace preview\n\n**Read only** documentation.\n");
+  await writeFile(join(cwd, "README.md"), "# Workspace preview\n\n**Read only** documentation.\n\nInline math $e^{i\\pi}$.\n\n```ts\nconst answer = 42;\n```\n");
   await writeFile(join(cwd, "empty.txt"), "");
   await writeFile(join(cwd, "binary.bin"), Buffer.from([0, 255]));
   await writeFile(join(cwd, "big.txt"), Buffer.alloc(1024 * 1024, 65));
@@ -90,6 +90,9 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(tree.getByRole("treeitem", { name: "main.ts", exact: true })).toBeVisible();
     await tree.getByRole("treeitem", { name: "README.md", exact: true }).click();
     await expect(rightbar.getByRole("heading", { name: "Workspace preview", exact: true })).toBeVisible();
+    // The markdown renderer, KaTeX and Shiki load after startup; previews still render math and highlight code.
+    await expect(rightbar.locator(".katex:visible")).toHaveCount(1);
+    await expect(rightbar.locator("pre.shiki:visible")).toContainText("const answer = 42;");
     await page.screenshot({ path: testInfo.outputPath(`markdown-${width}.png`) });
     await rightbar.getByRole("button", { name: "Source", exact: true }).click();
     await expect(rightbar.locator("pre:visible")).toContainText("# Workspace preview");
