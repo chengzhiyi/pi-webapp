@@ -1,0 +1,16 @@
+pkgbase = pi-webapp-bin
+	pkgdesc = Desktop client for Pi Webapp (official AppImage)
+	pkgver = 0.1.39.b16
+	pkgrel = 1
+	url = https://github.com/chengzhiyi/pi-webapp
+	arch = x86_64
+	license = MIT
+	depends = gtk3
+	depends = nss
+	depends = alsa-lib
+	depends = hicolor-icon-theme
+	options = !strip
+	source = https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-linux-x86_64.AppImage
+	sha256sums = a82f594eab04fee29521c241cef91ea65ae53db8dfa6ecf02a8bd8eedff16ff1
+
+pkgname = pi-webapp-bin

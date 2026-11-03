@@ -70,6 +70,8 @@ chmod +x pi-*-linux-x86_64.AppImage
 如果系统不支持 FUSE，请运行 `./pi-*-linux-x86_64.AppImage --appimage-extract-and-run`。
 :::
 
+Arch Linux 用户可以使用 [`packaging/arch`](https://github.com/chengzhiyi/pi-webapp/tree/alpha/packaging/arch) 中维护的 AUR 配方。其中的 README 介绍了如何用 `makepkg` 构建、自动更新，以及如何从手动安装的 AppImage 迁移而不产生重复菜单项。
+
 第一次启动后确认版本：在 macOS 上选 **pi → 关于 pi**。它会显示外壳版本、桌面构建号和正在运行的 pi-webapp 版本。然后按[快速开始 → 连接模型](./getting-started#connect-a-model)继续。
 
 ## 它和 Web 启动器有什么不同
