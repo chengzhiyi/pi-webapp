@@ -135,4 +135,4 @@ export type BridgeEvent =
   | { type: "snapshot"; session: SessionView }
   | { type: "stream"; message: ViewMessage | null }
   | { type: "workspaces"; value: WorkspaceListView }
-  | ({ type: "error"; message: string; errorCode?: string; errorReported?: boolean } & ErrorCorrelation);
+  | ({ type: "error"; message: string; errorCode?: string; errorReported?: boolean; /** The failed assistant message already shows this error in the transcript. */ inTranscript?: boolean } & ErrorCorrelation);

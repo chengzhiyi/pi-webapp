@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { IconFolderOpen16, IconProjectAddOutline16, StateDot } from "../../../web/src/ui/primitives/index.ts";
+import { IconFolderOpen16, IconProjectAddOutline16, StateDot, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconChevronDownOutline14, IconCloseFill14, IconSearchOutline16, IconFolderClose16, IconNewChatOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { Button } from "../../../web/src/ui/primitives/Button.tsx";
 import { Modal } from "../../../web/src/ui/primitives/Modal.tsx";
@@ -93,6 +93,8 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
     setQuery(""); setSearchExpanded(false); searchButton.current?.focus();
   };
   const matchingWorkspaces = workspaces.items.filter((workspace) => !needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || workspaces.sessions.some((item) => item.workspaceId === workspace.id && item.name.toLocaleLowerCase().includes(needle)));
+  // Dialogs show their own failures inline; sidebar actions report through a toast.
+  useErrorToast("workspace-action", dialogOpen || removeTarget || renameTarget || deleteTarget ? null : error);
   const run = async (action: () => Promise<void>) => {
     if (disabled) return;
     setBusy(true); setError("");
@@ -189,7 +191,6 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
       })}
       {matchingWorkspaces.length === 0 && <p className={browserCss.empty} role="status">{needle ? t("没有找到匹配的工作区或会话", "No matching workspaces or sessions") : t("添加工作区，开始管理对话", "Add a workspace to start organizing conversations")}{needle && <button type="button" className={browserCss.sessionOverflowButton} onClick={closeSearch}>{t("清除搜索", "Clear search")}</button>}</p>}
       {busy && <p className={browserCss.searchStatus} role="status">{t("正在处理…", "Working…")}</p>}
-      {error && !dialogOpen && <p className={css.error} role="alert">{error}</p>}
     </div></div></div>}
     <Modal open={removeTarget !== null} onClose={() => { if (!busy) setRemoveTarget(null); }} title={t("移除工作区？", "Remove workspace?")} closeLabel={t("关闭", "Close")}
       footer={<><Button variant="outline" disabled={busy} onClick={() => setRemoveTarget(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={disabled} onClick={() => { if (removeTarget) void run(async () => { await onRemove(removeTarget.id); setRemoveTarget(null); }); }}>{t("从列表移除", "Remove from list")}</Button></>}>

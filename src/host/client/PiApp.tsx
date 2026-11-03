@@ -52,6 +52,7 @@ export function PiApp() {
   const hostedCallbacks = useRef<{ openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> }>({});
   const hosted = useHostedPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.pluginGeneration, hostedCallbacks, locale);
   useErrorToast("hosted-runtime", hosted.error);
+  useErrorToast("plugin-load", pluginErrors.length ? `${t("插件加载失败", "Plugin load failed")}: ${pluginErrors.length}` : null, pluginErrors.join("\n"), t("诊断信息", "Diagnostics"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const recovery = useMemo(() => drawingRecovery(() => setPluginsOpen(true)), []);
@@ -211,5 +212,5 @@ export function PiApp() {
     actions={actions}
     renderSlot={renderSlot}
     t={(name: string) => labels[name] ?? name}
-  />{pluginErrors.length > 0 && <div className="pi-plugin-errors" role="status" title={pluginErrors.join("\n")}>{t("插件加载失败", "Plugin load failed")}: {pluginErrors.length}</div>}{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</AppUpdateProvider>;
+  />{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</AppUpdateProvider>;
 }

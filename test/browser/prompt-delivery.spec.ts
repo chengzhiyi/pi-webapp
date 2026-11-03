@@ -102,7 +102,7 @@ for (const width of [1440, 390, 320]) test(`DSH send → queue → edit/delete/s
     await editor.fill("");
     failQueue = true;
     await row("Revised follow-up").getByRole("button", { name: /发送（引导）|Send \(steer\)/ }).click();
-    await expect(queue.getByRole("alert")).toContainText("Fixture queue action failed");
+    await expect(page.locator("[data-toast-viewport]").getByRole("alert").filter({ hasText: "Fixture queue action failed" })).toBeVisible();
     await expect(edit("Revised follow-up")).toBeEnabled();
     failQueue = false;
     await row("Revised follow-up").getByRole("button", { name: /发送（引导）|Send \(steer\)/ }).click();

@@ -119,11 +119,12 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     // Send errors remove the optimistic placeholder and restore the draft.
     rejectSend = true;
     await editor.fill("Failed request"); await editor.press("Enter");
-    await expect(page.getByRole("alert")).toContainText("Fixture send failed");
+    const toasts = page.locator("[data-toast-viewport]");
+    await expect(toasts.getByRole("alert")).toContainText("Fixture send failed");
     await expect(activity).toHaveCount(0);
     await expect(editor).toHaveText("Failed request");
-    await page.getByRole("button", { name: /^(关闭错误|Dismiss error)$/ }).click();
-    await expect(page.locator(".pi-error")).toHaveCount(0);
+    await toasts.getByRole("button", { name: /^(关闭|Dismiss)$/ }).click();
+    await expect(toasts.getByRole("alert")).toHaveCount(0);
     rejectSend = false; releaseSend = undefined;
     await editor.press("Enter");
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
@@ -139,18 +140,23 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await page.clock.fastForward(4000);
     session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
-    session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: "Model failed" }] };
+    const modelFailure = '400 {"type":"error","error":{"type":"invalid_request_error","message":"Model failed"},"request_id":"req_fixture"}';
+    session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: modelFailure }] };
     bridge.publish({ type: "snapshot", session });
-    bridge.publish({ type: "error", message: "Model failed" });
-    await expect(page.locator(".pi-model-error")).toContainText("Model failed");
-    await expect(page.locator(".pi-error")).toContainText("Model failed");
+    bridge.publish({ type: "error", message: modelFailure, inTranscript: true });
+    const card = page.locator(".pi-model-error");
+    await expect(card.locator(".pi-model-error-message")).toHaveText("Model failed");
+    await expect(card.locator(".pi-model-error-meta")).toHaveText("HTTP 400 · invalid_request_error");
+    await expect(card.locator(".pi-model-error-request")).toHaveText("req_fixture");
+    if (process.env.PI_ERROR_SCREENSHOT) await card.screenshot({ path: `${process.env.PI_ERROR_SCREENSHOT}-${width}.png` });
+    // The transcript card already reports this failure; no toast repeats it.
+    await expect(toasts.getByRole("alert")).toHaveCount(0);
     await expect(activity).toHaveCount(0);
     // A retry clears both stale presentations as soon as Pi produces a new response.
     const recovered = message("stream", "Recovered response\n\n```ts\nconst answer = 42;\n```");
     session = { ...session, idle: false, streaming: recovered };
     bridge.publish({ type: "stream", message: recovered });
     await expect(page.locator(".pi-model-error")).toHaveCount(0);
-    await expect(page.locator(".pi-error")).toHaveCount(0);
     await expect(page.getByText("Recovered response", { exact: true })).toBeVisible();
     // Model code blocks and replies still copy when Electron denies the async Clipboard API.
     await page.evaluate(() => {

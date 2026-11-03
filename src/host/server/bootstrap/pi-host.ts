@@ -422,7 +422,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     if (event.message.role === "assistant" && event.message.stopReason === "error") {
       shared.tuiAgentError = true;
       const errorId = shared.bridge?.reportError?.(new Error("Agent response failed"), { ...shared.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
-      if (shared.selected === "tui") shared.bridge?.publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...shared.operation });
+      if (shared.selected === "tui") shared.bridge?.publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, inTranscript: true, ...shared.operation });
     }
     if (event.message.role === "toolResult") shared.tools?.message(event.message, diagnosticContext(ctx));
     if (event.message.role === "assistant") shared.tuiStreaming = null;

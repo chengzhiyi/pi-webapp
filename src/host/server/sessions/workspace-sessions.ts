@@ -262,7 +262,7 @@ export class WorkspaceSessions {
             const network = runtime.networkDiagnostic;
             const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION,
               ...(network ? { networkKind: network.kind, networkStage: network.stage, causeCodes: network.causes.flatMap(cause => cause.code ? [cause.code] : []).join(","), requestId: network.requestId } : {}) }) ?? network?.errorId;
-            publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...runtime.operation });
+            publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, inTranscript: true, ...runtime.operation });
           }
           if (event.type === "message_end" && event.message.role === "toolResult") tools.message(event.message, context);
           if (event.type === "agent_settled") { this.telemetry.breadcrumb("agent_end", context); tools.clear(); runtime.operation = undefined; }

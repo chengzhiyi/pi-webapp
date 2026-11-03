@@ -38,6 +38,7 @@ test("shared contract accepts legacy and hot hosted wire event variants", () => 
     { type: "workspaces", value: { items: [{ id: "ws", path: "/workspace", title: "Workspace" }], activeId: null,
       sessions: [{ id: "session-1", workspaceId: "ws", path: null, name: "Chat", modified: "now" }] } },
     { type: "error", message: "Failed", errorId: "error-1", requestId: "request-1", operationId: "operation-1", errorCode: "validation_error", errorReported: true },
+    { type: "error", message: "Model failed", inTranscript: true },
     { type: "shutdown" }, { type: "shutdown", reconnect: true }, { type: "plugins_changed" }, { type: "hosted_plugins_changed" },
   ];
   for (const event of events) assert.deepEqual(roundtrip(event), event);
@@ -91,7 +92,7 @@ test("validates stream, workspace, error and shutdown payloads", () => {
     { type: "workspaces", value: { items: [{ id: "ws", path: "/", title: "W", available: "yes" }], activeId: null, sessions: [] } },
     { type: "workspaces", value: { items: [], activeId: 1, sessions: [] } },
     { type: "workspaces", value: { items: [], activeId: null, sessions: [{ id: "s", workspaceId: "w", path: null, name: "N", modified: "now", idle: "true" }] } },
-    { type: "error", message: {} }, { type: "error", message: "Failure", errorReported: "true" },
+    { type: "error", message: {} }, { type: "error", message: "Failure", errorReported: "true" }, { type: "error", message: "Failure", inTranscript: 1 },
     { type: "error", message: "Failure", errorId: 1 }, { type: "shutdown", reconnect: "true" },
   ];
   for (const event of invalid) assert.throws(() => parseBridgeEvent(event), /Invalid stream event/);
