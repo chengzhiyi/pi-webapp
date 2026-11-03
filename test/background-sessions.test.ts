@@ -25,6 +25,7 @@ test("SDK sessions run independently across workspace and session switches", { t
     await host.send("Work in A"); await aReply.ready;
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(a.isIdle, false);
+    assert.equal(host.snapshot().activityId, 1);
 
     await host.open(second, "new");
     const b = host.session!;
@@ -33,6 +34,7 @@ test("SDK sessions run independently across workspace and session switches", { t
     const bReply = await controlledReply(b, "Second workspace progress");
     await host.send("Work in B"); await bReply.ready;
     assert.equal(b.isIdle, false);
+    assert.equal(host.snapshot().activityId, 1);
     await host.open(first, "continue");
     assert.equal(host.session, a, "returning reuses the running instance");
     assert.equal(host.snapshot().idle, false);
@@ -100,6 +102,7 @@ test("background failures stay in their chat and service shutdown cancels all ac
     assert.ok(host.snapshot().messages.some(message => message.role === "assistant" && message.error === "Fixture response failed"));
     const nextReply = await controlledReply(a, "Pending foreground progress");
     await host.send("Try again"); await nextReply.ready;
+    assert.equal(host.snapshot().activityId, 2, "a later run has a distinct activity identity");
     events.length = 0;
     await host.dispose(); await host.dispose();
     assert.equal(nextReply.wasAborted(), true);
