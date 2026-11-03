@@ -1,66 +1,36 @@
 name: AUR package
 
 on:
-  schedule:
-    - cron: "17 4 * * *"
+  pull_request:
+    paths:
+      - "packaging/arch/**"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Desktop tag to package (empty means newest desktop release)"
-        required: false
-        type: string
-      publish:
-        description: "Publish the already reviewed PKGBUILD to the AUR Git remote"
-        type: boolean
-        default: false
 
 concurrency:
   group: pi-webapp-aur
   cancel-in-progress: false
 
 jobs:
-  update:
-    if: inputs.publish != true
+  check:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     container: archlinux:latest
     timeout-minutes: 15
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: alpha
       - name: Install the package build tools
-        run: pacman -Sy --noconfirm --needed base-devel git nodejs github-cli jq
-      - name: Update PKGBUILD and .SRCINFO from the official release
-        env:
-          AUR_TAG: ${{ inputs.tag }}
-          GITHUB_TOKEN: ${{ github.token }}
+        run: pacman -Sy --noconfirm --needed base-devel
+      - name: Verify PKGBUILD metadata as an unprivileged user
         run: |
-          tag="$(node packaging/arch/update.mjs "${AUR_TAG}" | jq -r .tag)"
-          echo "AUR_TAG=${tag}" >> "${GITHUB_ENV}"
-      - name: Open a review PR when the package changed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if git diff --quiet -- packaging/arch; then
-            echo "AUR package is already current"
-            exit 0
-          fi
-          branch="chore/aur-${AUR_TAG}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "${branch}"
-          git add packaging/arch/PKGBUILD packaging/arch/.SRCINFO
-          git commit -m "chore(aur): update to ${AUR_TAG}"
-          git push -u origin "${branch}"
-          gh pr create --repo chengzhiyi/pi-webapp --base alpha --head "${branch}" \
-            --title "chore(aur): update to ${AUR_TAG}" \
-            --body "Automated AUR update for ${AUR_TAG}. The AppImage checksum comes from the release's official SHA256SUMS. AUR publication remains a separate manual step."
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          cd "${GITHUB_WORKSPACE}"
+          runuser -u builder -- bash -c 'cd packaging/arch && makepkg --printsrcinfo > /tmp/pi-webapp.SRCINFO'
+          diff -u packaging/arch/.SRCINFO /tmp/pi-webapp.SRCINFO
 
   publish:
-    if: inputs.publish
+    if: github.event_name == 'workflow_dispatch'
+    environment: aur
     runs-on: ubuntu-latest
     container: archlinux:latest
     timeout-minutes: 15
@@ -71,11 +41,13 @@ jobs:
           persist-credentials: false
       - name: Install the package build tools
         run: pacman -Sy --noconfirm --needed base-devel git openssh
-      - name: Verify reviewed package metadata
+      - name: Verify reviewed package metadata as an unprivileged user
         run: |
-          cd packaging/arch
-          makepkg --printsrcinfo > /tmp/pi-webapp.SRCINFO
-          diff -u .SRCINFO /tmp/pi-webapp.SRCINFO
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          cd "${GITHUB_WORKSPACE}"
+          runuser -u builder -- bash -c 'cd packaging/arch && makepkg --printsrcinfo > /tmp/pi-webapp.SRCINFO'
+          diff -u packaging/arch/.SRCINFO /tmp/pi-webapp.SRCINFO
       - name: Publish to the dedicated AUR Git repository
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
@@ -86,7 +58,8 @@ jobs:
           install -dm700 ~/.ssh
           printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+          ssh-keyscan -t ed25519 aur.archlinux.org > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -F 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4' > /dev/null
           git clone ssh://aur@aur.archlinux.org/pi-webapp-bin.git /tmp/pi-webapp-aur
           cp packaging/arch/PKGBUILD packaging/arch/.SRCINFO /tmp/pi-webapp-aur/
           cd /tmp/pi-webapp-aur

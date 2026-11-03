@@ -34,11 +34,18 @@ The package preserves `~/.pi` and does not stop an already running compatible se
 
 ## Updating and publishing
 
-`.github/workflows/aur.yml` checks for a new desktop release daily and can also be run manually. Its default path opens a review PR to `alpha` with updated `PKGBUILD` and `.SRCINFO`; it never publishes to AUR automatically.
+Update the recipe as part of a desktop release PR and commit the result:
 
-AUR publication is a separate manual step after that update is reviewed and merged. Run **AUR package → Run workflow** with `publish=true`. This pushes only the reviewed `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/pi-webapp-bin.git`.
+```bash
+node packaging/arch/update.mjs desktop-v0.1.39-b16
+git add packaging/arch/PKGBUILD packaging/arch/.SRCINFO
+```
 
-Configure these repository secrets for the AUR account that owns the package:
+The updater rewrites both metadata files directly and does not require `makepkg`, so it also works on macOS. Pull requests touching `packaging/arch/**` run the **AUR package → check** job. It verifies the committed `.SRCINFO` with `makepkg --printsrcinfo` as an unprivileged user inside `archlinux:latest`.
+
+AUR publication is a separate manual step after the update is reviewed and merged into `alpha`. Run **AUR package → Run workflow** on `alpha`. The publish job uses the protected `aur` environment, which requires owner approval and contains the AUR credentials. It verifies the metadata as an unprivileged user, checks AUR's pinned Ed25519 host fingerprint, and pushes only `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/pi-webapp-bin.git`.
+
+Configure these secrets in the `aur` environment for the AUR account that owns the package:
 
 - `AUR_SSH_PRIVATE_KEY`: an SSH private key accepted by AUR;
 - `AUR_USERNAME`: Git author name;

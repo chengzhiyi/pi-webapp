@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
-const run = promisify(execFile);
 const directory = fileURLToPath(new URL("./", import.meta.url));
 const repository = "chengzhiyi/pi-webapp";
 const requestedTag = process.argv[2];
@@ -56,6 +53,12 @@ if (next === before) {
   process.exit(0);
 }
 await writeFile(pkgbuildPath, next);
-const { stdout } = await run("makepkg", ["--printsrcinfo"], { cwd: directory });
-await writeFile(`${directory}.SRCINFO`, stdout);
+const sourceUrl = `https://github.com/${repository}/releases/download/desktop-v${version}-b${build}/${filename}`;
+const srcinfoPath = `${directory}.SRCINFO`;
+const srcinfo = await readFile(srcinfoPath, "utf8");
+const nextSrcinfo = srcinfo
+  .replace(/^\tpkgver = .*$/m, `\tpkgver = ${version}.b${build}`)
+  .replace(/^\tsource = .*$/m, `\tsource = ${sourceUrl}`)
+  .replace(/^\tsha256sums = .*$/m, `\tsha256sums = ${match[1]}`);
+await writeFile(srcinfoPath, nextSrcinfo);
 console.log(JSON.stringify({ tag: release.tag_name, changed: true }));
