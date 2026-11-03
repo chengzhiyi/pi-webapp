@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
 import type { LoadedPlugin } from "./plugin-runtime.tsx";
 import { HeroShell } from "../../../web/src/ui/conversation/EmptyHero.tsx";
-import { StateDot, IconFolderOpen16, IconPlusOutline16 } from "../../../web/src/ui/primitives/index.ts";
+import { StateDot, IconFolderOpen16, IconPlusOutline16, dismissToast, showToast } from "../../../web/src/ui/primitives/index.ts";
 import conversationCss from "../../../web/src/ui/conversation/ConversationRoot.module.css";
 import inputCss from "../../../web/src/ui/conversation/InputBar.module.css";
 import heroCss from "../../../web/src/ui/conversation/HeroShell.module.css";
@@ -35,6 +35,7 @@ import { PiPromptControls } from "./PiPromptControls.tsx";
 import { localize as t, useLocale } from "../../../web/src/ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
 import { useConversationScroll } from "./use-conversation-scroll.ts";
+import { parseModelError } from "./model-error.ts";
 import "./pi-conversation.css";
 
 interface Props {
@@ -108,6 +109,18 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   );
 }
 
+function ModelErrorCard({ error, onDismiss }: { error: string; onDismiss: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const parsed = parseModelError(error);
+  const meta = [parsed.status && `HTTP ${parsed.status}`, parsed.type].filter(Boolean).join(" · ");
+  const copy = () => { void navigator.clipboard?.writeText(parsed.raw).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+  return <div className="pi-model-error" role="alert">
+    <div className="pi-model-error-title"><strong>{t("模型请求失败", "Model request failed")}</strong>{meta && <span className="pi-model-error-meta">{meta}</span>}<button type="button" className="pi-error-dismiss" aria-label={t("关闭错误", "Dismiss error")} onClick={onDismiss}>×</button></div>
+    <p className="pi-model-error-message">{parsed.usageLimit ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : parsed.message}</p>
+    <div className="pi-model-error-footer">{parsed.requestId && <span className="pi-model-error-request" title={t("请求 ID", "Request ID")}>{parsed.requestId}</span>}<button type="button" className="pi-model-error-copy" onClick={copy}>{copied ? t("已复制", "Copied") : t("复制详情", "Copy details")}</button></div>
+  </div>;
+}
+
 function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, renderToolView, artifactTools, viewTools, running = false, cwd, superseded = false }: {
   turn: ConversationTurn; results: Map<string, ViewMessage>; model: string | null; loadImage: Props["onLoadImage"]; onInspect: (id: string) => void; renderPluginSlot: Props["renderPluginSlot"]; renderToolView: Props["renderToolView"]; artifactTools: readonly string[]; viewTools: readonly string[]; running?: boolean; cwd?: string; superseded?: boolean;
 }) {
@@ -143,7 +156,7 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
     {toolViewCalls(turn.messages, viewTools).map(({ key, call }) => <div key={key} data-tool-view={call.toolName}>{renderToolView?.(call, call.toolCallId ? results.get(call.toolCallId) : undefined, running && !results.has(call.toolCallId ?? ""))}</div>)}
     {answerBlocks.length > 0 && lastAssistant && <PiMessage message={{ ...lastAssistant, blocks: answerBlocks }} results={results} loadImage={loadImage} running={lastAssistant.id === "stream"} />}
     {turn.messages.filter((message) => message.role === "tool" && (!message.toolCallId || !results.has(message.toolCallId))).map((message) => <PiMessage key={message.id} message={message} results={results} loadImage={loadImage} />)}
-    {failures.map((message) => <div key={`${message.id}-error`} className="pi-model-error" role="alert"><div className="pi-model-error-title"><strong>{t("模型请求失败", "Model request failed")}</strong><button type="button" className="pi-error-dismiss" aria-label={t("关闭错误", "Dismiss error")} onClick={() => setDismissedFailures(current => new Set(current).add(message.id))}>×</button></div><span>{/usage limit has been reached/i.test(message.error ?? "") ? t("模型服务的使用额度已耗尽。请切换模型或等待额度恢复后重试。", "The model service usage limit has been reached. Switch models or try again after the limit resets.") : message.error}</span></div>)}
+    {failures.map((message) => <ModelErrorCard key={`${message.id}-error`} error={message.error!} onDismiss={() => setDismissedFailures(current => new Set(current).add(message.id))} />)}
     {!running && failures.length === 0 && (lastAssistant || (turn.usage && turn.usage.totalTokens > 0)) && <TurnActions text={answer} timestamp={lastAssistant?.timestamp} usage={turn.usage} model={lastAssistant?.model ?? model} />}
     {renderPluginSlot("turn.tail", { id: turn.id, completed: !running, messageIds: turn.messages.map((message) => message.id), toolCallIds: turn.messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)) })}
   </div>;
@@ -180,6 +193,8 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   const setDraft = (text: string) => updateDraft(value => ({ ...value, text }));
   const setAttachments = (value: PendingAttachment[] | ((current: PendingAttachment[]) => PendingAttachment[])) => updateDraft(current => ({ ...current, attachments: typeof value === "function" ? value(current.attachments) : value }));
   const setAttachmentError = (error: string) => updateDraft(value => ({ ...value, error }));
+  // Composer failures float as a toast so they never push the input bar around.
+  useEffect(() => { if (attachmentError) showToast({ key: "composer-error", message: attachmentError }); else dismissToast("composer-error"); }, [attachmentError]);
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
   const [working, setWorking] = useState(false);
@@ -452,7 +467,6 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
         </div>
         {running && draft.trimStart().startsWith("/") && <div className="pi-prompt-hint">{t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands")}</div>}
       </form>
-      {attachmentError && <div className="pi-error" role="alert">{attachmentError}</div>}
     </div>
   );
 }
@@ -477,6 +491,21 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
   const inspect = useCallback((id: string) => { setInspectCallId(id); setActiveTab("trajectory"); }, []);
   const transcript = useHostedTranscript(session?.sessionId, [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])], viewTools);
   const empty = session === null || (transcript.messages.length === 0 && activity === null);
+  const dismissError = useRef(onDismissError);
+  dismissError.current = onDismissError;
+  // Hand each failure to the app-wide toast stack, then clear it so a repeat raises a fresh toast.
+  useEffect(() => {
+    if (!error) return;
+    const parsed = parseModelError(error);
+    showToast({ key: "conversation-error", message: parsed.message, detail: parsed.raw !== parsed.message ? parsed.raw : undefined, detailLabel: t("诊断信息", "Diagnostics") });
+    dismissError.current();
+  }, [error]);
+  const retryCleanup = useRef(transcript.retry);
+  retryCleanup.current = transcript.retry;
+  useEffect(() => {
+    if (transcript.error) showToast({ key: "transcript-cleanup", message: transcript.error, action: { label: t("重试视图清理", "Retry view cleanup"), onClick: () => retryCleanup.current() } });
+    else dismissToast("transcript-cleanup");
+  }, [transcript.error]);
   const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
     if (!session) return;
     // Queued prompts stay out of the transcript until Pi actually consumes them.
@@ -538,8 +567,6 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
               {composerInteraction}
               <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
-              {transcript.error && <div className="pi-error" role="alert">{transcript.error}<button onClick={transcript.retry}>Retry view cleanup</button></div>}
-              {error && <div className="pi-error pi-error-dismissible" role="alert"><span>{error}</span><button type="button" className="pi-error-dismiss" aria-label={t("关闭错误", "Dismiss error")} onClick={onDismissError}>×</button></div>}
             </div>
           </div>
           {showLatest && <div className={chatCss.toBottomSlot}>

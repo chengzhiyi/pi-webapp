@@ -58,7 +58,7 @@ function workspaces(value: unknown): value is WorkspaceListView {
 function errorEvent(value: unknown): value is Extract<BridgeEvent, { type: "error" }> {
   return record(value) && value.type === "error" && string(value.message)
     && optionalStrings(value, ["errorCode", "errorId", "requestId", "operationId"])
-    && optional(value, "errorReported", boolean);
+    && optional(value, "errorReported", boolean) && optional(value, "inTranscript", boolean);
 }
 
 /** Reject malformed events before they enter UI state; errors never echo wire content. */

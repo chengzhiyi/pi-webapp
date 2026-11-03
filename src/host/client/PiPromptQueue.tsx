@@ -4,6 +4,7 @@ import { displayUserMessage } from "../../contracts/user-message.ts";
 import { localize as t } from "../../../web/src/ui/locale/preference.ts";
 import { IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconQueueOutlineRegular, IconEditOutlineRegular, IconTrashOutlineRegular, IconSendOutlineRegular, IconCheckOutlineRegular, IconCloseOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { FileTypeIcon } from "../../../web/src/ui/primitives/FileTypeIcon.tsx";
+import { useErrorToast } from "../../../web/src/ui/primitives/Toast.tsx";
 import { Tooltip } from "../../../web/src/ui/shared/primitives/Tooltip.tsx";
 import css from "./PiPromptQueue.module.css";
 
@@ -20,6 +21,7 @@ export function PiPromptQueue({ session, connected, onUpdate }: Props) {
   const [editing, setEditing] = useState<{ id: string; revision: number; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  useErrorToast("prompt-queue", error);
   const inFlight = useRef(false);
   const listId = useId();
   const list = useRef<HTMLOListElement>(null);
@@ -100,7 +102,6 @@ export function PiPromptQueue({ session, connected, onUpdate }: Props) {
           </div>}
         </li>;
       })}</ol>
-      {error && <div className={css.error} role="alert">{error}</div>}
       {session?.paused && <div className={css.paused} role="status">{t("已暂停，继续后处理", "Paused; processed on resume")}</div>}
     </div>
   </section>;
