@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { CodeFileIcon } from './CodeFileIcon.tsx'
+// Code-file classification and artwork are shared with the vendored copy; only the
+// coarse glyphs and the csv/tsv mapping below are this app's own.
+import { CodeFileIcon } from '../shared/primitives/CodeFileIcon.tsx'
 import {
   classifyCodeFileType, isCodeFileType, type CodeFileType, type FileTypeProjectContext,
-} from './code-file-types.ts'
+} from '../shared/primitives/code-file-types.ts'
 import type { IconProps } from './icons/props.ts'
 import css from './FileTypeIcon.module.css'
 
@@ -28,7 +30,7 @@ export type FileTypeKind = FileType
 type ClassifiedFileType = Exclude<FileType, 'folder'>
 type TraditionalFileType = Exclude<FileType, CodeFileType>
 
-export type { CodeFileType, FileTypeProjectContext } from './code-file-types.ts'
+export type { CodeFileType, FileTypeProjectContext } from '../shared/primitives/code-file-types.ts'
 
 /** Props for {@link FileTypeIcon}: either a path to classify or an already resolved kind. */
 export type FileTypeIconProps = IconProps & (
