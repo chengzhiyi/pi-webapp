@@ -57,13 +57,14 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     if (width === 1440) {
       const popups: string[] = [];
       page.on("popup", popup => popups.push(popup.url()));
-      const link = page.getByRole("link", { name: "《协作内核与插件协议设计》", exact: true });
+      // Local file links open the preview panel, so the shared renderer draws them as buttons.
+      const link = page.getByRole("button", { name: "《协作内核与插件协议设计》", exact: true });
       await link.click();
       await expect(rightbar.getByRole("heading", { name: "中文文件链接预览", exact: true })).toBeVisible();
       expect(popups).toEqual([]);
-      await page.getByRole("link", { name: "再次打开", exact: true }).click();
+      await page.getByRole("button", { name: "再次打开", exact: true }).click();
       await expect(rightbar.getByRole("tab", { name: /协作内核与插件协议设计/ })).toHaveCount(1);
-      await page.getByRole("link", { name: "绝对路径", exact: true }).click();
+      await page.getByRole("button", { name: "绝对路径", exact: true }).click();
       await expect(rightbar.getByRole("heading", { name: "Workspace preview", exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "外部网站", exact: true })).toHaveAttribute("target", "_blank");
       await expect(page).toHaveURL(new URL(bridge.url).origin + "/");

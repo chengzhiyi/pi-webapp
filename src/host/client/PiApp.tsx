@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "../../../web/src/ui/layout/AppFrame.tsx";
 import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "../../../web/src/ui/layout/columns.ts";
 import { SidebarRoot } from "../../../web/src/ui/sidebar/SidebarRoot.tsx";
@@ -26,12 +26,8 @@ import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, localize as t } from "../../../web/src/ui/locale/preference.ts";
 import type { LayoutInfo, PanelInfo } from "../../../web/src/ui/contract.ts";
 import type { SidebarPanelMetadata } from "../../../web/src/ui/sidebar/contract/slots.ts";
+import { LazyMarkdownText, loadMarkdownText, useMarkdownLabels } from "./markdown-text.tsx";
 import "./pi.css";
-
-// KaTeX, Shiki and the shared renderer only serve plugin surfaces (file previews, panels),
-// so they load after startup instead of in the boot chunk. PiApp preloads them once mounted.
-const loadMarkdownText = () => import("../../../web/src/ui/shared/primitives/markdown/MarkdownText.tsx");
-const MarkdownText = lazy(() => loadMarkdownText().then((module) => ({ default: module.MarkdownText })));
 import "./plugin-rightbar.css";
 
 export function PiApp() {
@@ -134,7 +130,8 @@ export function PiApp() {
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
   useEffect(() => { void loadMarkdownText(); }, []);
-  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <Suspense fallback={<div className="pi-markdown-pending">{text}</div>}><MarkdownText text={text} pathImages={pathImages} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} /></Suspense>, [locale]);
+  const markdownLabels = useMarkdownLabels();
+  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <LazyMarkdownText text={text} pathImages={pathImages} labels={markdownLabels} />, [markdownLabels]);
   const send: typeof bridge.send = async (...args) => {
     const sessionId = bridge.session?.sessionId;
     setPreSendError("");

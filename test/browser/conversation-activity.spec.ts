@@ -178,10 +178,10 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
       };
     });
     const copiedText = () => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText);
-    const copyCode = page.locator(".pi-code-toolbar button");
+    const copyCode = page.locator(".md-code-block").first().getByRole("button", { name: /^(复制|Copy|已复制|Copied)$/ });
     await copyCode.click();
-    await expect(copyCode).toHaveText(/^(已复制|Copied)$/);
-    expect(await copiedText()).toBe("const answer = 42;\n");
+    await expect(copyCode).toHaveAccessibleName(/^(已复制|Copied)$/);
+    expect(await copiedText()).toBe("const answer = 42;");
     // The fallback's temporary textarea hands focus back to the clicked control.
     await expect(copyCode).toBeFocused();
     // The finished reply's copy action takes the same fallback.

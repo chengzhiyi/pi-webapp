@@ -102,7 +102,7 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
         if (block.kind === "thinking") return <ReasoningRow key={index} text={block.text} running={running} />;
         if (block.kind === "toolCall") return <PiToolRow key={block.toolCallId || index} block={block} result={block.toolCallId ? results.get(block.toolCallId) : undefined} running={running} cwd={cwd} onInspect={onInspect} />;
         if (block.kind === "image") return <div className="pi-image-note" key={index}>{block.text}</div>;
-        return <PiMarkdown key={index} text={block.text} />;
+        return <PiMarkdown key={index} text={block.text} streaming={running} />;
       })}
     </div>
   );
