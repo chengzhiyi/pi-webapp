@@ -35,7 +35,7 @@ Enter one of these in the **Add package** box and click **Add**:
 | SSH | `ssh://git@github.com/user/repo` or `git@github.com:user/repo` |
 | Local folder | `/path/to/package` |
 
-Pi reloads its resources afterwards. The entry is saved to Pi's global settings (`~/.pi/agent/settings.json`), so the terminal Pi sees it too. To remove one, use its remove action in the list.
+Pi reloads its resources afterwards. The entry is saved to Pi's global settings (`~/.pi/agent/settings.json`), so the terminal Pi sees it too. Workspace chats load ordinary Pi extensions and their tools; only the `pi-webapp` extension itself is excluded to prevent a nested host. To remove one, use its remove action in the list.
 
 If you type a package source (anything starting with `npm:`, `git:`, `http(s)://`, `ssh://` or `git@`) into the extension or skill box, the dialog stops you and offers **Go to packages**, because those boxes accept file paths only.
 

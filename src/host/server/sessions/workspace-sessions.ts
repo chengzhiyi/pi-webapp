@@ -10,7 +10,7 @@ import { resumeMessage } from "./execution-control.ts";
 import { assertPromptDelivery } from "./prompt-delivery.ts";
 import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
 import { EditablePromptQueue, PromptQueueError } from "./editable-prompt-queue.ts";
-import { pluginRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
+import { sessionRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
 import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
@@ -214,7 +214,7 @@ export class WorkspaceSessions {
     const old = this.runtimes.get(manager.getSessionId());
     const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
     const bus = createEventBus();
-    const runtimePaths = await pluginRuntimePaths(cwd, catalog.extensionRoots);
+    const runtimePaths = await sessionRuntimePaths(cwd, catalog.extensionRoots, this.isProjectTrusted(cwd));
     const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus,
       extensionFactories: this.hosted ? [this.hosted.adapter.extension(this.hosted.scope(cwd, manager.getSessionId()))] : [],
     });
