@@ -21,6 +21,18 @@ export function planRelease(sourceVersion, tags, channel) {
   return { version: `${base}-alpha.${sequence}`, tag: "alpha", channel };
 }
 
+/** Desktop bundles the next unreleased base so older npm selections cannot outrank its newer code. */
+export function planDesktopVersion(sourceVersion, tags) {
+  return parseVersion(planRelease(sourceVersion, tags, "alpha").version).core.join(".");
+}
+
+/** A desktop build must never label its bundled backend older than npm latest. */
+export function assertDesktopVersionCurrent(version, tags) {
+  if (!isStableVersion(tags.latest)) throw new Error("npm latest must be a stable version");
+  if (compareVersions(version, tags.latest) < 0)
+    throw new Error(`package.json ${version} is older than npm latest ${tags.latest}; run npm run desktop:prepare-build`);
+}
+
 export function releaseChannel(ref) {
   if (ref === "refs/heads/main") return "stable";
   if (ref === "refs/heads/alpha") return "alpha";

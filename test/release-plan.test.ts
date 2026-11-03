@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { planRelease, releaseChannel } from "../scripts/release-plan.mjs";
+import { assertDesktopVersionCurrent, planDesktopVersion, planRelease, releaseChannel } from "../scripts/release-plan.mjs";
 
 test("main publishes stable, alpha publishes preview, all other refs fail closed", () => {
   assert.equal(releaseChannel("refs/heads/main"), "stable");
@@ -29,6 +29,26 @@ test("an explicit minor target and a stable hotfix do not move preview backwards
   assert.throws(() => planRelease("0.2.0", { latest: "0.1.29", alpha: "0.2.0-beta.1" }, "alpha"));
   assert.throws(() => planRelease("0.2.0", { latest: "0.2.0-alpha.1" }, "stable"));
   assert.throws(() => planRelease("0.2.0", tags, "typo"));
+});
+
+test("desktop bundles the next unreleased base without changing npm numbering", () => {
+  const tags = { latest: "0.1.51", alpha: "0.1.52-alpha.7" };
+  assert.equal(planDesktopVersion("0.1.39", tags), "0.1.52");
+  assert.equal(planDesktopVersion("0.1.52", tags), "0.1.52");
+  assert.equal(planDesktopVersion("0.2.0", tags), "0.2.0");
+  assert.equal(planDesktopVersion("0.1.39", { latest: "0.1.52", alpha: "0.1.52-alpha.7" }), "0.1.53");
+  assert.equal(planDesktopVersion("0.1.39", { latest: "0.1.51" }), "0.1.52");
+  // Recording the desktop base in package.json leaves the next npm publishes where they were.
+  assert.equal(planRelease("0.1.52", tags, "alpha").version, planRelease("0.1.39", tags, "alpha").version);
+  assert.equal(planRelease("0.1.52", tags, "stable").version, planRelease("0.1.39", tags, "stable").version);
+});
+
+test("desktop builds refuse a bundled version older than npm latest", () => {
+  const tags = { latest: "0.1.51", alpha: "0.1.52-alpha.7" };
+  assert.throws(() => assertDesktopVersionCurrent("0.1.39", tags), /older than npm latest 0\.1\.51/);
+  assert.doesNotThrow(() => assertDesktopVersionCurrent("0.1.51", tags));
+  assert.doesNotThrow(() => assertDesktopVersionCurrent("0.1.52", tags));
+  assert.throws(() => assertDesktopVersionCurrent("0.1.52", { latest: "0.1.52-alpha.1" }));
 });
 
 test("workflow validates both branches, pins release source, and never writes version commits", async () => {
