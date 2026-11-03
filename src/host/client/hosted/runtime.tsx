@@ -109,7 +109,14 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       void work.catch(() => {}).then(() => client.close()).catch(cause => console.error("Hosted view cleanup did not acknowledge edits", cause)).finally(() => frame.dispose());
     };
   }, [card.pluginId, card.generation, card.documentUrl, card.controllerUrl, mount.sessionId, mount.kind, mount.contentId, attempt]);
-  useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => fail.current(cause)); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
+  useEffect(() => {
+    void ready.current.then(() => {
+      const target = adapter.current;
+      // A generation switch freezes and later disposes the old frame, rejecting its pending
+      // update after the new frame has recovered. Only the live frame's failures count.
+      return target?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme }).catch(cause => { if (adapter.current === target) fail.current(cause); });
+    }, () => { /* The mount effect already reported its own failure. */ });
+  }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
   // Failures and notices go to the app toast stack, never inline: the controller is
   // mounted outside the layout, and its retry must stay reachable because it shares
   // the generation barrier with visible editors.
