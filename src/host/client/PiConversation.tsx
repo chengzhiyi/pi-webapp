@@ -485,7 +485,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     localFiles: optimistic.files,
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
-  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId);
+  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId, session?.activityId);
   const viewTools = useMemo(() => plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []), [plugins]);
   const artifactTools = useMemo(() => plugins.flatMap((plugin) => plugin.definition.artifactTools ?? []), [plugins]);
   const inspect = useCallback((id: string) => { setInspectCallId(id); setActiveTab("trajectory"); }, []);

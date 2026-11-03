@@ -1,12 +1,20 @@
 import { HttpError } from "../../../../src/host/client/http-error.ts";
 
+const backendMessages: Record<string, string> = {
+  "请等待当前回复结束后再升级": "Wait for the current reply to finish before updating.",
+  "请等待所有聊天任务结束后再升级": "Wait for all chat tasks to finish before updating.",
+};
+
 export function updateErrorMessage(cause: unknown, locale: "zh" | "en", action: "check" | "install"): string {
   if (cause instanceof HttpError && cause.status === 404) {
     return locale === "zh"
       ? "后台服务仍在运行旧版。请重启 pi-webapp 后重新打开页面，再检查更新。"
       : "The background service is still running an older version. Restart pi-webapp, reopen this page, then check again.";
   }
-  if (cause instanceof Error && cause.message) return cause.message;
+  if (cause instanceof Error && cause.message) {
+    const translated = locale === "en" ? backendMessages[cause.message] : undefined;
+    return translated ?? cause.message;
+  }
   if (action === "check") return locale === "zh" ? "检查更新失败" : "Could not check for updates";
   return locale === "zh" ? "升级失败" : "Update failed";
 }

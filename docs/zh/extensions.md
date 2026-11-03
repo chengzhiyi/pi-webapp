@@ -35,7 +35,7 @@
 | SSH | `ssh://git@github.com/user/repo` 或 `git@github.com:user/repo` |
 | 本地目录 | `/path/to/package` |
 
-之后 Pi 会重新加载它的资源。这条记录会保存到 Pi 的全局设置（`~/.pi/agent/settings.json`），所以终端里的 Pi 也能看到。要移除某一项，请使用列表里它自己的移除操作。
+之后 Pi 会重新加载它的资源。这条记录会保存到 Pi 的全局设置（`~/.pi/agent/settings.json`），所以终端里的 Pi 也能看到。工作区会话也会加载普通 Pi 扩展及其工具；只有 `pi-webapp` 自身的扩展会被排除，以避免嵌套启动宿主。要移除某一项，请使用列表里它自己的移除操作。
 
 如果你把包来源（任何以 `npm:`、`git:`、`http(s)://`、`ssh://` 或 `git@` 开头的内容）填进扩展或技能的输入框，对话框会拦住你并提供 **转到包**，因为那两个输入框只接受文件路径。
 

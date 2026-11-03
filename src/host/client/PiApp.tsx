@@ -9,6 +9,7 @@ import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { PluginManagementPage } from "./PluginManagementPage.tsx";
 import { PiUpdateShortcut } from "./PiUpdateShortcut.tsx";
+import { PiHelpMenu } from "./PiHelpMenu.tsx";
 import { AppUpdateProvider } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import { IconPluginPinwheelOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
@@ -166,7 +167,7 @@ export function PiApp() {
     if (key === "sidebar.brand.name") return <span>pi-webapp</span>;
     if (key === "sidebar.footer.action") return <PiUpdateShortcut wide={owner.wide} hideError={settingsOpen} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} />;
     if (key === "sidebar.panellist") return <IconPluginPinwheelOutlineRegular size={owner.size} />;
-    if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row ${owner.wide ? "" : "pi-settings-trigger-rail"}`}><button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label={t("Pi 设置", "Pi Settings")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>{t("Pi 设置", "Pi Settings")}</span>}</button></div>;
+    if (key === "sidebar.settings") return <div className={`pi-settings-trigger-row pi-settings-trigger-split ${owner.wide ? "" : "pi-settings-trigger-rail"}`}>{!owner.wide && <PiHelpMenu wide={false} />}<button className="pi-settings-sidebar" data-wide={owner.wide} type="button" aria-label={t("Pi 设置", "Pi Settings")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>{owner.wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}{owner.wide && <span>{t("Pi 设置", "Pi Settings")}</span>}</button>{owner.wide && <PiHelpMenu wide />}</div>;
     if (key === "sidebar.workspaces") return <PiWorkspaceBrowser
       wide={owner.wide}
       expandSidebar={owner.expandSidebar}

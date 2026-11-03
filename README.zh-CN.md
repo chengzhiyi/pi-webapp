@@ -6,7 +6,7 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [项目架构](#技术架构亮点) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 15：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/pi-0.1.39-desktop.15-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
+**桌面测试版 build 16：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -105,27 +105,27 @@ pi
 
 ## 桌面端下载
 
-**最新桌面测试版：[pi 0.1.39 · build 15](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b15)。** 请按系统与芯片选择安装包：
+**最新桌面测试版：[pi 0.1.39 · build 16](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b16)。** 请按系统与芯片选择安装包：
 
 | 平台 | 下载 |
 | --- | --- |
-| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/pi-0.1.39-desktop.15-mac-arm64.dmg) |
-| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/pi-0.1.39-desktop.15-mac-x64.dmg) |
-| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/pi-0.1.39-desktop.15-win-x64.exe) |
-| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/pi-0.1.39-desktop.15-linux-x86_64.AppImage) |
+| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) |
+| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-x64.dmg) |
+| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-win-x64.exe) |
+| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-linux-x86_64.AppImage) |
 
-[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b15/desktop-release.json)
+[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/desktop-release.json)
 
 **build 12 修复桌面退出无响应。** 退出确认会显示在主窗口前方；加载中关闭不再弹出阻塞警告；后台停止失败时可以选择“仅退出桌面”。已有后台服务和任务可继续运行。
 
 **build 14 新增旧共享后台的安全启动器交接。** build 12 本身支持体验版，但附加到 build 10 启动的后台后，旧启动器能力仍会保留。安装 build 14 后，先在稳定版通道升级业务包，再使用「pi → 安全切换到当前桌面启动器…」。交接会等待聊天空闲、终端关闭和真实图稿保存确认，保留原本地地址与恢复副本，不会强制停止旧进程；之后再切换体验版并在线升级。通道和所选版本在重启后保持；体验版选择 npm `latest` 与 `alpha` 中较新的版本，不会把旧 alpha 当作升级。界面分别显示当前窗口、后台启动器和业务包版本。已有 npm 0.1.26/0.1.27 后台仍可安全连接，不接管其任务。
 
-**build 15 更新内置界面。** 桌面原生菜单和对话框跟随所选语言；文本、链接与编辑区提供原生右键菜单；右键工作区和聊天可直接打开操作菜单；剪贴板权限被拒绝时复制按钮会自动降级；重试成功后清除过期的模型错误；活动耗时以易读格式显示。
+**build 16 更新内置界面。** 桌面原生菜单和对话框跟随所选语言；文本、链接与编辑区提供原生右键菜单；右键工作区和聊天可直接打开操作菜单；剪贴板权限被拒绝时复制按钮会自动降级；重试成功后清除过期的模型错误；活动耗时以易读格式显示。
 
 桌面应用名为 **pi**，自带 Node 和 Pi，无需另装运行时。支持复用兼容的 Web 服务、在浏览器中打开同一服务，以及退出时选择是否保留后台任务。模型凭据、Git/SSH 配置和项目工具链仍需自行准备。
 
 - **安装：** macOS 从 DMG 将 **pi.app** 拖入“应用程序”；Windows 运行 EXE；Linux 为 AppImage 添加执行权限后运行，不支持 FUSE 时可参考该版本发布说明中的替代方式。
-- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 15**。替换前先退出旧桌面，不要删除 `~/.pi`。
+- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 16**。替换前先退出旧桌面，不要删除 `~/.pi`。
 - **测试版边界：** 当前为自愿参与的预发布测试包，不是具有发布者签名的稳定发行版。macOS 使用 ad-hoc 临时签名、未经过 Apple 公证，可能被 Gatekeeper 拦截；请按 [macOS 测试安装说明](docs/desktop-testing.md)核验，失败就停止。Windows/Linux 安装包未签名。不要全局关闭系统安全保护。桌面外壳更新仍需手动安装，业务包更新在应用设置中进行；暂不包含 Windows ARM 和 Linux ARM。
 
 ## 技术架构亮点

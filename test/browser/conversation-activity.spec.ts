@@ -10,7 +10,7 @@ import type { SessionView, ViewMessage } from "../../src/host/server/sessions/vi
 for (const width of [1440, 390, 320]) test(`agent activity bridges send and first response at ${width}px`, async ({ page }, testInfo) => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-activity-browser-"));
   const message = (id: string, text: string, role: ViewMessage["role"] = "assistant"): ViewMessage => ({ id, role, timestamp: new Date().toISOString(), blocks: [{ kind: "text", text }] });
-  let session: SessionView = { schemaVersion: 1, sessionId: "activity", cwd, name: "Activity chat", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [], streaming: null };
+  let session: SessionView = { schemaVersion: 1, sessionId: "activity", cwd, name: "A session title that should use the available conversation header width instead of stopping at two hundred and twenty pixels", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [], streaming: null };
   let releaseSend: (() => void) | undefined;
   let rejectSend = false;
   const host: BridgeHost = {
@@ -55,6 +55,12 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
     await expect(activity.getByRole("status")).toHaveText(/^(正在发送|Sending)$/);
     await expect(page.locator('[data-message-role="user"]')).toHaveCount(1);
+    const headerTitle = page.locator('[class*="crumbCurrent"]');
+    const titleSize = await headerTitle.evaluate(element => ({ client: element.clientWidth, content: element.scrollWidth }));
+    if (width === 1440) {
+      expect(titleSize.client).toBeGreaterThan(220);
+      expect(titleSize.content).toBeLessThanOrEqual(titleSize.client + 1);
+    } else expect(titleSize.content).toBeGreaterThanOrEqual(titleSize.client);
     await page.clock.fastForward(2000);
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "2");
     await expect.poll(() => !!releaseSend).toBe(true); releaseSend!();
@@ -136,9 +142,18 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     session = { ...session, idle: false }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toBeVisible();
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
-    // A running session switch starts a distinct clock, never reuses the previous elapsed time.
+    // A different running session starts at zero; returning resumes the original background clock.
+    const runningSessionId = session.sessionId;
     await page.clock.fastForward(4000);
     session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
+    await page.clock.fastForward(4000);
+    session = { ...session, sessionId: runningSessionId }; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "8");
+    // A background completion and new run has a new activity id, so it must not reuse the old clock.
+    const restartedSession = { ...session, activityId: (session.activityId ?? 0) + 1 };
+    session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
+    session = restartedSession; bridge.publish({ type: "snapshot", session });
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     const modelFailure = '400 {"type":"error","error":{"type":"invalid_request_error","message":"Model failed"},"request_id":"req_fixture"}';
     session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: modelFailure }] };
