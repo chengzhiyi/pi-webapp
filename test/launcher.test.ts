@@ -280,7 +280,8 @@ async function candidateRestart(name: string, nextScript: string, prepare?: (age
 /** A rollback restarts the previous version; wait for it before stopping so teardown never races it. */
 async function previousServiceBack(f: Awaited<ReturnType<typeof candidateRestart>>) {
   for (let attempt = 0; attempt < 80; attempt++) {
-    const state = await readFile(f.statePath, "utf8").then(JSON.parse, () => null);
+    // The launcher may be mid-write: a missing or partial file is just "not back yet".
+    const state = await readFile(f.statePath, "utf8").then(JSON.parse).catch(() => null);
     if (state?.url && state.nonce !== f.first.nonce) return state;
     await delay(100);
   }
