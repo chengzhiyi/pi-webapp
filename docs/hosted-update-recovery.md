@@ -19,21 +19,22 @@ Protocol, resource integrity, permission and data-schema checks remain required.
 Open editing realms must acknowledge a real checkpoint before activation; a
 refresh or a newer drawing is never treated as proof that unsaved edits survived.
 
-Host package preparation downloads and validates code without selecting it.
-`update-transaction.json` records downloading, validating, prepared, selecting,
-selected, restart-requested, and committed phases. Selection follows a reversible
-view/worker suspend. Before handoff, failure restores only the pointer bytes owned
-by this transaction under the update mutex and resumes the exact old generation.
-Cancelled/failed/committed records remain in `update-history`; host-pair records
+Host package preparation downloads and validates code and writes a candidate; it
+never selects it. The launcher owns selection, health admission and rollback (see
+the upgrade contract in [plugin lifecycle and host update recovery](plugin-update-recovery.md)).
+`update-transaction.json` records downloading, validating, prepared,
+restart-requested, committed and failed phases with the real failure cause;
+`selecting`/`selected` appear only in records written by releases before 0.1.51.
+Cancelled/failed/committed records remain in `update-history`. The launcher keeps
+its own outcomes in `upgrade/history`. Host-pair records written by older hosts
 remain on disk with a terminal cancelled/reconciled phase, never erased.
 
 Settings exposes **Cancel unfinished update** through an authenticated same-session
-endpoint. It can recover a legacy selected transaction only when the selected
-pointer digest still matches its receipt and the current launcher is verified.
-A competing pointer is never overwritten. Plugin active state, drawings, backups,
-ownership databases and lock markers are not changed by cancellation. Once the
-launcher accepts restart, cancellation is refused until health admission or a
-verified fallback invocation establishes which host owns recovery.
+endpoint. It aborts a running download or retires a prepared candidate (moved to
+`upgrade/history`). Plugin active state, drawings, backups, ownership databases and
+lock markers are not changed by cancellation. Once the launcher holds the restart
+request, cancellation is refused: the launcher admits the new version or rolls back
+by itself.
 
 See [architecture and verification](plugin-update-recovery.md) for the new contract.
 The ORI-42 reports below are historical evidence, not the current update policy.
@@ -129,6 +130,35 @@ or file-write endpoint has been added.
 Restart one owner only after recovery. Confirm inventory, enabled intent, active
 version/generation and latest drawing revisions; compare workspace hashes to the
 verified backup. The UI explains the offline recovery path for lock errors.
+
+### Stale required-action pair journal (hosts up to 0.1.50)
+
+Hosts up to 0.1.50 rewrite `host-pair/intent.json` as `required-action` on every
+startup in which an enabled plugin fails to load (for example a developer source
+missing from `installed.json`). Those hosts then refuse every update with
+`Host pair selection pending (<version>, required-action)`, including updates that
+contain the fix, and plugin management is refused too. Newer hosts store a settled
+record as `reconciled` with `lifecyclePhase: "required-action"`, which no host fences.
+
+With a desktop shell that has it, prefer the menu item *Reset Update State and Use
+Bundled Version…*: it stops the backend, moves this journal (and every other upgrade
+record) aside and starts the bundled version, no command line needed.
+
+Otherwise, quit Pi completely, including its background launcher (`pi-webapp stop`,
+or `pi-webapp stop --force` when a plugin view never confirms its save), back up the
+hosted root (`~/.pi/agent/pi-web/hosted`), then run the recovery CLI from a newer
+package or a source checkout:
+
+```sh
+node dist/hosted-recovery.js inspect "$HOSTED_ROOT/host-pair"
+node dist/hosted-recovery.js settle-pair "$HOSTED_ROOT" "$FINGERPRINT" "$CONFIRMATION"
+```
+
+Only a `required-action` journal is settled; an in-flight `selecting`/`selected`/
+`restart-requested` record is refused (use **Cancel unfinished update**). The original
+record is kept as `history/<id>-settled-<fingerprint>.json`. No pointer, plugin code
+or plugin data changes. The broken plugin stays unavailable on its card until it is
+reinstalled or disabled, but it no longer blocks the update.
 
 ## Fault matrix and reproducible evidence
 

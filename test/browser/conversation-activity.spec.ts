@@ -10,7 +10,7 @@ import type { SessionView, ViewMessage } from "../../src/host/server/sessions/vi
 for (const width of [1440, 390, 320]) test(`agent activity bridges send and first response at ${width}px`, async ({ page }, testInfo) => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-activity-browser-"));
   const message = (id: string, text: string, role: ViewMessage["role"] = "assistant"): ViewMessage => ({ id, role, timestamp: new Date().toISOString(), blocks: [{ kind: "text", text }] });
-  let session: SessionView = { schemaVersion: 1, sessionId: "activity", cwd, name: "Activity chat", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [], streaming: null };
+  let session: SessionView = { schemaVersion: 1, sessionId: "activity", cwd, name: "A session title that should use the available conversation header width instead of stopping at two hundred and twenty pixels", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [], streaming: null };
   let releaseSend: (() => void) | undefined;
   let rejectSend = false;
   const host: BridgeHost = {
@@ -55,6 +55,12 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
     await expect(activity.getByRole("status")).toHaveText(/^(正在发送|Sending)$/);
     await expect(page.locator('[data-message-role="user"]')).toHaveCount(1);
+    const headerTitle = page.locator('[class*="crumbCurrent"]');
+    const titleSize = await headerTitle.evaluate(element => ({ client: element.clientWidth, content: element.scrollWidth }));
+    if (width === 1440) {
+      expect(titleSize.client).toBeGreaterThan(220);
+      expect(titleSize.content).toBeLessThanOrEqual(titleSize.client + 1);
+    } else expect(titleSize.content).toBeGreaterThanOrEqual(titleSize.client);
     await page.clock.fastForward(2000);
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "2");
     await expect.poll(() => !!releaseSend).toBe(true); releaseSend!();
@@ -119,11 +125,14 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     // Send errors remove the optimistic placeholder and restore the draft.
     rejectSend = true;
     await editor.fill("Failed request"); await editor.press("Enter");
-    await expect(page.getByRole("alert")).toContainText("Fixture send failed");
+    // Assert on this failure's own toast: the fake clock can also time out a slow plugin load.
+    const toasts = page.locator("[data-toast-viewport]");
+    const sendFailure = toasts.getByRole("alert").filter({ hasText: "Fixture send failed" });
+    await expect(sendFailure).toBeVisible();
     await expect(activity).toHaveCount(0);
     await expect(editor).toHaveText("Failed request");
-    await page.getByRole("button", { name: /^(关闭错误|Dismiss error)$/ }).click();
-    await expect(page.locator(".pi-error")).toHaveCount(0);
+    await sendFailure.getByRole("button", { name: /^(关闭|Dismiss)$/ }).click();
+    await expect(sendFailure).toHaveCount(0);
     rejectSend = false; releaseSend = undefined;
     await editor.press("Enter");
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
@@ -135,22 +144,36 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     session = { ...session, idle: false }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toBeVisible();
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
-    // A running session switch starts a distinct clock, never reuses the previous elapsed time.
+    // A different running session starts at zero; returning resumes the original background clock.
+    const runningSessionId = session.sessionId;
     await page.clock.fastForward(4000);
     session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
-    session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: "Model failed" }] };
+    await page.clock.fastForward(4000);
+    session = { ...session, sessionId: runningSessionId }; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "8");
+    // A background completion and new run has a new activity id, so it must not reuse the old clock.
+    const restartedSession = { ...session, activityId: (session.activityId ?? 0) + 1 };
+    session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
+    session = restartedSession; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
+    const modelFailure = '400 {"type":"error","error":{"type":"invalid_request_error","message":"Model failed"},"request_id":"req_fixture"}';
+    session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: modelFailure }] };
     bridge.publish({ type: "snapshot", session });
-    bridge.publish({ type: "error", message: "Model failed" });
-    await expect(page.locator(".pi-model-error")).toContainText("Model failed");
-    await expect(page.locator(".pi-error")).toContainText("Model failed");
+    bridge.publish({ type: "error", message: modelFailure, inTranscript: true });
+    const card = page.locator(".pi-model-error");
+    await expect(card.locator(".pi-model-error-message")).toHaveText("Model failed");
+    await expect(card.locator(".pi-model-error-meta")).toHaveText("HTTP 400 · invalid_request_error");
+    await expect(card.locator(".pi-model-error-request")).toHaveText("req_fixture");
+    if (process.env.PI_ERROR_SCREENSHOT) await card.screenshot({ path: `${process.env.PI_ERROR_SCREENSHOT}-${width}.png` });
+    // The transcript card already reports this failure; no toast repeats it.
+    await expect(toasts.getByRole("alert").filter({ hasText: "Model failed" })).toHaveCount(0);
     await expect(activity).toHaveCount(0);
     // A retry clears both stale presentations as soon as Pi produces a new response.
     const recovered = message("stream", "Recovered response\n\n```ts\nconst answer = 42;\n```");
     session = { ...session, idle: false, streaming: recovered };
     bridge.publish({ type: "stream", message: recovered });
     await expect(page.locator(".pi-model-error")).toHaveCount(0);
-    await expect(page.locator(".pi-error")).toHaveCount(0);
     await expect(page.getByText("Recovered response", { exact: true })).toBeVisible();
     // Model code blocks and replies still copy when Electron denies the async Clipboard API.
     await page.evaluate(() => {
@@ -163,10 +186,10 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
       };
     });
     const copiedText = () => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText);
-    const copyCode = page.locator(".pi-code-toolbar button");
+    const copyCode = page.locator(".md-code-block").first().getByRole("button", { name: /^(复制|Copy|已复制|Copied)$/ });
     await copyCode.click();
-    await expect(copyCode).toHaveText(/^(已复制|Copied)$/);
-    expect(await copiedText()).toBe("const answer = 42;\n");
+    await expect(copyCode).toHaveAccessibleName(/^(已复制|Copied)$/);
+    expect(await copiedText()).toBe("const answer = 42;");
     // The fallback's temporary textarea hands focus back to the clicked control.
     await expect(copyCode).toBeFocused();
     // The finished reply's copy action takes the same fallback.

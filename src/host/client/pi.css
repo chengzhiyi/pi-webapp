@@ -5,3 +5,4 @@ body { font-family: var(--dsw-font-family); color: var(--dsw-alias-label-primary
 .pi-session-heading { margin-top: 16px; }
 .pi-rail-workspace { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .pi-rail-workspace:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-markdown-pending { white-space: pre-wrap; overflow-wrap: anywhere; }

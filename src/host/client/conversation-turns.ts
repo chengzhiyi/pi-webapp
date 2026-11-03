@@ -56,6 +56,14 @@ export function toolViewTurnKey(turn: ConversationTurn, tools: readonly string[]
   return first ? `tool:${first.key}` : `message:${turn.id}`;
 }
 
+/** Deep equality for transcript snapshots. Committed messages keep their identity
+ * while a reply streams, so only replaced entries pay for serialization. */
+export function sameMessages(previous: readonly ViewMessage[], next: readonly ViewMessage[]): boolean {
+  if (previous === next) return true;
+  if (previous.length !== next.length) return false;
+  return previous.every((message, index) => message === next[index] || JSON.stringify(message) === JSON.stringify(next[index]));
+}
+
 export function toolResults(messages: ViewMessage[]): Map<string, ViewMessage> {
   const callIds = new Set(messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)));
   return new Map(messages.filter((message) => message.role === "tool" && message.toolCallId && callIds.has(message.toolCallId))

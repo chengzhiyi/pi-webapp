@@ -1,5 +1,12 @@
 # ORI-38 — controlled host / official-plugin paired updater
 
+> **Superseded in 0.1.51.** The host + plugin pair transaction described here is
+> retired: plugins no longer take part in host updates, and the launcher owns
+> selection, health admission and rollback. See the upgrade contract in
+> [plugin lifecycle and host update recovery](plugin-update-recovery.md). This page
+> is kept as the record of the earlier design; `host-pair/intent.json` is now only
+> read and settled for compatibility with hosts up to 0.1.50.
+
 ## Delivery boundary
 
 Base: `4c0ebbd`, dedicated branch `feat/ori38-paired-update`, worktree `../pi-webapp-ori38`.

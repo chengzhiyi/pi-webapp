@@ -49,7 +49,7 @@ test("A07: composition and held native drag reject send, preserve composer and t
     // Synthetic browser composition lifecycle, not a claim of OS IME candidate-window coverage.
     await editor.locator("canvas.interactive").evaluate(e => e.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "中文" })));
     await composer.press("Enter");
-    await expect(page.locator(".pi-error")).toContainText("composing or dragging"); await expect(composer).toHaveText("保留输入，等中文组合和拖动结束"); expect(h.sends()).toBe(0);
+    await expect(page.locator("[data-toast-viewport]")).toContainText("composing or dragging"); await expect(composer).toHaveText("保留输入，等中文组合和拖动结束"); expect(h.sends()).toBe(0);
     await editor.locator("canvas.interactive").evaluate(e => e.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "中文" })));
     const before = await h.action("get", { id: created.id });
     const canvas = editor.locator("canvas.interactive"), bounds = (await canvas.boundingBox())!;
@@ -189,7 +189,7 @@ test("removed tool close network failure retains the original realm and exposes 
     await expect(page.getByRole("alert")).toContainText("retained for recovery");
     expect(await iframe.getAttribute("src")).toBe(identity);
     offline = false;
-    await page.getByRole("button", { name: "Retry view cleanup", exact: true }).click();
+    await page.locator("[data-toast-viewport]").getByRole("button", { name: /^(重试视图清理|Retry view cleanup)$/ }).click();
     await expect(iframe).toHaveCount(0);
     expect(h.errors).toEqual([]);
   } finally { await h.close(); }

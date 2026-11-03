@@ -12,6 +12,7 @@ import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broke
 import { HostedPluginSupervisor, type HostedSwitchHooks } from "../src/host/server/plugins/hosted/supervisor.ts";
 import { HostedRuntimeProcess } from "../src/host/server/plugins/hosted/runtime-process.ts";
 import { atomicJson } from "../src/host/server/plugins/hosted/storage.ts";
+import { slowTest } from "./helpers/slow-test.ts";
 
 const runtime = `export async function createRuntime(ctx) { return {
   describe: () => ({ tools: [{ name: 'fixture_diagram', label: 'Fixture', description: 'Fixture tool', parameters: {type:'object',properties:{}}, action: 'read' }] }),
@@ -219,7 +220,7 @@ test("independent supervisors cannot silently steal a live runtime; shutdown ret
   await second.disable(); assert.equal((await b.active())?.enabled, false);
 });
 
-test("50 enable/disable cycles leave no old processes and preserve persistent state", async t => {
+test("50 enable/disable cycles leave no old processes and preserve persistent state", slowTest, async t => {
   const root = await temporary(t), entry = await workerEntry(root), f = await fixture(root), pkg = await validateHostedPackage(f.directory);
   const b = new HostedStateBroker(join(root, "state"), pkg.id), s = new HostedPluginSupervisor(b, entry);
   disposeBeforeStorage(root, () => s.disable()); const pids: number[] = [];

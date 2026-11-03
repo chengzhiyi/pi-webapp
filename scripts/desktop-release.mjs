@@ -4,6 +4,8 @@ import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { inspectMacAppSignature, validateSigningManifest } from "./desktop-signing.mjs";
+import { fetchDistTags } from "./npm-dist-tags.mjs";
+import { assertDesktopVersionCurrent } from "./release-plan.mjs";
 
 export const releaseTargets = [
   { id: "mac-arm64", platform: "darwin", arch: "arm64", os: "mac", ext: "dmg", label: "macOS · Apple Silicon" },
@@ -193,7 +195,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const root = process.cwd(); const options = { root, output: join(root, ".desktop/release-assets"), sourceCommit: process.env.DESKTOP_SOURCE_COMMIT,
     repository: process.env.GITHUB_REPOSITORY, ref: process.env.GITHUB_REF };
   if (process.argv[2] === "--check-source") {
-    validateSource(options.sourceCommit, options.repository, options.ref); validateRef(options.ref, await identity(root));
+    validateSource(options.sourceCommit, options.repository, options.ref);
+    const spec = await identity(root); validateRef(options.ref, spec);
+    assertDesktopVersionCurrent(spec.version, fetchDistTags((await json(root, "package.json")).name));
   } else if (process.argv[2] === "--assemble") {
     await assembleRelease({ ...options, incoming: join(root, ".desktop/incoming") });
   } else {

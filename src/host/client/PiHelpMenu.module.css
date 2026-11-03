@@ -1,0 +1,3 @@
+/* Wide sidebars place the help button beside Pi Settings; the rail stacks them. */
+.trigger[data-wide="true"] { flex: none; width: 42px; justify-content: center; padding: 0; }
+.item { text-decoration: none; }

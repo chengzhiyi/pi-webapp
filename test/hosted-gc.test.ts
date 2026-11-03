@@ -13,6 +13,7 @@ import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broke
 import { OFFICIAL_PLUGINS } from "../src/host/server/plugins/hosted/official-catalog.ts";
 import { sha256 } from "../src/host/server/plugins/hosted/resources.ts";
 import { atomicJson, withStorageLock } from "../src/host/server/plugins/hosted/storage.ts";
+import { slowTest } from "./helpers/slow-test.ts";
 
 const id = OFFICIAL_PLUGINS[0]!.id;
 const code = (expected: string) => (e: unknown) => (e as { code?: string }).code === expected;
@@ -61,7 +62,7 @@ async function setup(t: { after(fn: () => Promise<void>): void }) {
   return { root, manager, broker, setVersion: (v: string) => { current = fixture(v); }, setOpen: (v: boolean) => { open = v; }, restart: () => { offline = true; const m = new HostedPluginManager(options); managers.push(m); return m; } };
 }
 
-test("50 actual replacement/GC cycles retain two code/state versions and latest accepted edits across offline restart", async t => {
+test("50 actual replacement/GC cycles retain two code/state versions and latest accepted edits across offline restart", slowTest, async t => {
   const { root, manager, broker, setVersion, restart } = await setup(t);
   await manager.manage(id, "install"); await manager.manage(id, "enable");
   for (let i = 1; i <= 50; i++) {

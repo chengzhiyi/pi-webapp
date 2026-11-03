@@ -1,25 +1,26 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, realpath, rename } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, realpath, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { atomicJson, boundedRead, readJournal, withStorageLock } from "../plugins/hosted/storage.ts";
+import { atomicJson, boundedRead, readJournal } from "../plugins/hosted/storage.ts";
 import { HostedPluginError } from "../plugins/hosted/errors.ts";
 
 export const pairRoot = (root: string) => join(root, "host-pair");
 export const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** Legacy schema-1 field. New hosts always write an empty list: plugins are never staged with the host. */
 export interface PairSelection { id: string; version: string; digest: string; before: unknown }
+/** Legacy host-switch journal (host-pair/intent.json). Hosts from 0.1.51 never start a switch here:
+ * the launcher owns the upgrade transaction (bin/upgrade-transaction.mjs). They only read records left
+ * by older hosts, settle them at startup, and keep the schema-1 encoding readable by those hosts.
+ * An in-flight record older than PAIR_STALE_MS without progress counts as abandoned. */
 export interface PairIntent {
   schema: 1; id: string; phase: "prepared" | "selecting" | "selected" | "restart-requested" | "reconciled" | "cancelled" | "required-action";
   version: string; packageRoot: string; hostDigest: string; fingerprint: string;
   selections: PairSelection[]; selection?: { path: string; digest: string }; message?: string;
-  lifecyclePhase?: "cancelled" | "restart-requested";
+  lifecyclePhase?: "cancelled" | "restart-requested" | "required-action";
+  /** Last progress. Absent in records written before 0.1.51; the file time is used instead. */
+  updatedAt?: string;
 }
-export interface HostedPairTransaction {
-  stage?(version: string, packageRoot: string, signal?: AbortSignal): Promise<void>;
-  cancel?(version?: string, packageRoot?: string, restoreSelection?: () => Promise<void>): Promise<void>;
-  status?(): Promise<PairIntent | null>;
-  select(version: string, packageRoot: string, writeSelection: () => Promise<void | { path: string; digest: string }>): Promise<void>;
-  restart(version: string, packageRoot: string, writeRestart: () => Promise<void>): Promise<void>;
-}
+export const PAIR_STALE_MS = 10 * 60_000;
 /** Fingerprint the staged application package, not dependency trees shared with npm peers.
  * No executable imports, symlinks, devices, unbounded file counts or unbounded reads. */
 async function hostTree(root: string): Promise<string> {
@@ -77,94 +78,28 @@ export async function readPair(root: string): Promise<PairIntent | null> {
   }
   if (intent) {
     const { lifecyclePhase, ...record } = intent;
-    intent = { ...record, phase: record.phase === "selected" && lifecyclePhase === "restart-requested" ? "restart-requested"
-      : record.phase === "reconciled" && lifecyclePhase === "cancelled" ? "cancelled" : record.phase };
+    const updatedAt = typeof record.updatedAt === "string" && !Number.isNaN(Date.parse(record.updatedAt)) ? record.updatedAt
+      : await stat(path).then(info => info.mtime.toISOString(), () => new Date(0).toISOString());
+    intent = { ...record, updatedAt, phase: record.phase === "selected" && lifecyclePhase === "restart-requested" ? "restart-requested"
+      : record.phase === "reconciled" && lifecyclePhase === "cancelled" ? "cancelled"
+      : record.phase === "reconciled" && lifecyclePhase === "required-action" ? "required-action" : record.phase };
   }
   return intent;
 }
 /** Keep schema-1's disk phase grammar readable by an older fallback host.
  * Additive lifecycle detail never makes rollback binaries reject the journal.
+ * A settled required-action is stored as "reconciled": hosts up to 0.1.50 treat a raw
+ * required-action as an in-flight update and refuse every later update, including the fix.
  */
 export async function writePair(root: string, intent: PairIntent): Promise<void> {
-  const { lifecyclePhase: _prior, ...record } = intent;
+  const { lifecyclePhase: _prior, ...record } = { ...intent, selections: [], updatedAt: new Date().toISOString() };
   const compatible = record.phase === "cancelled" ? { ...record, phase: "reconciled", lifecyclePhase: "cancelled" }
+    : record.phase === "required-action" ? { ...record, phase: "reconciled", lifecyclePhase: "required-action" }
     : record.phase === "restart-requested" ? { ...record, phase: "selected", lifecyclePhase: "restart-requested" } : record;
   await atomicJson(join(pairRoot(root), "intent.json"), compatible);
 }
-export const pendingPair = (intent: PairIntent | null) => intent && !["prepared", "reconciled", "cancelled"].includes(intent.phase);
-/** Only an update actually between pointer write and restart admission fences management.
- * A settled "required-action" record is history: it never blocks plugins or the next update. */
+/** Between pointer write and the selected host's admission. A settled required-action is history. */
 export const inFlightPair = (intent: PairIntent | null) => intent && ["selecting", "selected", "restart-requested"].includes(intent.phase);
-export async function assertPairIdle(root: string): Promise<void> {
-  const intent = await readPair(root);
-  if (intent && inFlightPair(intent)) throw new HostedPluginError("host_pair_required", `Host pair selection pending (${intent.version}, ${intent.phase}): ${intent.message ?? "restart selected host, or stop all owners and inspect host-pair/intent.json"}; data retained`);
-}
-/** A disk owner fence spans preparation, revalidation and pointer selection. The journal then
- * fences management across the process exit; abandoned locks are never reclaimed by PID. */
-export function pairTransaction(root: string, prepare: (version: string, signal?: AbortSignal) => Promise<PairSelection[]>, snapshot: () => Promise<unknown>, validate: (version: string, selections: PairSelection[]) => Promise<void> = async () => {}): HostedPairTransaction {
-  const retain = async (intent: PairIntent) => {
-    const directory = join(pairRoot(root), "history");
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    await atomicJson(join(directory, `${intent.id}.json`), intent);
-  };
-  const prepareIntent = async (version: string, packageRoot: string, signal?: AbortSignal): Promise<PairIntent> => {
-    const hostDigest = await candidateHost(version, packageRoot), before = fingerprint(await snapshot());
-    const selections = await prepare(version, signal); signal?.throwIfAborted();
-    if (fingerprint(await snapshot()) !== before) throw new HostedPluginError("host_pair_changed", "Plugin policy/activation changed during preflight; recheck update");
-    await validate(version, selections);
-    return { schema: 1, id: randomUUID(), phase: "prepared", version, packageRoot, hostDigest, fingerprint: before, selections };
-  };
-  return {
-    status: () => readPair(root),
-    stage: (version, packageRoot, signal) => withStorageLock(pairRoot(root), async () => {
-      await assertPairIdle(root);
-      const previous = await readPair(root);
-      if (previous) await retain(previous.phase === "prepared" ? { ...previous, phase: "cancelled", message: "Superseded before version selection; no code or data changed" }
-        : previous.phase === "required-action" ? { ...previous, message: `Superseded by a new update; ${previous.message ?? "no message"}` } : previous);
-      await writePair(root, await prepareIntent(version, packageRoot, signal));
-    }),
-    cancel: (version, packageRoot, restoreSelection) => withStorageLock(pairRoot(root), async () => {
-      const intent = await readPair(root);
-      if (!intent || intent.phase === "cancelled" || intent.phase === "reconciled") return;
-      if (version && intent.version !== version || packageRoot && intent.packageRoot !== packageRoot) throw new HostedPluginError("host_pair_changed", "Another update owns this transaction");
-      if (pendingPair(intent) && !restoreSelection) throw new HostedPluginError("host_pair_required", "Selected update requires its owned pointer recovery receipt before cancellation");
-      await restoreSelection?.();
-      // The caller restores an owned selected pointer before cancelling. Never restore plugin state.
-      const cancelled: PairIntent = { ...intent, phase: "cancelled", message: "Update cancelled; current runtime and plugin data retained" };
-      await writePair(root, cancelled); await retain(cancelled);
-    }),
-    select: (version, packageRoot, writeSelection) => withStorageLock(pairRoot(root), async () => {
-      await assertPairIdle(root);
-      const staged = await readPair(root);
-      const intent = staged?.phase === "prepared" && staged.version === version && staged.packageRoot === packageRoot && staged.fingerprint === fingerprint(await snapshot())
-        ? staged : await prepareIntent(version, packageRoot);
-      const { hostDigest, selections } = intent, before = intent.fingerprint;
-      await writePair(root, intent);
-      await validate(version, selections);
-      if (await candidateHost(version, packageRoot) !== hostDigest || fingerprint(await snapshot()) !== before) {
-        await writePair(root, { ...intent, phase: "required-action", message: "Preflight changed; host pointer not written" });
-        throw new HostedPluginError("host_pair_changed", "Preflight changed; host pointer not written");
-      }
-      // Ambiguous pointer write failures retain candidate and intent; never delete possibly selected code.
-      await writePair(root, { ...intent, phase: "selecting" });
-      const selection = await writeSelection();
-      await writePair(root, { ...intent, phase: "selected", ...(selection ? { selection } : {}) });
-    }),
-    restart: (version, packageRoot, writeRestart) => withStorageLock(pairRoot(root), async () => {
-      const intent = await readPair(root);
-      if (!intent || intent.phase !== "selected" || intent.version !== version || intent.packageRoot !== packageRoot ||
-          intent.hostDigest !== await candidateHost(version, packageRoot) || intent.fingerprint !== fingerprint(await snapshot())) {
-        throw new HostedPluginError("host_pair_changed", "Selected pair changed; restart refused, inspect pair journal");
-      }
-      if (intent.selection && fingerprint((await readFile(intent.selection.path)).toString("base64")) !== intent.selection.digest) {
-        throw new HostedPluginError("host_pair_changed", "Host selection pointer changed; restart refused");
-      }
-      await validate(version, intent.selections);
-      if (intent.hostDigest !== await candidateHost(version, packageRoot) || intent.fingerprint !== fingerprint(await snapshot())) {
-        throw new HostedPluginError("host_pair_changed", "Selected pair changed during restart validation");
-      }
-      await writePair(root, { ...intent, phase: "restart-requested", message: "Restart authorized; awaiting launcher receipt and selected host health admission" });
-      await writeRestart();
-    }),
-  };
-}
+/** In flight and still making progress. An abandoned record never fences the next update. */
+export const activePair = (intent: PairIntent | null, now = Date.now()) =>
+  !!intent && !!inFlightPair(intent) && now - Date.parse(intent.updatedAt ?? "") < PAIR_STALE_MS;

@@ -135,7 +135,8 @@ export function usePiBridge() {
                 }
                 if (event.type === "workspaces") setWorkspaces(event.value);
                 if (event.type === "error") {
-                  setError(event.message);
+                  // A failed reply explains itself in the transcript; only other failures need a toast.
+                  if (!event.inTranscript) setError(event.message);
                   if (!event.errorId && !event.errorReported && event.errorCode !== "validation_error") reportError(new Error("Agent response failed"), { stage: "agent", code: "agent_failed", requestId: event.requestId, operationId: event.operationId });
                   breadcrumb("agent_error", { errorId: event.errorId, requestId: event.requestId, operationId: event.operationId });
                 }

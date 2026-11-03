@@ -10,7 +10,7 @@ import { resumeMessage } from "./execution-control.ts";
 import { assertPromptDelivery } from "./prompt-delivery.ts";
 import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/bridge-contract.ts";
 import { EditablePromptQueue, PromptQueueError } from "./editable-prompt-queue.ts";
-import { pluginRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
+import { sessionRuntimePaths } from "../plugins/plugin-runtime-paths.ts";
 import type { BridgeEvent } from "../transport/bridge.ts";
 import { opaqueError, type DiagnosticFields, type ErrorCorrelation } from "../../../contracts/telemetry.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
@@ -35,6 +35,7 @@ interface WorkspaceRuntime {
   releasePaths: () => Promise<void>;
   releaseHosted?: () => void;
   generation: number;
+  activityId: number;
   closing: boolean;
   waitController: AbortController;
   operation?: ErrorCorrelation;
@@ -213,7 +214,7 @@ export class WorkspaceSessions {
     const old = this.runtimes.get(manager.getSessionId());
     const catalog = await WebPluginCatalog.discover(cwd, this.isProjectTrusted(cwd));
     const bus = createEventBus();
-    const runtimePaths = await pluginRuntimePaths(cwd, catalog.extensionRoots);
+    const runtimePaths = await sessionRuntimePaths(cwd, catalog.extensionRoots, this.isProjectTrusted(cwd));
     const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir(), noExtensions: true, additionalExtensionPaths: runtimePaths.paths, eventBus: bus,
       extensionFactories: this.hosted ? [this.hosted.adapter.extension(this.hosted.scope(cwd, manager.getSessionId()))] : [],
     });
@@ -225,7 +226,7 @@ export class WorkspaceSessions {
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
       const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, activityId: 0, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
         detached: detachedOwner ? { owner: detachedOwner, events: [], seq: 0, lastText: "", restoreTools: null } : undefined };
       runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {
         const owner = this.runtimes.get(manager.getSessionId()) ?? runtime;
@@ -254,7 +255,7 @@ export class WorkspaceSessions {
         }
         if (!this.disposed && !runtime.closing) {
           const context: DiagnosticFields = { ...runtime.operation, session: this.telemetry.anonymize(session.sessionManager.getSessionId()), piVersion: VERSION, model: session.model ? `${session.model.provider}/${session.model.id}` : null, thinkingLevel: session.thinkingLevel };
-          if (event.type === "agent_start") this.telemetry.breadcrumb("agent_start", context);
+          if (event.type === "agent_start") { runtime.activityId++; this.telemetry.breadcrumb("agent_start", context); }
           if (event.type === "tool_execution_start") tools.start(event, context);
           if (event.type === "tool_execution_end") tools.end(event, context);
           if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
@@ -262,7 +263,7 @@ export class WorkspaceSessions {
             const network = runtime.networkDiagnostic;
             const errorId = this.reportError(new Error("Agent response failed"), { ...runtime.operation, stage: "agent", code: "agent_failed", piVersion: VERSION,
               ...(network ? { networkKind: network.kind, networkStage: network.stage, causeCodes: network.causes.flatMap(cause => cause.code ? [cause.code] : []).join(","), requestId: network.requestId } : {}) }) ?? network?.errorId;
-            publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...runtime.operation });
+            publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, inTranscript: true, ...runtime.operation });
           }
           if (event.type === "message_end" && event.message.role === "toolResult") tools.message(event.message, context);
           if (event.type === "agent_settled") { this.telemetry.breadcrumb("agent_end", context); tools.clear(); runtime.operation = undefined; }
@@ -329,6 +330,7 @@ export class WorkspaceSessions {
       name: sessionTitle(session.sessionManager.getSessionName(), messages),
       model: session.model ? `${session.model.provider}/${session.model.id}` : null,
       thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle && !runtime.prompts.sending,
+      activityId: runtime.activityId,
       paused: sessionPaused(session.sessionManager.getBranch()),
       promptQueue: { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] },
       queuedPrompts: runtime.prompts.view(),

@@ -4,7 +4,7 @@ This page covers everything in the message box and the conversation view: sendin
 
 ## Send a message
 
-Type in the box at the bottom and press **Enter**. Press **Shift+Enter** for a new line. The conversation shows Markdown, code blocks (each with **Copy code**), and links to workspace files that open as previews in the [Files tool](./workspace-tools#files).
+Type in the box at the bottom and press **Enter**. Press **Shift+Enter** for a new line. The conversation shows Markdown, TeX math, and syntax-highlighted code blocks (each with **Copy** and a line-wrap toggle), and links to workspace files that open as previews in the [Files tool](./workspace-tools#files).
 
 Under each reply, **Copy reply** copies the text and the **Usage** figure shows the tokens it used.
 

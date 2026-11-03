@@ -56,6 +56,20 @@ test("corrupt pair and update journals are quarantined with bytes retained, neve
   assert.deepEqual(JSON.parse(await readFile(join(root, "pi-web", retained), "utf8")), { schema: 9, phase: "mystery" });
 });
 
+test("a failed update records its actual cause, not only a generic download failure", async t => {
+  const root = await mkdtemp(join(tmpdir(), "update-failure-cause-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const packageRoot = join(root, "current"); await mkdir(packageRoot);
+  await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.36" }));
+  const updater = new SelfUpdater({ agentDir: root, packageRoot, launcherNonce: "fixture", desktopManaged: false, runNpm: async args => {
+    if (args[0] === "view") return JSON.stringify("0.1.37");
+    throw new Error("Host pair selection pending (0.1.36, selected): restart selected host");
+  } });
+  await assert.rejects(updater.prepare(), /Host pair selection pending/);
+  const transaction = JSON.parse(await readFile(join(root, "pi-web/update-transaction.json"), "utf8"));
+  assert.equal(transaction.phase, "failed");
+  assert.match(transaction.message, /下载或验证失败：Host pair selection pending \(0\.1\.36, selected\)/);
+});
+
 test("open terminals are a confirmation, released only after the user confirms", async () => {
   let open = 2, released = 0;
   const terminal = { metadata: { id: "terminal" }, routes: [], handle: async () => {},

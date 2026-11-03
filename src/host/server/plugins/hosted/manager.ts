@@ -13,7 +13,7 @@ import { hostedAsset, type HostedPackage } from "./resources.ts";
 import { atomicJson, boundedRead, readJson, withStorageLock } from "./storage.ts";
 import { compareVersions } from "./versions.ts";
 import { readFile } from "node:fs/promises";
-import { assertPairIdle, candidateHost, fingerprint, inFlightPair, pairRoot, pairTransaction, pendingPair, readPair, writePair, type PairSelection } from "../../updates/hosted-pair.ts";
+import { activePair, candidateHost, inFlightPair, pairRoot, readPair, writePair, type PairIntent } from "../../updates/hosted-pair.ts";
 
 interface Policy { updatePolicy: UpdatePolicy; pinnedVersion?: string }
 export interface UpdateDiagnostic {
@@ -64,8 +64,6 @@ export class HostedPluginManager {
   private readonly assetLeases = new Map<string, Map<string, number>>();
   private closing = false;
   private readonly scheduler: PluginScheduler;
-  private pairAdmittedValue = false;
-  get pairAdmitted(): boolean { return this.pairAdmittedValue; }
   constructor(options: HostedManagerOptions) {
     this.options = options;
     this.installer = new HostedPluginInstaller({ root: join(options.root, "packages"), hostVersion: options.hostVersion, catalog: options.catalog, fetch: options.fetch });
@@ -114,11 +112,12 @@ export class HostedPluginManager {
     if (!supervisor) throw new HostedPluginError("unknown_plugin", "Plugin runtime is not registered");
     return supervisor;
   }
+  /** Plugin operations queue per plugin and use only that plugin's own storage locks.
+   * Host-update state (the pair journal) never fences installing, enabling, disabling or removing a plugin. */
   private serialize<T>(id: string, run: () => Promise<T>): Promise<T> {
     this.supervisor(id);
     if (this.closing) return Promise.reject(new HostedPluginError("manager_closed", "Plugin manager is shutting down"));
-    const fenced = () => withStorageLock(pairRoot(this.options.root), async () => { await assertPairIdle(this.options.root); return run(); });
-    const result = (this.operations.get(id) ?? Promise.resolve()).then(fenced, fenced);
+    const result = (this.operations.get(id) ?? Promise.resolve()).then(run, run);
     this.operations.set(id, result);
     void result.then(() => this.errors.delete(id), error => { this.errors.set(id, failure(error)); }).finally(() => { if (this.operations.get(id) === result) this.operations.delete(id); });
     return result;
@@ -170,75 +169,75 @@ export class HostedPluginManager {
   async setPolicy(id: string, policy: Policy): Promise<void> {
     this.supervisor(id);
     if (!["notify", "automatic", "pinned"].includes(policy.updatePolicy) || policy.updatePolicy === "pinned" && !policy.pinnedVersion || policy.pinnedVersion && !/^\d+\.\d+\.\d+$/.test(policy.pinnedVersion)) throw new HostedPluginError("invalid_input", "Invalid plugin update policy");
-    await withStorageLock(pairRoot(this.options.root), async () => {
-      await assertPairIdle(this.options.root);
-      await withStorageLock(join(this.options.root, "policies"), async () => {
-        const policies = await this.policies(); policies[id] = { updatePolicy: "notify" }; // Compatibility endpoint; legacy strategies are retired.
-        await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
-      });
-    });
-  }
-  /** Offline startup: catalog absence never downloads editor code; failures remain visible. */
-  async start(): Promise<void> {
-    await withStorageLock(pairRoot(this.options.root), () => this.startLocked());
-  }
-  private async startLocked(): Promise<void> {
     await withStorageLock(join(this.options.root, "policies"), async () => {
-      const policies = await this.policies();
+      const policies = await this.policies(); policies[id] = { updatePolicy: "notify" }; // Compatibility endpoint; legacy strategies are retired.
       await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
     });
-    const intent = await readPair(this.options.root);
-    let recovering = pendingPair(intent), useSelections = true;
-    if (recovering && intent) {
+  }
+  /** Settles the host-update journal under its own lock before any plugin loads. Running is the
+   * host's health outcome; no plugin result is ever written to it. Settled records are rewritten in
+   * the schema-1 encoding so an older fallback host never reads them as in flight. */
+  private settleHostPair(): Promise<{ intent: PairIntent | null; admitted: boolean }> {
+    return withStorageLock(pairRoot(this.options.root), async () => {
+      const intent = await readPair(this.options.root);
+      if (!intent) return { intent, admitted: false };
+      if (!inFlightPair(intent)) {
+        if (intent.phase === "required-action") await writePair(this.options.root, intent);
+        return { intent, admitted: false };
+      }
       try {
         if (intent.version !== this.options.hostVersion || intent.hostDigest !== await candidateHost(intent.version, intent.packageRoot) ||
             this.options.packageRoot && intent.hostDigest !== await candidateHost(this.options.hostVersion, this.options.packageRoot) ||
             !Buffer.from(await readFile(this.options.workerEntry)).equals(await readFile(join(intent.packageRoot, "dist", "hosted-worker.js")))) throw new Error("Running host differs from selected pair");
       } catch (error) {
-        // The selected host is not the one running (e.g. the launcher fell back). That is a host
-        // outcome, not a plugin failure: plugins keep running on this host and the next update
-        // supersedes this record.
-        const message = `Selected host not running; current host and plugins retained. ${failure(error).message}; data retained`;
-        await writePair(this.options.root, { ...intent, phase: "required-action", message });
-        // A failed/pre-pointer attempt must not make the still-compatible old host unusable.
-        // Load ONLY its current state below, never the future selection on this runtime.
-        recovering = false;
+        // The selected host is not the one running (e.g. the launcher fell back). The attempt is
+        // over: plugins keep running on this host and the next update starts fresh.
+        await writePair(this.options.root, { ...intent, phase: "cancelled", message: `Selected host not running; current host and plugins retained. ${failure(error).message}; data retained` });
+        return { intent, admitted: false };
       }
-      // A staged plugin that changed is a plugin problem, not a host one: admit the host and load
-      // each plugin's current version instead of the staged selection.
-      if (recovering) try { await this.validatePairPackages(intent.version, intent.selections); } catch { useSelections = false; }
-    }
+      await writePair(this.options.root, { ...intent, phase: "reconciled", message: "Selected host running; plugins load independently and report their own errors" });
+      return { intent, admitted: true };
+    });
+  }
+  /** Offline startup: catalog absence never downloads editor code; failures remain visible. */
+  async start(): Promise<void> {
+    await withStorageLock(join(this.options.root, "policies"), async () => {
+      const policies = await this.policies();
+      await atomicJson(join(this.options.root, "policies", "policies.json"), policies);
+    });
+    // Host health is decided before, and independently of, any plugin.
+    const { admitted } = await this.settleHostPair();
     await this.installer.inventory();
-    const startupFingerprint = fingerprint(await this.pairSnapshot());
     for (const plugin of this.installer.catalog) {
       const s = this.supervisor(plugin.id), active = await s.broker.active();
       if (!active?.enabled) continue;
       try {
-        const selected = recovering && useSelections ? intent?.selections.find(p => p.id === plugin.id) : undefined;
-        // Never replay an old plan over a newer accepted generation/pin/disable. A crash after
-        // activation simply loads the now-current compatible version on the next startup.
-        const unchanged = selected && fingerprint(active) === fingerprint(selected.before) &&
-          intent?.fingerprint === startupFingerprint;
-        const pkg = await this.installer.load(plugin.id, unchanged ? selected.version : active.version);
-        if (unchanged && pkg.digest !== selected.digest) throw new Error("Staged plugin digest changed");
+        const pkg = await this.compatiblePackage(plugin.id, active.version);
         await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
-        if (!pendingPair(intent)) await this.collectSettled(plugin.id);
+        // Right after a host switch, keep versions a fallback host may still need.
+        if (!admitted) await this.collectSettled(plugin.id);
       } catch (error) {
         const detail = failure(error);
         const recovery = ["runtime_owned", "storage_busy"].includes(detail.code)
           ? "Stop all owners, verify a backup and use the offline hosted-recovery tool."
           : "Update, reinstall or disable this plugin; the rest of the app is unaffected.";
+        // A plugin that fails to start only becomes unusable: its error stays on its own card and
+        // the next startup / plugin update retries it.
         this.errors.set(plugin.id, { ...detail, message: `Plugin unavailable: startup failed (${detail.code}): ${detail.message}; data retained. ${recovery}` });
       }
     }
-    if (recovering && intent) {
-      // The selected host is running, so the pair is settled. A plugin that fails to start (selected
-      // or not) only becomes unusable: its error stays on its own card and the next startup / plugin
-      // update retries it. Plugin failures must never fence host updates or plugin management.
-      await writePair(this.options.root, { ...intent, phase: "reconciled", message: this.errors.size
-        ? `Host admitted; unavailable plugins retained with their data: ${[...this.errors].map(([id, detail]) => `${id}: ${detail.message}`).join("; ")}`
-        : "Current compatible state admitted; no previous state restored" });
-      this.pairAdmittedValue = !this.errors.size;
+  }
+  /** The active version when it supports this host; otherwise the newest installed version that
+   * does (e.g. one prefetched before a host update). Never a downgrade guess across hosts. */
+  private async compatiblePackage(id: string, activeVersion: string): Promise<HostedPackage> {
+    try { return await this.installer.load(id, activeVersion); }
+    catch (error) {
+      if (failure(error).code !== "incompatible_plugin") throw error;
+      const versions = ((await this.installer.inventory()).versions[id] ?? []).map(v => v.version).filter(v => v !== activeVersion).sort((a, b) => compareVersions(b, a));
+      for (const version of versions) {
+        try { return await this.installer.load(id, version); } catch { /* Try an older installed release. */ }
+      }
+      throw error;
     }
   }
   async inventory(): Promise<{ plugins: ManagedHostedPlugin[]; errors: string[] }> {
@@ -384,7 +383,7 @@ export class HostedPluginManager {
   async reconcileHostUpgrade(): Promise<boolean> {
     // A pending pair owns selection. Do not overwrite its actual startup failure
     // (e.g. runtime_owned) with the generic management fence or touch the registry.
-    if (inFlightPair(await readPair(this.options.root))) return false;
+    if (activePair(await readPair(this.options.root))) return false;
     const inventory = await this.installer.inventory(), policies = await this.policies();
     let succeeded = true;
     for (const plugin of this.installer.catalog) {
@@ -411,69 +410,51 @@ export class HostedPluginManager {
   async pairSnapshot(): Promise<unknown> {
     return { policies: await this.policies(), active: await Promise.all(this.installer.catalog.map(async p => [p.id, await this.supervisor(p.id).broker.active()])) };
   }
-  get hostPair() { return pairTransaction(this.options.root, (version, signal) => this.prepareHostPair(version, signal), () => this.pairSnapshot(), (version, selections) => this.validatePairPackages(version, selections)); }
-  private async validatePairPackages(hostVersion: string, selections: PairSelection[]): Promise<void> {
-    const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog });
-    for (const selection of selections) {
-      const pkg = await target.load(selection.id, selection.version);
-      if (pkg.digest !== selection.digest) throw new HostedPluginError("host_pair_changed", "Staged plugin digest changed; selection refused");
-    }
-  }
-  private async prepareHostPair(hostVersion: string, signal?: AbortSignal): Promise<PairSelection[]> {
+  /** Best effort, before a host update: download a release compatible with the target host for each
+   * installed plugin whose installed versions do not support it. Nothing is activated; failures are
+   * recorded on the plugin's own diagnostics and never reach the host update. */
+  async prefetchForHost(hostVersion: string, signal?: AbortSignal): Promise<void> {
     const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog, fetch: this.options.fetch });
-    const inventory = await this.installer.inventory(), policies = await this.policies();
-    const selections: PairSelection[] = [];
+    const inventory = await this.installer.inventory();
     for (const plugin of this.installer.catalog) {
-      const versions = inventory.versions[plugin.id]; if (!versions?.length) continue;
+      const versions = (inventory.versions[plugin.id] ?? []).map(v => v.version).sort((a, b) => compareVersions(b, a));
       const active = await this.supervisor(plugin.id).broker.active();
-      const latest = versions.map(v => v.version).sort((a, b) => compareVersions(b, a))[0]!;
-      // Compatible plugins evolve independently. A host update is not an implicit
-      // plugin update: retain the exact live version and its data schema offline.
-      // A plugin never blocks the host update: when no usable version exists for the new host it
-      // is left out of the selection and simply starts unavailable (data retained, error on its card).
-      let pkg: HostedPackage | null = null;
-      try { pkg = await target.load(plugin.id, active?.enabled ? active.version : latest); }
-      catch (error) {
-        const detail = failure(error);
-        if (detail.code === "incompatible_plugin") try {
-          const release = await target.check(plugin.id, latest, undefined, signal);
-          pkg = release.version === latest ? await target.load(plugin.id, latest) : await target.install(plugin.id, release, signal);
-          await this.recordCheck(plugin.id, { status: "up-to-date", version: pkg.version, message: "Compatible combination prepared for software update" });
-          this.errors.delete(plugin.id);
-        } catch (updateError) {
-          signal?.throwIfAborted();
-          const cause = failure(updateError);
-          // Older local code may still fit the new host.
-          if (latest !== active?.version) pkg = await target.load(plugin.id, latest).catch(() => null);
-          if (!pkg) await this.recordCheck(plugin.id, { status: "failed", code: cause.code, message: `${cause.message}; plugin will be unavailable after the software update until a compatible release is installed` });
-        } else await this.recordCheck(plugin.id, { status: "failed", code: detail.code, message: `${detail.message}; plugin will be unavailable after the software update` });
+      if (!versions.length || this.isDevPlugin(plugin.id)) continue;
+      let usable = false;
+      for (const version of new Set([...(active?.enabled ? [active.version] : []), ...versions])) {
+        try { await target.load(plugin.id, version); usable = true; break; } catch { /* Not for the target host. */ }
       }
-      if (!pkg) continue;
-      selections.push({ id: plugin.id, version: pkg.version, digest: pkg.digest, before: active });
+      if (usable) continue;
+      try {
+        const release = await target.check(plugin.id, versions[0], undefined, signal);
+        const pkg = await target.install(plugin.id, release, signal);
+        await this.recordCheck(plugin.id, { status: "up-to-date", version: pkg.version, message: "Release compatible with the next software version downloaded; activation happens on that version" });
+      } catch (error) {
+        signal?.throwIfAborted();
+        const cause = failure(error);
+        await this.recordCheck(plugin.id, { status: "failed", code: cause.code, message: `${cause.message}; plugin will be unavailable after the software update until a compatible release is installed` }).catch(() => {});
+      }
     }
-    return selections;
   }
-  /** Conservative pre-selection gate: no registry/install/activation against a future host.
-   * A pair needing migration must be prepared by a full paired updater, not guessed here.
-   */
-  async validateHostUpdate(hostVersion: string): Promise<boolean> {
+  /** Per-plugin compatibility against a future host's declared protocol range: a warning list,
+   * never a gate. No registry/install/activation happens here; a plugin with no usable local
+   * version simply starts unavailable on the new host until a compatible release is installed. */
+  async hostUpdateWarnings(hostVersion: string): Promise<Array<{ pluginId: string; message: string }>> {
     const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog });
-    const inventory = await this.installer.inventory(), policies = await this.policies();
-    let installed = false;
+    const inventory = await this.installer.inventory(), warnings: Array<{ pluginId: string; message: string }> = [];
     for (const plugin of this.installer.catalog) {
-      const versions = inventory.versions[plugin.id];
-      if (!versions?.length) continue;
-      installed = true;
-      const active = await this.supervisor(plugin.id).broker.active();
-      const latest = versions.map(v => v.version).sort((a, b) => compareVersions(b, a))[0]!;
-      const selected = new Set([latest, ...(active ? [active.version] : []), ...(policies[plugin.id]?.pinnedVersion ? [policies[plugin.id]!.pinnedVersion!] : []),
-        ...(this.supervisor(plugin.id).pendingVersion ? [this.supervisor(plugin.id).pendingVersion!] : [])]);
-      for (const version of selected) {
-        try { await target.load(plugin.id, version); }
-        catch (error) { throw new HostedPluginError("host_pair_required", `Host update blocked for ${plugin.id}@${version}: ${failure(error).message}. Prepare a compatible pair; installed code/data retained`); }
+      const versions = inventory.versions[plugin.id], active = await this.supervisor(plugin.id).broker.active();
+      if (!active?.enabled) continue;
+      if (!versions?.length) { warnings.push({ pluginId: plugin.id, message: "Plugin is not installed; it stays unavailable after the update until it is reinstalled" }); continue; }
+      const candidates = [active.version, ...versions.map(v => v.version).sort((a, b) => compareVersions(b, a))];
+      let usable = false, cause = "";
+      for (const version of new Set(candidates)) {
+        try { await target.load(plugin.id, version); usable = true; break; }
+        catch (error) { cause ||= failure(error).message; }
       }
+      if (!usable) warnings.push({ pluginId: plugin.id, message: `No installed version supports ${hostVersion} (${cause}); it is unavailable after the update until a compatible release is installed` });
     }
-    return installed;
+    return warnings;
   }
   async shutdown(): Promise<void> {
     this.closing = true;

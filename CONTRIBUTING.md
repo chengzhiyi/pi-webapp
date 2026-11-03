@@ -37,6 +37,8 @@ npm run check   # TypeScript for the host and the web UI
 npm test        # unit and integration tests
 ```
 
+While iterating, `npm run test:quick` runs the same unit tests minus a few long soak tests (about a quarter faster). Run the full `npm test` before you push.
+
 If you changed the UI, also run the relevant browser tests with `npm run test:browser` (Playwright).
 
 ## Code guidelines

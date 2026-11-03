@@ -49,6 +49,7 @@ export class HostedPluginIntegration {
   private restartResume?: () => Promise<void>;
   private closing = false;
   private started = false;
+  private starting?: Promise<void>;
   private stopping?: Promise<void>;
   private readonly options: HostedIntegrationOptions;
   private readonly trusted: ReadonlyMap<string, HostedPluginPolicy>;
@@ -220,7 +221,21 @@ export class HostedPluginIntegration {
     this.switches = result.catch(() => {});
     return result.catch(error => { if (shutdown) this.adapter.thaw(); throw error; });
   }
-  async start(): Promise<void> {
+  /** Host health admission waits for plugins at most `timeoutMs`. A slow or hung plugin start keeps
+   * running in the background and reports on its own card; it never fails the host's startup. */
+  async admit(timeoutMs: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = this.start().then(() => true);
+    started.catch(() => {});
+    try { return await Promise.race([started, new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), timeoutMs); timer.unref?.(); })]); }
+    finally { clearTimeout(timer); }
+  }
+  start(): Promise<void> {
+    // One start at a time; a failed start can be retried by the next session start.
+    this.starting ??= this.startOnce().catch(error => { this.starting = undefined; throw error; });
+    return this.starting;
+  }
+  private async startOnce(): Promise<void> {
     if (this.started) return;
     await this.adapter.verifyCompatibility();
     for (const plugin of this.options.catalog ?? OFFICIAL_PLUGINS) {
@@ -237,11 +252,8 @@ export class HostedPluginIntegration {
       if (this.recovery.size) return;
       const marker = join(this.options.root, "host-version.json");
       if ((await readJson<{ version: string }>(marker))?.version !== this.options.hostVersion) {
-        // Controlled selection already staged/admitted this exact combination offline.
-        // Do not immediately replace it with a second registry-derived startup selection.
-        const synchronized = this.manager.pairAdmitted
-          ? !(await this.manager.inventory()).plugins.some(plugin => plugin.updateDiagnostic?.status === "failed")
-          : await this.manager.reconcileHostUpgrade();
+        // Per plugin: compatible installed code is kept; only a real range conflict consults the registry.
+        const synchronized = await this.manager.reconcileHostUpgrade();
         if (synchronized) {
           await privateDirectory(this.options.root);
           await atomicJson(marker, { version: this.options.hostVersion });
@@ -256,15 +268,9 @@ export class HostedPluginIntegration {
     this.started = true;
     this.devWatcher?.start();
   }
-  /** Legacy conservative compatibility check, NOT a paired updater. Production SelfUpdater
-   * uses manager.hostPair to stage and fence the complete selection/restart transaction. */
-  async validateHostUpdate(version: string, packageRoot: string): Promise<void> {
-    await this.enqueue(async () => {
-      if (await this.manager.validateHostUpdate(version)) {
-        try { await access(join(packageRoot, "dist", "hosted-worker.js")); }
-        catch { throw new HostedPluginError("host_pair_required", "Selected host has no hosted worker; keep current host/plugin pair"); }
-      }
-    });
+  /** Plugins that would be unavailable on a host version: shown before an update, never blocking it. */
+  hostUpdateWarnings(version: string): Promise<Array<{ pluginId: string; message: string }>> {
+    return this.manager.hostUpdateWarnings(version);
   }
   async inventory(): Promise<HostedPluginCatalog> {
     const inventory = await this.manager.inventory();

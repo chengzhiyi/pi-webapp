@@ -378,7 +378,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.current = ctx;
     shared.releaseHostedTui?.();
     shared.releaseHostedTui = shared.hosted?.adapter.mountTui(pi, trustedScope(ctx.cwd, ctx.sessionManager.getSessionId()));
-    await shared.hosted?.start();
+    // Plugins never gate host health: the web entry opens even if a plugin is still starting or hangs.
+    if (shared.hosted && !await shared.hosted.admit(10_000)) console.error("pi-webapp: plugin startup is still running; the host continues and plugins report on their own cards");
     if (shared.tuiPromptSessionId !== ctx.sessionManager.getSessionId()) {
       shared.tuiPrompts = new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
       shared.tuiPromptSessionId = ctx.sessionManager.getSessionId();
@@ -422,7 +423,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     if (event.message.role === "assistant" && event.message.stopReason === "error") {
       shared.tuiAgentError = true;
       const errorId = shared.bridge?.reportError?.(new Error("Agent response failed"), { ...shared.operation, stage: "agent", code: "agent_failed", piVersion: VERSION });
-      if (shared.selected === "tui") shared.bridge?.publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, ...shared.operation });
+      if (shared.selected === "tui") shared.bridge?.publish({ type: "error", message: event.message.errorMessage ?? "Agent response failed", errorCode: "unexpected_error", errorId, inTranscript: true, ...shared.operation });
     }
     if (event.message.role === "toolResult") shared.tools?.message(event.message, diagnosticContext(ctx));
     if (event.message.role === "assistant") shared.tuiStreaming = null;
@@ -531,7 +532,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
-              hostedPair: shared.hosted!.manager.hostPair,
+              pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
+              prefetchPlugins: (version, signal) => shared.hosted!.manager.prefetchForHost(version, signal),
               beforeRestart: force => shared.hosted!.prepareRestart(force) }),
             snapshot,
             busyGitWorkspaces: () => {

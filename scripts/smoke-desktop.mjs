@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { saveSmokeDiagnostics, seedSmokeLocale, waitForDesktopProcessExit } from "./desktop-smoke-diagnostics.mjs";
+import { localize as native, setDesktopLocale } from "../desktop/locale.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const packaged = process.argv.includes("--packaged");
@@ -77,6 +78,10 @@ try {
   await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.getByRole("button", { name: closeSettingsName })).toBeVisible({ timeout: 30000 });
   await stage("native-identity");
+  // Native menus and dialogs follow the OS language; assert whichever one this runner reports.
+  setDesktopLocale(await electron.evaluate(({ app }) => app.getLocale()));
+  const quitLabel = native("退出…", "Quit…");
+  const checkUpdateLabel = native("检查桌面更新…", "Check for Desktop Updates…");
   const identity = await electron.evaluate(async ({ app, BrowserWindow, Menu, dialog }) => {
     let about;
     const show = dialog.showMessageBox;
@@ -92,16 +97,16 @@ try {
   assert.equal(identity.menu, appName);
   assert.equal(identity.title, appName);
   assert.equal(identity.about.message, appName);
-  assert.ok(identity.about.detail.includes(`桌面构建 ${release.buildNumber}`));
-  assert.ok(identity.about.detail.includes("应用位置："));
+  assert.ok(identity.about.detail.includes(native(`桌面构建 ${release.buildNumber}`, `Desktop build ${release.buildNumber}`)));
+  assert.ok(identity.about.detail.includes(native("应用位置：", "App location:")));
   const updateMenu = await electron.evaluate(({ Menu }) => Menu.getApplicationMenu().items[0].submenu.items.map(item => item.label));
-  assert.ok(updateMenu.includes("检查桌面更新…"));
-  assert.ok(updateMenu.includes("取消桌面更新下载"));
+  assert.ok(updateMenu.includes(checkUpdateLabel));
+  assert.ok(updateMenu.includes(native("取消桌面更新下载", "Cancel Desktop Update Download")));
   // Exercise the packaged native menu -> fixed Release metadata -> actual verified
   // download -> manual handoff path. Only network bytes/native dialogs are fixtures;
   // no installed app, publisher certificate, or user's backend is used/replaced.
   const supportsUpdateDownload = packaged && process.platform === "darwin" && process.arch === "arm64";
-  if (supportsUpdateDownload) await electron.evaluate(async ({ Menu, dialog, shell, app }, build) => {
+  if (supportsUpdateDownload) await electron.evaluate(async ({ Menu, dialog, shell, app }, { build, labels }) => {
     const fs = process.getBuiltinModule("node:fs/promises");
     const { createHash } = process.getBuiltinModule("node:crypto");
     const original = { fetch: globalThis.fetch, show: dialog.showMessageBox, reveal: shell.showItemInFolder };
@@ -126,11 +131,11 @@ try {
       };
       shell.showItemInFolder = path => { revealed = path; };
       dialog.showMessageBox = async options => {
-        if (options.title === "发现桌面更新") return { response: 1 };
-        if (options.title === "桌面安装包已下载") complete();
+        if (options.title === labels.available) return { response: 1 };
+        if (options.title === labels.downloaded) complete();
         return { response: 0 };
       };
-      Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "检查桌面更新…").click();
+      Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === labels.check).click();
       await done;
       await new Promise(resolve => setTimeout(resolve, 20));
       if (!revealed || !(await fs.readFile(revealed)).equals(data)) throw new Error("checked DMG handoff missing");
@@ -138,7 +143,8 @@ try {
       clearTimeout(timer); globalThis.fetch = original.fetch; dialog.showMessageBox = original.show; shell.showItemInFolder = original.reveal;
       if (revealed) await fs.rm(process.getBuiltinModule("node:path").dirname(revealed), { recursive: true, force: true });
     }
-  }, release.buildNumber);
+  }, { build: release.buildNumber, labels: { check: checkUpdateLabel, available: native("发现桌面更新", "Desktop Update Available"),
+    downloaded: native("桌面安装包已下载", "Desktop Installer Downloaded") } });
   await page.screenshot({ path: join(artifacts, "desktop-model-setup.png") });
   await page.getByRole("button", { name: closeSettingsName }).click();
   state = JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8"));
@@ -167,7 +173,8 @@ try {
   const authorization = { Authorization: `Bearer ${address.hash.slice(1)}` };
   const update = await fetch(`${address.origin}/api/update`, { headers: authorization, signal: AbortSignal.timeout(30000) }).then(r => r.json());
   assert.equal(update.canRestart, true);
-  assert.match(update.reason, /用户目录/);
+  // The restart warning is only sent when the registry actually offers a newer package.
+  if (update.available) assert.match(update.reason, /关闭终端/);
   assert.equal(update.desktopShell.build, String(release.buildNumber));
   await stage("desktop-preview-channel");
   const preference = await fetch(`${address.origin}/api/update/channel`, { method: "POST", signal: AbortSignal.timeout(10000),
@@ -202,13 +209,13 @@ try {
   await stage("quit-cancel-and-refused-stop-recovery");
   // Only the stop failure and native answers are fixtures. Drive the actual
   // application menu repeatedly to catch a stuck askingQuit gate after recovery.
-  const quitRecovery = await electron.evaluate(async ({ app, Menu, dialog, BrowserWindow }) => {
+  const quitRecovery = await electron.evaluate(async ({ app, Menu, dialog, BrowserWindow }, quitLabel) => {
     const { DesktopBackend } = process.getBuiltinModule("node:module").createRequire(`${app.getAppPath()}/package.json`)("./backend.mjs");
     const original = { stop: DesktopBackend.prototype.stop, refresh: DesktopBackend.prototype.refresh, show: dialog.showMessageBox };
     const answers = [0, 2, 0, 0];
     const prompts = [];
     const parents = [];
-    const item = Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…");
+    const item = Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === quitLabel);
     const waitForPrompts = async count => {
       for (let n = 0; n < 200 && prompts.length < count; n++) await new Promise(resolve => setTimeout(resolve, 10));
       if (prompts.length !== count) throw new Error("quit flow did not reach its expected confirmation");
@@ -230,10 +237,10 @@ try {
       DesktopBackend.prototype.stop = original.stop; DesktopBackend.prototype.refresh = original.refresh;
       dialog.showMessageBox = original.show;
     }
-  });
+  }, quitLabel);
   assert.equal(quitRecovery.windows, 1);
   assert.deepEqual(quitRecovery.parents, [true, true, true, true]);
-  assert.equal(quitRecovery.prompts[2].title, "后台尚未停止");
+  assert.equal(quitRecovery.prompts[2].title, native("后台尚未停止", "Background service has not stopped"));
   assert.match(quitRecovery.prompts[2].detail, /插件保存或释放未完成/);
   assert.equal(JSON.parse(await readFile(join(agentDir, "pi-web", "launcher.json"), "utf8")).pid, state.pid);
   await stage("confirmed-owned-service-shutdown");
@@ -275,9 +282,9 @@ try {
     const desktopClosed = electron.waitForEvent("close", { timeout: 15000 });
     const processExited = waitForDesktopProcessExit(electron.process(), { expectedPid: actualPid });
     try {
-      await Promise.all([processExited, desktopClosed, electron.evaluate(({ Menu }) => {
-        setImmediate(() => Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === "退出…").click());
-      })]);
+      await Promise.all([processExited, desktopClosed, electron.evaluate(({ Menu }, quitLabel) => {
+        setImmediate(() => Menu.getApplicationMenu().items[0].submenu.items.find(item => item.label === quitLabel).click());
+      }, quitLabel)]);
     }
     catch (error) {
       console.error("Timed out quit mode:", mode, "main PID:", electron.process().pid,

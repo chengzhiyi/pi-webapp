@@ -70,6 +70,8 @@ chmod +x pi-*-linux-x86_64.AppImage
 If your system has no FUSE support, run `./pi-*-linux-x86_64.AppImage --appimage-extract-and-run`.
 :::
 
+On Arch Linux, an AUR recipe is maintained in [`packaging/arch`](https://github.com/chengzhiyi/pi-webapp/tree/alpha/packaging/arch). Its README covers building with `makepkg`, automated updates, and moving from a manually installed AppImage without duplicate menu entries.
+
 After the first start, confirm the version: on macOS choose **pi → 关于 pi** (About pi). It shows the shell version, the desktop build number and the running pi-webapp version. Then follow [Quick start → Connect a model](./getting-started#_3-connect-a-model).
 
 ## How it differs from the web launcher
