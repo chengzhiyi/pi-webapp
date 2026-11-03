@@ -232,8 +232,13 @@ alone, to determine support.
 
 For repeatable publication, commit the intended version/build and push a tag
 pointing to that verified source SHA; do not silently follow a moving main while
-its independent npm pipeline may write another version. Increment the desktop
-build number for each delivered rebuild. Tag creation/release is an intentional
+its independent npm pipeline may write another version. Prepare each delivered
+rebuild with `npm run desktop:prepare-build`: it increments the desktop build
+number and sets package.json to the next unreleased npm base (for example
+0.1.52 while npm latest is 0.1.51). npm publishes never write their version
+back, and the shell treats package.json as its bundled backend version. A stale
+value lets an older npm package selected in Settings outrank the newer bundled
+code. `--check-source` fails when package.json is older than npm latest. Tag creation/release is an intentional
 publication action, not part of an ordinary main commit.
 
 The release pipeline uses four **native** targets:

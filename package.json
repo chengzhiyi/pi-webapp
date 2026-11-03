@@ -71,6 +71,7 @@
     "desktop:smoke:handoff": "node scripts/smoke-desktop-handoff.mjs",
     "desktop:smoke:legacy": "node scripts/smoke-desktop-legacy.mjs",
     "desktop:package": "node scripts/package-desktop.mjs",
+    "desktop:prepare-build": "node scripts/prepare-desktop-build.mjs",
     "build": "node scripts/build.mjs",
     "build:web": "node scripts/build.mjs browser",
     "build:extension": "node scripts/build.mjs node",

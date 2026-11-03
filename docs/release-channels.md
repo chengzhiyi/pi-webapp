@@ -17,7 +17,7 @@ feature/* --PR--> alpha --release PR--> main
 
 ## Version policy
 
-The root `package.json` version expresses the **intended base**, not proof of the latest published version. CI updates package metadata and lockfile only in its isolated artifact checkout, with no bot commits back to either branch. This avoids push races, recursive CI, alpha/stable version merge conflicts and a branch version being committed before npm publication succeeds.
+The root `package.json` version expresses the **intended base**, not proof of the latest published version. CI updates package metadata and lockfile only in its isolated artifact checkout, with no bot commits back to either branch. This avoids push races, recursive CI, alpha/stable version merge conflicts and a branch version being committed before npm publication succeeds. The one deliberate exception is a desktop build commit: `npm run desktop:prepare-build` records the next unreleased base, because the desktop shell treats package.json as its bundled backend version (see [desktop.md](desktop.md)). This does not change npm numbering.
 
 - If the source base exceeds npm `latest`, use it. Otherwise choose the next patch after `latest`.
 - Stable publishes that base (e.g. `0.1.30`). Alpha publishes `base-alpha.N`; its counter advances numerically based on npm's `alpha` tag and never moves the existing alpha line backwards.
