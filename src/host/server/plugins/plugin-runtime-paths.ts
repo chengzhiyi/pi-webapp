@@ -1,17 +1,16 @@
 import { createHash } from 'node:crypto';
 import { readFile, realpath, writeFile, unlink } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, parse, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DefaultPackageManager, getAgentDir, SettingsManager } from '@earendil-works/pi-coding-agent';
 
 const leases = new Map<string, number>();
 
-async function hostPackageRoot(): Promise<string | null> {
-  let directory = dirname(fileURLToPath(import.meta.url));
+async function extensionPackageName(path: string): Promise<string | null> {
+  let directory = dirname(path);
   while (directory !== parse(directory).root) {
     try {
       const pkg = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { name?: unknown };
-      if (pkg.name === 'pi-webapp') return realpath(directory);
+      if (typeof pkg.name === 'string') return pkg.name;
     } catch { /* Keep walking towards the package root. */ }
     directory = dirname(directory);
   }
@@ -23,20 +22,24 @@ function inside(root: string, path: string): boolean {
   return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest));
 }
 
-/** Load configured Pi extensions, but never recurse into this host's own extension. */
+/** Load configured Pi extensions, but never recurse into any installed pi-webapp copy. */
 export async function sessionRuntimePaths(cwd: string, webRoots: readonly string[], projectTrusted: boolean) {
   const settingsManager = SettingsManager.create(cwd, undefined, { projectTrusted });
   const manager = new DefaultPackageManager({ cwd, agentDir: getAgentDir(), settingsManager });
-  const resolved = await manager.resolve();
-  const ownRoot = await hostPackageRoot();
-  const configured: string[] = [];
+  const resolved = await manager.resolve(async () => 'skip');
+  const canonicalWebRoots = await Promise.all(webRoots.map(root => realpath(root)));
+  const configured = new Set<string>();
   for (const item of resolved.extensions) {
     if (!item.enabled || item.path.startsWith('builtin:')) continue;
     const path = await realpath(item.path);
-    if (ownRoot && inside(ownRoot, path)) continue;
-    configured.push(path);
+    if (await extensionPackageName(path) === 'pi-webapp') continue;
+    if (canonicalWebRoots.some(root => inside(root, path))) continue;
+    configured.add(path);
   }
-  return pluginRuntimePaths(cwd, [...webRoots, ...configured]);
+  // Only Web plugins need cache-busting snapshots. Ordinary Pi extensions keep
+  // their original paths, so read-only installs are never written to.
+  const web = await pluginRuntimePaths(cwd, canonicalWebRoots);
+  return { paths: [...web.paths, ...configured], release: web.release };
 }
 
 /** Compiled ESM entrypoints otherwise survive runtime replacement in Node's cache. */
