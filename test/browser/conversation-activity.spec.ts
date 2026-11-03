@@ -135,9 +135,18 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     session = { ...session, idle: false }; bridge.publish({ type: "snapshot", session });
     await expect(activity).toBeVisible();
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
-    // A running session switch starts a distinct clock, never reuses the previous elapsed time.
+    // A different running session starts at zero; returning resumes the original background clock.
+    const runningSessionId = session.sessionId;
     await page.clock.fastForward(4000);
     session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
+    await page.clock.fastForward(4000);
+    session = { ...session, sessionId: runningSessionId }; bridge.publish({ type: "snapshot", session });
+    await expect(elapsed).toHaveAttribute("data-agent-elapsed", "8");
+    // A background completion and new run has a new activity id, so it must not reuse the old clock.
+    const restartedSession = { ...session, activityId: (session.activityId ?? 0) + 1 };
+    session = { ...session, sessionId: "another-running-session" }; bridge.publish({ type: "snapshot", session });
+    session = restartedSession; bridge.publish({ type: "snapshot", session });
     await expect(elapsed).toHaveAttribute("data-agent-elapsed", "0");
     session = { ...session, idle: true, messages: [...session.messages, { ...message("error", ""), blocks: [], error: "Model failed" }] };
     bridge.publish({ type: "snapshot", session });

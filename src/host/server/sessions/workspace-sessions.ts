@@ -35,6 +35,7 @@ interface WorkspaceRuntime {
   releasePaths: () => Promise<void>;
   releaseHosted?: () => void;
   generation: number;
+  activityId: number;
   closing: boolean;
   waitController: AbortController;
   operation?: ErrorCorrelation;
@@ -225,7 +226,7 @@ export class WorkspaceSessions {
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
       const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, activityId: 0, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
         detached: detachedOwner ? { owner: detachedOwner, events: [], seq: 0, lastText: "", restoreTools: null } : undefined };
       runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {
         const owner = this.runtimes.get(manager.getSessionId()) ?? runtime;
@@ -254,7 +255,7 @@ export class WorkspaceSessions {
         }
         if (!this.disposed && !runtime.closing) {
           const context: DiagnosticFields = { ...runtime.operation, session: this.telemetry.anonymize(session.sessionManager.getSessionId()), piVersion: VERSION, model: session.model ? `${session.model.provider}/${session.model.id}` : null, thinkingLevel: session.thinkingLevel };
-          if (event.type === "agent_start") this.telemetry.breadcrumb("agent_start", context);
+          if (event.type === "agent_start") { runtime.activityId++; this.telemetry.breadcrumb("agent_start", context); }
           if (event.type === "tool_execution_start") tools.start(event, context);
           if (event.type === "tool_execution_end") tools.end(event, context);
           if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
@@ -329,6 +330,7 @@ export class WorkspaceSessions {
       name: sessionTitle(session.sessionManager.getSessionName(), messages),
       model: session.model ? `${session.model.provider}/${session.model.id}` : null,
       thinkingLevel: session.thinkingLevel, thinkingLevels: session.getAvailableThinkingLevels(), idle: session.isIdle && !runtime.prompts.sending,
+      activityId: runtime.activityId,
       paused: sessionPaused(session.sessionManager.getBranch()),
       promptQueue: { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] },
       queuedPrompts: runtime.prompts.view(),

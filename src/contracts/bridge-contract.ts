@@ -53,6 +53,8 @@ export interface SessionView {
   thinkingLevel: string | null;
   thinkingLevels: string[];
   idle: boolean;
+  /** Increments on every agent run, distinguishing restarts within one chat. */
+  activityId?: number;
   paused?: boolean;
   /** Native SDK queue; pending prompts are not yet transcript messages. */
   promptQueue?: PromptQueue;

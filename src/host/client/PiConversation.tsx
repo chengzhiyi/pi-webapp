@@ -463,7 +463,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     localFiles: optimistic.files,
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
-  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId);
+  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId, session?.activityId);
   const viewTools = plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []);
   const transcript = useHostedTranscript(session?.sessionId, [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])], viewTools);
   const empty = session === null || (transcript.messages.length === 0 && activity === null);
