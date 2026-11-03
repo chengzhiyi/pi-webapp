@@ -1,12 +1,14 @@
 import type { ServerResponse } from "node:http";
 import type { SessionView } from "../../../contracts/bridge-contract.ts";
 import type { PluginMetadata } from "../../../contracts/plugins.ts";
+import type { ActivityHostApi } from "../../../plugins/builtin/activity/contract/activity.ts";
 
 export interface PluginRequestContext {
   path: string;
   body: { sessionId: string } & Record<string, unknown>;
   res: ServerResponse;
   snapshot(): SessionView;
+  activity?: ActivityHostApi;
   busyWorkspaces(): string[];
   json(status: number, value: unknown): void;
 }

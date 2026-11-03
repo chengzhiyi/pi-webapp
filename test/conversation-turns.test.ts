@@ -20,6 +20,17 @@ test("projects Pi calls, results, and reported assistant usage", () => {
   assert.equal(result?.toolCallId, "call-1");
 });
 
+test("renders background completion notifications without machine XML", () => {
+  const notice = projectEntry({ id: "notice", type: "custom_message", timestamp: "2026-01-01T00:00:00Z", parentId: null,
+    customType: "background-task-notification", display: true, content: "<background-task-notification>machine payload</background-task-notification>",
+    details: { id: "task-1", name: "Preview finished task", status: "completed", outputPath: "/private/task.log" },
+  } as Parameters<typeof projectEntry>[0]);
+  assert.equal(notice?.role, "notice");
+  assert.deepEqual(notice?.blocks, [{ kind: "text", text: "Background task “Preview finished task” completed" }]);
+  assert.equal(JSON.stringify(notice).includes("background-task-notification"), false);
+  assert.equal(JSON.stringify(notice).includes("/private/task.log"), false);
+});
+
 test("preserves a failed assistant response even when it has no text or tokens", () => {
   const failed = projectEntry({ id: "failed", type: "message", timestamp: "2026-01-01T00:00:00Z", parentId: null,
     message: { role: "assistant", timestamp: 0, content: [], api: "openai-codex-responses", provider: "openai-codex", model: "gpt-5.5",

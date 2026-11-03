@@ -69,6 +69,17 @@
   display: none;
 }
 
+.activityRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 28px;
+}
+
+.activityRow:empty, .heroActivity:empty { display: none; }
+.heroActivity { display: flex; padding: 0 20px; }
+
 .callRow {
   border-radius: 6px;
 }

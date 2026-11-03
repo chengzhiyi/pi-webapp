@@ -1,10 +1,10 @@
-# Files, terminal and Git
+# Files, terminal, Git and activity
 
-This page shows how to use the three built-in tools next to a conversation: preview files, run commands in a real terminal, and review and commit changes.
+This page shows how to use the four built-in tools next to a conversation: preview files, run commands in a real terminal, review and commit changes, and inspect agents and background tasks.
 
 ## Open the tool panel
 
-Click the panel icon in the upper right of a conversation to open the right sidebar. Its start page offers three tools:
+Click the panel icon in the upper right of a conversation to open the right sidebar. Its start page offers four tools:
 
 ![The tool panel start page with Workspace files, Open terminal and Git changes](/images/tool-panel-start.png)
 
@@ -71,8 +71,21 @@ Commits and branch switches need the workspace's root folder. Switching branches
 
 Remote branch labels and ahead/behind counts come from what Git already knows locally; pi-webapp never fetches.
 
+## Activity {#activity}
+
+Choose **Activity** to inspect work owned by the current chat. While work is active, a spinning **Background · N tasks** button also appears next to **Working** in the chat (or beside the workspace name on an empty chat) and opens the same panel. It disappears when nothing is running or the activity connection is unavailable.
+
+**Running** contains active and paused work; **Finished** is a collapsible history group. A row shows its type, title, status and duration, with model and token information when the owning package provides them. Click a row to read bounded output or a verified result. Active work updates without reopening the panel.
+
+The panel automatically uses these installed Pi packages; neither is installed by pi-webapp itself:
+
+- **pi-subagents** supplies async runs, workflows and active foreground agents. You can inspect and stop async runs. A foreground child is controlled by its parent turn, so the panel does not offer a separate stop action for it.
+- **pi-background-tasks** supplies shell, agent, delegate, Fusion, attested and managed tasks. Depending on the task type, you can read logs or results, stop work and rerun an ordinary shell command.
+
+Stopping asks for confirmation. Rerun creates a new task rather than rewriting history. Closing the panel or switching chats does not stop the work itself. If neither package is installed, the panel explains how to enable activity support.
+
 ## Turn a tool off
 
-Files, Terminal and Git can each be switched off under **Plugins** in the sidebar. See [Packages, skills and plugins](./extensions#built-in-capabilities). Turning Terminal off ends every terminal on the service.
+Files, Terminal, Git and Activity can each be switched off under **Plugins** in the sidebar. See [Packages, skills and plugins](./extensions#built-in-capabilities). Turning Terminal off ends every terminal on the service.
 
 Next: [Diagrams with Excalidraw](./diagrams).

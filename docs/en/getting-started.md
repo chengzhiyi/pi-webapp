@@ -69,7 +69,7 @@ A finished reply with a **Usage** line under it is your confirmation that everyt
 
 ## 5. Open Files, Terminal or Git
 
-Click the panel icon in the upper right of the conversation to open the right sidebar. Its start page offers **Workspace files**, **Open terminal** and **Git changes**. They are covered in [Files, terminal and Git](./workspace-tools).
+Click the panel icon in the upper right of the conversation to open the right sidebar. Its start page offers **Workspace files**, **Open terminal**, **Git changes** and **Activity**. They are covered in [Files, terminal, Git and activity](./workspace-tools).
 
 ## 6. Stop it, and start it again
 

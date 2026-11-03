@@ -33,6 +33,8 @@ import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 import { assertModelAdmission } from "../models/model-transport.ts";
+import { SessionActivity } from "../../../plugins/builtin/activity/server/session-activity.ts";
+import type { ActivityTarget } from "../../../plugins/builtin/activity/contract/activity.ts";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
 // The installed bundle and source checkout have different directory depths.
@@ -65,6 +67,7 @@ interface SharedState {
   lifecycle: LifecycleQueue;
   tuiGeneration: number;
   stopChanged: (() => void) | null;
+  tuiActivity?: SessionActivity;
   tuiWaitController: AbortController;
   tools?: ToolDiagnostics;
   hosted?: HostedPluginIntegration;
@@ -110,6 +113,12 @@ shared.tuiAgentError ??= false;
 function activeCatalog(): WebPluginCatalog | null {
   return shared.selected === "sdk" ? shared.workspaceSessions?.catalog ?? null : shared.tuiCatalog;
 }
+function activityFor(sessionId: string): SessionActivity {
+  if (shared.selected === "sdk") return shared.workspaceSessions!.activity(sessionId);
+  if (!shared.tuiActivity || shared.current?.sessionManager.getSessionId() !== sessionId) throw new Error("会话不存在或已关闭");
+  return shared.tuiActivity;
+}
+function activityTarget(target: ActivityTarget): SessionActivity { return activityFor(target.sessionId); }
 let authRuntime: Promise<ModelRuntime> | null = null;
 function modelAuthRuntime() { return authRuntime ??= ModelRuntime.create({ refreshOnCreate: false }); }
 const mirroredProviders = new Map<string, object>();
@@ -375,6 +384,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.tuiWaitController = new AbortController();
     shared.tuiGeneration++;
     bindChanged();
+    shared.tuiActivity?.close();
+    shared.tuiActivity = new SessionActivity(pi.events, ctx.sessionManager.getSessionId());
     shared.current = ctx;
     shared.releaseHostedTui?.();
     shared.releaseHostedTui = shared.hosted?.adapter.mountTui(pi, trustedScope(ctx.cwd, ctx.sessionManager.getSessionId()));
@@ -453,6 +464,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     shared.operation = undefined;
     shared.tuiWaitController.abort();
     shared.tuiGeneration++;
+    shared.tuiActivity?.close();
+    shared.tuiActivity = undefined;
     shared.stopChanged?.();
     shared.stopChanged = null;
     shared.interactions?.cancelAll();
@@ -531,6 +544,13 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
+            activity: {
+              snapshot: sessionId => activityFor(sessionId).refresh(),
+              subscribe: (sessionId, listener) => activityFor(sessionId).subscribe(listener),
+              detail: target => activityTarget(target).detail(target),
+              stop: target => activityTarget(target).stop(target),
+              rerun: target => activityTarget(target).rerun(target),
+            },
             selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
               pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
               prefetchPlugins: (version, signal) => shared.hosted!.manager.prefetchForHost(version, signal),

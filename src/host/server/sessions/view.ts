@@ -2,7 +2,7 @@ import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-a
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { displayUserMessage } from "../../../contracts/user-message.ts";
 import type { PluginEntry } from "@chengzhiyi/pi-web-protocol";
-import type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../../../contracts/bridge-contract.ts";
+import type { SessionView, ViewBlock, ViewMessage } from "../../../contracts/bridge-contract.ts";
 export type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../../../contracts/bridge-contract.ts";
 
 export const PAUSED_ENTRY = 'pi-webapp/paused';
@@ -61,9 +61,24 @@ export function contentBlocks(content: string | readonly ContentPart[]): ViewBlo
   });
 }
 
+function backgroundTaskNotice(details: unknown): string {
+  const task = typeof details === "object" && details !== null ? details as Record<string, unknown> : null;
+  const name = typeof task?.name === "string" && task.name.trim() ? task.name : "Background task";
+  const error = typeof task?.error === "string" && task.error.trim() ? ` — ${task.error.slice(0, 300)}` : "";
+  if (task?.status === "failed") return `Background task “${name}” failed${error}`;
+  if (task?.status === "killed") return `Background task “${name}” stopped`;
+  return `Background task “${name}” completed`;
+}
+
 export function projectEntry(entry: SessionEntry): ViewMessage | null {
   if (entry.type === "custom_message") {
     if (!entry.display) return null;
+    if (entry.customType === "background-task-notification") return {
+      id: entry.id,
+      role: "notice",
+      timestamp: entry.timestamp,
+      blocks: contentBlocks(backgroundTaskNotice(entry.details)),
+    };
     return {
       id: entry.id,
       role: "notice",

@@ -15,7 +15,7 @@ pi-webapp has few settings of its own. Most things you'd want to change are in t
 | Update the app | **Pi Settings → General → App updates** | Manual |
 | Add a Pi package or extension | **Pi Settings → Packages** ([Packages, skills and plugins](./extensions)) | None added |
 | Add a skill | **Pi Settings → Skills** | Skills Pi discovers on its own |
-| Turn Files, Terminal or Git on or off | **Plugins** in the sidebar | All three on |
+| Turn Files, Terminal, Git or Activity on or off | **Plugins** in the sidebar | All four on |
 | Install the Excalidraw plugin | **Plugins → Official plugins** ([Diagrams](./diagrams)) | Not installed |
 | Add or remove a workspace | Sidebar ([Sessions and workspaces](./sessions)) | The launch folder and every folder with saved sessions |
 | Move Pi's data folder | `PI_CODING_AGENT_DIR` ([Environment variables](./reference/environment)) | `~/.pi/agent` |

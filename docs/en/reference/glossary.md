@@ -30,7 +30,7 @@ This page defines the terms used across the guide, in alphabetical order.
 
 **Pi SDK.** Pi as a library. The npm package of pi-webapp is pinned to one exact SDK version that it was tested with.
 
-**Plugin.** A pi-webapp feature with its own screen: the built-in Files, Terminal and Git tools, and optional ones such as Excalidraw. Managed under **Plugins** in the sidebar.
+**Plugin.** A pi-webapp feature with its own screen: the built-in Files, Terminal, Git and Activity tools, and optional ones such as Excalidraw. Managed under **Plugins** in the sidebar.
 
 **Hosted plugin.** The kind of plugin that is downloaded and runs in its own process and browser frame, such as Excalidraw. The term shows up in some logs and messages.
 
