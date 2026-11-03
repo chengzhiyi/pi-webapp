@@ -11,6 +11,23 @@ import { downloadDrawing } from "./download.ts";
 import { HostedToolCard } from "./ToolCard.tsx";
 import { notification, toolHeight, toolPresentation } from "./tool-ui.ts";
 import { HostedPluginIcon } from "./PluginIcon.tsx";
+import { dismissToast, showToast } from "../../../../web/src/ui/primitives/Toast.tsx";
+
+// A host outage fails a plugin's controller, panels and tool cards together, so
+// failed frames of one plugin share one app toast; Reconnect retries all of them.
+const failedViews = new Map<string, Map<object, () => void>>();
+function viewFailed(card: HostedPluginCard, owner: object, locale: "zh" | "en", cause: unknown, retry: () => void) {
+  const views = failedViews.get(card.pluginId) ?? new Map<object, () => void>();
+  failedViews.set(card.pluginId, views); views.set(owner, retry);
+  const zh = locale === "zh";
+  showToast({ key: `hosted-view:${card.pluginId}`, message: zh ? `${card.name} 连接中断` : `${card.name} lost its connection`,
+    detail: cause instanceof Error ? cause.message : String(cause), detailLabel: zh ? "诊断信息" : "Diagnostics",
+    action: { label: zh ? "重新连接" : "Reconnect", onClick: () => { const pending = [...views.values()]; views.clear(); for (const run of pending) run(); } } });
+}
+function viewRecovered(pluginId: string, owner: object) {
+  const views = failedViews.get(pluginId);
+  if (views?.delete(owner) && !views.size) dismissToast(`hosted-view:${pluginId}`);
+}
 
 interface HostedCallbacks { current: { openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> } }
 
@@ -23,10 +40,20 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
   const viewClient = useRef<HostedViewClient | null>(null);
   const ready = useRef<Promise<unknown>>(Promise.resolve());
   const callbacks = useRef({ open, sendMessage, reconnect, abort }); callbacks.current = { open, sendMessage, reconnect, abort };
-  const [error, setError] = useState("");
+  const owner = useRef({}).current;
+  const mounted = useRef(false);
+  const [attempt, setAttempt] = useState(0);
+  const fail = useRef((_cause: unknown) => {});
+  const retry = useRef(() => {});
+  fail.current = cause => viewFailed(card, owner, mount.locale, cause, () => retry.current());
+  retry.current = () => {
+    // A frame that never finished mounting has nothing to resume: mount it again.
+    if (!mounted.current) { setAttempt(value => value + 1); return; }
+    try { viewClient.current?.retry(); } catch (cause) { fail.current(cause); }
+  };
+  useEffect(() => () => viewRecovered(card.pluginId, owner), [card.pluginId, owner]);
   const [presentation, setPresentation] = useState<{ title: string }>();
   const [height, setHeight] = useState(240); // Compatibility fallback for unnegotiated frames.
-  const [notice, setNotice] = useState<ReturnType<typeof notification>>();
   const [currentTheme, setTheme] = useState(theme);
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(theme()));
@@ -37,14 +64,15 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
     if (!iframe.current || card.generation === undefined) return;
     const identity: HostedViewIdentity = { pluginId: card.pluginId, generation: card.generation, sessionId: mount.sessionId, mountId: crypto.randomUUID() };
     let alive = true;
-    const report = (cause: unknown) => { if (alive) setError(cause instanceof Error ? cause.message : String(cause)); };
+    mounted.current = false;
+    const report = (cause: unknown) => { if (alive) fail.current(cause); };
     let client: HostedViewClient;
     const frame = new FrameAdapter(iframe.current, identity, async (method, input) => {
       if (!alive) throw new Error("Frame mount cancelled");
       const value = input as Record<string, unknown>;
       if (method === "toolPresentation" && mount.kind === "tool") { setPresentation(toolPresentation(input)); return null; }
       if (method === "resize" && mount.kind === "tool") { setHeight(toolHeight(input)); return null; }
-      if (method === "notify") { setNotice(notification(input)); return null; }
+      if (method === "notify") { const notice = notification(input); showToast({ tone: notice.level, message: notice.message }); return null; }
       if (method === "action") {
         if (typeof value?.action !== "string") throw new Error("Invalid action");
         return hostedApi.action({ sessionId: identity.sessionId, pluginId: identity.pluginId, generation: identity.generation, ...client.capability, action: value.action, input: value.input });
@@ -67,6 +95,8 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       client.connecting();
       await frame.connect((mount.kind === "controller" ? card.controllerUrl : card.documentUrl)!, { ...mount, theme: theme(), hostUi: { toolCard: true, autoResize: true, notifications: true } });
       client.listen();
+      mounted.current = true;
+      viewRecovered(card.pluginId, owner);
     })();
     ready.current = work;
     const remove = hostedFrames.add({ identity, ready: work, adapter: frame, afterFlush: () => client.flushed(), toolCallId: (update as ToolViewProps | undefined)?.call?.toolCallId, retire: () => client.close() });
@@ -78,15 +108,12 @@ function HostedFrame({ card, mount, update, open, sendMessage, reconnect, abort 
       // Do not issue a dispose RPC into a destroyed realm and retain a doomed timeout/port.
       void work.catch(() => {}).then(() => client.close()).catch(cause => console.error("Hosted view cleanup did not acknowledge edits", cause)).finally(() => frame.dispose());
     };
-  }, [card.pluginId, card.generation, card.documentUrl, card.controllerUrl, mount.sessionId, mount.kind, mount.contentId]);
-  useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => setError(String(cause))); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
-  // Controller content is hidden, but its transport failure/retry must remain
-  // reachable: it participates in the same generation barrier as visible editors.
+  }, [card.pluginId, card.generation, card.documentUrl, card.controllerUrl, mount.sessionId, mount.kind, mount.contentId, attempt]);
+  useEffect(() => { void ready.current.then(() => adapter.current?.call("update", { ...mount, ...(update as object ?? {}), theme: currentTheme })).catch(cause => fail.current(cause)); }, [update, mount.locale, currentTheme, mount.visible, mount.title]);
+  // Failures and notices go to the app toast stack, never inline: the controller is
+  // mounted outside the layout, and its retry must stay reachable because it shares
+  // the generation barrier with visible editors.
   const content = <div data-hosted-plugin={card.pluginId} style={{ height: mount.kind === "controller" || mount.kind === "tool" ? "auto" : "100%", minHeight: 0 }}>
-    {error && <p role="alert">{error} <button type="button" onClick={() => {
-      try { viewClient.current?.retry(); setError(""); } catch (cause) { setError(String(cause)); }
-    }}>Retry view connection</button></p>}
-    {notice && <p role={notice.level === "error" ? "alert" : "status"}>{notice.message}<button type="button" aria-label={mount.locale === "zh" ? "关闭通知" : "Dismiss notification"} onClick={() => setNotice(undefined)}>×</button></p>}
     <iframe hidden={mount.kind === "controller"} ref={iframe} title={`${card.name} ${mount.kind}`} style={{ display: mount.kind === "controller" ? "none" : "block", width: "100%", height: mount.kind === "tool" ? height : "100%", border: 0 }} />
   </div>;
   return mount.kind === "tool" ? <HostedToolCard title={presentation?.title} tool={update as ToolViewProps} locale={mount.locale}>{content}</HostedToolCard> : content;
