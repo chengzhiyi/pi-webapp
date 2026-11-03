@@ -147,7 +147,7 @@ test("independent cards/editors retain dirty views when close, uninstall and upd
     await page.locator(`[data-dockkit-tab="${tab}"]`).hover();
     await page.locator(`[data-dockkit-tab-close="${tab}"]`).click();
     // The panel reports a failed close through the app toast stack instead of shifting its layout.
-    await expect(page.locator("[data-toast-viewport]").getByRole("alert")).toContainText("Injected checkpoint failure");
+    await expect(page.locator("[data-toast-viewport]").getByRole("alert").filter({ hasText: "Injected checkpoint failure" })).toBeVisible();
     await expect(editors).toHaveCount(2); expect(await editors.nth(1).getAttribute("src")).toBe(secondSource);
 
     const collapse = page.getByRole("button", { name: "Collapse right sidebar", exact: true });

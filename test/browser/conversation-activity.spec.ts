@@ -125,12 +125,14 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     // Send errors remove the optimistic placeholder and restore the draft.
     rejectSend = true;
     await editor.fill("Failed request"); await editor.press("Enter");
+    // Assert on this failure's own toast: the fake clock can also time out a slow plugin load.
     const toasts = page.locator("[data-toast-viewport]");
-    await expect(toasts.getByRole("alert")).toContainText("Fixture send failed");
+    const sendFailure = toasts.getByRole("alert").filter({ hasText: "Fixture send failed" });
+    await expect(sendFailure).toBeVisible();
     await expect(activity).toHaveCount(0);
     await expect(editor).toHaveText("Failed request");
-    await toasts.getByRole("button", { name: /^(关闭|Dismiss)$/ }).click();
-    await expect(toasts.getByRole("alert")).toHaveCount(0);
+    await sendFailure.getByRole("button", { name: /^(关闭|Dismiss)$/ }).click();
+    await expect(sendFailure).toHaveCount(0);
     rejectSend = false; releaseSend = undefined;
     await editor.press("Enter");
     await expect(activity).toHaveAttribute("data-agent-activity", "sending");
@@ -165,7 +167,7 @@ for (const width of [1440, 390, 320]) test(`agent activity bridges send and firs
     await expect(card.locator(".pi-model-error-request")).toHaveText("req_fixture");
     if (process.env.PI_ERROR_SCREENSHOT) await card.screenshot({ path: `${process.env.PI_ERROR_SCREENSHOT}-${width}.png` });
     // The transcript card already reports this failure; no toast repeats it.
-    await expect(toasts.getByRole("alert")).toHaveCount(0);
+    await expect(toasts.getByRole("alert").filter({ hasText: "Model failed" })).toHaveCount(0);
     await expect(activity).toHaveCount(0);
     // A retry clears both stale presentations as soon as Pi produces a new response.
     const recovered = message("stream", "Recovered response\n\n```ts\nconst answer = 42;\n```");

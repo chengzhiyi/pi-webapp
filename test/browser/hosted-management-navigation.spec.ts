@@ -48,7 +48,7 @@ for (const width of [390, 768, 1440]) test(`official rows keep actions independe
     });
     await toggle.click();
     // List failures go to the app-wide toast stack, not inline under the row.
-    await expect(page.locator("[data-toast-viewport]").getByRole("alert")).toContainText("Save confirmation is still pending");
+    await expect(page.locator("[data-toast-viewport]").getByRole("alert").filter({ hasText: "Save confirmation is still pending" })).toBeVisible();
     await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked(); expect(enableCount).toBe(1);
     failEnable = false; await toggle.click();
     await expect.poll(() => enableCount).toBe(2);
