@@ -1,0 +1,41 @@
+# Maintainer: chengzhiyi <https://github.com/chengzhiyi>
+
+pkgname=pi-webapp-bin
+pkgver=0.1.39.b16
+pkgrel=1
+_upstream_version=0.1.39
+_desktop_build=16
+pkgdesc="Desktop client for Pi Webapp (official AppImage)"
+arch=('x86_64')
+url="https://github.com/chengzhiyi/pi-webapp"
+license=('MIT')
+depends=('gtk3' 'nss' 'alsa-lib' 'hicolor-icon-theme')
+options=('!strip')
+source=("https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v${_upstream_version}-b${_desktop_build}/pi-${_upstream_version}-desktop.${_desktop_build}-linux-x86_64.AppImage")
+sha256sums=('a82f594eab04fee29521c241cef91ea65ae53db8dfa6ecf02a8bd8eedff16ff1')
+
+package() {
+  local appimage="pi-${_upstream_version}-desktop.${_desktop_build}-linux-x86_64.AppImage"
+  install -Dm755 "${srcdir}/${appimage}" "${srcdir}/pi-webapp.AppImage"
+  rm -rf "${srcdir}/squashfs-root"
+  "${srcdir}/pi-webapp.AppImage" --appimage-extract >/dev/null
+
+  install -dm755 "${pkgdir}/opt/pi-webapp"
+  cp -a "${srcdir}/squashfs-root/." "${pkgdir}/opt/pi-webapp/"
+
+  install -Dm755 /dev/stdin "${pkgdir}/usr/bin/pi-webapp" <<'EOF'
+#!/bin/sh
+exec /opt/pi-webapp/AppRun "$@"
+EOF
+
+  install -Dm644 "${srcdir}/squashfs-root/pi.desktop" \
+    "${pkgdir}/usr/share/applications/pi-webapp.desktop"
+  sed -i \
+    -e 's|^Exec=.*|Exec=pi-webapp %U|' \
+    -e 's|^Icon=.*|Icon=pi-webapp|' \
+    "${pkgdir}/usr/share/applications/pi-webapp.desktop"
+  install -Dm644 "${srcdir}/squashfs-root/usr/share/icons/hicolor/1024x1024/apps/pi.png" \
+    "${pkgdir}/usr/share/icons/hicolor/1024x1024/apps/pi-webapp.png"
+  install -Dm644 "${srcdir}/squashfs-root/resources/runtime/backend/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
