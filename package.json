@@ -62,6 +62,7 @@
     "lint:fix": "biome lint --write",
     "test": "node --import ./test/setup-env.mjs --experimental-strip-types --test --test-concurrency=4 test/*.test.ts && npm run test:desktop",
     "test:desktop": "node --test desktop/test/*.test.mjs",
+    "test:quick": "node --import ./test/setup-env.mjs --import ./test/setup-quick.mjs --experimental-strip-types --test --test-concurrency=4 test/*.test.ts",
     "desktop:icons": "node scripts/generate-desktop-icons.mjs",
     "desktop:sync-runtime": "node scripts/sync-desktop-runtime.mjs",
     "desktop:prepare": "npm run build && node scripts/prepare-desktop.mjs",
