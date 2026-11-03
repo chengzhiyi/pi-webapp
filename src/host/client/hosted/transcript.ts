@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ViewMessage } from "../../../contracts/bridge-contract.ts";
 import { hostedFrames } from "./frame-adapter.ts";
+import { sameMessages } from "../conversation-turns.ts";
 
 export function removedToolCalls(previous: ViewMessage[], next: ViewMessage[], tools: readonly string[]) {
   const calls = (messages: ViewMessage[]) => messages.flatMap(message => message.blocks.filter(block => block.kind === "toolCall" && tools.includes(block.toolName ?? "")).map(block => block.toolCallId!));
@@ -15,7 +16,7 @@ export function useHostedTranscript(sessionId: string | undefined, incoming: Vie
   const [error, setError] = useState("");
   const [attempt, retry] = useState(0);
   if (state.sessionId !== sessionId) setState({ sessionId, messages: incoming, retiring: [] });
-  else if (!state.retiring.length && JSON.stringify(state.messages) !== JSON.stringify(incoming)) {
+  else if (!state.retiring.length && !sameMessages(state.messages, incoming)) {
     const removed = removedToolCalls(state.messages, incoming, tools);
     // Retire the old projection's tool owners as one boundary. Additional snapshots
     // may remove more calls while a close is in flight; none may slip past the gate.
