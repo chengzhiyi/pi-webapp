@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TurnReference, WebSlotName } from "@chengzhiyi/pi-web-protocol";
 import type { LoadedPlugin } from "./plugin-runtime.tsx";
 import { HeroShell } from "../../../web/src/ui/conversation/EmptyHero.tsx";
@@ -66,6 +66,14 @@ interface Props {
   onSetThinkingLevel: (level: string) => Promise<void>;
 }
 
+/** Committed calls and results keep their identity while a reply streams, so settled
+ * rows skip re-rendering. Subscribing to the locale keeps their labels current. */
+const PiToolRow = memo(function PiToolRow({ block, result, running, cwd, onInspect }: { block: ViewBlock; result?: ViewMessage; running: boolean; cwd?: string; onInspect?: (id: string) => void }) {
+  useLocale();
+  const id = block.toolCallId;
+  return <ToolRow block={block} result={result} running={running} cwd={cwd} onInspect={id && onInspect ? () => onInspect(id) : undefined} />;
+});
+
 function PiMessage({ message, results, loadImage, running = false, onInspect, cwd }: { message: ViewMessage; results: Map<string, ViewMessage>; loadImage: Props["onLoadImage"]; running?: boolean; onInspect?: (id: string) => void; cwd?: string }) {
   if (message.role === "tool" && message.toolCallId && results.has(message.toolCallId)) return null;
   if (message.role === "user") {
@@ -92,7 +100,7 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
     <div className="pi-message" data-message-role={message.role}>
       {message.blocks.map((block, index) => {
         if (block.kind === "thinking") return <ReasoningRow key={index} text={block.text} running={running} />;
-        if (block.kind === "toolCall") return <ToolRow key={block.toolCallId || index} block={block} result={block.toolCallId ? results.get(block.toolCallId) : undefined} running={running} cwd={cwd} onInspect={block.toolCallId && onInspect ? () => onInspect(block.toolCallId!) : undefined} />;
+        if (block.kind === "toolCall") return <PiToolRow key={block.toolCallId || index} block={block} result={block.toolCallId ? results.get(block.toolCallId) : undefined} running={running} cwd={cwd} onInspect={onInspect} />;
         if (block.kind === "image") return <div className="pi-image-note" key={index}>{block.text}</div>;
         return <PiMarkdown key={index} text={block.text} />;
       })}
@@ -464,7 +472,9 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
   const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId, session?.activityId);
-  const viewTools = plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []);
+  const viewTools = useMemo(() => plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []), [plugins]);
+  const artifactTools = useMemo(() => plugins.flatMap((plugin) => plugin.definition.artifactTools ?? []), [plugins]);
+  const inspect = useCallback((id: string) => { setInspectCallId(id); setActiveTab("trajectory"); }, []);
   const transcript = useHostedTranscript(session?.sessionId, [...(session?.messages ?? []), ...(pending ? [pending] : []), ...(streaming ? [streaming] : [])], viewTools);
   const empty = session === null || (transcript.messages.length === 0 && activity === null);
   const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
@@ -518,7 +528,7 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
         <div ref={scroll} className={conversationCss.scrollBody} data-conversation-scroll="" onScroll={onScroll} onWheel={onWheel}>
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
-              {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={plugins.flatMap((plugin) => plugin.definition.artifactTools ?? [])} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={(id) => { setInspectCallId(id); setActiveTab("trajectory"); }} />)}
+              {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={artifactTools} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={inspect} />)}
               {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}

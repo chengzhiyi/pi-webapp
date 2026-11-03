@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conversationTurns, toolResults, toolViewCalls, toolViewTurnKey } from "../src/host/client/conversation-turns.ts";
+import { conversationTurns, sameMessages, toolResults, toolViewCalls, toolViewTurnKey } from "../src/host/client/conversation-turns.ts";
 import { projectEntry, sessionTitle } from "../src/host/server/sessions/view.ts";
 import type { ViewMessage } from "../src/host/client/pi-bridge.ts";
 
@@ -75,4 +75,16 @@ test("keeps turn usage separate and pairs only matching tool results", () => {
   assert.equal(sessionTitle(undefined, [{ id: "attachment", role: "user", timestamp: "2026-01-01", blocks: [
     { kind: "text", text: `图片内容\n\n附件 "图片.png"：/tmp/pi-web/attachments/${"a".repeat(64)}/图片.png` },
   ] }]), "图片内容");
+});
+
+test("transcript snapshots compare by identity first and by content for replaced messages", () => {
+  const user: ViewMessage = { id: "u", role: "user", timestamp: "2026-01-01T00:00:00Z", blocks: [{ kind: "text", text: "hi" }] };
+  const reply: ViewMessage = { id: "stream", role: "assistant", timestamp: "2026-01-01T00:00:01Z", blocks: [{ kind: "text", text: "hel" }] };
+  const transcript = [user, reply];
+  assert.equal(sameMessages(transcript, transcript), true);
+  assert.equal(sameMessages(transcript, [user, reply]), true);
+  assert.equal(sameMessages(transcript, [structuredClone(user), structuredClone(reply)]), true);
+  assert.equal(sameMessages(transcript, [user, { ...reply, blocks: [{ kind: "text", text: "hello" }] }]), false);
+  assert.equal(sameMessages(transcript, [user]), false);
+  assert.equal(sameMessages(transcript, [reply, user]), false);
 });

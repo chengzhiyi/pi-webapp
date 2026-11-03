@@ -1,7 +1,7 @@
-import { useRef, useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { localize as t } from "../../../web/src/ui/locale/preference.ts";
+import { localize as t, useLocale } from "../../../web/src/ui/locale/preference.ts";
 import { useMarkdownDelegate } from "../../../web/src/ui/shared/primitives/markdown/MarkdownDelegate.tsx";
 import { parseFileLink } from "../../../web/src/ui/shared/primitives/markdown/file-link.ts";
 import { writeClipboard } from "../../../web/src/ui/shared/primitives/clipboard.ts";
@@ -19,9 +19,14 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   </div>;
 }
 
-export function PiMarkdown({ text }: { text: string }) {
+const remarkPlugins = [remarkGfm];
+
+/** Parsing is the costly part of a chat render: settled blocks keep their text while a
+ * reply streams, so they skip it. The locale subscription keeps the code toolbar current. */
+export const PiMarkdown = memo(function PiMarkdown({ text }: { text: string }) {
+  useLocale();
   const { openFile } = useMarkdownDelegate();
-  return <div className="pi-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+  const components = useMemo<Components>(() => ({
     pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
     a: ({ href, children }) => {
       const file = href ? parseFileLink(href) : undefined;
@@ -31,5 +36,6 @@ export function PiMarkdown({ text }: { text: string }) {
         openFile(file.path, file.line === undefined ? undefined : { line: file.line });
       } : undefined}>{children}</a>;
     },
-  }}>{text}</ReactMarkdown></div>;
-}
+  }), [openFile]);
+  return <div className="pi-markdown"><ReactMarkdown remarkPlugins={remarkPlugins} components={components}>{text}</ReactMarkdown></div>;
+});
