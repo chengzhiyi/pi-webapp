@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "packaging/arch/**"
+      - ".github/workflows/aur.yml"
   workflow_dispatch:
 
 concurrency:
@@ -54,7 +55,9 @@ jobs:
           AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
         run: |
-          test -n "${AUR_SSH_PRIVATE_KEY}" && test -n "${AUR_USERNAME}" && test -n "${AUR_EMAIL}"
+          : "${AUR_SSH_PRIVATE_KEY:?is not set in the aur environment}"
+          : "${AUR_USERNAME:?is not set in the aur environment}"
+          : "${AUR_EMAIL:?is not set in the aur environment}"
           install -dm700 ~/.ssh
           printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
@@ -63,13 +66,14 @@ jobs:
           git clone ssh://aur@aur.archlinux.org/pi-webapp-bin.git /tmp/pi-webapp-aur
           cp packaging/arch/PKGBUILD packaging/arch/.SRCINFO /tmp/pi-webapp-aur/
           cd /tmp/pi-webapp-aur
-          if git diff --quiet; then
+          # Stage first: on the first upload the clone is empty and the copied files are untracked.
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
             echo "AUR is already current"
             exit 0
           fi
           git config user.name "${AUR_USERNAME}"
           git config user.email "${AUR_EMAIL}"
-          git add PKGBUILD .SRCINFO
           source PKGBUILD
           git commit -m "Update to ${pkgver}-${pkgrel}"
-          git push origin master
+          git push origin HEAD:master

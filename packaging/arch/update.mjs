@@ -58,6 +58,7 @@ const srcinfoPath = `${directory}.SRCINFO`;
 const srcinfo = await readFile(srcinfoPath, "utf8");
 const nextSrcinfo = srcinfo
   .replace(/^\tpkgver = .*$/m, `\tpkgver = ${version}.b${build}`)
+  .replace(/^\tpkgrel = .*$/m, "\tpkgrel = 1")
   .replace(/^\tsource = .*$/m, `\tsource = ${sourceUrl}`)
   .replace(/^\tsha256sums = .*$/m, `\tsha256sums = ${match[1]}`);
 await writeFile(srcinfoPath, nextSrcinfo);
