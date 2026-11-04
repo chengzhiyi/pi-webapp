@@ -8,7 +8,6 @@ import { FileTree } from "./FileTree.tsx";
 import { FileSearchResults } from "./FileSearch.tsx";
 import { emptyStatus, statusIndex, type StatusIndex } from "./file-status.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
-import { useScrollbarReveal } from "./scrollbar-reveal.ts";
 import type { WorkspaceFileListing } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
@@ -49,7 +48,6 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const [reveal, setReveal] = useState<{ line: number }>();
   const [search, setSearch] = useState<HTMLInputElement | null>(null);
   const layout = useRef<HTMLDivElement>(null);
-  useScrollbarReveal(layout);
   const dirty = useRef(false);
   const onDirtyChange = useCallback((value: boolean) => { dirty.current = value; }, []);
   // Reload the tree, its Git colours and an unedited preview whenever the agent finishes a turn.
@@ -112,7 +110,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   };
   const breadcrumb = <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={path} levels={state.levels} onOpen={open} />;
   const toggleTree = !treeOpen && <TreeToggle open={false} controls={treeId} onToggle={() => showTree(true)} />;
-  return <div ref={layout} className={`${css.files} ${css.autoScrollbars}`} data-narrow={narrow || undefined} data-tree-open={treeOpen || undefined}>
+  return <div ref={layout} className={css.files} data-narrow={narrow || undefined} data-tree-open={treeOpen || undefined}>
     <div className={css.filesMain}>
       {path
         ? <WorkspaceFilePreview key={path} sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} trailing={toggleTree}

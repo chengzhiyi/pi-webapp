@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { MenuSurface, focusWithoutRing } from "../../../../../web/src/ui/shared/primitives.ts";
 import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
 import { FileTree } from "./FileTree.tsx";
-import { revealScrollbarsWhileScrolling } from "./scrollbar-reveal.ts";
 import type { WorkspaceFileListing } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
@@ -40,7 +39,6 @@ function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, o
     setPosition({ top, left, maxHeight: Math.min(MAX_HEIGHT, Math.max(160, window.innerHeight - top - MARGIN)) });
     focusWithoutRing(menu);
   }, [anchor]);
-  useEffect(() => self.current ? revealScrollbarsWhileScrolling(self.current) : undefined, []);
   useEffect(() => {
     // The segment toggles its own menu; any other press outside dismisses it.
     const onPointerDown = (event: PointerEvent) => {
@@ -74,7 +72,7 @@ function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, o
   // an inner scroller keeps the background under every row.
   const { maxHeight, ...place } = position ?? { visibility: "hidden", top: 0, left: 0 };
   return createPortal(
-    <MenuSurface ref={self} role="dialog" aria-label={label} tabIndex={-1} className={`${css.crumbMenu} ${css.autoScrollbars}`} style={place}
+    <MenuSurface ref={self} role="dialog" aria-label={label} tabIndex={-1} className={css.crumbMenu} style={place}
       onKeyDown={event => {
         if (event.target === self.current && event.key === "ArrowDown") {
           event.preventDefault();

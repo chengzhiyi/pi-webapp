@@ -5,7 +5,6 @@ import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
 import { HttpError } from "../../../../host/client/http-error.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
-import { useScrollbarReveal } from "./scrollbar-reveal.ts";
 import type { WorkspaceFilePreview as Preview } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
@@ -51,8 +50,6 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
   const [markdownEditing, setMarkdownEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<SaveProblem | null>(null);
-  const root = useRef<HTMLDivElement>(null);
-  useScrollbarReveal(root);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(false); setImageError(false); setLightbox(false);
@@ -150,7 +147,7 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
     if (current.trim() === "") return <p className={css.state}>{t("空文件", "Empty file")}</p>;
     return <div className={css.markdown}>{renderMarkdown(current, pathImages)}</div>;
   };
-  return <div ref={root} className={`${css.body} ${css.autoScrollbars}`}>
+  return <div className={css.body}>
     <div className={css.toolbar}>
       {breadcrumb ?? <span className={css.path} title={path}>{path}</span>}
       {dirty && <span className={css.unsaved} role="status">{t("未保存", "Unsaved")}</span>}

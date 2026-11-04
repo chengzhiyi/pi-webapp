@@ -11,7 +11,12 @@
  * Surfaces pick their elevation by rebinding --piw-scrollbar-thumb{,-hover}:
  * the l1 pair here is the base-surface default, and an elevated surface
  * (menu, popover, dialog) rebinds to the l2 pair on its own container. A
- * scroll container may also rebind the three geometry variables below. */
+ * scroll container may also rebind the three geometry variables below.
+ *
+ * Every bar is thin and drawn only while its element scrolls: scrollbar-reveal.ts
+ * marks the scrolling element with `data-scrolling` for a moment, and only a
+ * marked element paints its thumb. Hovering the hidden thumb still draws it in
+ * the hover colour, so it can be found and dragged. */
 
 body {
   --piw-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l1);
@@ -22,7 +27,7 @@ body {
      below. A surface that must align itself beside a space-consuming bar
      (ConversationRoot's overlay composer seat) reads this instead of
      hardcoding the number. */
-  --piw-scrollbar-width: 8px;
+  --piw-scrollbar-width: 6px;
 }
 
 /* The two paths are mutually exclusive, and the gate is load-bearing rather
@@ -56,6 +61,11 @@ body {
   body,
   body * {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  body [data-scrolling],
+  body[data-scrolling] {
     scrollbar-color: var(--piw-scrollbar-thumb) transparent;
   }
 }
@@ -80,10 +90,15 @@ body {
   border: var(--piw-scrollbar-thumb-border) solid transparent;
   border-radius: 999px;
   corner-shape: round;
-  background: var(--piw-scrollbar-thumb);
+  background: transparent;
   background-clip: content-box;
 }
 
+[data-scrolling]::-webkit-scrollbar-thumb {
+  background-color: var(--piw-scrollbar-thumb);
+}
+
+/* After the scrolling rule so a hovered thumb takes the hover colour either way. */
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--piw-scrollbar-thumb-hover);
 }
