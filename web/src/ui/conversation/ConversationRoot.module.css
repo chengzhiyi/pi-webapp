@@ -436,7 +436,7 @@
      must give back the same width to keep the input card in place across
      tabs. Reads ui-theme's --piw-scrollbar-width, which mirrors the WebKit
      bar's layout width. Chat reserves the engine-resolved width, so on an
-     engine where the resolved width differs from this fixed 8px the card
+     engine where the resolved width differs from this fixed 6px the card
      drifts by half the difference — accepted residual risk, recorded in
      ([decision](../../../../../../.agents/notes/archived/bug-fix/2026-08-12-composer-overlay-seat-width-compensation.md)). */
   right: var(--piw-scrollbar-width);

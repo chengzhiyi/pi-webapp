@@ -14,9 +14,11 @@ import { TelemetryBoundary } from "./TelemetryBoundary.tsx";
 import { PiApp } from "./PiApp.tsx";
 import { installThemePreference } from "../../../web/src/ui/theme/preference.ts";
 import { installLocalePreference } from "../../../web/src/ui/locale/preference.ts";
+import { installScrollbarReveal } from "../../../web/src/ui/theme/scrollbar-reveal.ts";
 
 installThemePreference();
 installLocalePreference();
+installScrollbarReveal();
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
 createRoot(root).render(<TelemetryBoundary><PiApp /></TelemetryBoundary>);

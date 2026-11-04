@@ -12,7 +12,30 @@
 .icon {
   display: flex;
   flex: none;
-  animation: agent-activity-spin 1.8s linear infinite;
+  animation: agent-activity-breathe 2s ease-in-out infinite;
+}
+
+/* Scanner-style pulse: a glowing core breathes, two rings ripple out in
+   turn, and a dashed orbit turns slowly around them. */
+.icon circle {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.core {
+  animation: agent-activity-breathe-core 2s ease-in-out infinite;
+}
+
+.ripple {
+  opacity: 0;
+  animation: agent-activity-ripple 2s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+
+.rippleLate { animation-delay: -1s; }
+
+.orbit {
+  opacity: 0.45;
+  animation: agent-activity-orbit 4s linear infinite;
 }
 
 /* Override turnStatus's standalone top alignment, regardless of CSS order. */
@@ -25,10 +48,34 @@
 
 .copy > span { white-space: nowrap; }
 
-@keyframes agent-activity-spin {
+@keyframes agent-activity-breathe {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+@keyframes agent-activity-breathe-core {
+  0%, 100% {
+    transform: scale(0.75);
+    filter: drop-shadow(0 0 1px currentColor);
+  }
+  50% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+}
+
+@keyframes agent-activity-ripple {
+  0% { transform: scale(0.45); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes agent-activity-orbit {
   to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .icon { animation: none; }
+  .icon, .core, .ripple, .orbit { animation: none; }
+  .core { filter: drop-shadow(0 0 2px currentColor); }
+  .ripple { opacity: 0.25; transform: scale(0.75); }
+  .rippleLate { opacity: 0; }
 }
