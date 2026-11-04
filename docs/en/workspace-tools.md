@@ -32,7 +32,7 @@ Limits: up to 1,000 entries per folder, 512 KB or 10,000 lines of text, and 8 MB
 
 **Git status.** In a Git repository, changed files and the folders that contain them are coloured and marked with a dot: amber for modified, green for new or untracked, red for conflicts. Ignored files and folders are greyed out.
 
-**Editing.** Choose **Edit** on a text file to change it, then **Save** or press ⌘/Ctrl+S. Tab indents; Shift+Tab moves focus out of the editor. Saving only overwrites an existing file and keeps its line endings. If the file changed on disk while you were editing (for example because the agent edited it), the save stops and you choose whether to discard your edits and reload, or overwrite. You're asked before leaving a file with unsaved changes. Images and binary files stay read-only.
+**Editing.** Code and text files open straight in an editor with syntax highlighting, line numbers, undo, and find (⌘/Ctrl+F). Markdown opens rendered; choose **Edit** to change the source and **Preview** to see your unsaved edits rendered. Choose **Save** or press ⌘/Ctrl+S. Tab indents; press Esc and then Tab to move focus out of the editor. Saving only overwrites an existing file and keeps its line endings. If the file changed on disk while you were editing (for example because the agent edited it), the save stops and you choose whether to discard your edits and reload, or overwrite. You're asked before leaving a file with unsaved changes. Images and binary files stay read-only.
 
 ## Terminal {#terminal}
 

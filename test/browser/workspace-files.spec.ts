@@ -55,6 +55,8 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(tree).toBeVisible();
   };
   const crumbs = rightbar.getByRole("navigation", { name: "File path" }).filter({ visible: true });
+  // Code and text files open straight into the CodeMirror editor.
+  const code = rightbar.locator(".cm-content:visible");
   try {
     await page.goto(bridge.url);
     if (width === 1440) {
@@ -84,12 +86,12 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await src.press("ArrowLeft"); await expect(src).toHaveAttribute("aria-expanded", "false");
     await src.press("ArrowRight"); await expect(main).toBeVisible();
     await main.focus(); await main.press("Enter");
-    await expect(rightbar.locator("pre:visible")).toContainText("Hello files");
-    await expect(rightbar.getByRole("button", { name: "Edit", exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(code).toContainText("Hello files");
+    await expect(rightbar.getByRole("button", { name: "Save", exact: true }).filter({ visible: true })).toBeDisabled();
     await page.screenshot({ path: testInfo.outputPath(`code-${width}.png`) });
     await writeFile(join(cwd, "src", "main.ts"), "export const message = 'Updated files';\n");
     await rightbar.getByRole("button", { name: "Reload file", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText("Updated files");
+    await expect(code).toContainText("Updated files");
     // The breadcrumb opens each directory's contents and switches files without the side tree.
     await expect(crumbs.locator('[aria-current="page"]')).toHaveText("main.ts");
     await crumbs.getByRole("button", { name: "src", exact: true }).click();
@@ -112,19 +114,21 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(rightbar.locator(".katex:visible")).toHaveCount(1);
     await expect(rightbar.locator("pre.shiki:visible")).toContainText("const answer = 42;");
     await page.screenshot({ path: testInfo.outputPath(`markdown-${width}.png`) });
-    await rightbar.getByRole("button", { name: "Source", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText("# Workspace preview");
+    await rightbar.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(code).toContainText("# Workspace preview");
     await showTree(); await tree.getByRole("treeitem", { name: "image.png", exact: true }).click();
     await expect(rightbar.getByRole("img", { name: "image.png", exact: true })).toBeVisible();
     await rightbar.getByRole("button", { name: "Enlarge image", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Image preview", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close image preview", exact: true }).click();
-    for (const [file, message] of [["empty.txt", "Empty file"], ["binary.bin", "Preview is unavailable for this file type."], ["big.txt", "File is too large"]]) {
+    await showTree(); await tree.getByRole("treeitem", { name: "empty.txt", exact: true }).click();
+    await expect(rightbar.getByRole("textbox", { name: "Edit empty.txt", exact: true })).toBeVisible();
+    for (const [file, message] of [["binary.bin", "Preview is unavailable for this file type."], ["big.txt", "File is too large"]]) {
       await showTree(); await tree.getByRole("treeitem", { name: file, exact: true }).click();
       await expect(rightbar.getByText(message, { exact: false })).toBeVisible();
     }
     await showTree(); await tree.getByRole("treeitem", { name: "page.html", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText("<script>");
+    await expect(code).toContainText("<script>");
     expect(await page.title()).not.toBe("executed");
     await showTree();
     await writeFile(join(cwd, "new.txt"), "new");
@@ -135,7 +139,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(rightbar.getByText("Could not read this file.", { exact: false })).toBeVisible();
     await writeFile(join(cwd, "new.txt"), "Restored file");
     await rightbar.getByRole("button", { name: "Retry", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText("Restored file");
+    await expect(code).toContainText("Restored file");
     await showTree();
     await page.screenshot({ path: testInfo.outputPath(`files-${width}.png`) });
     await rightbar.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();

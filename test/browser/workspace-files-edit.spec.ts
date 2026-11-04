@@ -19,7 +19,7 @@ test("workspace files show Git status, search names and contents, and edit with 
   const git = (...args: string[]) => execFileSync("git", args, { cwd });
   git("init", "-q"); git("add", "."); git("-c", "user.email=files@example.com", "-c", "user.name=Files", "commit", "-qm", "init");
   await writeFile(join(cwd, "src", "util.ts"), "export const util = 2;\n");
-  await mkdir(join(cwd, "notes")); await writeFile(join(cwd, "notes", "todo.md"), "- item\n");
+  await mkdir(join(cwd, "notes")); await writeFile(join(cwd, "notes", "todo.md"), "# Todo\n\n- item\n");
   const session: SessionView = { schemaVersion: 1, sessionId: "files-edit", cwd, name: "Files", model: "example/model", thinkingLevel: "off", thinkingLevels: ["off"], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
   let bridge: Bridge | undefined;
   const host: BridgeHost = {
@@ -36,6 +36,8 @@ test("workspace files show Git status, search names and contents, and edit with 
   const rightbar = page.locator("[data-sidebar-right-session]");
   const tree = page.getByRole("tree", { name: "Workspace files" });
   const editor = (name: string) => rightbar.getByRole("textbox", { name: `Edit ${name}`, exact: true });
+  const code = rightbar.locator(".cm-content:visible");
+  const unsaved = rightbar.getByText("Unsaved", { exact: true });
   try {
     bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)), new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }));
     await page.goto(bridge.url);
@@ -58,25 +60,28 @@ test("workspace files show Git status, search names and contents, and edit with 
     await search.fill("util");
     await expect(rightbar.getByRole("list", { name: "Matching files" }).getByRole("button")).toHaveCount(1);
     await search.press("Enter");
-    await expect(rightbar.locator("pre:visible")).toContainText("util = 2");
+    await expect(code).toContainText("util = 2");
+    // The editor highlights the language without any extra step.
+    // Keywords take --shiki-token-keyword (light theme #d6336c), the same colour as read-only code blocks.
+    await expect(rightbar.locator(".cm-content:visible span").filter({ hasText: /^export$/ })).toHaveCSS("color", "rgb(214, 51, 108)");
     await search.fill("?needle");
     const hit = rightbar.getByRole("button", { name: "src/main.ts line 61: export const needle = 'haystack';", exact: true });
     await expect(rightbar.getByRole("button", { name: /web\/index\.html line 1/ })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("search.png") });
     await hit.click();
-    await expect(rightbar.locator("[data-files-reveal]")).toContainText("needle");
+    await expect(rightbar.locator(".cm-activeLine:visible")).toContainText("export const needle");
     await search.press("Escape");
     await expect(tree).toBeVisible();
 
-    // Edit and save; Tab indents inside the editor.
+    // Code files are editable as soon as they open; Tab indents and ⌘/Ctrl+S saves.
     await tree.getByRole("treeitem", { name: "util.ts", exact: true }).click();
-    await rightbar.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(rightbar.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
     await editor("util.ts").fill("export const util = 3;\n");
+    await editor("util.ts").press("ControlOrMeta+End");
     await editor("util.ts").press("Tab");
-    await expect(editor("util.ts")).toHaveValue("export const util = 3;\n  ");
-    await expect(rightbar.getByText("Unsaved", { exact: true })).toBeVisible();
+    await expect(unsaved).toBeVisible();
     await editor("util.ts").press("ControlOrMeta+s");
-    await expect(rightbar.getByText("Unsaved", { exact: true })).toHaveCount(0);
+    await expect(unsaved).toHaveCount(0);
     expect(await readFile(join(cwd, "src", "util.ts"), "utf8")).toBe("export const util = 3;\n  ");
 
     // A change on disk during editing is never overwritten silently.
@@ -84,26 +89,38 @@ test("workspace files show Git status, search names and contents, and edit with 
     await editor("util.ts").fill("mine\n");
     await rightbar.getByRole("button", { name: "Save", exact: true }).click();
     await expect(rightbar.getByRole("alert")).toContainText("changed on disk");
+    await page.screenshot({ path: testInfo.outputPath("editor.png") });
     expect(await readFile(join(cwd, "src", "util.ts"), "utf8")).toBe("changed elsewhere\n");
     await page.screenshot({ path: testInfo.outputPath("conflict.png") });
     await rightbar.getByRole("button", { name: "Overwrite", exact: true }).click();
-    await expect(rightbar.getByText("Unsaved", { exact: true })).toHaveCount(0);
+    await expect(unsaved).toHaveCount(0);
     expect(await readFile(join(cwd, "src", "util.ts"), "utf8")).toBe("mine\n");
 
     // Leaving with unsaved edits asks first; CRLF files keep their line endings.
     await editor("util.ts").fill("draft\n");
     page.once("dialog", dialog => void dialog.dismiss());
     await tree.getByRole("treeitem", { name: "crlf.txt", exact: true }).click();
-    await expect(editor("util.ts")).toHaveValue("draft\n");
+    await expect(editor("util.ts")).toContainText("draft");
     page.once("dialog", dialog => void dialog.accept());
     await tree.getByRole("treeitem", { name: "crlf.txt", exact: true }).click();
-    await rightbar.getByRole("button", { name: "Edit", exact: true }).click();
     await editor("crlf.txt").fill("first\nsecond\nthird\n");
     await rightbar.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(rightbar.getByText("Unsaved", { exact: true })).toHaveCount(0);
+    await expect(unsaved).toHaveCount(0);
     expect(await readFile(join(cwd, "src", "crlf.txt"), "utf8")).toBe("first\r\nsecond\r\nthird\r\n");
-    await rightbar.getByRole("button", { name: "Done", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText("third");
+
+    // Markdown opens rendered; Edit switches to the editor and Preview renders unsaved edits.
+    await tree.getByRole("treeitem", { name: "notes", exact: true }).click();
+    await tree.getByRole("treeitem", { name: "todo.md", exact: true }).click();
+    await expect(rightbar.getByRole("heading", { name: "Todo", exact: true })).toBeVisible();
+    await rightbar.getByRole("button", { name: "Edit", exact: true }).click();
+    await editor("todo.md").fill("# Done list\n\n- shipped\n");
+    await page.screenshot({ path: testInfo.outputPath("markdown-edit.png") });
+    await rightbar.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(rightbar.getByRole("heading", { name: "Done list", exact: true })).toBeVisible();
+    await expect(unsaved).toBeVisible();
+    await rightbar.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(unsaved).toHaveCount(0);
+    expect(await readFile(join(cwd, "notes", "todo.md"), "utf8")).toBe("# Done list\n\n- shipped\n");
     expect(errors).toEqual([]);
   } finally { await bridge?.close(); await rm(cwd, { recursive: true, force: true }); }
 });

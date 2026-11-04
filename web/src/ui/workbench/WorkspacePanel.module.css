@@ -20,7 +20,6 @@
 .state { margin: 0; padding: 12px 16px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .preview { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
 .markdown { padding: 8px 20px 24px; overflow-wrap: anywhere; }
-.code { margin: 0; border-radius: 0; min-height: 100%; }
 .imageButton { display: grid; place-items: center; min-height: 160px; width: 100%; padding: 16px; border: 0; background: transparent; cursor: zoom-in; }
 .image { display: block; max-width: 100%; max-height: 70vh; object-fit: contain; }
 /* Padding belongs inside the pane height, not below it. The grid stays at the
@@ -54,8 +53,6 @@
 .tree [data-git-status='ignored'] > .row > .name { color: var(--dsw-alias-label-tertiary); }
 .statusDot { flex: none; width: 6px; height: 6px; margin-inline: auto 4px; border-radius: 50%; background: var(--files-status); opacity: .8; }
 .folderIcon { flex: none; color: var(--dsw-static-amber-500); }
-/* The code card fills the preview: no outer margin (the shared block's 16px wins on source order otherwise). */
-.preview > .code { margin: 0; }
 .tree [aria-selected='true'] > .row { background: var(--dsw-alias-interactive-bg-hover); }
 .tree [aria-selected='true'] > .row .name { font-weight: 500; }
 .crumbs { flex: 1; min-width: 0; overflow: hidden; }
@@ -95,9 +92,9 @@
 .lineNumber { flex: none; min-width: 3ch; color: var(--dsw-alias-label-tertiary); text-align: end; font-variant-numeric: tabular-nums; }
 .lineText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .match { border-radius: 2px; background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 30%, transparent); color: inherit; }
-.preview :global(.line)[data-files-reveal] { background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 18%, transparent); }
-/* Editing */
-.editor { display: block; box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 12px 16px; resize: none; border: 0; outline: none; background: var(--dsw-alias-markdown-code-block, transparent); color: var(--dsw-alias-label-primary); font-family: var(--ds-font-family-code); font-size: 12.5px; line-height: 1.6; tab-size: 2; white-space: pre; overflow: auto; }
+/* Editing: CodeMirror fills the preview area and scrolls itself. */
+.codeEditor { height: 100%; min-height: 0; }
+.codeEditor :global(.cm-editor) { height: 100%; }
 .unsaved { flex: none; color: var(--dsw-alias-state-warn-label); font-size: 11px; white-space: nowrap; }
 .primaryButton { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 500; }
 .primaryButton:disabled { opacity: .45; cursor: default; }
