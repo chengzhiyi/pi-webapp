@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { IconPanelLeftOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular } from "../../../../../web/src/ui/shared/primitives/icons/index.tsx";
+import { IconFolderClose16 } from "../../../../../web/src/ui/primitives/index.ts";
 import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
 import { WorkspaceFilePreview } from "./WorkspaceFilePreview.tsx";
 import { FileBreadcrumb } from "./FileBreadcrumb.tsx";
@@ -7,6 +8,7 @@ import { FileTree } from "./FileTree.tsx";
 import { FileSearchResults } from "./FileSearch.tsx";
 import { emptyStatus, statusIndex, type StatusIndex } from "./file-status.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
+import { useScrollbarReveal } from "./scrollbar-reveal.ts";
 import type { WorkspaceFileListing } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
@@ -47,6 +49,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const [reveal, setReveal] = useState<{ line: number }>();
   const [search, setSearch] = useState<HTMLInputElement | null>(null);
   const layout = useRef<HTMLDivElement>(null);
+  useScrollbarReveal(layout);
   const dirty = useRef(false);
   const onDirtyChange = useCallback((value: boolean) => { dirty.current = value; }, []);
   // Reload the tree, its Git colours and an unedited preview whenever the agent finishes a turn.
@@ -109,14 +112,18 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   };
   const breadcrumb = <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={path} levels={state.levels} onOpen={open} />;
   const toggleTree = !treeOpen && <TreeToggle open={false} controls={treeId} onToggle={() => showTree(true)} />;
-  return <div ref={layout} className={css.files} data-narrow={narrow || undefined} data-tree-open={treeOpen || undefined}>
+  return <div ref={layout} className={`${css.files} ${css.autoScrollbars}`} data-narrow={narrow || undefined} data-tree-open={treeOpen || undefined}>
     <div className={css.filesMain}>
       {path
         ? <WorkspaceFilePreview key={path} sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} trailing={toggleTree}
           refresh={revision} reveal={reveal} onDirtyChange={onDirtyChange} onSaved={onSaved} />
         : <div className={css.body}>
           <div className={css.toolbar}>{breadcrumb}{toggleTree}</div>
-          <p className={css.state}>{t("从文件目录中选择文件进行预览。", "Select a file from the tree to preview it.")}</p>
+          <div className={css.emptyFile}>
+            <IconFolderClose16 size={28} className={css.emptyFileIcon} />
+            <p className={css.emptyFileTitle}>{t("打开的文件显示在这里", "Open files appear here")}</p>
+            <p className={css.emptyFileHint}>{t("请在目录树中选择一个文件，或在对话中点击文件路径。", "Choose a file in the tree, or click a file path in the chat.")}</p>
+          </div>
         </div>}
     </div>
     {treeOpen && <aside id={treeId} className={css.filesSide} aria-label={t("文件目录", "File tree")}>

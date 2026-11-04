@@ -26,7 +26,7 @@ Choose **Workspace files** to browse the workspace. The folder tree sits on the 
 | HTML and SVG | Shown as source text. They are never run. |
 | Other binary files | A notice that they can't be previewed. |
 
-Limits: up to 1,000 entries per folder, 512 KB or 10,000 lines of text, and 8 MB per image. The previewer only reads inside the workspace and follows no symlink that leads outside it. The tree, its Git colours and any preview you aren't editing reload when the agent finishes a turn; use the refresh buttons to reload them at other times.
+Limits: up to 1,000 entries per folder, 5 MB or 200,000 lines of text, and 8 MB per image. The previewer only reads inside the workspace and follows no symlink that leads outside it. The tree, its Git colours and any preview you aren't editing reload when the agent finishes a turn; use the refresh buttons to reload them at other times.
 
 **Search.** Type in the box above the tree to filter files by name (letters in order also match, so `btx` finds `button.tsx`). Start with `?` to search inside files instead, for example `?TODO`; choose a match to open the file at that line. In a Git repository both searches skip ignored files; elsewhere they skip `node_modules`. Press Esc to clear the search.
 

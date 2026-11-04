@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { listWorkspaceFiles, previewWorkspaceFile, writeWorkspaceFile } from "../src/plugins/builtin/files/server/workspace-files.ts";
+import { EDITOR_LIMITS, listWorkspaceFiles, previewWorkspaceFile, writeWorkspaceFile } from "../src/plugins/builtin/files/server/workspace-files.ts";
 import { searchWorkspaceFiles, workspaceFileStatus } from "../src/plugins/builtin/files/server/workspace-search.ts";
 
 test("workspace tree includes dotfiles and files, sorts directories first and lists only one level", async () => {
@@ -66,6 +66,11 @@ test("previews handle empty, UTF-8, active markup, binary, image and oversized f
     await writeFile(join(root, "big.txt"), Buffer.alloc(1024 * 1024, 65));
     assert.equal((await previewWorkspaceFile(root, "big.txt")).kind, "too-large");
     await writeFile(join(root, "many-lines.txt"), "\n".repeat(20000));
+    // The Files editor opens what Git's line-by-line diffs (the default limits) refuse.
+    assert.equal((await previewWorkspaceFile(root, "big.txt", EDITOR_LIMITS)).kind, "text");
+    assert.equal((await previewWorkspaceFile(root, "many-lines.txt", EDITOR_LIMITS)).kind, "text");
+    await writeFile(join(root, "huge.txt"), Buffer.alloc(6 * 1024 * 1024, 65));
+    assert.equal((await previewWorkspaceFile(root, "huge.txt", EDITOR_LIMITS)).kind, "too-large");
     const manyLines = await previewWorkspaceFile(root, "many-lines.txt");
     assert.equal(manyLines.kind, "too-large");
     if (manyLines.kind === "too-large") assert.equal(manyLines.unit, "lines");
@@ -112,7 +117,7 @@ test("saves overwrite an existing text file in place only from the version on di
     assert.equal(await readFile(join(root, "outside.txt"), "utf8"), "private");
     await assert.rejects(writeWorkspaceFile(workspace, "a.txt", 42, saved.version));
     await assert.rejects(writeWorkspaceFile(workspace, "a.txt", "x", "not-a-version"));
-    await assert.rejects(writeWorkspaceFile(workspace, "a.txt", "x".repeat(600 * 1024), saved.version), (error: { status: number }) => error.status === 413);
+    await assert.rejects(writeWorkspaceFile(workspace, "a.txt", "x".repeat(6 * 1024 * 1024), saved.version), (error: { status: number }) => error.status === 413);
     assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "two\n");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

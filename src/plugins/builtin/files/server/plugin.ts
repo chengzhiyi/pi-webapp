@@ -1,6 +1,6 @@
 import type { ServerPlugin } from "../../../../host/server/plugins/server-plugin.ts";
 import { metadata } from "../contract/manifest.ts";
-import { listWorkspaceFiles, previewWorkspaceFile, readWorkspaceImage, writeWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
+import { EDITOR_LIMITS, listWorkspaceFiles, previewWorkspaceFile, readWorkspaceImage, writeWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
 import { searchWorkspaceFiles, workspaceFileStatus } from "./workspace-search.ts";
 import { opaqueError } from "../../../../contracts/telemetry.ts";
 
@@ -29,7 +29,7 @@ export const filesPlugin: ServerPlugin = {
         : operation === "write" ? await writeWorkspaceFile(session.cwd, filePath, body.text, body.version)
         : operation === "status" ? await workspaceFileStatus(session.cwd)
         : operation === "search" ? await searchWorkspaceFiles(session.cwd, body.query, body.mode)
-        : await previewWorkspaceFile(session.cwd, filePath);
+        : await previewWorkspaceFile(session.cwd, filePath, EDITOR_LIMITS);
       if (operation !== "write" && switched()) { json(409, { error: "会话已切换" }); return; }
       json(200, value);
     } catch (error) {

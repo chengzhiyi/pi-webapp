@@ -100,3 +100,13 @@
 .primaryButton:disabled { opacity: .45; cursor: default; }
 .saveProblem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: none; padding: 6px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l3); background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 10%, transparent); font-size: 12px; }
 .saveProblem span { flex: 1 1 200px; }
+/* Thin scrollbars that appear only while scrolling (or when the thumb is hovered).
+   scrollbar.css reads these variables on each scrolling element. */
+.autoScrollbars, .autoScrollbars * { --piw-scrollbar-width: 6px; --piw-scrollbar-thumb: transparent; }
+.autoScrollbars [data-scrolling], .autoScrollbars[data-scrolling] { --piw-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l1); }
+.crumbMenu.autoScrollbars [data-scrolling] { --piw-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2); --piw-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2); }
+/* No file open yet */
+.emptyFile { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; }
+.emptyFileIcon { margin-bottom: 6px; color: var(--dsw-alias-label-tertiary); }
+.emptyFileTitle { margin: 0; color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 500; }
+.emptyFileHint { max-width: 280px; margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; }

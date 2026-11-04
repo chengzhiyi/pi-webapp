@@ -44,6 +44,7 @@ test("workspace files show Git status, search names and contents, and edit with 
     await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
     await rightbar.getByRole("button", { name: "Workspace files", exact: true }).click();
 
+    await expect(rightbar.getByText("Open files appear here", { exact: true })).toBeVisible();
     // Status: changes colour their folders, untracked folders and ignored folders are marked, .git is hidden.
     await expect(tree.getByRole("treeitem", { name: "src", exact: true })).toHaveAttribute("data-git-status", "modified");
     await expect(tree.getByRole("treeitem", { name: "notes", exact: true })).toHaveAttribute("data-git-status", "untracked");
@@ -64,6 +65,12 @@ test("workspace files show Git status, search names and contents, and edit with 
     // The editor highlights the language without any extra step.
     // Keywords take --shiki-token-keyword (light theme #d6336c), the same colour as read-only code blocks.
     await expect(rightbar.locator(".cm-content:visible span").filter({ hasText: /^export$/ })).toHaveCSS("color", "rgb(214, 51, 108)");
+    // More than the old 10,000-line preview cap still opens in the editor.
+    await writeFile(join(cwd, "src", "long.txt"), Array.from({ length: 12000 }, (_, index) => `line ${index + 1}`).join("\n"));
+    await search.fill("long.txt");
+    await expect(rightbar.getByRole("list", { name: "Matching files" }).getByRole("button", { name: /long\.txt/ })).toBeVisible();
+    await search.press("Enter");
+    await expect(editor("long.txt")).toContainText("line 1");
     await search.fill("?needle");
     const hit = rightbar.getByRole("button", { name: "src/main.ts line 61: export const needle = 'haystack';", exact: true });
     await expect(rightbar.getByRole("button", { name: /web\/index\.html line 1/ })).toBeVisible();

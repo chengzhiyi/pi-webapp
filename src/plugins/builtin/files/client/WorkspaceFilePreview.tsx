@@ -5,6 +5,7 @@ import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
 import { HttpError } from "../../../../host/client/http-error.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
+import { useScrollbarReveal } from "./scrollbar-reveal.ts";
 import type { WorkspaceFilePreview as Preview } from "../contract/workspace-files.ts";
 import css from "../../../../../web/src/ui/workbench/WorkspacePanel.module.css";
 
@@ -50,6 +51,8 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
   const [markdownEditing, setMarkdownEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<SaveProblem | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useScrollbarReveal(root);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(false); setImageError(false); setLightbox(false);
@@ -122,7 +125,7 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
       onSaved?.();
     } catch (cause) {
       if (cause instanceof HttpError && cause.status === 409 && cause.reason === "conflict") setProblem({ kind: "conflict" });
-      else if (cause instanceof HttpError && cause.status === 413) setProblem({ kind: "error", message: t("内容过大，无法保存（最多 512 KB、10,000 行）。", "Too large to save (512 KB or 10,000 lines at most).") });
+      else if (cause instanceof HttpError && cause.status === 413) setProblem({ kind: "error", message: t("内容过大，无法保存（最多 5 MB、200,000 行）。", "Too large to save (5 MB or 200,000 lines at most).") });
       else if (cause instanceof HttpError && cause.status === 409) setProblem({ kind: "error", message: t("会话已切换，未保存。", "The session changed, so nothing was saved.") });
       else setProblem({ kind: "error", message: t("保存失败，文件可能已移动、删除或无权写入。", "Could not save. The file may have moved, been deleted, or be read-only.") });
     } finally { setSaving(false); }
@@ -133,8 +136,8 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
     if (error) return <div className={css.state} role="status"><p>{t("文件读取失败，可能已移动、删除或无权访问。", "Could not read this file. It may have moved, been deleted, or be inaccessible.")}</p><button type="button" className={css.textButton} onClick={reload}>{t("重试", "Retry")}</button></div>;
     if (!preview) return null;
     if (preview.kind === "too-large") return <p className={css.state}>{preview.unit === "lines"
-      ? t(`文件行数过多，最多预览 ${preview.limit} 行。`, `File has too many lines. Limit: ${preview.limit} lines.`)
-      : t(`文件过大，无法预览。大小上限：${preview.limit / 1024} KB`, `File is too large to preview. Limit: ${preview.limit / 1024} KB`)}</p>;
+      ? t(`文件行数过多，最多打开 ${preview.limit.toLocaleString()} 行。`, `File has too many lines. Limit: ${preview.limit.toLocaleString()} lines.`)
+      : t(`文件过大，无法打开。大小上限：${preview.limit / 1024 / 1024} MB`, `File is too large to open. Limit: ${preview.limit / 1024 / 1024} MB`)}</p>;
     if (preview.kind === "unsupported") return <p className={css.state}>{t("暂不支持预览此文件类型。", "Preview is unavailable for this file type.")}</p>;
     if (preview.kind === "image" && image) {
       if (imageError) return <p className={css.state}>{t("图片无法解码。", "This image could not be decoded.")}</p>;
@@ -147,7 +150,7 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
     if (current.trim() === "") return <p className={css.state}>{t("空文件", "Empty file")}</p>;
     return <div className={css.markdown}>{renderMarkdown(current, pathImages)}</div>;
   };
-  return <div className={css.body}>
+  return <div ref={root} className={`${css.body} ${css.autoScrollbars}`}>
     <div className={css.toolbar}>
       {breadcrumb ?? <span className={css.path} title={path}>{path}</span>}
       {dirty && <span className={css.unsaved} role="status">{t("未保存", "Unsaved")}</span>}

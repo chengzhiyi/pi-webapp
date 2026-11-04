@@ -16,7 +16,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
   await writeFile(join(cwd, "README.md"), "# Workspace preview\n\n**Read only** documentation.\n\nInline math $e^{i\\pi}$.\n\n```ts\nconst answer = 42;\n```\n");
   await writeFile(join(cwd, "empty.txt"), "");
   await writeFile(join(cwd, "binary.bin"), Buffer.from([0, 255]));
-  await writeFile(join(cwd, "big.txt"), Buffer.alloc(1024 * 1024, 65));
+  await writeFile(join(cwd, "big.txt"), Buffer.alloc(6 * 1024 * 1024, 65));
   await writeFile(join(cwd, "page.html"), '<script>document.title="executed"</script>');
   await writeFile(join(cwd, "image.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"));
   await writeFile(join(other, "other.txt"), "Different workspace");

@@ -5,9 +5,11 @@ import { isAbsolute, relative, resolve, sep, win32 } from "node:path";
 import type { WorkspaceFileEntry, WorkspaceFileListing, WorkspaceFilePreview, WorkspaceFileWrite } from "../contract/workspace-files.ts";
 
 const MAX_ENTRIES = 1000;
-const MAX_TEXT_BYTES = 512 * 1024;
+/** Default text bounds, kept by callers that render every line (Git's untracked-file diffs). */
+const PREVIEW_LIMITS = { bytes: 512 * 1024, lines: 10000 };
+/** The Files editor renders only visible lines (CodeMirror), so it opens and saves much larger files. */
+export const EDITOR_LIMITS = { bytes: 5 * 1024 * 1024, lines: 200000 };
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const MAX_TEXT_LINES = 10000;
 const names = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -80,7 +82,7 @@ function imageType(bytes: Buffer): string | undefined {
   return undefined;
 }
 
-export async function previewWorkspaceFile(cwd: string, path: string): Promise<WorkspaceFilePreview> {
+export async function previewWorkspaceFile(cwd: string, path: string, limits = PREVIEW_LIMITS): Promise<WorkspaceFilePreview> {
   return fileOperation(async () => {
     const target = await workspacePath(cwd, path);
     if (!(await stat(target)).isFile()) throw new WorkspaceFileError("这不是可预览的普通文件");
@@ -93,7 +95,7 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       const head = Buffer.alloc(16);
       await file.read(head, 0, head.length, 0);
       const mimeType = imageType(head);
-      const limit = mimeType ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES;
+      const limit = mimeType ? MAX_IMAGE_BYTES : limits.bytes;
       if (info.size > limit) return { ...meta, kind: "too-large", limit, unit: "bytes" };
       // Read at most limit + 1 even if the file grows after stat.
       const buffer = Buffer.alloc(Math.min(info.size + 1, limit + 1));
@@ -109,7 +111,7 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       if (bytes.some(byte => byte === 0 || (byte < 32 && ![9, 10, 12, 13, 27].includes(byte)))) return { ...meta, kind: "unsupported" };
       let lines = 1;
       for (let index = 0; index < bytes.length - 1; index++) {
-        if (bytes[index] === 10 && ++lines > MAX_TEXT_LINES) return { ...meta, kind: "too-large", limit: MAX_TEXT_LINES, unit: "lines" };
+        if (bytes[index] === 10 && ++lines > limits.lines) return { ...meta, kind: "too-large", limit: limits.lines, unit: "lines" };
       }
       try { return { ...meta, kind: "text", text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), version: digest(bytes) }; }
       catch { return { ...meta, kind: "unsupported" }; }
@@ -150,9 +152,10 @@ export async function readWorkspaceImage(cwd: string, path: string): Promise<{ m
 export async function writeWorkspaceFile(cwd: string, path: string, text: unknown, version: unknown): Promise<WorkspaceFileWrite> {
   if (typeof text !== "string" || typeof version !== "string" || !/^[0-9a-f]{64}$/u.test(version)) throw new WorkspaceFileError("保存内容无效");
   const next = Buffer.from(text, "utf8");
-  if (next.length > MAX_TEXT_BYTES) throw new WorkspaceFileError(`文件过大，最多保存 ${MAX_TEXT_BYTES / 1024} KB`, 413);
+  const { bytes: maxBytes, lines: maxLines } = EDITOR_LIMITS;
+  if (next.length > maxBytes) throw new WorkspaceFileError(`文件过大，最多保存 ${maxBytes / 1024 / 1024} MB`, 413);
   let lines = 1;
-  for (const byte of next) if (byte === 10 && ++lines > MAX_TEXT_LINES + 1) throw new WorkspaceFileError(`文件行数过多，最多保存 ${MAX_TEXT_LINES} 行`, 413);
+  for (const byte of next) if (byte === 10 && ++lines > maxLines + 1) throw new WorkspaceFileError(`文件行数过多，最多保存 ${maxLines} 行`, 413);
   return fileOperation(async () => {
     const target = await workspacePath(cwd, path);
     if (!(await stat(target)).isFile()) throw new WorkspaceFileError("只能保存已存在的普通文件");
@@ -160,7 +163,7 @@ export async function writeWorkspaceFile(cwd: string, path: string, text: unknow
     try {
       const info = await file.stat();
       if (!info.isFile()) throw new WorkspaceFileError("只能保存已存在的普通文件");
-      if (info.size > MAX_TEXT_BYTES) throw new WorkspaceFileError("文件已在磁盘上更改，请重新读取后再保存", 409, "conflict");
+      if (info.size > maxBytes) throw new WorkspaceFileError("文件已在磁盘上更改，请重新读取后再保存", 409, "conflict");
       const buffer = Buffer.alloc(info.size + 1);
       let length = 0;
       while (length < buffer.length) {
