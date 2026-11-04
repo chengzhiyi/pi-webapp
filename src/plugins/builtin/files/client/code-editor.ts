@@ -9,6 +9,7 @@ import { languages } from "@codemirror/language-data";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { findPanel } from "./find-panel.ts";
 
 /** Token colours come from the same `--shiki-*` sheet as read-only code blocks, so light/dark follow the app theme. */
 const highlight = HighlightStyle.define([
@@ -69,6 +70,7 @@ export function createCodeEditor(parent: HTMLElement, options: {
       doc: options.text,
       extensions: [
         basicSetup,
+        findPanel,
         // Tab indents; Escape then Tab moves focus on, so the editor never traps the keyboard.
         keymap.of([indentWithTab]),
         Prec.highest(keymap.of([{ key: "Mod-s", preventDefault: true, run: () => { options.onSave(); return true; } }])),

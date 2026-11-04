@@ -71,6 +71,25 @@ test("workspace files show Git status, search names and contents, and edit with 
     await expect(rightbar.getByRole("list", { name: "Matching files" }).getByRole("button", { name: /long\.txt/ })).toBeVisible();
     await search.press("Enter");
     await expect(editor("long.txt")).toContainText("line 1");
+    // ⌘/Ctrl+F opens the floating Find box: type-ahead selects the first match, Enter steps, Esc closes.
+    await editor("long.txt").click();
+    await editor("long.txt").press("ControlOrMeta+Home");
+    await editor("long.txt").press("ControlOrMeta+f");
+    const find = rightbar.getByRole("textbox", { name: "Find in file", exact: true });
+    await expect(find).toBeFocused();
+    await find.fill("line 12");
+    const findBox = rightbar.getByRole("search");
+    await expect(findBox).toContainText("1/112");
+    await find.press("Enter");
+    await expect(findBox).toContainText("2/112");
+    await find.press("Shift+Enter");
+    await expect(findBox).toContainText("1/112");
+    await find.fill("no such text");
+    await expect(findBox).toContainText("No results");
+    await page.screenshot({ path: testInfo.outputPath("find.png") });
+    await find.press("Escape");
+    await expect(findBox).toHaveCount(0);
+    await expect(editor("long.txt")).toBeFocused();
     await search.fill("?needle");
     const hit = rightbar.getByRole("button", { name: "src/main.ts line 61: export const needle = 'haystack';", exact: true });
     await expect(rightbar.getByRole("button", { name: /web\/index\.html line 1/ })).toBeVisible();
