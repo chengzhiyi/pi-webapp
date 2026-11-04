@@ -7,7 +7,7 @@ import test from "node:test";
 import { startBridge, type BridgeHost } from "../src/host/server/transport/bridge.ts";
 import type { SessionView } from "../src/host/server/sessions/view.ts";
 
-test("workspace file endpoints require the active session, token and same origin and never write files", async () => {
+test("workspace file endpoints require the active session, token and same origin, and write only through guarded saves", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-files-api-"));
   let session: SessionView = { schemaVersion: 1, sessionId: "files-a", cwd, name: "Files", model: null, thinkingLevel: null,
     thinkingLevels: [], idle: true, contextUsage: null, messages: [], pluginEntries: [] };
@@ -50,6 +50,26 @@ test("workspace file endpoints require the active session, token and same origin
     assert.equal(error.errorId, undefined);
     assert.equal((await fetch(`${url.origin}/api/workspace/files/preview`, { method: "PUT", headers, body: JSON.stringify({ sessionId: "files-a", path: "readme.md", text: "changed" }) })).status, 404);
     assert.equal(await readFile(join(cwd, "readme.md"), "utf8"), "# Local only\n");
+    // Saves: same guards as reads, plus a version that must match the bytes on disk.
+    const { version } = await (await request("preview", { path: "readme.md" })).json();
+    assert.equal((await request("write", { path: "readme.md", text: "x", version }, { ...headers, Authorization: "" })).status, 401);
+    assert.equal((await request("write", { path: "readme.md", text: "x", version }, { ...headers, Origin: "https://other.example" })).status, 403);
+    assert.equal((await request("write", { path: "readme.md", text: "x", version, sessionId: "stale" })).status, 409);
+    assert.equal((await request("write", { path: "../outside", text: "x", version })).status, 403);
+    assert.equal((await request("write", { path: "new.md", text: "x", version })).status, 404);
+    assert.equal(await readFile(join(cwd, "readme.md"), "utf8"), "# Local only\n");
+    const saved = await request("write", { path: "readme.md", text: "# Edited\n", version });
+    assert.equal(saved.status, 200);
+    assert.equal(await readFile(join(cwd, "readme.md"), "utf8"), "# Edited\n");
+    const conflict = await request("write", { path: "readme.md", text: "# Again\n", version });
+    assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).reason, "conflict");
+    assert.equal((await request("status", {})).status, 200);
+    assert.equal((await (await request("status", {})).json()).kind, "not-repository");
+    const found = await (await request("search", { query: "read", mode: "name" })).json();
+    assert.deepEqual(found.results, [{ path: "readme.md" }]);
+    assert.equal((await request("search", { query: "read", mode: "name" }, { ...headers, Authorization: "" })).status, 401);
+    assert.equal((await request("search", { query: "", mode: "name" })).status, 400);
     // Simulate a switch between the initial snapshot and the completed disk read.
     let reads = 0;
     host.snapshot = () => ++reads === 1 ? session : { ...session, sessionId: "files-b" };

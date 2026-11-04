@@ -49,7 +49,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`interactive terminal life
     await rightbar.getByRole("button", { name: "New tab", exact: true }).click();
     await rightbar.getByRole("button", { name: "Workspace files", exact: true }).click();
     await rightbar.getByRole("treeitem", { name: "terminal-cwd", exact: true }).click();
-    await expect(rightbar.locator("pre:visible")).toContainText(cwd);
+    await expect(rightbar.locator(".cm-content:visible")).toContainText(cwd);
     await rightbar.getByRole("tab", { name: /Terminal/ }).click({ position: { x: 15, y: 14 } });
     await expect(screen).toBeVisible();
     await rightbar.getByRole("button", { name: "Collapse right sidebar", exact: true }).click();

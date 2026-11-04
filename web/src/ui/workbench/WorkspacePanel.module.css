@@ -11,17 +11,15 @@
 .scroll { flex: 1; min-height: 0; overflow: auto; padding-block: 8px; }
 .tree, .level { padding: 0; margin: 0; list-style: none; }
 .tree [role='treeitem'] { outline: none; }
-.row { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px; cursor: pointer; }
+.row { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 2px 10px; cursor: pointer; }
 .row svg { flex: none; }
 .row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .tree [role='treeitem']:focus-visible > .row { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: -2px; background: var(--dsw-alias-interactive-bg-hover); }
 .tree [aria-disabled='true'] > .row { opacity: .5; cursor: default; }
-.chevron { width: 12px; flex: none; color: var(--dsw-alias-label-tertiary); text-align: center; }
 .name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
 .state { margin: 0; padding: 12px 16px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .preview { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
 .markdown { padding: 8px 20px 24px; overflow-wrap: anywhere; }
-.code { margin: 0; border-radius: 0; min-height: 100%; }
 .imageButton { display: grid; place-items: center; min-height: 160px; width: 100%; padding: 16px; border: 0; background: transparent; cursor: zoom-in; }
 .image { display: block; max-width: 100%; max-height: 70vh; object-fit: contain; }
 /* Padding belongs inside the pane height, not below it. The grid stays at the
@@ -39,3 +37,71 @@
 @media (prefers-reduced-motion: reduce) { .guideEntry { transition: none; } }
 .title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Files: preview on the left, directory tree on the right. Narrow panes show one at a time. */
+.files { display: flex; height: 100%; min-width: 0; min-height: 0; }
+.filesMain { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.filesSide { display: flex; flex-direction: column; flex: none; width: clamp(220px, 34%, 320px); min-height: 0; border-inline-start: 0.5px solid var(--dsw-alias-border-l3); color: var(--dsw-alias-label-primary); font-size: var(--dsh-content-font-size, 14px); }
+.files[data-narrow][data-tree-open] .filesMain { display: none; }
+.files[data-narrow] .filesSide { width: 100%; border-inline-start: 0; }
+.treeToggle svg { transform: scaleX(-1); }
+/* Git status: the name takes the state colour; changes also carry a dot at the row end. */
+.tree [data-git-status] > .row { --files-status: var(--dsw-alias-label-primary); }
+.tree [data-git-status='modified'] > .row { --files-status: var(--dsw-alias-state-warn-label); }
+.tree [data-git-status='added'] > .row, .tree [data-git-status='untracked'] > .row { --files-status: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
+.tree [data-git-status='conflict'] > .row { --files-status: var(--dsw-alias-state-error-primary); }
+.tree [data-git-status] > .row > .name { color: var(--files-status); }
+.tree [data-git-status='ignored'] > .row > .name { color: var(--dsw-alias-label-tertiary); }
+.statusDot { flex: none; width: 6px; height: 6px; margin-inline: auto 4px; border-radius: 50%; background: var(--files-status); opacity: .8; }
+.folderIcon { flex: none; color: var(--dsw-static-amber-500); }
+.tree [aria-selected='true'] > .row { background: var(--dsw-alias-interactive-bg-hover); }
+.tree [aria-selected='true'] > .row .name { font-weight: 500; }
+.crumbs { flex: 1; min-width: 0; overflow: hidden; }
+.crumbs ol { display: flex; align-items: center; min-width: 0; padding: 0; margin: 0; list-style: none; }
+/* Ellipsis appears at any sub-pixel shrink, so only the workspace name shrinks;
+   directories and the file name keep their text up to a cap. */
+.crumbs li { display: flex; align-items: center; flex: none; min-width: 0; max-width: 8em; }
+.crumbs li:first-child { flex: 0 1 auto; max-width: none; }
+.crumbs li.crumbFile { max-width: 60%; }
+.crumb { min-width: 24px; max-width: 100%; overflow: hidden; padding: 3px 5px; border: 0; border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.crumb:hover, .crumb[aria-expanded='true'] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.crumb:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: -2px; }
+.crumbSeparator { flex: none; padding-inline: 1px; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.crumbCurrent { min-width: 0; overflow: hidden; padding: 3px 5px; color: var(--dsw-alias-label-primary); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+/* Portalled beside the app root, above floating panels (60) like the dock's tab menu. */
+.crumbMenu { position: fixed; z-index: 70; box-sizing: border-box; width: min(260px, calc(100vw - 16px)); border: 0.5px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 12px; outline: none; }
+.crumbMenuScroll { overflow: auto; padding: 4px; }
+.crumbMenu .row { gap: 6px; min-height: 26px; padding-block: 2px; border-radius: var(--dsw-radius-sm); }
+.crumbMenu .name { font-size: 12px; }
+.crumbMenu .state { padding: 6px 10px; font-size: 12px; }
+/* Search box in the tree column; results replace the tree while it has text. */
+.search { display: flex; align-items: center; flex: 1; gap: 6px; min-width: 0; height: 26px; box-sizing: border-box; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-sm); color: var(--dsw-alias-label-tertiary); }
+.search:focus-within { border-color: var(--dsw-alias-border-l1, var(--dsw-alias-label-tertiary)); }
+.search svg { flex: none; width: 14px; height: 14px; }
+.search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; }
+.search input::placeholder { color: var(--dsw-alias-label-tertiary); }
+.search input::-webkit-search-cancel-button { cursor: pointer; }
+.results, .results ul { padding: 0; margin: 0; list-style: none; }
+.result, .resultLine { display: flex; align-items: center; gap: 6px; box-sizing: border-box; width: 100%; min-height: 26px; padding: 2px 10px; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.result:hover, .resultLine:hover, .result:focus-visible, .resultLine:focus-visible { background: var(--dsw-alias-interactive-bg-hover); outline: none; }
+.result svg, .resultFile svg { flex: none; }
+.resultDirectory { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--dsw-alias-label-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.resultFile { display: flex; align-items: center; gap: 6px; padding: 6px 10px 2px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.resultFile .name { flex: 1; font-size: 12px; }
+.resultCount { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.resultLine { align-items: baseline; padding-inline-start: 18px; min-height: 22px; font-family: var(--ds-font-family-code); font-size: 11.5px; }
+.lineNumber { flex: none; min-width: 3ch; color: var(--dsw-alias-label-tertiary); text-align: end; font-variant-numeric: tabular-nums; }
+.lineText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.match { border-radius: 2px; background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 30%, transparent); color: inherit; }
+/* Editing: CodeMirror fills the preview area and scrolls itself. */
+.codeEditor { height: 100%; min-height: 0; }
+.codeEditor :global(.cm-editor) { height: 100%; }
+.unsaved { flex: none; color: var(--dsw-alias-state-warn-label); font-size: 11px; white-space: nowrap; }
+.primaryButton { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 500; }
+.primaryButton:disabled { opacity: .45; cursor: default; }
+.saveProblem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: none; padding: 6px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l3); background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 10%, transparent); font-size: 12px; }
+.saveProblem span { flex: 1 1 200px; }
+/* No file open yet */
+.emptyFile { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; }
+.emptyFileIcon { margin-bottom: 6px; color: var(--dsw-alias-label-tertiary); }
+.emptyFileTitle { margin: 0; color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 500; }
+.emptyFileHint { max-width: 280px; margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; }

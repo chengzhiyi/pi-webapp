@@ -6,7 +6,7 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [项目架构](#技术架构亮点) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 16：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
+**桌面测试版 build 17：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -105,16 +105,16 @@ pi
 
 ## 桌面端下载
 
-**最新桌面测试版：[pi 0.1.39 · build 16](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b16)。** 请按系统与芯片选择安装包：
+**最新桌面测试版：[pi 0.1.52 · build 17](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.52-b17)。** 请按系统与芯片选择安装包：
 
 | 平台 | 下载 |
 | --- | --- |
-| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) |
-| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-x64.dmg) |
-| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-win-x64.exe) |
-| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-linux-x86_64.AppImage) |
+| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) |
+| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-x64.dmg) |
+| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-win-x64.exe) |
+| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-linux-x86_64.AppImage) |
 
-[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/desktop-release.json)
+[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/desktop-release.json)
 
 **build 12 修复桌面退出无响应。** 退出确认会显示在主窗口前方；加载中关闭不再弹出阻塞警告；后台停止失败时可以选择“仅退出桌面”。已有后台服务和任务可继续运行。
 
@@ -122,10 +122,12 @@ pi
 
 **build 16 更新内置界面。** 桌面原生菜单和对话框跟随所选语言；文本、链接与编辑区提供原生右键菜单；右键工作区和聊天可直接打开操作菜单；剪贴板权限被拒绝时复制按钮会自动降级；重试成功后清除过期的模型错误；活动耗时以易读格式显示。
 
+**build 17 内置 pi-webapp 0.1.52。** 错误改为轻提示显示，模型错误显示为易读卡片；聊天 Markdown 使用共享渲染器；流式输出时不再重绘已完成的历史，Markdown 渲染器在启动后再加载；会话标题占满可用宽度；工作区会话保留 Pi 扩展；切换聊天后活动耗时不再丢失。
+
 桌面应用名为 **pi**，自带 Node 和 Pi，无需另装运行时。支持复用兼容的 Web 服务、在浏览器中打开同一服务，以及退出时选择是否保留后台任务。模型凭据、Git/SSH 配置和项目工具链仍需自行准备。
 
 - **安装：** macOS 从 DMG 将 **pi.app** 拖入“应用程序”；Windows 运行 EXE；Linux 为 AppImage 添加执行权限后运行，不支持 FUSE 时可参考该版本发布说明中的替代方式。
-- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 16**。替换前先退出旧桌面，不要删除 `~/.pi`。
+- **核对：** 对照同一 Release 的 `SHA256SUMS` 校验安装包，在「pi → 关于 pi」确认 **build 17**。替换前先退出旧桌面，不要删除 `~/.pi`。
 - **测试版边界：** 当前为自愿参与的预发布测试包，不是具有发布者签名的稳定发行版。macOS 使用 ad-hoc 临时签名、未经过 Apple 公证，可能被 Gatekeeper 拦截；请按 [macOS 测试安装说明](docs/desktop-testing.md)核验，失败就停止。Windows/Linux 安装包未签名。不要全局关闭系统安全保护。桌面外壳更新仍需手动安装，业务包更新在应用设置中进行；暂不包含 Windows ARM 和 Linux ARM。
 
 ## 技术架构亮点

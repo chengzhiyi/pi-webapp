@@ -1,17 +1,23 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, opendir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep, win32 } from "node:path";
-import type { WorkspaceFileEntry, WorkspaceFileListing, WorkspaceFilePreview } from "../contract/workspace-files.ts";
+import type { WorkspaceFileEntry, WorkspaceFileListing, WorkspaceFilePreview, WorkspaceFileWrite } from "../contract/workspace-files.ts";
 
 const MAX_ENTRIES = 1000;
-const MAX_TEXT_BYTES = 512 * 1024;
+/** Default text bounds, kept by callers that render every line (Git's untracked-file diffs). */
+const PREVIEW_LIMITS = { bytes: 512 * 1024, lines: 10000 };
+/** The Files editor renders only visible lines (CodeMirror), so it opens and saves much larger files. */
+export const EDITOR_LIMITS = { bytes: 5 * 1024 * 1024, lines: 200000 };
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const MAX_TEXT_LINES = 10000;
 const names = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 export class WorkspaceFileError extends Error {
   readonly status: number;
-  constructor(message: string, status = 400) { super(message); this.name = "WorkspaceFileError"; this.status = status; }
+  readonly reason: string | undefined;
+  constructor(message: string, status = 400, reason?: string) { super(message); this.name = "WorkspaceFileError"; this.status = status; this.reason = reason; }
 }
 
 function inside(root: string, target: string): boolean {
@@ -20,7 +26,7 @@ function inside(root: string, target: string): boolean {
 }
 
 /** Check both the authored path and its symlink-resolved target. */
-async function workspacePath(cwd: string, path: string): Promise<string> {
+export async function workspacePath(cwd: string, path: string): Promise<string> {
   if (typeof path !== "string" || path.length > 4096 || path.includes("\0") || path.includes("\\") || isAbsolute(path) || win32.isAbsolute(path)) {
     throw new WorkspaceFileError("工作区文件路径无效");
   }
@@ -49,6 +55,8 @@ export async function listWorkspaceFiles(cwd: string, path: string): Promise<Wor
     const entries: WorkspaceFileEntry[] = [];
     let truncated = false;
     for await (const entry of await opendir(target)) {
+      // Git's own metadata is not workspace content.
+      if (entry.name === ".git") continue;
       if (entries.length === MAX_ENTRIES) { truncated = true; break; }
       const child = path ? `${path}/${entry.name}` : entry.name;
       let kind: WorkspaceFileEntry["kind"] = entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other";
@@ -74,7 +82,7 @@ function imageType(bytes: Buffer): string | undefined {
   return undefined;
 }
 
-export async function previewWorkspaceFile(cwd: string, path: string): Promise<WorkspaceFilePreview> {
+export async function previewWorkspaceFile(cwd: string, path: string, limits = PREVIEW_LIMITS): Promise<WorkspaceFilePreview> {
   return fileOperation(async () => {
     const target = await workspacePath(cwd, path);
     if (!(await stat(target)).isFile()) throw new WorkspaceFileError("这不是可预览的普通文件");
@@ -87,7 +95,7 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       const head = Buffer.alloc(16);
       await file.read(head, 0, head.length, 0);
       const mimeType = imageType(head);
-      const limit = mimeType ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES;
+      const limit = mimeType ? MAX_IMAGE_BYTES : limits.bytes;
       if (info.size > limit) return { ...meta, kind: "too-large", limit, unit: "bytes" };
       // Read at most limit + 1 even if the file grows after stat.
       const buffer = Buffer.alloc(Math.min(info.size + 1, limit + 1));
@@ -103,9 +111,9 @@ export async function previewWorkspaceFile(cwd: string, path: string): Promise<W
       if (bytes.some(byte => byte === 0 || (byte < 32 && ![9, 10, 12, 13, 27].includes(byte)))) return { ...meta, kind: "unsupported" };
       let lines = 1;
       for (let index = 0; index < bytes.length - 1; index++) {
-        if (bytes[index] === 10 && ++lines > MAX_TEXT_LINES) return { ...meta, kind: "too-large", limit: MAX_TEXT_LINES, unit: "lines" };
+        if (bytes[index] === 10 && ++lines > limits.lines) return { ...meta, kind: "too-large", limit: limits.lines, unit: "lines" };
       }
-      try { return { ...meta, kind: "text", text: new TextDecoder("utf-8", { fatal: true }).decode(bytes) }; }
+      try { return { ...meta, kind: "text", text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), version: digest(bytes) }; }
       catch { return { ...meta, kind: "unsupported" }; }
     } finally { await file.close(); }
   });
@@ -133,6 +141,42 @@ export async function readWorkspaceImage(cwd: string, path: string): Promise<{ m
       const mimeType = imageType(bytes);
       if (!mimeType) throw new WorkspaceFileError("不支持的图片类型", 415);
       return { mimeType, bytes };
+    } finally { await file.close(); }
+  });
+}
+
+/**
+ * Overwrite one existing UTF-8 text file in place (mode, owner and hard links are kept).
+ * The save is refused when the bytes on disk no longer match the version the edit started from.
+ */
+export async function writeWorkspaceFile(cwd: string, path: string, text: unknown, version: unknown): Promise<WorkspaceFileWrite> {
+  if (typeof text !== "string" || typeof version !== "string" || !/^[0-9a-f]{64}$/u.test(version)) throw new WorkspaceFileError("保存内容无效");
+  const next = Buffer.from(text, "utf8");
+  const { bytes: maxBytes, lines: maxLines } = EDITOR_LIMITS;
+  if (next.length > maxBytes) throw new WorkspaceFileError(`文件过大，最多保存 ${maxBytes / 1024 / 1024} MB`, 413);
+  let lines = 1;
+  for (const byte of next) if (byte === 10 && ++lines > maxLines + 1) throw new WorkspaceFileError(`文件行数过多，最多保存 ${maxLines} 行`, 413);
+  return fileOperation(async () => {
+    const target = await workspacePath(cwd, path);
+    if (!(await stat(target)).isFile()) throw new WorkspaceFileError("只能保存已存在的普通文件");
+    const file = await open(target, constants.O_RDWR | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
+    try {
+      const info = await file.stat();
+      if (!info.isFile()) throw new WorkspaceFileError("只能保存已存在的普通文件");
+      if (info.size > maxBytes) throw new WorkspaceFileError("文件已在磁盘上更改，请重新读取后再保存", 409, "conflict");
+      const buffer = Buffer.alloc(info.size + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      if (length > info.size || digest(buffer.subarray(0, length)) !== version) throw new WorkspaceFileError("文件已在磁盘上更改，请重新读取后再保存", 409, "conflict");
+      await file.truncate(0);
+      let written = 0;
+      while (written < next.length) written += (await file.write(next, written, next.length - written, written)).bytesWritten;
+      await file.sync();
+      return { path, size: next.length, version: digest(next) };
     } finally { await file.close(); }
   });
 }

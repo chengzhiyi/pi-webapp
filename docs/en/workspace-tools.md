@@ -14,7 +14,7 @@ If you [install the Excalidraw plugin](./diagrams), its entry appears on the sam
 
 ## Files {#files}
 
-Choose **Workspace files** to browse the workspace. Click a file to open a read-only preview in a new tab. File links the agent writes in chat (paths inside the workspace) open the same preview.
+Choose **Workspace files** to browse the workspace. The folder tree sits on the right; click a file and its preview opens on the left of the same tab. The path above the preview is clickable: choose any folder in it to list that folder's contents and jump to another file. Use the panel button at the end of the toolbar to hide or show the tree. In a narrow panel the tree and the preview take turns. File links the agent writes in chat (paths inside the workspace) open the preview in its own tab, with the same clickable path.
 
 ![A file open in a read-only preview tab](/images/files-preview.png)
 
@@ -26,9 +26,13 @@ Choose **Workspace files** to browse the workspace. Click a file to open a read-
 | HTML and SVG | Shown as source text. They are never run. |
 | Other binary files | A notice that they can't be previewed. |
 
-Limits: up to 1,000 entries per folder, 512 KB or 10,000 lines of text, and 8 MB per image. The previewer only reads inside the workspace and follows no symlink that leads outside it. Use the refresh button to reload a listing or preview; they don't update on their own.
+Limits: up to 1,000 entries per folder, 5 MB or 200,000 lines of text, and 8 MB per image. The previewer only reads inside the workspace and follows no symlink that leads outside it. The tree, its Git colours and any preview you aren't editing reload when the agent finishes a turn; use the refresh buttons to reload them at other times.
 
-Previews are read-only. To change a file, ask Pi or use your editor.
+**Search.** Type in the box above the tree to filter files by name (letters in order also match, so `btx` finds `button.tsx`). Start with `?` to search inside files instead, for example `?TODO`; choose a match to open the file at that line. In a Git repository both searches skip ignored files; elsewhere they skip `node_modules`. Press Esc to clear the search.
+
+**Git status.** In a Git repository, changed files and the folders that contain them are coloured and marked with a dot: amber for modified, green for new or untracked, red for conflicts. Ignored files and folders are greyed out.
+
+**Editing.** Code and text files open straight in an editor with syntax highlighting, line numbers, undo, and find (⌘/Ctrl+F; Enter and Shift+Enter step through matches, Esc closes). Markdown opens rendered; choose **Edit** to change the source and **Preview** to see your unsaved edits rendered. Choose **Save** or press ⌘/Ctrl+S. Tab indents; press Esc and then Tab to move focus out of the editor. Saving only overwrites an existing file and keeps its line endings. If the file changed on disk while you were editing (for example because the agent edited it), the save stops and you choose whether to discard your edits and reload, or overwrite. You're asked before leaving a file with unsaved changes. Images and binary files stay read-only.
 
 ## Terminal {#terminal}
 
