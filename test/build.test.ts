@@ -22,3 +22,18 @@ test("private source maps match shipped debug IDs and mismatches block archiving
     await assert.rejects(prepareSourceMaps(directory, true), /Invalid Sentry Debug ID/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("a bundler chunk without sources gets an empty map carrying its debug ID", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-web-sentry-maps-"));
+  const id = "87654321-4321-4321-4321-cba987654321";
+  try {
+    await writeFile(join(directory, "rolldown-runtime-abc.js"), `/* sentry-dbid-${id} */ var e=Object.create;`);
+    await assert.rejects(prepareSourceMaps(directory), /Missing source map for rolldown-runtime-abc\.js/);
+    await prepareSourceMaps(directory, true);
+    const map = JSON.parse(await readFile(join(directory, "rolldown-runtime-abc.js.map"), "utf8"));
+    assert.deepEqual(map, { version: 3, file: "rolldown-runtime-abc.js", sources: [], names: [], mappings: "", debug_id: id, debugId: id });
+    await prepareSourceMaps(directory);
+    await writeFile(join(directory, "untagged.js"), "var x = 1;");
+    await assert.rejects(prepareSourceMaps(directory, true), /Missing source map for untagged\.js/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

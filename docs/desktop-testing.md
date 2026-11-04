@@ -67,7 +67,7 @@ Web 版，或从可信源码构建运行，不必购买开发者会员。
   四平台发布清单可包含 macOS arm64 的可选更新 ZIP；没有发布者身份时仍只走 DMG 手动安装。
   执行 packaged smoke（含 PTY/浏览器共享后台）。
   这些检查不能替代“浏览器下载 → Finder 安装 → 用户明确同意”的隔离场景人工验收。
-- 每次交付递增 `desktop/release.json` 的构建号、重新生成校验和。
+- 每次交付先运行 `npm run desktop:prepare-build`：递增 `desktop/release.json` 的构建号，并把 `package.json` 版本设为 npm 下一个未发布版本；再重新生成校验和。
   不覆盖已有公开 Release，不以移除隔离或本机可启动宣称通过 Gatekeeper。
 
 English summary: These are complete **ad-hoc signed**, **unnotarized** opt-in test builds,

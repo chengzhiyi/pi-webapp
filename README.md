@@ -6,7 +6,7 @@ Conversations, project files, terminals, and Git—side by side. Use the same wo
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/introduction.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 16:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
+**Desktop test build 17:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -105,16 +105,16 @@ Enter **`/web`** inside Pi. The browser stays synchronized with that terminal se
 
 ## Desktop downloads
 
-**Latest desktop test release: [pi 0.1.39 · build 16](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.39-b16).** Download the installer for your operating system and CPU:
+**Latest desktop test release: [pi 0.1.52 · build 17](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.52-b17).** Download the installer for your operating system and CPU:
 
 | Platform | Download |
 | --- | --- |
-| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-arm64.dmg) |
-| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-mac-x64.dmg) |
-| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-win-x64.exe) |
-| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/pi-0.1.39-desktop.16-linux-x86_64.AppImage) |
+| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) |
+| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-x64.dmg) |
+| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-win-x64.exe) |
+| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-linux-x86_64.AppImage) |
 
-[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.39-b16/desktop-release.json)
+[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/desktop-release.json)
 
 **Build 12 fixes desktop quit responsiveness.** Quit confirmations focus the main window, closing a loading window no longer opens a blocking error alert, and a failed backend stop offers a desktop-only exit. Existing background services remain available.
 
@@ -122,10 +122,12 @@ Enter **`/web`** inside Pi. The browser stays synchronized with that terminal se
 
 **Build 16 refreshes the bundled interface.** The native desktop menus and dialogs follow the selected language; text, links and editors get native right-click menus; workspaces and chats open their actions on right-click; copy controls fall back when clipboard permission is denied; stale model errors clear after a successful retry; and activity durations are human-readable.
 
+**Build 17 bundles pi-webapp 0.1.52.** Errors appear as toasts and model errors as readable cards; chat markdown uses the shared renderer; streaming no longer re-renders settled history and the markdown renderer loads after startup; conversation titles use the available width; workspace sessions keep their Pi extensions; and activity elapsed time survives switching chats.
+
 The **pi** desktop app bundles Node and Pi—no separate runtime installation needed. It can reuse a compatible Web service, open the same service in your browser, and let you choose whether background tasks continue after closing the app. Bring your own model credentials, Git/SSH setup, and project toolchains.
 
 - **Install:** macOS: drag **pi.app** from the DMG into Applications. Windows: run the EXE installer. Linux: make the AppImage executable and run it; see the release notes for the FUSE alternative.
-- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 16** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
+- **Verify:** compare the installer with `SHA256SUMS` from the same release. Confirm **build 17** in **pi → 关于 pi (About pi)**. Quit the old desktop before replacing it; do not delete `~/.pi`.
 - **Test-release limits:** these are opt-in prereleases, not publisher-signed stable distributions. macOS uses ad-hoc signatures without Apple notarization and may be blocked by Gatekeeper; follow the [macOS test installation guide](docs/desktop-testing.md) and stop if verification fails. Windows/Linux packages are unsigned. Never disable system security globally. Desktop shell updates require manual installation; business-package updates use the app's Settings. Windows ARM and Linux ARM are not included.
 
 ## Architecture highlights

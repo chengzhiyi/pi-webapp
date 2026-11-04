@@ -212,7 +212,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
     return <div className={css.error} role="alert">{problemText(failure, card.installed, t)}{detail && <details><summary>{t("诊断信息", "Diagnostics")}</summary><code>{failure.code}</code><p>{failure.message}</p>{diagnostic && <p>{diagnostic.checkedAt} · {diagnostic.hostVersion}</p>}{/lock|owned/i.test(failure.message) && <p>{t("停止所有程序并备份后，按 docs/hosted-update-recovery.md 恢复。此页面不会清锁。", "Stop all hosts and back up data before following docs/hosted-update-recovery.md. This page never clears locks.")}</p>}</details>}{detail && failure.code === "view_barrier" && <PendingViews pluginId={card.pluginId} t={t} />}</div>;
   };
   return <section className={css.section} data-hosted-management aria-busy={busy || reading} style={!visible ? { display: "none" } : undefined}>
-    {!selected && <h2>{t("官方插件", "Official plugins")} <span>{shown.length}</span></h2>}
+    {!selected && <h2 className={rows.groupTitle}>{t("官方插件", "Official plugins")}</h2>}
     {error && <div role="alert" className={css.error}>{t("无法读取插件状态，请重试。", "Cannot read plugin status. Please retry.")}<details><summary>{t("诊断信息", "Diagnostics")}</summary>{error.message}</details><Button variant="outline" size="sm" disabled={busy || reading || disabled} onClick={() => setRetryRead(value => value + 1)}>{t("重试", "Retry")}</Button></div>}
     {catalog.dev && <div data-hosted-dev>
       {catalog.dev.notices.map((item, index) => <div key={index} className={item.level === "info" ? css.notice : css.error} role={item.level === "error" ? "alert" : "status"}><strong>{t("开发模式", "Dev mode")}{item.pluginId ? ` · ${item.pluginId}` : ""}</strong>: {item.message}</div>)}
@@ -223,11 +223,18 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       void hostedApi.manage({ pluginId: download.pluginId, operation: "cancel-download", downloadId: download.id }).then(() => setNotice(t("已请求取消，已完成的安装不会回滚。", "Cancellation requested; committed installations are not rolled back."))).catch(cause => setOperationError({ id: download.pluginId, problem: problem(cause) }));
     }}>{t("取消下载（不回滚已提交安装）", "Cancel download (no rollback after commit)")}</Button>}
     {selected ? <div className={rows.detail} data-hosted-detail={selected.pluginId}>
-      <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span><div><strong>{name(selected)}</strong><p>{description(selected)}</p></div>{switchFor(selected)}</div>
-      <dl><dt>{t("插件标识", "Plugin ID")}</dt><dd><code>{selected.pluginId}</code></dd><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
+      <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span>{switchFor(selected)}</div>
+      <div className={rows.detailMain}>
+        <div className={rows.titleRow}><h1>{selected.name}</h1>{selected.official && <span className={rows.tag} data-tone="info">{t("官方", "Official")}</span>}{selected.version && <span className={rows.tag}>v{selected.version}</span>}{failureFor(selected) && <span className={rows.tag} data-tone="danger">{t("需要处理", "Needs attention")}</span>}</div>
+        <p className={rows.detailDesc}>{description(selected)}</p>
+        <p className={rows.detailName}><code>{selected.pluginId}</code></p>
+      </div>
       {failureView(selected, true)}
+      <section className={rows.detailSection}><h2>{t("详细信息", "Details")}</h2>
+        <dl><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
+      </section>
       <SecretsSection card={selected} t={t} disabled={unavailableControls} onCatalog={next => { setCatalog(next); window.dispatchEvent(new Event("pi:hosted-catalog-changed")); }} />
-      <section className={css.configuration}><h2>{t("配置与更新", "Configuration & updates")}</h2>
+      <section className={`${css.configuration} ${rows.detailSection}`}><h2>{t("配置与更新", "Configuration & updates")}</h2>
         <p className={rows.scope}>{selected.icon === "drawing" || selected.pluginId === OFFICIAL_HOSTED_PLUGIN.pluginId ? t("无需额外配置。启用后，可从工作区侧栏打开，也可查看对话中的图稿。图稿保存在工作区，停用或卸载不会删除文件和插件数据。", "No additional configuration is required. Once enabled, open it from the workspace sidebar or view diagrams in conversations. Disabling or uninstalling retains workspace files and plugin data.") : t("启用后从工作区侧栏打开。停用或卸载不会删除插件数据。", "Once enabled, open it from the workspace sidebar. Disabling or uninstalling retains plugin data.")}</p>
         <p className={rows.scope}>{t("兼容的插件可独立更新；软件升级仅在协议不兼容时协调插件版本。", "Compatible plugins update independently. App upgrades coordinate plugins only when their protocol is incompatible.")}</p>
         <p className={rows.scope}>{t("停用或卸载前会先保存并关闭相关视图；保存失败时不会继续。", "Disabling or uninstalling first saves and closes related views; a failed save stops the operation.")}</p>
@@ -240,10 +247,13 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       </section>
     </div> : <ul className={rows.cards}>{shown.map(card => <li className={rows.card} key={card.pluginId} data-hosted-card={card.pluginId}>
       <span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={card} size={30} /></span>
-      <div className={rows.cardMain}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button><p>{description(card)}</p><small><span className={rows.dot} data-enabled={known && card.enabled} />{busy ? t("正在应用…", "Applying…") : status(card)}{!busy && failureFor(card) && <span className={css.attention}>{t(" · 需要处理", " · Needs attention")}</span>}</small>
-        {card.pendingVersion ? <small>{t("关闭编辑器后更新至：", "Close editors to update to: ")}{card.pendingVersion}</small> : card.availableVersion && card.availableVersion !== card.version && <small>{t("可用版本：", "Available release: ")}{card.availableVersion}</small>}
+      <div className={rows.cardMain}><div className={rows.titleRow}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button>
+          <span className={rows.tag} data-tone={busy ? "info" : undefined}>{busy ? t("正在应用…", "Applying…") : status(card)}</span>
+          {!busy && failureFor(card) && <span className={rows.tag} data-tone="danger">{t("需要处理", "Needs attention")}</span>}
+          {card.pendingVersion ? <span className={rows.tag} data-tone="info">{t("关闭编辑器后更新至：", "Close editors to update to: ")}{card.pendingVersion}</span> : card.availableVersion && card.availableVersion !== card.version && <span className={rows.tag} data-tone="info">{t("可用版本：", "Available release: ")}{card.availableVersion}</span>}
+        </div><p>{description(card)}</p>
       </div>
-      <div className={`${rows.cardEnd} ${css.rowActions}`}>{downloadFor(card)}{switchFor(card)}<span aria-hidden="true">›</span></div>
+      <div className={`${rows.cardEnd} ${css.rowActions}`}>{downloadFor(card)}{switchFor(card)}</div>
     </li>)}</ul>}
     <Modal open={confirm !== null} onClose={() => setConfirm(null)} title={confirmation?.title ?? ""} closeLabel={t("关闭", "Close")} description={confirmation?.description} footer={<><Button variant="outline" onClick={() => setConfirm(null)}>{t("取消", "Cancel")}</Button><Button variant="primary" disabled={unavailableControls} onClick={() => { if (confirm) void operate(confirm.card, confirm.operation, confirm.reopen); }}>{confirmation?.confirm}</Button></>} />
   </section>;

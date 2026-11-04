@@ -1,0 +1,79 @@
+name: AUR package
+
+on:
+  pull_request:
+    paths:
+      - "packaging/arch/**"
+      - ".github/workflows/aur.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pi-webapp-aur
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the package build tools
+        run: pacman -Sy --noconfirm --needed base-devel
+      - name: Verify PKGBUILD metadata as an unprivileged user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          cd "${GITHUB_WORKSPACE}"
+          runuser -u builder -- bash -c 'cd packaging/arch && makepkg --printsrcinfo > /tmp/pi-webapp.SRCINFO'
+          diff -u packaging/arch/.SRCINFO /tmp/pi-webapp.SRCINFO
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    environment: aur
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: alpha
+          persist-credentials: false
+      - name: Install the package build tools
+        run: pacman -Sy --noconfirm --needed base-devel git openssh
+      - name: Verify reviewed package metadata as an unprivileged user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          cd "${GITHUB_WORKSPACE}"
+          runuser -u builder -- bash -c 'cd packaging/arch && makepkg --printsrcinfo > /tmp/pi-webapp.SRCINFO'
+          diff -u packaging/arch/.SRCINFO /tmp/pi-webapp.SRCINFO
+      - name: Publish to the dedicated AUR Git repository
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+        run: |
+          : "${AUR_SSH_PRIVATE_KEY:?is not set in the aur environment}"
+          : "${AUR_USERNAME:?is not set in the aur environment}"
+          : "${AUR_EMAIL:?is not set in the aur environment}"
+          install -dm700 ~/.ssh
+          printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 aur.archlinux.org > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -F 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4' > /dev/null
+          git clone ssh://aur@aur.archlinux.org/pi-webapp-bin.git /tmp/pi-webapp-aur
+          cp packaging/arch/PKGBUILD packaging/arch/.SRCINFO /tmp/pi-webapp-aur/
+          cd /tmp/pi-webapp-aur
+          # Stage first: on the first upload the clone is empty and the copied files are untracked.
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "AUR is already current"
+            exit 0
+          fi
+          git config user.name "${AUR_USERNAME}"
+          git config user.email "${AUR_EMAIL}"
+          source PKGBUILD
+          git commit -m "Update to ${pkgver}-${pkgrel}"
+          git push origin HEAD:master

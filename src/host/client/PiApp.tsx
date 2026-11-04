@@ -13,7 +13,6 @@ import { PiHelpMenu } from "./PiHelpMenu.tsx";
 import { AppUpdateProvider } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import { IconPluginPinwheelOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { usePiBridge } from "./pi-bridge.ts";
-import { MarkdownText } from "../../../web/src/ui/shared/primitives/markdown/MarkdownText.tsx";
 import { MarkdownDelegateProvider } from "../../../web/src/ui/shared/primitives/markdown/MarkdownDelegate.tsx";
 import { workspacePreviewPath } from "../../../web/src/ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
@@ -27,6 +26,7 @@ import { BUILTIN_IDS } from "../../contracts/plugins.ts";
 import { useLocale, localize as t } from "../../../web/src/ui/locale/preference.ts";
 import type { LayoutInfo, PanelInfo } from "../../../web/src/ui/contract.ts";
 import type { SidebarPanelMetadata } from "../../../web/src/ui/sidebar/contract/slots.ts";
+import { LazyMarkdownText, loadMarkdownText, useMarkdownLabels } from "./markdown-text.tsx";
 import "./pi.css";
 import "./plugin-rightbar.css";
 
@@ -53,6 +53,7 @@ export function PiApp() {
   const hostedCallbacks = useRef<{ openPanel?(alias: string): void; sendMessage?(text: string): Promise<void>; abort?(): Promise<void> }>({});
   const hosted = useHostedPlugins(bridge.connection === "connected", bridge.session?.sessionId, bridge.pluginGeneration, hostedCallbacks, locale);
   useErrorToast("hosted-runtime", hosted.error);
+  useErrorToast("plugin-load", pluginErrors.length ? `${t("插件加载失败", "Plugin load failed")}: ${pluginErrors.length}` : null, pluginErrors.join("\n"), t("诊断信息", "Diagnostics"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const recovery = useMemo(() => drawingRecovery(() => setPluginsOpen(true)), []);
@@ -129,7 +130,9 @@ export function PiApp() {
     setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && panel.shown && !pluginsOpen && !fullscreen }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
-  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <MarkdownText text={text} pathImages={pathImages} labels={{ code: { copyLabel: t("复制", "Copy"), copiedLabel: t("已复制", "Copied"), toolbarLabels: { codeLabel: t("代码块", "Code block"), wrapLabel: t("自动换行", "Wrap"), unwrapLabel: t("取消换行", "Unwrap") } }, footnotes: t("脚注", "Footnotes") }} />, [locale]);
+  useEffect(() => { void loadMarkdownText(); }, []);
+  const markdownLabels = useMarkdownLabels();
+  const renderMarkdown = useCallback((text: string, pathImages?: { resolve(value: string): string | undefined }) => <LazyMarkdownText text={text} pathImages={pathImages} labels={markdownLabels} />, [markdownLabels]);
   const send: typeof bridge.send = async (...args) => {
     const sessionId = bridge.session?.sessionId;
     setPreSendError("");
@@ -212,5 +215,5 @@ export function PiApp() {
     actions={actions}
     renderSlot={renderSlot}
     t={(name: string) => labels[name] ?? name}
-  />{pluginErrors.length > 0 && <div className="pi-plugin-errors" role="status" title={pluginErrors.join("\n")}>{t("插件加载失败", "Plugin load failed")}: {pluginErrors.length}</div>}{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</AppUpdateProvider>;
+  />{settingsOpen && <PiSettings onBack={closeSettings} setupMode={needsModelSetup} getConfig={bridge.getConfig} updateConfig={bridge.updateConfig} getUpdate={bridge.getUpdate} getRunningVersion={bridge.getRunningVersion} setUpdateChannel={bridge.setUpdateChannel} cancelUpdate={bridge.cancelUpdate} update={bridge.update} getProviders={bridge.getProviders} getProviderModels={bridge.getProviderModels} updateProviderModel={bridge.updateProviderModel} logoutProvider={bridge.logoutProvider} addCustomProvider={bridge.addCustomProvider} startProviderLogin={bridge.startProviderLogin} getProviderLogin={bridge.getProviderLogin} getActiveProviderLogin={bridge.getActiveProviderLogin} respondProviderLogin={bridge.respondProviderLogin} cancelProviderLogin={bridge.cancelProviderLogin} refreshModels={bridge.refreshModels} />}</AppUpdateProvider>;
 }

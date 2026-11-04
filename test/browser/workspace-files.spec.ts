@@ -13,7 +13,7 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
   await mkdir(other);
   await mkdir(join(cwd, "src"));
   await writeFile(join(cwd, "src", "main.ts"), "export const message = 'Hello files';\n");
-  await writeFile(join(cwd, "README.md"), "# Workspace preview\n\n**Read only** documentation.\n");
+  await writeFile(join(cwd, "README.md"), "# Workspace preview\n\n**Read only** documentation.\n\nInline math $e^{i\\pi}$.\n\n```ts\nconst answer = 42;\n```\n");
   await writeFile(join(cwd, "empty.txt"), "");
   await writeFile(join(cwd, "binary.bin"), Buffer.from([0, 255]));
   await writeFile(join(cwd, "big.txt"), Buffer.alloc(1024 * 1024, 65));
@@ -60,13 +60,14 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     if (width === 1440) {
       const popups: string[] = [];
       page.on("popup", popup => popups.push(popup.url()));
-      const link = page.getByRole("link", { name: "《协作内核与插件协议设计》", exact: true });
+      // Local file links open the preview panel, so the shared renderer draws them as buttons.
+      const link = page.getByRole("button", { name: "《协作内核与插件协议设计》", exact: true });
       await link.click();
       await expect(rightbar.getByRole("heading", { name: "中文文件链接预览", exact: true })).toBeVisible();
       expect(popups).toEqual([]);
-      await page.getByRole("link", { name: "再次打开", exact: true }).click();
+      await page.getByRole("button", { name: "再次打开", exact: true }).click();
       await expect(rightbar.getByRole("tab", { name: /协作内核与插件协议设计/ })).toHaveCount(1);
-      await page.getByRole("link", { name: "绝对路径", exact: true }).click();
+      await page.getByRole("button", { name: "绝对路径", exact: true }).click();
       await expect(rightbar.getByRole("heading", { name: "Workspace preview", exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "外部网站", exact: true })).toHaveAttribute("target", "_blank");
       await expect(page).toHaveURL(new URL(bridge.url).origin + "/");
@@ -107,6 +108,9 @@ for (const width of [1440, 1024, 768, 390, 320]) test(`workspace files open from
     await expect(tree.getByRole("treeitem", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(tree.getByRole("treeitem", { name: "main.ts", exact: true })).toHaveAttribute("aria-selected", "false");
     await tree.getByRole("treeitem", { name: "README.md", exact: true }).click();
+    // The markdown renderer, KaTeX and Shiki load after startup; previews still render math and highlight code.
+    await expect(rightbar.locator(".katex:visible")).toHaveCount(1);
+    await expect(rightbar.locator("pre.shiki:visible")).toContainText("const answer = 42;");
     await page.screenshot({ path: testInfo.outputPath(`markdown-${width}.png`) });
     await rightbar.getByRole("button", { name: "Source", exact: true }).click();
     await expect(rightbar.locator("pre:visible")).toContainText("# Workspace preview");

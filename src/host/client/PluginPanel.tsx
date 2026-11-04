@@ -5,6 +5,7 @@ import { dockLabels } from "../../../web/src/ui/shared/sidebar/labels.ts";
 import { zh, en } from "../../../web/src/ui/shared/sidebar/locales.ts";
 import { Button } from "../../../web/src/ui/shared/primitives/Button.tsx";
 import { Tooltip } from "../../../web/src/ui/shared/primitives/Tooltip.tsx";
+import { useErrorToast } from "../../../web/src/ui/primitives/Toast.tsx";
 import { IconPanelLeftOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import css from "../../../web/src/ui/shared/sidebar/SidebarRight.module.css";
 import expandCss from "../../../web/src/ui/shared/sidebar/ExpandButton.module.css";
@@ -73,6 +74,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
   const { controller, snapshot, openContent: open } = panel;
   const { state } = snapshot;
   const [closeError, setCloseError] = useState("");
+  useErrorToast("plugin-panel-close", closeError);
   const closing = useRef(false);
   const intents = useMemo(() => new Proxy(controller, { get(target, key) {
     if (key === "closeTab") return (id: TabId) => {
@@ -99,7 +101,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
   const panelWidth = narrow ? "100vw" : width;
   return <div className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
     data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : focus ? "focus" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
-    <div className={css.panelBody}>{closeError && <p role="alert">{closeError}</p>}<DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
+    <div className={css.panelBody}><DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
       intents={intents} labels={dockLabels(t)} active keepMounted={() => true}
       renderTab={tab => {
         const paneId = findTabPane(state, tab.id).id;
