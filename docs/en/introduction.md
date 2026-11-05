@@ -14,10 +14,10 @@ Pi still does the real work. It runs the agent, calls your model provider, execu
 | --- | --- |
 | [Conversations](./conversation) | Streaming replies, expandable tool calls, token usage, a per-turn trajectory view, file attachments, and a queue for messages you send while Pi is busy. |
 | [Sessions and workspaces](./sessions) | Every project folder is a workspace with its own saved chats. Chats run independently, so switching to another one does not interrupt the first. |
-| [Files, terminal and Git](./workspace-tools) | Read-only file previews, real interactive shells, and a Git panel for reviewing diffs, staging, committing and switching local branches. |
+| [Files, terminal, Git and activity](./workspace-tools) | Read-only file previews, real interactive shells, Git review, and a live panel for agents and background tasks. |
 | [Diagrams](./diagrams) | An optional Excalidraw plugin that turns a request into an editable diagram. |
 | [Models and providers](./models) | Sign in to a provider or add an API key, pick models, and add your own OpenAI- or Anthropic-compatible endpoint. |
-| [Packages, skills and plugins](./extensions) | Manage Pi packages and skills, and switch the built-in Files, Terminal and Git capabilities on or off. |
+| [Packages, skills and plugins](./extensions) | Manage Pi packages and skills, and switch the built-in Files, Terminal, Git and Activity capabilities on or off. |
 
 ## Three ways to run it
 

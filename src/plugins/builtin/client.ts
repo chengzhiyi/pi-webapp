@@ -5,6 +5,7 @@ const modules: Record<string, () => Promise<{ default: WorkbenchPluginDefinition
   "builtin:@pi-webapp/files": () => import("./files/client/plugin.tsx"),
   "builtin:@pi-webapp/terminal": () => import("./terminal/client/plugin.tsx"),
   "builtin:@pi-webapp/git": () => import("./git/client/plugin.tsx"),
+  "builtin:@pi-webapp/activity": () => import("./activity/client/plugin.tsx"),
 };
 export function loadBuiltinPlugin(url: string) {
   const load = modules[url];

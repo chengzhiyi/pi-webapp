@@ -8,7 +8,7 @@ import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 // Only enabled workspace capabilities have launchers; the optional drawing
 // package is absent in this fixture. Historical drawing recovery has no launcher.
-const launcherLabels = { en: ["Git changes", "Workspace files", "Open terminal"], zh: ["Git 改动", "工作区文件", "打开终端"] };
+const launcherLabels = { en: ["Git changes", "Workspace files", "Open terminal", "Activity"], zh: ["Git 改动", "工作区文件", "打开终端", "活动任务"] };
 
 async function expectTopAlignedGrid(grid: Locator, locale: "zh" | "en") {
   await expect(grid).toBeVisible();

@@ -41,6 +41,7 @@ import "./pi-conversation.css";
 interface Props {
   composerInteraction?: ReactNode;
   rightbarControl?: ReactNode;
+  backgroundControl?: ReactNode;
   renderPluginSlot: (slot: WebSlotName, turn?: TurnReference) => ReactNode;
   renderToolView?: (call: ViewBlock, result: ViewMessage | undefined, running: boolean) => ReactNode;
   plugins: LoadedPlugin[];
@@ -471,7 +472,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   );
 }
 
-export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
+export function PiConversation({ rightbarControl, backgroundControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -558,13 +559,14 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
           {!empty && <div ref={content} className={conversationCss.viewArea}>{activeTab === "chat" ? <div className={chatCss.root}><div className={chatCss.scroll}><div className={chatCss.column}>
             <>
               {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={artifactTools} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={inspect} />)}
-              {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
+              <div className={chatCss.activityRow}>{activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}{backgroundControl}</div>
             </>
           </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
           <div ref={composer} className={conversationCss.composerSeat} data-composer-seat="">
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
+              {empty && <div className={chatCss.heroActivity}>{backgroundControl}</div>}
               {composerInteraction}
               <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
             </div>

@@ -11,7 +11,7 @@ These terms are easy to mix up because they sit near each other in the interface
 | **Pi package** | A bundle you install from npm, Git or a local folder. It can contain extensions and skills. | **Pi Settings → Packages** |
 | **Pi extension** | Code that adds capabilities to Pi itself, such as new commands and tools. It can come from a package or be loaded on its own from a path. | **Pi Settings → Packages** |
 | **Skill** | A folder or `SKILL.md` file of task guidance that Pi can load on demand. | **Pi Settings → Skills** |
-| **Plugin** | A pi-webapp feature with its own screen: the built-in Files, Terminal and Git tools, and optional ones such as Excalidraw. | **Plugins** in the sidebar |
+| **Plugin** | A pi-webapp feature with its own screen: the built-in Files, Terminal, Git and Activity tools, and optional ones such as Excalidraw. | **Plugins** in the sidebar |
 
 Installing a package is not the same as switching a plugin on or off, and the two live in different places on purpose.
 
@@ -57,11 +57,11 @@ Click **Plugins** in the sidebar, under **New session**. The page has two groups
 
 ### Built-in capabilities {#built-in-capabilities}
 
-**Workspace files**, **Terminal** and **Git** are on by default. Each has a switch.
+**Workspace files**, **Terminal**, **Git** and **Activity** are on by default. Each has a switch.
 
 - The switch is global: it applies to every workspace and chat on this service, and it persists across restarts.
 - Switching needs **every chat to be idle**. The page says so; try again once they have finished.
-- Turning a tool off closes its open tabs and blocks its requests. Turning off **Terminal** also ends every terminal on the service: a **Disable Terminal?** dialog warns that unsaved shell work may be lost, and you confirm with **Disable and stop terminals**.
+- Turning a tool off closes its open tabs and blocks its requests. Turning off **Terminal** also ends every terminal on the service: a **Disable Terminal?** dialog warns that unsaved shell work may be lost, and you confirm with **Disable and stop terminals**. Turning off **Activity** only hides its monitoring panel; it never stops agents or background tasks.
 - The switch shows what the service confirmed, not what you clicked.
 
 ### Official plugins

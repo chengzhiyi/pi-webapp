@@ -25,12 +25,14 @@ import type { PromptDelivery, QueuedPromptAction } from "../../../contracts/brid
 import { assertPromptDelivery } from "../sessions/prompt-delivery.ts";
 import { PromptQueueError } from "../sessions/editable-prompt-queue.ts";
 import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandlers } from "../plugins/hosted/routes.ts";
+import type { ActivityHostApi } from "../../../plugins/builtin/activity/contract/activity.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
 
 export interface BridgeHost {
   hosted?: HostedBridgeHandlers;
+  activity?: ActivityHostApi;
   plugins?(): WebPluginCatalogView | Promise<WebPluginCatalogView>;
   pluginAsset?(path: string): Promise<{ bytes: Buffer; type: string } | null>;
   invokePluginAction?(sessionId: string, pluginId: string, action: string, input: unknown): Promise<unknown>;
@@ -110,7 +112,8 @@ async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<unknow
     if (size > limit) throw new Error("请求内容过大");
     chunks.push(bytes);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  catch { throw new Error("请求 JSON 无效"); }
 }
 
 async function readAttachment(req: IncomingMessage): Promise<Buffer> {
@@ -417,7 +420,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             return;
           }
           if (pluginRegistry.mutating && path !== "/api/abort") { json(res, 409, { error: "插件配置正在保存，请稍后重试" }); return; }
-          if (await pluginRegistry.dispatch({ path, body: body as { sessionId: string } & Record<string, unknown>, res, snapshot: () => host.snapshot(), busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], json: (status, value) => json(res, status, value) })) return;
+          if (await pluginRegistry.dispatch({ path, body: body as { sessionId: string } & Record<string, unknown>, res, snapshot: () => host.snapshot(), activity: host.activity, busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], json: (status, value) => json(res, status, value) })) return;
           if (path === "/api/plugin-interaction") {
             if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
             if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("requestId" in body) || typeof body.requestId !== "string" || body.requestId.length > 200 || !host.resolvePluginInteraction || !("value" in body)) {
@@ -438,7 +441,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
               if (!route) { json(res, 400, { error: "插件动作不存在" }); return; }
               const input = "input" in body ? body.input : {};
               if (!input || typeof input !== "object" || Array.isArray(input)) { json(res, 400, { error: "插件动作参数无效" }); return; }
-              await pluginRegistry.dispatch({ path: route, body: { ...input, sessionId: body.sessionId }, res, snapshot: () => host.snapshot(), busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], json: (status, value) => json(res, status, status >= 200 && status < 300 ? { value } : value) });
+              await pluginRegistry.dispatch({ path: route, body: { ...input, sessionId: body.sessionId }, res, snapshot: () => host.snapshot(), activity: host.activity, busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], json: (status, value) => json(res, status, status >= 200 && status < 300 ? { value } : value) });
               return;
             }
             if (!host.invokePluginAction) { json(res, 400, { error: "插件动作不可用" }); return; }

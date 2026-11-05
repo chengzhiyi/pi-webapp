@@ -19,6 +19,7 @@ import type { ModelNetworkDiagnostic } from "../../../../bin/model-network.mjs";
 
 import type { HostedAgentAdapter } from "../plugins/hosted/agent-adapter.ts";
 import type { HostedScope } from "@chengzhiyi/pi-web-protocol";
+import { SessionActivity } from "../../../plugins/builtin/activity/server/session-activity.ts";
 
 export interface HostedWorkspaceOptions {
   adapter: HostedAgentAdapter;
@@ -41,6 +42,7 @@ interface WorkspaceRuntime {
   operation?: ErrorCorrelation;
   agentErrorReported?: boolean;
   tools: ToolDiagnostics;
+  activity: SessionActivity;
   streaming: ViewMessage | null;
   networkDiagnostic?: ModelNetworkDiagnostic;
   prompts: EditablePromptQueue;
@@ -93,6 +95,12 @@ export class WorkspaceSessions {
   get session(): AgentSession | null { return this.active?.session ?? null; }
   get path(): string | null { return this.active?.cwd ?? null; }
   get catalog(): WebPluginCatalog | null { return this.active?.catalog ?? null; }
+
+  activity(sessionId: string): SessionActivity {
+    const runtime = this.runtimes.get(sessionId);
+    if (this.disposed || !runtime || runtime.closing) throw new Error("会话不存在或已关闭");
+    return runtime.activity;
+  }
 
   open(path: string, target: "continue" | "new" | { sessionFile: string } | { sessionManager: SessionManager } | { sessionId: string }): Promise<void> {
     return this.queue.run(async () => {
@@ -226,7 +234,7 @@ export class WorkspaceSessions {
       const model = manager.buildSessionProjection().model ? undefined : this.active?.session.model ?? this.fallbackModel();
       const { session } = await createAgentSession({ cwd, sessionManager: manager, model, resourceLoader, customTools: this.customTools });
       const tools = new ToolDiagnostics({ enabled: () => this.telemetry.enabled(), capture: this.reportError, breadcrumb: (category, context) => this.telemetry.breadcrumb(category, context), anonymize: value => this.telemetry.anonymize(value) });
-      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, activityId: 0, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, streaming: null, prompts: null!,
+      const runtime: WorkspaceRuntime = { session, cwd, catalog, bus, generation: ++this.generation, activityId: 0, closing: false, waitController: new AbortController(), interactions: null!, detach: () => {}, releasePaths: runtimePaths.release, tools, activity: new SessionActivity(bus, manager.getSessionId()), streaming: null, prompts: null!,
         detached: detachedOwner ? { owner: detachedOwner, events: [], seq: 0, lastText: "", restoreTools: null } : undefined };
       runtime.prompts = old?.prompts ?? new EditablePromptQueue(() => {
         const owner = this.runtimes.get(manager.getSessionId()) ?? runtime;
@@ -258,6 +266,7 @@ export class WorkspaceSessions {
           if (event.type === "agent_start") { runtime.activityId++; this.telemetry.breadcrumb("agent_start", context); }
           if (event.type === "tool_execution_start") tools.start(event, context);
           if (event.type === "tool_execution_end") tools.end(event, context);
+          if (["tool_execution_start", "tool_execution_update", "tool_execution_end", "agent_settled"].includes(event.type)) runtime.activity.invalidate();
           if (event.type === "message_end" && event.message.role === "assistant" && event.message.stopReason === "error") {
             runtime.agentErrorReported = true;
             const network = runtime.networkDiagnostic;
@@ -318,7 +327,7 @@ export class WorkspaceSessions {
     runtime.tools.clear();
     runtime.waitController.abort();
     runtime.interactions.dispose();
-    await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.detach(); runtime.bus.clear(); });
+    await closeAgentSession(runtime.session, reason, message => this.diagnostic(runtime, "host", "shutdown", message), 5_000, () => { runtime.activity.close(); runtime.detach(); runtime.bus.clear(); });
     runtime.releaseHosted?.();
     await runtime.releasePaths();
   }

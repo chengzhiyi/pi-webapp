@@ -59,8 +59,9 @@ npx pi-webapp
 | **Files beside the conversation** | Browse the workspace, follow file links from chat, and preview highlighted code, Markdown, and images in read-only tabs. |
 | **Real integrated terminals** | Run interactive shells in the workspace, use Ctrl+C, and keep processes and output when switching chats or panels. |
 | **Git review and workflow** | Review changes and inline diffs, stage/unstage files, commit the staged index, create/switch local branches, and explore commit history with a branch graph. |
+| **Agents and background tasks** | Watch running and finished work from pi-subagents and pi-background-tasks, open Activity from the in-chat Background counter, inspect output and results, stop active work, and rerun ordinary shell tasks. |
 | **A flexible workbench** | Resize, split, or expand tool panels; use workspace focus mode while keeping navigation within reach. Each chat retains its own tool tabs until the page reloads. |
-| **Models, skills, and plugins** | Configure providers and models, manage Pi packages/extensions/skills, and toggle bundled Files, Terminal, and Git capabilities. Supported Web plugins can add their own UI. |
+| **Models, skills, and plugins** | Configure providers and models, manage Pi packages/extensions/skills, and toggle bundled Files, Terminal, Git, and Activity capabilities. Supported Web plugins can add their own UI. |
 | **Browser and desktop entry points** | Use the background launcher, open `/web` from Pi's terminal, or launch the Electron desktop app with bundled Node/Pi. |
 
 > Chats run independently, but files and Git changes in the same worktree are shared. Switching chats does not stop work; stopping the service ends its background tasks. Terminals and agent tools run with your system permissions, not in a sandbox.
@@ -81,7 +82,7 @@ On headless machines, it prints the local address. Set `PI_WEBAPP_AUTO_OPEN=0` t
 
 1. Open **Settings → Models** to configure a provider and choose a model you have access to.
 2. Select or add a workspace, then start a conversation.
-3. Open the conversation's upper-right tool panel to explore **Files**, **Terminal**, or **Git changes** alongside the agent.
+3. Open the conversation's upper-right tool panel to explore **Files**, **Terminal**, **Git changes**, or **Activity** alongside the agent.
 
 Model access is required separately; a local interface does not mean offline inference. Keep token-bearing local URLs private and do not expose the service directly to the public internet.
 
@@ -142,7 +143,7 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 | --- | --- |
 | **Thin Pi adapter, separate host** | Agent integration stays small; server orchestration, browser UI, and workspace capabilities have explicit ownership instead of growing inside one extension entry point. |
 | **Typed, validated cross-boundary contracts** | Browser code uses wire DTOs rather than Node/Pi runtime objects. HTTP actions and NDJSON events keep commands and live state updates explicit. |
-| **Plugin-owned capabilities** | Built-in Git, Files, and Terminal each own their server/client/contracts and cleanup. A registry dispatches requests; the host workbench manages tabs, docking, focus, and session identity. |
+| **Plugin-owned capabilities** | Built-in Git, Files, Terminal, and Activity each own their server/client/contracts and cleanup. A registry dispatches requests; the host workbench manages tabs, docking, focus, and session identity. |
 | **Lifecycle-aware sessions** | Background sessions retain progress and pending interactions when you navigate away. Switching a chat preserves tool resources; closing a tab disposes its resource. |
 | **Guardrails at the host boundary** | Loopback transport uses token/origin checks; file previews enforce workspace and symlink boundaries. Git writes reject stale state and coordinate known chats sharing the worktree. These checks are not an OS sandbox. |
 | **One UI across entry points** | React + TypeScript power the workbench, Vite/esbuild bundle the app, and Electron provides the desktop shell without a separate conversation UI. |
@@ -156,7 +157,7 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 | `web/src/ui/` · `src/host/client/` | Shared UI, conversation shell, workbench, and browser plugin management |
 | `src/host/server/` | Transport, sessions, workspaces, model configuration, and plugin lifecycle |
 | `src/adapters/pi/` | Thin Pi extension entry point |
-| `src/plugins/builtin/` | Files, Git, and Terminal; each owns server, client, and contracts |
+| `src/plugins/builtin/` | Files, Git, Terminal, and Activity; each owns server, client, and contracts |
 | `src/contracts/` · `src/platform/telemetry/` | Wire contracts and shared diagnostics |
 | `bin/` · `desktop/` | CLI launcher and Electron shell |
 
