@@ -3,7 +3,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { accessToken } from "../../../../host/client/access-token.ts";
 import { bridgeFetch, bridgeJson } from "../../../../host/client/telemetry-fetch.ts";
 import { HttpError } from "../../../../host/client/http-error.ts";
-import type { TerminalFrame } from "../contract/terminal.ts";
+import type { TerminalFrame, TerminalInputDecision } from "../contract/terminal.ts";
+import { metadata } from "../contract/manifest.ts";
 import { writeClipboard } from "../../../../../web/src/ui/shared/primitives/clipboard.ts";
 
 export interface TerminalState { phase: "starting" | "connected" | "disconnected" | "failed" | "exited"; exitCode?: number; reason?: string }
@@ -19,6 +20,11 @@ function openTerminal(terminal: Terminal, container: HTMLElement) {
     return element;
   } as typeof create;
   try { terminal.open(container); } finally { document.createElement = create; }
+}
+
+/** Answer the agent's request to type into a terminal from the terminal tab itself (the composer may be hidden). */
+export async function answerTerminalApproval(sessionId: string, requestId: string, value: TerminalInputDecision): Promise<void> {
+  await bridgeJson(await bridgeFetch("/api/plugin-interaction", { method: "POST", headers: { Authorization: `Bearer ${accessToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, pluginId: metadata.id, requestId, value }) }));
 }
 
 /** Owned by a Dock tab, never by the lifetime of a rendered pane or active session. */
