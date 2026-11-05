@@ -11,6 +11,8 @@ export interface UnconfirmedView extends HostedViewIdentity {
   /** Found in another window's durable journal; discovery is not consent to retire it. */
   discovered?: boolean;
   backups?: Array<{ key: string; name: string }>;
+  /** When this record was first seen holding only a local copy, after the host stopped tracking its view. */
+  orphanedAt?: number;
 }
 const key = "pi:hosted:unconfirmed-views:v1";
 const recordPrefix = "pi:hosted:unconfirmed-view:v1:";
@@ -26,6 +28,7 @@ function validRecord(value: unknown): value is UnconfirmedView {
     && Number.isSafeInteger(record.generation) && Number(record.generation) >= 1
     && (record.contentId === undefined || typeof record.contentId === "string")
     && (record.createdAt === undefined || Number.isSafeInteger(record.createdAt))
+    && (record.orphanedAt === undefined || Number.isSafeInteger(record.orphanedAt))
     && ["retained", "frameStarted"].every(name => record[name] === undefined || typeof record[name] === "boolean")
     && (record.backups === undefined || Array.isArray(record.backups) && record.backups.every(backup => backup && typeof backup.key === "string" && typeof backup.name === "string"));
 }
@@ -118,6 +121,7 @@ function persist(record: UnconfirmedView) {
     }
     const { discovered: _discovered, ...stored } = { ...record,
       ...(current?.frameStarted ? { frameStarted: true } : {}), ...(current?.retained ? { retained: true } : {}),
+      ...(current?.orphanedAt !== undefined ? { orphanedAt: current.orphanedAt } : {}),
       backups: [...new Map([...(current?.backups ?? []), ...(record.backups ?? [])].map(backup => [backup.key, backup])).values()] };
     localStorage.setItem(recordPrefix + record.viewToken, JSON.stringify(stored));
     return true;
@@ -141,7 +145,13 @@ export function forgetView(viewToken: string) {
   try {
     // Read first so malformed original data is never replaced by a tombstone.
     durableRecord(viewToken);
-    if (typeof localStorage !== "undefined") localStorage.setItem(retiredPrefix + viewToken, JSON.stringify(true));
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(retiredPrefix + viewToken, JSON.stringify(true));
+      // A retired record protects nothing; drop the copies captured for it alone.
+      const copies = `${recoveryPrefix}${viewToken}:`, stale: string[] = [];
+      for (let index = 0; index < localStorage.length; index++) { const storedKey = localStorage.key(index); if (storedKey?.startsWith(copies)) stale.push(storedKey); }
+      for (const storedKey of stale) { localStorage.removeItem(storedKey); recoveryCopies.delete(storedKey); }
+    }
   } catch { unreadable(); }
   saveSession();
 }
@@ -160,6 +170,26 @@ export async function reconcileView(item: UnconfirmedView): Promise<HostedViewRe
 }
 /** A REGISTER request cannot still be in flight this long after its record was written. */
 const settledMs = 5 * 60_000;
+/** How long a record that only holds a differing local copy stays listed before it clears itself. */
+export const keepLocalCopyMs = 7 * 24 * 60 * 60_000;
+const isSettled = (item: UnconfirmedView, now: number) => item.frameStarted === true || item.createdAt === undefined || now - item.createdAt > settledMs;
+/** True when the host no longer holds this view, so it cannot block updates, uninstalls
+ * or stops: all that remains is a local drawing copy that may differ from the saved one. */
+export function onlyLocalCopy(item: UnconfirmedView, state: HostedViewRecovery | undefined, now = Date.now()) {
+  return state?.state === "retained" || state?.state === "absent" && isSettled(item, now);
+}
+/** Stamp when a record started holding only a local copy; clear it once that copy is old. */
+function ageLocalCopy(item: UnconfirmedView, now: number): HostedViewRecovery | undefined {
+  const current = records.find(record => record.viewToken === item.viewToken);
+  const since = current?.orphanedAt ?? item.orphanedAt;
+  if (since !== undefined && now - since > keepLocalCopyMs) { forgetView(item.viewToken); return { state: "retired" }; }
+  if (since === undefined && current) {
+    const stamped = { ...current, orphanedAt: now };
+    if (persist(stamped)) { records = records.map(record => record.viewToken === item.viewToken ? stamped : record); saveSession(); }
+  }
+  item.orphanedAt = since ?? now;
+  return undefined;
+}
 const goneCodes = new Set(["invalid_scope", "unknown_plugin"]);
 const officialDrawing = "@chengzhiyi/pi-excalidraw";
 function fingerprint(elements: unknown) {
@@ -191,18 +221,25 @@ async function backupsSaved(item: UnconfirmedView, generation: number | undefine
  * the view. Records whose local drawing copy differs from the saved drawing, and
  * records the user explicitly retained, always stay for an explicit decision. */
 export async function settleView(item: UnconfirmedView, generation?: number, now = Date.now()): Promise<HostedViewRecovery | undefined> {
-  if (item.retained) return { state: "retained" };
-  const settled = item.frameStarted === true || item.createdAt === undefined || now - item.createdAt > settledMs;
+  const state = await probeView(item, generation, now);
+  // Nothing on the host waits for this record: keep its differing copy for a while, not forever.
+  return onlyLocalCopy(item, state, now) ? ageLocalCopy(item, now) ?? state : state;
+}
+async function probeView(item: UnconfirmedView, generation: number | undefined, now: number): Promise<HostedViewRecovery | undefined> {
+  const settled = isSettled(item, now);
   const retire = async () => {
     if (!await backupsSaved(item, generation)) return false;
     forgetView(item.viewToken); return true;
   };
+  // Retaining already released the host; once the copy matches the saved drawing it protects nothing.
+  if (item.retained) return await retire() ? { state: "retired" } : { state: "retained" };
   let state: HostedViewRecovery | undefined;
   try { state = (await hostedApi.view({ ...item, operation: "status" })).recovery; }
   catch (cause) {
     const code = (cause as { code?: unknown })?.code;
     // The session or plugin is gone, so the host holds no view that could still change.
-    if (settled && typeof code === "string" && goneCodes.has(code) && await retire()) return { state: "retired" };
+    // Its copy still differs, but nothing remains on the host for it to block.
+    if (settled && typeof code === "string" && goneCodes.has(code)) return await retire() ? { state: "retired" } : { state: "absent" };
     // Older hosts have no STATUS; keep the original conservative reconciliation.
     if (cause instanceof Error && cause.message === "Unknown view operation") return reconcileView(item);
     throw cause;
