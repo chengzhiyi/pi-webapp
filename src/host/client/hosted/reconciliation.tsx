@@ -71,9 +71,10 @@ export function useHostedReconciliation({ sessionId, locale, openRecovered }: { 
         <p>{t("保留恢复记录会停止旧视图继续写入，不会覆盖当前图稿。丢弃未确认的记录不会保存或恢复图稿，无法找回的最新修改可能永久丢失。", "Retaining recovery records stops old views writing without overwriting the current drawing. Discarding unconfirmed records does not save or restore a drawing; unrecoverable recent edits may be permanently lost.")}</p>
         <div className={css.list}>{shown.map((item, index) => <section className={css.item} key={item.viewToken} data-unconfirmed-view={item.mountId}>
           <h3>{kind(item.kind)} {index + 1}</h3>
-          {localOnly.has(item.viewToken)
-            ? <p>{t(`此视图已不阻塞任何操作，仅保留与已保存图稿不同的本地副本，约 ${expires(item)} 天后自动清除。`, `This view no longer blocks anything. It only keeps a local copy that differs from the saved drawing, and clears itself in about ${expires(item)} day(s).`)}</p>
-            : item.retained && <p>{t("失联视图的恢复记录已保留。插件可继续操作；旧稿是否完整仍需核对。", "Disconnected view recovery record retained. Plugin operations may continue; the old draft still needs verification.")}</p>}
+          {/* A retained record keeps confirming the user's own retention; the expiry note is secondary. */}
+          {item.retained
+            ? <p>{t(`失联视图的恢复记录已保留。插件可继续操作；旧稿是否完整仍需核对。约 ${expires(item)} 天后自动清除。`, `Disconnected view recovery record retained. Plugin operations may continue; the old draft still needs verification. It clears itself in about ${expires(item)} day(s).`)}</p>
+            : localOnly.has(item.viewToken) && <p>{t(`此视图已不阻塞任何操作，仅保留与已保存图稿不同的本地副本，约 ${expires(item)} 天后自动清除。`, `This view no longer blocks anything. It only keeps a local copy that differs from the saved drawing, and clears itself in about ${expires(item)} day(s).`)}</p>}
           <details><summary>{t("视图信息", "View details")}</summary><dl><dt>{t("会话", "Session")}</dt><dd>{item.sessionId}</dd><dt>{t("插件", "Plugin")}</dt><dd>{item.pluginId}</dd><dt>{t("版本代次", "Generation")}</dt><dd>{item.generation}</dd><dt>{t("视图标识", "View ID")}</dt><dd>{item.mountId}</dd>{item.contentId && <><dt>{t("内容标识", "Content ID")}</dt><dd>{item.contentId}</dd></>}</dl></details>
           <div className={css.actions}>
             {recoveryDrafts(item).map(draft => <Button key={draft.name} variant="outline" disabled={working} onClick={() => downloadDrawing({ blob: new Blob([draft.json], { type: "application/json" }), name: draft.name })}>{t("下载本地恢复副本", "Download local recovery copy")} · {draft.name}</Button>)}
