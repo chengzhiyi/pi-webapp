@@ -45,3 +45,9 @@
 .pi-model-setup-trigger { padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-state-business-primary); font: inherit; font-size: 12px; cursor: pointer; }
 .pi-model-setup-trigger:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pi-prompt-hint { padding: 0 14px 8px; margin-top: -8px; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 16px; }
+/* A prompt sent from the floating composer names the workspace tab it addressed. */
+.pi-message-context { display: inline-flex; align-self: flex-end; align-items: center; gap: 4px; max-width: 100%; color: var(--dsw-alias-label-caption); font-size: 11px; line-height: 16px; }
+.pi-message-context > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The floating composer's unfolded conversation reuses message styles in a narrower card. */
+.pi-floating-transcript { display: flex; flex-direction: column; gap: 14px; }
+.pi-floating-transcript-empty { margin: 8px 0; color: var(--dsw-alias-label-caption); font-size: 12px; }

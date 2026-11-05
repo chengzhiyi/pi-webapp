@@ -14,7 +14,14 @@ export interface WorkbenchPanelProps {
   open(kind: string, contentId: string, title: string): void;
   sendMessage(text: string): Promise<void>;
   resource<T>(create: () => T, dispose?: (value: T) => void, activate?: (value: T, active: boolean) => void): T;
+  /**
+   * Describe what this tab currently shows, for prompts addressed to it from the floating composer.
+   * `detail` is shown to the user ("package.json · L55–80"); `reference` is what the agent reads.
+   * Call again when it changes; null clears it. The host adds the tab's title and kind itself.
+   */
+  reportContext?(context: TabContextReport | null): void;
 }
+export interface TabContextReport { detail?: string; reference?: string }
 export interface WorkbenchPanelContribution {
   kind: string;
   component: ComponentType<WorkbenchPanelProps>;

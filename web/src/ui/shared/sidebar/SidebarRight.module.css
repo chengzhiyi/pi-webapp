@@ -67,6 +67,14 @@
   --dsh-dockkit-dock-layer: 40;
 }
 
+/* While the floating composer docks at the bottom of a focused or fullscreen
+   panel it publishes its height here; docked tab content ends above it, so no
+   panel control (a commit button, a terminal's last line) sits underneath. */
+.panel :global([data-dockkit-host='dock'] > [data-dockkit-content]) {
+  box-sizing: border-box;
+  padding-bottom: var(--pi-floating-composer-inset, 0px);
+}
+
 /* No whole-box subtraction here: Electron drag regions are window geometry,
    not stacking, so a strip row inside this fullscreen content that marks itself
    `data-window-drag` (ui-dockkit) still owns the drag over its own box, and

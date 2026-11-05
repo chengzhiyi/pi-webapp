@@ -32,7 +32,8 @@ const theme = EditorView.theme({
   "&": { height: "100%", color: "var(--shiki-foreground)", backgroundColor: "var(--shiki-background)", fontSize: "12.5px" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--ds-font-family-code)", lineHeight: "1.6", overflow: "auto" },
-  ".cm-content": { padding: "10px 0", caretColor: "var(--dsw-alias-label-primary)" },
+  // A floating composer over a wide panel publishes its overlap; the last lines scroll clear of it.
+  ".cm-content": { padding: "10px 0 calc(10px + var(--pi-floating-composer-overlap, 0px))", caretColor: "var(--dsw-alias-label-primary)" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--dsw-alias-label-primary)" },
   ".cm-gutters": { backgroundColor: "var(--shiki-background)", color: "var(--dsw-alias-label-tertiary)", border: "none" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 14px", minWidth: "3ch" },
@@ -59,6 +60,8 @@ export interface CodeEditorHandle {
 
 export function createCodeEditor(parent: HTMLElement, options: {
   text: string; filename: string; label: string; onChange(text: string): void; onSave(): void;
+  /** 1-based first/last line of a non-empty selection, or null when the selection is a caret. */
+  onSelection?(lines: { from: number; to: number } | null): void;
 }): CodeEditorHandle {
   const language = new Compartment();
   // The page's CSP admits only nonce-tagged <style> elements; the terminal reads the same meta tag.
@@ -79,7 +82,13 @@ export function createCodeEditor(parent: HTMLElement, options: {
         language.of([]),
         ...(nonce ? [EditorView.cspNonce.of(nonce)] : []),
         EditorView.contentAttributes.of({ "aria-label": options.label }),
-        EditorView.updateListener.of(update => { if (update.docChanged && !external) options.onChange(update.state.doc.toString()); }),
+        EditorView.updateListener.of(update => {
+          if (update.docChanged && !external) options.onChange(update.state.doc.toString());
+          if (update.selectionSet || update.docChanged) {
+            const range = update.state.selection.main;
+            options.onSelection?.(range.empty ? null : { from: update.state.doc.lineAt(range.from).number, to: update.state.doc.lineAt(range.to).number });
+          }
+        }),
       ],
     }),
   });
