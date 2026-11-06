@@ -10,15 +10,15 @@ const loadEditor = () => editorModule ??= import("./code-editor.ts");
  * Highlighted, editable source. `text` is the document the parent wants shown; edits are
  * reported through `onChange` and only become `text` again when the parent passes them back.
  */
-export function CodeEditor({ text, filename, label, reveal, autoFocus, onChange, onSave }: {
+export function CodeEditor({ text, filename, label, reveal, autoFocus, onChange, onSave, onSelection }: {
   text: string; filename: string; label: string; reveal?: { line: number }; autoFocus?: boolean;
-  onChange(text: string): void; onSave(): void;
+  onChange(text: string): void; onSave(): void; onSelection?(lines: { from: number; to: number } | null): void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [editor, setEditor] = useState<CodeEditorHandle>();
   const [failed, setFailed] = useState(false);
-  const callbacks = useRef({ onChange, onSave });
-  useLayoutEffect(() => { callbacks.current = { onChange, onSave }; });
+  const callbacks = useRef({ onChange, onSave, onSelection });
+  useLayoutEffect(() => { callbacks.current = { onChange, onSave, onSelection }; });
   const initial = useRef(text);
   useEffect(() => {
     let created: CodeEditorHandle | undefined;
@@ -29,10 +29,11 @@ export function CodeEditor({ text, filename, label, reveal, autoFocus, onChange,
         text: initial.current, filename, label,
         onChange: value => callbacks.current.onChange(value),
         onSave: () => callbacks.current.onSave(),
+        onSelection: lines => callbacks.current.onSelection?.(lines),
       });
       setEditor(created);
     }).catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; created?.destroy(); };
+    return () => { cancelled = true; created?.destroy(); callbacks.current.onSelection?.(null); };
   }, [filename, label]);
   // Saves and outside reloads change the parent's text; typing already matches it.
   useEffect(() => { editor?.setText(text); }, [editor, text]);

@@ -27,7 +27,7 @@ const normalize = (text: string) => text.replace(/\r\n/gu, "\n");
 type SaveProblem = { kind: "conflict" } | { kind: "error"; message: string };
 
 /** Conversation streaming must not repeatedly parse an unchanged preview. */
-export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ sessionId, path, renderMarkdown, breadcrumb, trailing, refresh = 0, reveal, onDirtyChange, onSaved }: {
+export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ sessionId, path, renderMarkdown, breadcrumb, trailing, refresh = 0, reveal, onDirtyChange, onSaved, onSelection }: {
   sessionId: string; path: string; renderMarkdown(text: string, pathImages?: { resolve(value: string): string | undefined }): ReactNode;
   /** Replaces the plain path label; trailing controls follow the reload button. */
   breadcrumb?: ReactNode; trailing?: ReactNode;
@@ -37,6 +37,8 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
   reveal?: { line: number };
   onDirtyChange?(dirty: boolean): void;
   onSaved?(): void;
+  /** The editor's selected line range, for prompts about "these lines". */
+  onSelection?(lines: { from: number; to: number } | null): void;
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +144,7 @@ export const WorkspaceFilePreview = memo(function WorkspaceFilePreview({ session
     }
     if (preview.kind !== "text") return null;
     if (editorShown) return <CodeEditor text={current} filename={name} label={t(`编辑 ${name}`, `Edit ${name}`)} reveal={reveal} autoFocus={markdown}
-      onChange={value => setDraft(value === original ? null : value)} onSave={() => void save()} />;
+      onChange={value => setDraft(value === original ? null : value)} onSave={() => void save()} onSelection={onSelection} />;
     // The rendered view shows unsaved edits too.
     if (current.trim() === "") return <p className={css.state}>{t("空文件", "Empty file")}</p>;
     return <div className={css.markdown}>{renderMarkdown(current, pathImages)}</div>;

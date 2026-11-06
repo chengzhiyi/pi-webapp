@@ -27,7 +27,9 @@ export const PiComposerEditor = forwardRef<ComposerEditorHandle, Props>(function
   live.current = props;
   const [editor] = useState(() => createEditor({ namespace: 'pi-composer', onError: error => { throw error; } }));
   const [composing, setComposing] = useState(false);
-  useImperativeHandle(ref, () => ({ focus: () => editor.focus() }), [editor]);
+  // Lexical's focus() only restores its selection, and the guard below skips
+  // that while focus is elsewhere; take DOM focus first so the call lands.
+  useImperativeHandle(ref, () => ({ focus: () => { editor.getRootElement()?.focus({ preventScroll: true }); editor.focus(); } }), [editor]);
   useLayoutEffect(() => {
     // DSH runtime's selection guard: restyling must not steal focus back
     // from a menu, model picker, or another control.

@@ -3,7 +3,10 @@
   display: grid;
   grid-template-rows: 100%;
   height: 100%;
-  overflow: hidden;
+  /* clip, not hidden: a hidden box still scrolls when a focused child (the
+     terminal's textarea) is revealed, which slid narrow fullscreen panels
+     sideways. The frame itself never scrolls. */
+  overflow: clip;
   background: var(--dsw-alias-bg-base);
   /* Collapse/expand animates the tracks using the shared motion tokens. */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);

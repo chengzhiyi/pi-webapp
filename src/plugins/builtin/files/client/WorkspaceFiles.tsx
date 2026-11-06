@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { TabContextReport } from "../../../../contracts/workbench.ts";
+import { fileContext, type LineRange } from "./file-context.ts";
 import { IconPanelLeftOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular } from "../../../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { IconFolderClose16 } from "../../../../../web/src/ui/primitives/index.ts";
 import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
@@ -27,6 +29,15 @@ export const createWorkspaceTree = (): WorkspaceTreeState => ({ expanded: new Se
 /** Below this panel width the tree and the preview take turns instead of sharing the row. */
 const NARROW_WIDTH = 420;
 
+/** Keep the host told which file (and lines) this tab shows; returns the editor's selection callback. */
+function useReportedFile(cwd: string, path: string | undefined, report?: (context: TabContextReport | null) => void) {
+  const [lines, setLines] = useState<LineRange | null>(null);
+  useEffect(() => { setLines(null); }, [path]);
+  useEffect(() => { report?.(fileContext(cwd, path, lines)); }, [report, cwd, path, lines]);
+  useEffect(() => () => report?.(null), [report]);
+  return useCallback((next: LineRange | null) => setLines(current => current?.from === next?.from && current?.to === next?.to ? current : next), []);
+}
+
 function TreeToggle({ open, controls, onToggle }: { open: boolean; controls: string; onToggle(): void }) {
   const label = open ? t("隐藏文件目录", "Hide file tree") : t("显示文件目录", "Show file tree");
   return <button type="button" className={`${css.iconButton} ${css.treeToggle}`} aria-label={label} title={label}
@@ -34,9 +45,10 @@ function TreeToggle({ open, controls, onToggle }: { open: boolean; controls: str
 }
 
 /** Preview on the left, directory tree on the right; the breadcrumb switches files without the tree. */
-export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idle, state, renderMarkdown }: {
+export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idle, state, renderMarkdown, reportContext }: {
   sessionId: string; cwd: string; idle: boolean; state: WorkspaceTreeState;
   renderMarkdown(text: string, pathImages?: { resolve(value: string): string | undefined }): ReactNode;
+  reportContext?(context: TabContextReport | null): void;
 }) {
   const [expanded, setExpanded] = useState(() => new Set(state.expanded));
   const [selected, setSelected] = useState(() => state.selected);
@@ -73,6 +85,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const changeQuery = (value: string) => { state.query = value; setQuery(value); };
   const treeId = `files-tree-${sessionId}`;
   const path = selected?.cwd === cwd ? selected.path : undefined;
+  const lines = useReportedFile(cwd, path, reportContext);
   // Runs whenever the tree column mounts, including after it is shown again.
   const restoreScroll = useCallback((element: HTMLDivElement | null) => { if (element) element.scrollTop = state.scrollTop; }, [state]);
   useLayoutEffect(() => {
@@ -114,7 +127,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
     <div className={css.filesMain}>
       {path
         ? <WorkspaceFilePreview key={path} sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} trailing={toggleTree}
-          refresh={revision} reveal={reveal} onDirtyChange={onDirtyChange} onSaved={onSaved} />
+          refresh={revision} reveal={reveal} onDirtyChange={onDirtyChange} onSaved={onSaved} onSelection={lines} />
         : <div className={css.body}>
           <div className={css.toolbar}>{breadcrumb}{toggleTree}</div>
           <div className={css.emptyFile}>
@@ -157,14 +170,16 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
 });
 
 /** A standalone preview tab (opened from a chat link); its breadcrumb opens other files in new tabs. */
-export function WorkspaceFileTab({ sessionId, cwd, path, levels, renderMarkdown, open }: {
+export function WorkspaceFileTab({ sessionId, cwd, path, levels, renderMarkdown, open, reportContext }: {
   sessionId: string; cwd: string; path: string; levels: Map<string, WorkspaceFileListing>; open(path: string): void;
   renderMarkdown(text: string, pathImages?: { resolve(value: string): string | undefined }): ReactNode;
+  reportContext?(context: TabContextReport | null): void;
 }) {
+  const lines = useReportedFile(cwd, path, reportContext);
   // The host recreates `open` on every render; a stable callback keeps the memoized preview from re-rendering.
   const latest = useRef(open);
   useLayoutEffect(() => { latest.current = open; });
   const onOpen = useCallback((file: string) => latest.current(file), []);
   const breadcrumb = useMemo(() => <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={path} levels={levels} onOpen={onOpen} />, [sessionId, cwd, path, levels, onOpen]);
-  return <WorkspaceFilePreview sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} />;
+  return <WorkspaceFilePreview sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} onSelection={lines} />;
 }

@@ -69,3 +69,13 @@ export function toolResults(messages: ViewMessage[]): Map<string, ViewMessage> {
   return new Map(messages.filter((message) => message.role === "tool" && message.toolCallId && callIds.has(message.toolCallId))
     .map((message) => [message.toolCallId!, message]));
 }
+
+/**
+ * Whether a tool card still needs the user: its result reports a pending status
+ * (`pending_review`, `pending_canvas_acceptance`). Results applied in place
+ * (`applied_on_canvas`) or plain results need nothing from them.
+ */
+export function cardAwaitsUser(result: ViewMessage | undefined): boolean {
+  const text = result?.blocks.filter(block => block.kind === "text").map(block => block.text).join("\n") ?? "";
+  return /"status"\s*:\s*"pending[_a-z]*"/u.test(text);
+}
