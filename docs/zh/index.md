@@ -2,6 +2,11 @@
 layout: home
 title: pi-webapp 使用指南
 
+release:
+  label: 0.1.53 新功能
+  text: 支持搜索、Git 状态和编辑的文件浏览器
+  link: /zh/changelog#v0-1-53
+
 hero:
   name: pi-webapp
   text: Pi 编程代理的工作台

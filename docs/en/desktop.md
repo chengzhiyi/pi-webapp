@@ -31,7 +31,7 @@ shasum -a 256 ~/Downloads/pi-*-mac-arm64.dmg
 
 On Linux use `sha256sum`. In PowerShell use `Get-FileHash <file> -Algorithm SHA256`. If it doesn't match, stop and don't install it. The checksum proves the file is the one that was published; it doesn't prove the software is safe.
 
-## Install
+## Install {#install}
 
 ::: details macOS
 1. Quit any older copy of the desktop app first, and stop the backend it started if it asks. Don't delete `~/.pi`.
