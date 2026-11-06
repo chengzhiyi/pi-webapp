@@ -1,4 +1,5 @@
 import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, type ToolDefinition, VERSION } from "@earendil-works/pi-coding-agent";
+import { acceptsInteraction } from "../plugins/interaction-plugins.ts";
 import { invokeWebAction, requestWebInteraction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest, type WebInteraction } from "@chengzhiyi/pi-web-protocol";
 import { BUILTIN_IDS } from "../../../contracts/plugins.ts";
 import { realpath } from "node:fs/promises";
@@ -244,7 +245,7 @@ export class WorkspaceSessions {
         detached.events.push({ seq: ++detached.seq, type, ...(text === undefined ? {} : { text }) });
         if (detached.events.length > MAX_DETACHED_EVENTS) detached.events.splice(0, detached.events.length - MAX_DETACHED_EVENTS);
       };
-      runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && (catalog.has(request.pluginId) || isBuiltinPlugin(request.pluginId)), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
+      runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && acceptsInteraction(catalog, request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       let lastStreamAt = 0;
       const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       const offEvents = session.subscribe(event => {
