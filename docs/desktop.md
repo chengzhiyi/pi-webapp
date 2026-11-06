@@ -238,7 +238,7 @@ number and sets package.json to the next unreleased npm base (for example
 0.1.52 while npm latest is 0.1.51). npm publishes never write their version
 back, and the shell treats package.json as its bundled backend version. A stale
 value lets an older npm package selected in Settings outrank the newer bundled
-code. `--check-source` fails when package.json is older than npm latest. Tag creation/release is an intentional
+code. It also renames the changelog's Unreleased section after the new build (see "Changelog and releases" in [MAINTAINING.md](MAINTAINING.md)). `--check-source` fails when package.json is older than npm latest, or when `docs/en/changelog.md` has no section for the build. Tag creation/release is an intentional
 publication action, not part of an ordinary main commit.
 
 The release pipeline uses four **native** targets:

@@ -13,4 +13,5 @@
 - [ ] `npm run lint`, `npm run check` and `npm test` pass locally
 - [ ] Tests added or updated for the behavior change
 - [ ] Docs updated (`docs/en/` and `docs/zh/`) if user-visible behavior changed
+- [ ] Changelog entry under **Unreleased** in `docs/en/changelog.md` and `docs/zh/changelog.md` if users will notice the change
 - [ ] No unrelated changes

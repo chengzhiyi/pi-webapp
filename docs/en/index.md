@@ -2,6 +2,11 @@
 layout: home
 title: pi-webapp user guide
 
+release:
+  label: New in 0.1.53
+  text: File browser with search, Git status and editing
+  link: /changelog#v0-1-53
+
 hero:
   name: pi-webapp
   text: A workbench for the Pi coding agent

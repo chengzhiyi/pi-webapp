@@ -62,6 +62,20 @@ The site is served at <https://pi.emath.top>:
 
 English (`docs/en/`) is the source text. The Chinese translation lives in `docs/zh/` with the same file names, published under `/zh/`; `docs:check` fails if a page exists in only one language. Chinese pages use the Chinese-interface screenshots in `docs/public/images/zh/` and quote interface labels exactly as the Chinese interface shows them (they come from the `t("中文", "English")` pairs in the source). Command output and launcher messages are Chinese in both languages. When you change an English page, change its counterpart in the same pull request. To retake the Chinese screenshots, follow "Writing rules" with the browser locale set to `zh` (`localStorage['pi-web-locale'] = 'zh'`) and Chinese prompts for the stand-in model.
 
+## Changelog and releases
+
+`docs/en/changelog.md` (with `docs/zh/changelog.md`) is the user-facing changelog, published at `/changelog`. It is the only list of what changed: GitHub release notes and the home page badge are taken from it.
+
+**With each feature or fix pull request.** Add a line under `## Unreleased {#unreleased}` in both languages, in the section that fits: **Highlights** for something worth announcing (a bold lead, two or three sentences, a link to the page that explains it), **Improvements and fixes** for the rest, **For plugin developers** for plugin-API changes. Write what the user notices, not the implementation; skip refactors, CI and tests. Use relative page links (`./workspace-tools#files`), which also become absolute links in the release notes.
+
+**Desktop build.** `npm run desktop:prepare-build` renames the Unreleased heading in both files to `## Desktop build N · pi X · YYYY-MM-DD {#build-N}`. Review the text before committing. The release workflow stops at `--check-source` if `docs/en/changelog.md` has no non-empty `{#build-N}` section, and puts that section at the top of the GitHub release notes as **What's new**, with links to the full changelog in both languages.
+
+**Promotion to `main` without a desktop build.** When the promotion brings user-visible changes, rename Unreleased by hand to `## pi X · YYYY-MM-DD {#vX-Y-Z}` (dots become dashes in the anchor), where X is the stable version the promotion will publish.
+
+**Every release with highlights.** Point the `release` front matter of `docs/en/index.md` and `docs/zh/index.md` at the new section. It is the badge above the home page title. Keep `text` to one short line.
+
+Both files must have the same section anchors in the same order; `npm run test:desktop` checks it.
+
 ## Checks before merging
 
 ```bash
