@@ -22,7 +22,9 @@ import { legacyCheckpointLoader } from "../plugins/hosted/legacy-checkpoints.ts"
 import { hostedCapabilities } from "../plugins/hosted/capabilities/bootstrap.ts";
 import { HostedDevSources, hostedDevConfigPath, hostedDevStatusPath } from "../plugins/hosted/dev-plugins.ts";
 import { OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
-import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
+import { invokeWebAction, requestWebInteraction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
+import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
+import { BUILTIN_IDS } from "../../../contracts/plugins.ts";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
 import { resumeMessage } from "../sessions/execution-control.ts";
@@ -349,6 +351,19 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   shared.offHostedThaw?.();
   shared.offHostedThaw = shared.hosted?.adapter.onThaw(scheduleTuiQueue);
   shared.pi = pi;
+  const builtinTools = builtinAgentTools({
+    async run(...args) {
+      if (!shared.bridge) throw new Error("Open the pi-web workbench first; workspace terminals live there.");
+      return shared.bridge.runPluginTool(...args);
+    },
+    // The foreground session asks through Pi's own bus; retained SDK sessions through theirs.
+    async ask(request, signal) {
+      if (shared.pi && request.sessionId === shared.current?.sessionManager.getSessionId()) return requestWebInteraction(shared.pi.events, request, signal);
+      if (!shared.workspaceSessions) throw new Error("The Web workbench is not open");
+      return shared.workspaceSessions.requestInteraction(request, signal);
+    },
+  });
+  for (const tool of builtinTools) pi.registerTool(tool);
   shared.tools?.clear();
   shared.tools = new ToolDiagnostics({
     enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
@@ -358,7 +373,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   });
   const diagnosticContext = (ctx: ExtensionContext): Record<string, unknown> => ({ ...shared.operation, session: shared.telemetry?.session(ctx.sessionManager.getSessionId()), piVersion: VERSION, model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : null, thinkingLevel: ctx.thinkingLevel });
   shared.interactions?.dispose();
-  shared.interactions = new WebInteractionHost(pi.events, (request) => !!shared.bridge && request.sessionId === shared.current?.sessionManager.getSessionId() && !!shared.tuiCatalog?.has(request.pluginId), () => { if (shared.current && shared.selected === "tui") publishSnapshot(shared.current); });
+  shared.interactions = new WebInteractionHost(pi.events, (request) => !!shared.bridge && request.sessionId === shared.current?.sessionManager.getSessionId() && (!!shared.tuiCatalog?.has(request.pluginId) || (Object.values(BUILTIN_IDS) as string[]).includes(request.pluginId)), () => { if (shared.current && shared.selected === "tui") publishSnapshot(shared.current); });
   const bindChanged = () => {
     shared.stopChanged?.();
     shared.stopChanged = pi.events.on(PLUGIN_CHANGED, () => {
@@ -527,7 +542,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             enabled: () => !!shared.telemetry?.enabled && !!shared.bridge,
             breadcrumb: (category, context) => shared.bridge?.breadcrumb?.(category, context),
             anonymize: value => shared.telemetry?.session(value) ?? "unavailable",
-          }, () => { void publishWorkspaces(); }, [], { adapter: shared.hosted!.adapter, scope: trustedScope });
+          }, () => { void publishWorkspaces(); }, builtinTools, { adapter: shared.hosted!.adapter, scope: trustedScope });
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,

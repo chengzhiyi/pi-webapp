@@ -1,5 +1,6 @@
 import { createAgentSession, createEventBus, DefaultResourceLoader, getAgentDir, SessionManager, type AgentSession, type EventBusController, type ExtensionContext, type SessionShutdownEvent, type ToolDefinition, VERSION } from "@earendil-works/pi-coding-agent";
-import { invokeWebAction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest } from "@chengzhiyi/pi-web-protocol";
+import { invokeWebAction, requestWebInteraction, WebInteractionHost, PLUGIN_CHANGED, type ActionRequest, type WebInteraction } from "@chengzhiyi/pi-web-protocol";
+import { BUILTIN_IDS } from "../../../contracts/plugins.ts";
 import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
@@ -50,6 +51,7 @@ interface WorkspaceRuntime {
 export interface DetachedEvent { seq: number; type: "turn_end" | "error"; text?: string }
 interface DetachedState { owner: string; events: DetachedEvent[]; seq: number; lastText: string; restoreTools: string[] | null }
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
+const isBuiltinPlugin = (id: string) => (Object.values(BUILTIN_IDS) as string[]).includes(id);
 const MAX_DETACHED_EVENTS = 200;
 
 export interface WorkspaceTelemetry {
@@ -242,7 +244,7 @@ export class WorkspaceSessions {
         detached.events.push({ seq: ++detached.seq, type, ...(text === undefined ? {} : { text }) });
         if (detached.events.length > MAX_DETACHED_EVENTS) detached.events.splice(0, detached.events.length - MAX_DETACHED_EVENTS);
       };
-      runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && catalog.has(request.pluginId), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
+      runtime.interactions = new WebInteractionHost(bus, request => !runtime.closing && request.sessionId === session.sessionManager.getSessionId() && (catalog.has(request.pluginId) || isBuiltinPlugin(request.pluginId)), () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       let lastStreamAt = 0;
       const offChanged = bus.on(PLUGIN_CHANGED, () => publish({ type: "snapshot", session: this.snapshotOf(runtime) }));
       const offEvents = session.subscribe(event => {
@@ -353,6 +355,12 @@ export class WorkspaceSessions {
     if (this.active !== runtime || runtime.closing || runner !== runtime.session.extensionRunner) throw new Error("会话运行实例已切换");
     this.publish({ type: "snapshot", session: this.snapshot() });
     return value;
+  }
+  /** Builtin tools ask the user through the session's own interaction host, active or retained. */
+  requestInteraction(request: WebInteraction, signal?: AbortSignal): Promise<unknown> {
+    const runtime = this.runtimes.get(request.sessionId);
+    if (this.disposed || !runtime || runtime.closing) return Promise.reject(new Error("会话不可用"));
+    return requestWebInteraction(runtime.bus, request, signal);
   }
   resolveInteraction(sessionId: string, pluginId: string, requestId: string, value: unknown): void {
     if (this.disposed || !this.active || this.active.closing) throw new Error("Interaction host unavailable");
