@@ -49,7 +49,7 @@ export class NodeTelemetry {
       };
       process.on("uncaughtExceptionMonitor", this.fatal);
     }
-    this.ready = import("@sentry/node").then((sdk) => {
+    this.ready = import("./sentry-node-sdk.ts").then((sdk) => {
       if (this.closed) return;
       this.client = new sdk.NodeClient({
         ...this.config.node, dist: buildId, integrations: [], transport: options.transport ?? ((options) => boundedFetchTransport(sdk.createTransport, options)),

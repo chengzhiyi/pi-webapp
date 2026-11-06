@@ -1,7 +1,7 @@
 import { build as viteBuild } from "vite";
 import { build as esbuild } from "esbuild";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
-import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { root, buildInfo, sentryBuildOptions, prepareSourceMaps, nodeSourceMapPlugin } from "./build-config.mjs";
@@ -36,11 +36,15 @@ if (side !== "node") {
   finally { await stripMaps(resolve(root, "web/dist")).catch(() => {}); }
 }
 if (side !== "browser") {
+  // Only runtime dependencies and Pi's host-provided peers stay external. Everything else the server imports
+  // (the Sentry SDK, the protocol package) is bundled, so installs never download it.
+  const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+  const external = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {})];
   try {
     await esbuild({
       // The worker is a separate ESM entry; plugins are never imported into the host realm.
       entryPoints: { extension: resolve(root, "src/adapters/pi/extension.ts"), "hosted-worker": resolve(root, "src/host/server/plugins/hosted/worker-entry.ts"), "hosted-recovery": resolve(root, "scripts/hosted-stopped-recovery.ts") },
-      bundle: true, platform: "node", format: "esm", target: "node22", packages: "external", minify: true,
+      bundle: true, platform: "node", format: "esm", target: "node22", external, minify: true,
       outdir: resolve(root, "dist"), sourcemap: "external",
       define: { __PI_WEB_RELEASE__: JSON.stringify(info.release), __PI_WEB_BUILD_ID__: JSON.stringify(info.buildId) },
       plugins: [{ name: "bundle-local-protocol", setup(builder) {
