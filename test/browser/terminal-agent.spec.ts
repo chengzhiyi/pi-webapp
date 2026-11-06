@@ -57,6 +57,8 @@ test("Pi types into the visible terminal only after the user allows it", async (
     const onTerminal = screen.getByRole("alertdialog", { name: "Pi wants to type into the terminal" });
     await expect(onTerminal).toBeVisible();
     await expect(onTerminal).toContainText("printf 'AGENT_%s\\n' VISIBLE");
+    // With the chat hidden, the floating composer carries the same approval, answerable in place.
+    await expect(page.locator('[data-floating-composer] [data-approval-place="composer"]')).toContainText("printf 'AGENT_%s\\n' VISIBLE");
     await page.screenshot({ path: testInfo.outputPath("terminal-agent-approval.png") });
     await onTerminal.getByRole("button", { name: "Allow", exact: true }).click();
     await expect(screen.locator(".xterm-rows")).toContainText("AGENT_VISIBLE");

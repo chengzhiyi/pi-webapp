@@ -215,7 +215,7 @@ interface ComposerDraft {
  * (draft, uploads, commands, send rules) into the floating shell instead of the
  * docked card, so nothing is copied between two composers.
  */
-function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, renderTranscript, latestTurnHasCard = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpdateQueuedPrompt" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; floating?: FloatingTarget | null; floatingStatus: FloatingStatus; renderTranscript?: () => ReactNode; latestTurnHasCard?: boolean; onSend: ComposerSend }) {
+function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, renderTranscript, latestTurnHasCard = false, interaction, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpdateQueuedPrompt" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; floating?: FloatingTarget | null; floatingStatus: FloatingStatus; renderTranscript?: () => ReactNode; latestTurnHasCard?: boolean; interaction?: ReactNode; onSend: ComposerSend }) {
   const locale = useLocale();
   // Keep unsent text and uploads scoped to their session for this tab's lifetime.
   // Setters capture the originating key, so late async replies cannot edit another chat.
@@ -612,14 +612,14 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
               </button>
             </span>
           </div>
-          {needsInput && <div className={floatingCss.transcriptBanner}>{needsInputLine}</div>}
+          {needsInput && <div className={floatingCss.transcriptBanner} data-floating-interaction>{interaction ?? needsInputLine}</div>}
           <div ref={transcriptScroll} className={floatingCss.transcriptBody} data-floating-transcript-body
             onWheel={() => { revealCard.current = false; }} onPointerDown={() => { revealCard.current = false; }} onKeyDown={() => { revealCard.current = false; }}
             onScroll={(event) => { if (revealCard.current) return; const element = event.currentTarget; followTranscript.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24; }}>
             {renderTranscript?.() ?? null}
           </div>
         </div>
-      : needsInput ? needsInputLine
+      : needsInput ? interaction ? <div data-floating-interaction>{interaction}</div> : needsInputLine
       : running
         ? <>
             {workingLine}
@@ -849,8 +849,8 @@ export function PiConversation({ floating = null, rightbarControl, composerInter
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
-              {composerInteraction}
-              <PiInputBar floating={floating} floatingStatus={floatingStatus} renderTranscript={renderFloatingTranscript} latestTurnHasCard={latestTurnHasCard} suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
+              {!floating && composerInteraction}
+              <PiInputBar interaction={floating ? composerInteraction : undefined} floating={floating} floatingStatus={floatingStatus} renderTranscript={renderFloatingTranscript} latestTurnHasCard={latestTurnHasCard} suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
             </div>
           </div>
           {showLatest && <div className={chatCss.toBottomSlot}>
