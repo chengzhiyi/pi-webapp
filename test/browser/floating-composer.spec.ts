@@ -117,7 +117,22 @@ test("the composer floats over a focused workspace, shares the draft, reports re
     await expect(transcript).toHaveCount(0);
     await region.getByRole("button", { name: "Show conversation" }).click();
     await expect(transcript).toBeVisible();
+    // The command menu takes the space above the bar: the conversation folds away under it, then returns.
+    await region.getByRole("button", { name: "Add command" }).click();
+    await expect(region.getByRole("listbox", { name: "Commands" })).toBeVisible();
+    await expect(transcript).toHaveCount(0);
+    await region.getByRole("button", { name: "Add command" }).click();
+    await expect(transcript).toBeVisible();
     await region.getByRole("button", { name: "Hide conversation" }).last().click();
+    // The session's model can be switched from the bar.
+    const model = region.locator("[data-floating-model]").getByRole("button", { name: /^Change model/ });
+    await expect(model).toBeVisible();
+    // An icon, not a name chip: it takes no more room than the row's other buttons.
+    expect(Math.round((await model.boundingBox())!.width)).toBe(32);
+    await expect(model).toHaveAttribute("title", /\S/);
+    await model.click();
+    await expect(page.getByRole("dialog").or(page.getByRole("menu")).or(page.getByRole("listbox")).first()).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(transcript).toHaveCount(0);
 
     // Collapse to the icon, then ⌘J / Ctrl+J brings the bar back with focus.

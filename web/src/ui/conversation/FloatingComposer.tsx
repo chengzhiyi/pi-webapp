@@ -218,6 +218,12 @@ export function FloatingComposer({ host, bounds: panel, status, iconState, iconL
     apply("--pi-floating-composer-overlap", overlap);
     return () => { panel.style.removeProperty("--pi-floating-composer-inset"); panel.style.removeProperty("--pi-floating-composer-overlap"); };
   }, [panel, inset, overlap]);
+  // While the bar is open it carries the session's requests (approvals); panels drop their own copy.
+  useEffect(() => {
+    if (!panel || collapsed) return;
+    panel.setAttribute("data-floating-composer-open", "");
+    return () => panel.removeAttribute("data-floating-composer-open");
+  }, [panel, collapsed]);
 
   const startDrag = (event: React.PointerEvent<HTMLElement>, target: "grip" | "icon") => {
     if (event.button !== 0 || !point || gesture.current) return;

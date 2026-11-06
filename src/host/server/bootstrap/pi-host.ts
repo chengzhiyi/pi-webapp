@@ -25,6 +25,7 @@ import { OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
 import { invokeWebAction, requestWebInteraction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
 import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
 import { BUILTIN_IDS } from "../../../contracts/plugins.ts";
+import { acceptsInteraction } from "../plugins/interaction-plugins.ts";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { LifecycleQueue } from "../sessions/lifecycle.ts";
 import { resumeMessage } from "../sessions/execution-control.ts";
@@ -109,6 +110,16 @@ shared.tuiStreaming ??= null;
 shared.tuiPrompts ??= new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
 shared.tuiPromptSessionId ??= null;
 shared.tuiAgentError ??= false;
+let releasePruneScheduled = false;
+/** Once per process, after startup settles: old releases are only disk, never needed to serve. */
+function scheduleReleasePrune(updater: SelfUpdater): SelfUpdater {
+  if (!releasePruneScheduled) {
+    releasePruneScheduled = true;
+    setTimeout(() => { void updater.pruneReleases().catch(() => {}); }, 60_000).unref();
+  }
+  return updater;
+}
+
 function activeCatalog(): WebPluginCatalog | null {
   return shared.selected === "sdk" ? shared.workspaceSessions?.catalog ?? null : shared.tuiCatalog;
 }
@@ -330,7 +341,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   shared.hosted ??= new HostedPluginIntegration({
     root: hostedRoot,
     ...(dev.enabled ? { dev, devStatusPath: hostedDevStatusPath(getAgentDir()) } : {}),
-    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], devArchives: dev.archives, devRoots: dev.roots } : {}),
+    // Dev sources may stand in for an official plugin too, so they are wired whenever dev mode is on.
+    ...(dev.enabled ? { devArchives: dev.archives, devRoots: dev.roots } : {}),
+    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog] } : {}),
     // Inert for plugins that declare no secrets/network/scheduler/sessions (every shipped plugin today).
     ...hostedCapabilities({ root: hostedRoot, sessions: () => shared.workspaceSessions, activeWorkspace: () => shared.workspaceSessions?.path ?? null, trustedScope,
       sessionTitle: id => shared.workspaceSessions?.retainedSessions().find(session => session.sessionId === id)?.name,
@@ -373,7 +386,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   });
   const diagnosticContext = (ctx: ExtensionContext): Record<string, unknown> => ({ ...shared.operation, session: shared.telemetry?.session(ctx.sessionManager.getSessionId()), piVersion: VERSION, model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : null, thinkingLevel: ctx.thinkingLevel });
   shared.interactions?.dispose();
-  shared.interactions = new WebInteractionHost(pi.events, (request) => !!shared.bridge && request.sessionId === shared.current?.sessionManager.getSessionId() && (!!shared.tuiCatalog?.has(request.pluginId) || (Object.values(BUILTIN_IDS) as string[]).includes(request.pluginId)), () => { if (shared.current && shared.selected === "tui") publishSnapshot(shared.current); });
+  shared.interactions = new WebInteractionHost(pi.events, (request) => !!shared.bridge && request.sessionId === shared.current?.sessionManager.getSessionId() && acceptsInteraction(shared.tuiCatalog, request.pluginId), () => { if (shared.current && shared.selected === "tui") publishSnapshot(shared.current); });
   const bindChanged = () => {
     shared.stopChanged?.();
     shared.stopChanged = pi.events.on(PLUGIN_CHANGED, () => {
@@ -546,10 +559,10 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
-            selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
+            selfUpdate: scheduleReleasePrune(new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
               pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
               prefetchPlugins: (version, signal) => shared.hosted!.manager.prefetchForHost(version, signal),
-              beforeRestart: force => shared.hosted!.prepareRestart(force) }),
+              beforeRestart: force => shared.hosted!.prepareRestart(force) })),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
@@ -581,7 +594,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
             },
             async resolvePluginInteraction(sessionId, pluginId, requestId, value) {
               activeSession(sessionId);
-              if (!activeCatalog()?.has(pluginId)) throw new Error("插件未启用");
+              // The ask side and the answer side accept the same plugins, built-ins included.
+              if (!acceptsInteraction(activeCatalog(), pluginId)) throw new Error("插件未启用");
               if (shared.selected === "sdk") shared.workspaceSessions!.resolveInteraction(sessionId, pluginId, requestId, value);
               else shared.interactions!.resolve(sessionId, pluginId, requestId, value);
             },

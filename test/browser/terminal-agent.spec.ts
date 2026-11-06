@@ -51,21 +51,30 @@ test("Pi types into the visible terminal only after the user allows it", async (
     await expect(prompt).toHaveCount(0);
     expect(await readFile(join(cwd, "denied.txt"), "utf8").catch(() => "missing")).toBe("missing");
 
-    // Allowed on the terminal itself while it fills the screen: the command runs there and Pi reads it back.
+    // Fullscreen with the chat hidden: the open floating composer carries the one approval card,
+    // and the terminal drops its own copy underneath it.
     await rightbar.getByRole("button", { name: "Fullscreen", exact: true }).click();
     await expect(rightbar).toHaveAttribute("data-sidebar-right-panel", "fullscreen");
     const allowed = send!.execute("allow", { text: "printf 'AGENT_%s\\n' VISIBLE" }, undefined, undefined, ctx);
-    const onTerminal = screen.getByRole("alertdialog", { name: "Pi wants to type into the terminal" });
-    await expect(onTerminal).toBeVisible();
-    await expect(onTerminal).toContainText("printf 'AGENT_%s\\n' VISIBLE");
+    const inComposer = page.locator('[data-floating-composer] [data-approval-place="composer"]');
+    await expect(inComposer).toContainText("printf 'AGENT_%s\\n' VISIBLE");
+    await expect(screen.locator('[data-approval-place="terminal"]')).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath("terminal-agent-approval.png") });
-    await onTerminal.getByRole("button", { name: "Allow", exact: true }).click();
+    await inComposer.getByRole("button", { name: "Allow", exact: true }).click();
     await expect(screen.locator(".xterm-rows")).toContainText("AGENT_VISIBLE");
     await expect(prompt).toHaveCount(0);
     const result = output(await allowed);
     expect(result).toContain(`Terminal ${terminalId}`);
     expect(result).toContain("AGENT_VISIBLE");
     expect(output(await read!.execute("read", { terminalId, lines: 3 }, undefined, undefined, ctx))).toContain("AGENT_VISIBLE");
+    // Collapsed to its icon, the composer shows no card, so the terminal shows its own and it can be allowed there.
+    await page.getByRole("region", { name: "Ask Pi" }).getByRole("button", { name: "Collapse composer" }).click();
+    const again = send!.execute("again", { terminalId, text: "printf 'AGAIN_%s\\n' OK" }, undefined, undefined, ctx);
+    const onTerminal = screen.locator('[data-approval-place="terminal"]');
+    await expect(onTerminal).toBeVisible();
+    await onTerminal.getByRole("button", { name: "Allow", exact: true }).click();
+    await expect(screen.locator(".xterm-rows")).toContainText("AGAIN_OK");
+    expect(output(await again)).toContain("AGAIN_OK");
     expect(errors).toEqual([]);
   } finally { interactions.dispose(); await bridge.close(); await rm(cwd, { recursive: true, force: true }); }
 });

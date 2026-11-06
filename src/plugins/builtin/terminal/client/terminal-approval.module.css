@@ -6,3 +6,5 @@
 .hint { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* The open floating composer shows the same approval where the user is typing; one card, not two. */
+:global([data-floating-composer-open]) .overlay { display: none; }

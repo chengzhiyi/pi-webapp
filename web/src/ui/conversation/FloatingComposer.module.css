@@ -531,3 +531,20 @@
   .icon[data-state='running']::after { opacity: 0.6; }
   .icon:hover { transform: none; }
 }
+
+/* The session's model picker, compact on the composer row. */
+.model {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--fc-row);
+}
+
+/* Same weight as the row's other icon buttons. */
+.model :global(button[data-compact]) {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.model :global(button[data-compact]:hover:not(:disabled)) {
+  color: var(--dsw-alias-label-primary);
+}

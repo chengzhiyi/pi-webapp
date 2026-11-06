@@ -289,3 +289,17 @@
   flex: 0 0 auto;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* Icon-only trigger for tight rows (the floating composer). */
+.trigger.compact {
+  justify-content: center;
+  width: 32px;
+  max-width: none;
+  height: 32px;
+  padding: 0;
+  border-radius: 16px;
+}
+
+.trigger.compact .triggerIcon {
+  display: block;
+}
