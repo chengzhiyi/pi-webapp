@@ -531,3 +531,18 @@
   .icon[data-state='running']::after { opacity: 0.6; }
   .icon:hover { transform: none; }
 }
+
+/* The session's model picker, compact on the composer row. */
+.model {
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 34%;
+  height: var(--fc-row);
+  min-width: 0;
+  margin-right: 2px;
+}
+
+.model :global(button) {
+  max-width: 100%;
+}

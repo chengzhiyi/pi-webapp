@@ -389,7 +389,7 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
       return;
     }
     // The floating bar carries no model picker: bring the conversation back and open it there.
-    if (!command.pluginId && command.name === "model") { if (isFloating) showConversationThen(() => setModelOpenSignal((value) => value + 1)); else setModelOpenSignal((value) => value + 1); return; }
+    if (!command.pluginId && command.name === "model") { setModelOpenSignal((value) => value + 1); return; }
     if (!command.pluginId && (command.name === "compact" || command.name === "new")) {
       setWorking(true);
       try { await (command.name === "compact" ? onCompact() : onNewSession()); }
@@ -487,7 +487,7 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
     }
     try {
       if (localCommand) {
-        if (text === "/model") { if (isFloating) showConversationThen(() => setModelOpenSignal((value) => value + 1)); else setModelOpenSignal((value) => value + 1); }
+        if (text === "/model") setModelOpenSignal((value) => value + 1);
         else await (text === "/compact" ? onCompact() : onNewSession());
         setDraft("");
       } else if (pluginCommand?.pluginId && pluginCommand.action && commandMatch) {
@@ -574,6 +574,9 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
                   onStop={() => { void stop(); }} />
               : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
               : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>;
+  const modelControl = noModels
+    ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button>
+    : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />;
   const slashHint = running && draft.trimStart().startsWith("/") && <div className="pi-prompt-hint">{t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands")}</div>;
 
   if (floating) {
@@ -645,7 +648,7 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
               </>
           : null;
     const hasFiles = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
-    return <FloatingComposer host={floating.host} bounds={floating.panel} status={status} iconState={iconState} iconLabel={iconLabel}
+    return <FloatingComposer host={floating.host} bounds={floating.panel} status={commandMenu === null ? status : null} iconState={iconState} iconLabel={iconLabel}
       labels={{ region: t("询问 Pi", "Ask Pi"), grip: t("移动输入框：方向键移动，Home 复位", "Move composer: arrow keys move, Home resets"), snapHint: t("拖动以移动，双击复位", "Drag to move, double-click to reset") }}
       focusInput={() => textarea.current?.focus()}
       onContentPointerDown={() => setReply(current => current && !current.compact ? { ...current, compact: true } : current)}>
@@ -668,6 +671,7 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
               </button>
             </span>}
             <div className={floatingCss.editor}>{editorView}</div>
+            <span className={floatingCss.model} data-floating-model>{modelControl}</span>
             <button className={floatingCss.action} type="button" data-active={transcriptOpen || undefined} aria-expanded={transcriptOpen}
               aria-label={transcriptOpen ? t("收起对话", "Hide conversation") : t("展开对话", "Show conversation")} title={transcriptOpen ? t("收起对话", "Hide conversation") : t("展开对话", "Show conversation")}
               onMouseDown={(event) => event.preventDefault()} onClick={() => openTranscript(!transcriptOpen)}>
@@ -700,7 +704,7 @@ function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, 
             {renderPluginSlot("composer.controls")}
           </div>
           <div className={inputCss.trailing}>
-            {noModels ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button> : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />}
+            {modelControl}
             {sendControls}
           </div>
         </div>
