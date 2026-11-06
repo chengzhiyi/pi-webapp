@@ -38,7 +38,8 @@ test("Pi types into the visible terminal only after the user allows it", async (
     const terminalId = (await screen.getAttribute("data-workspace-terminal"))!;
 
     // Denied from the composer: nothing reaches the shell and the composer comes back.
-    const denied = send!.execute("deny", { terminalId, text: "printf DENIED > denied.txt" }, undefined, undefined, ctx);
+    // Settle into a value at once: the refusal can land before the click resolves, and an unobserved rejection fails the test.
+    const denied = send!.execute("deny", { terminalId, text: "printf DENIED > denied.txt" }, undefined, undefined, ctx).then(() => "sent", (error: Error) => error.message);
     const prompt = page.getByRole("alertdialog", { name: "Pi wants to type into the terminal" });
     // Shown both in place of the composer and on the targeted terminal tab.
     await expect(prompt).toHaveCount(2);
@@ -46,7 +47,7 @@ test("Pi types into the visible terminal only after the user allows it", async (
     await expect(composerCard).toContainText("printf DENIED > denied.txt");
     await expect(screen.locator('[data-approval-place="terminal"]')).toBeVisible();
     await composerCard.getByRole("button", { name: "Deny", exact: true }).click();
-    await expect(denied).rejects.toThrow(/declined/);
+    expect(await denied).toMatch(/declined/);
     await expect(prompt).toHaveCount(0);
     expect(await readFile(join(cwd, "denied.txt"), "utf8").catch(() => "missing")).toBe("missing");
 
