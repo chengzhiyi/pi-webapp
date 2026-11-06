@@ -11,6 +11,7 @@ import { desktopProtocolVersion, validateDesktopRelease } from "../../../../desk
 import { readCandidate, readUpgradeTransaction, retireCandidate, writeCandidate } from "../../../../bin/upgrade-transaction.mjs";
 import { launcherHandoffProtocol, readHandoff, writeHandoff } from "../../../../desktop/launcher-handoff.mjs";
 import { desktopPeerSpecs, exactSdkPeerSpecs, verifyDesktopPackage } from "./desktop-package.ts";
+import { pruneReleases } from "./release-prune.ts";
 
 const execFileAsync = promisify(execFile);
 import { compareVersions, isStableVersion, isAlphaVersion, parseVersion } from "../../../../desktop/release-version.mjs";
@@ -142,6 +143,14 @@ export class SelfUpdater {
     if (pkg.name !== "pi-webapp") throw new Error("当前 pi-webapp 版本无效");
     parseVersion(pkg.version);
     return pkg.version;
+  }
+
+  /** Removes downloaded releases no pointer can start. Never while an update is in flight here or elsewhere. */
+  async pruneReleases(): Promise<string[]> {
+    if (this.preparing || this.preparedUpdate || this.restartPending || this.cancellation) return [];
+    const transaction = await this.transaction();
+    if (transaction && !terminal(transaction.phase)) return [];
+    return pruneReleases({ agentDir: this.agentDir, packageRoot: this.packageRoot });
   }
 
   /** Settles a record no live operation of this process owns. Nothing here can fence an update:

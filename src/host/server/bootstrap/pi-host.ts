@@ -110,6 +110,16 @@ shared.tuiStreaming ??= null;
 shared.tuiPrompts ??= new EditablePromptQueue(() => { if (shared.selected === "tui" && shared.current) shared.bridge?.publish({ type: "snapshot", session: tuiSnapshot() }); void publishWorkspaces(); });
 shared.tuiPromptSessionId ??= null;
 shared.tuiAgentError ??= false;
+let releasePruneScheduled = false;
+/** Once per process, after startup settles: old releases are only disk, never needed to serve. */
+function scheduleReleasePrune(updater: SelfUpdater): SelfUpdater {
+  if (!releasePruneScheduled) {
+    releasePruneScheduled = true;
+    setTimeout(() => { void updater.pruneReleases().catch(() => {}); }, 60_000).unref();
+  }
+  return updater;
+}
+
 function activeCatalog(): WebPluginCatalog | null {
   return shared.selected === "sdk" ? shared.workspaceSessions?.catalog ?? null : shared.tuiCatalog;
 }
@@ -549,10 +559,10 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
-            selfUpdate: new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
+            selfUpdate: scheduleReleasePrune(new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
               pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
               prefetchPlugins: (version, signal) => shared.hosted!.manager.prefetchForHost(version, signal),
-              beforeRestart: force => shared.hosted!.prepareRestart(force) }),
+              beforeRestart: force => shared.hosted!.prepareRestart(force) })),
             snapshot,
             busyGitWorkspaces: () => {
               const paths = (shared.workspaceSessions?.retainedSessions() ?? []).filter(session => !session.idle).map(session => session.cwd);
