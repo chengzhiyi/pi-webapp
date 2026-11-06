@@ -330,7 +330,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
   shared.hosted ??= new HostedPluginIntegration({
     root: hostedRoot,
     ...(dev.enabled ? { dev, devStatusPath: hostedDevStatusPath(getAgentDir()) } : {}),
-    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], devArchives: dev.archives, devRoots: dev.roots } : {}),
+    // Dev sources may stand in for an official plugin too, so they are wired whenever dev mode is on.
+    ...(dev.enabled ? { devArchives: dev.archives, devRoots: dev.roots } : {}),
+    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog] } : {}),
     // Inert for plugins that declare no secrets/network/scheduler/sessions (every shipped plugin today).
     ...hostedCapabilities({ root: hostedRoot, sessions: () => shared.workspaceSessions, activeWorkspace: () => shared.workspaceSessions?.path ?? null, trustedScope,
       sessionTitle: id => shared.workspaceSessions?.retainedSessions().find(session => session.sessionId === id)?.name,

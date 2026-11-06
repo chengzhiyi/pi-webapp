@@ -98,7 +98,7 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   assert.equal(sources.notices().length, 5, messages.join("\n"));
   assert.match(messages[0]!, /missing: directory does not exist/);
   assert.match(messages[1]!, /package\.json not found/); assert.match(messages[2]!, /not valid JSON/);
-  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
+  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-excalidraw\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
   assert.deepEqual([...sources.roots], [[GITHUB_ID, good]]); assert.equal(sources.enabled, true);
   assert.ok(sources.catalog.some(p => p.id === GITHUB_ID));
 
@@ -111,6 +111,21 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   const archive = devPluginsFromEnv(`@x/y=${join(root, "a.tgz")};${GITHUB_ID}=${join(root, "a.txt")};${GITHUB_ID}=${join(root, "gone.tgz")};junk`);
   assert.equal(archive.catalog.length, 0);
   assert.match(archive.notices.map(n => n.message).join("\n"), /unknown plugin id "@x\/y"[\s\S]*not a \.tgz[\s\S]*archive not found[\s\S]*not <id>=<path\.tgz>/);
+});
+
+test("an official plugin can be developed from a local directory or archive without joining the dev catalog", async t => {
+  const root = await tmp(t), configPath = join(root, "hosted-dev.json");
+  const dir = await pluginDir(root, { name: "@chengzhiyi/pi-excalidraw" });
+  const sources = new HostedDevSources({ env: {}, configPath });
+  // Added after startup: it is already in the host catalog, so it applies live instead of asking for a restart.
+  await writeFile(configPath, JSON.stringify({ roots: [dir] })); sources.refresh();
+  assert.deepEqual([...sources.roots], [["@chengzhiyi/pi-excalidraw", dir]]);
+  assert.deepEqual(sources.notices(), []);
+  assert.equal(sources.catalog.some(p => p.id === "@chengzhiyi/pi-excalidraw"), false);
+  await writeFile(join(root, "x.tgz"), "");
+  const archive = devPluginsFromEnv(`@chengzhiyi/pi-excalidraw=${join(root, "x.tgz")}`);
+  assert.deepEqual(archive.notices, []); assert.equal(archive.catalog.length, 0);
+  assert.equal(archive.archives.get("@chengzhiyi/pi-excalidraw"), join(root, "x.tgz"));
 });
 
 test("a root added to the config after startup is reported, not silently ignored; edits to known plugins apply live", async t => {

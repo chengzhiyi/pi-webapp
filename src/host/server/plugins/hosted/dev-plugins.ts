@@ -4,7 +4,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
 import type { HostedDevInfo, HostedPluginCatalog } from "../../../../contracts/hosted-plugins.ts";
 import { failure } from "./errors.ts";
-import type { OfficialPlugin } from "./official-catalog.ts";
+import { OFFICIAL_PLUGINS, type OfficialPlugin } from "./official-catalog.ts";
 
 export const GITHUB_ID = "@chengzhiyi/pi-github";
 /** Catalog metadata for plugins that exist only as developer-supplied sources (no registry listing yet). */
@@ -17,7 +17,10 @@ const KNOWN: Record<string, OfficialPlugin> = {
   },
 };
 export interface DevNotice { level: "error" | "warning" | "info"; pluginId?: string; source: string; message: string }
-const knownIds = () => Object.keys(KNOWN).join(", ");
+/** Official plugins may also be developed from a local source; they are already in the host catalog. */
+const official = (id: string) => OFFICIAL_PLUGINS.some(plugin => plugin.id === id);
+const accepted = (id: string) => !!KNOWN[id] || official(id);
+const knownIds = () => [...Object.keys(KNOWN), ...OFFICIAL_PLUGINS.map(plugin => plugin.id)].join(", ");
 
 /** `PI_WEBAPP_HOSTED_DEV_ARCHIVES="<id>=<path.tgz>;<id>=<path.tgz>"`. Unknown ids are rejected rather than trusted. */
 export function devPluginsFromEnv(value = process.env.PI_WEBAPP_HOSTED_DEV_ARCHIVES): { catalog: OfficialPlugin[]; archives: Map<string, string>; notices: DevNotice[] } {
@@ -27,11 +30,12 @@ export function devPluginsFromEnv(value = process.env.PI_WEBAPP_HOSTED_DEV_ARCHI
     const eq = part.lastIndexOf("="), id = part.slice(0, eq), file = part.slice(eq + 1);
     const known = KNOWN[id];
     const problem = eq < 1 ? `entry "${part}" is not <id>=<path.tgz>`
-      : !known ? `unknown plugin id "${id}" (known: ${knownIds()})`
+      : !accepted(id) ? `unknown plugin id "${id}" (known: ${knownIds()})`
       : !file.endsWith(".tgz") ? `"${file}" is not a .tgz archive`
       : !existsSync(resolve(file)) ? `archive not found: ${resolve(file)}` : null;
-    if (problem) { notices.push({ level: "error", source, ...(known ? { pluginId: id } : {}), message: problem }); continue; }
-    catalog.push(known!); archives.set(id, resolve(file));
+    if (problem) { notices.push({ level: "error", source, ...(accepted(id) ? { pluginId: id } : {}), message: problem }); continue; }
+    if (known) catalog.push(known);
+    archives.set(id, resolve(file));
   }
   return { catalog, archives, notices };
 }
@@ -73,7 +77,7 @@ export function inspectDevRoot(spec: RootSpec): { pluginId?: string; notice?: De
   try { pkg = JSON.parse(readFileSync(join(spec.path, "package.json"), "utf8")); }
   catch (error) { return fail((error as NodeJS.ErrnoException).code === "ENOENT" ? "package.json not found (point at the package directory, not its parent)" : "package.json is not valid JSON"); }
   if (typeof pkg.name !== "string") return fail("package.json has no name");
-  if (!KNOWN[pkg.name]) return fail(`unknown plugin id "${pkg.name}" (known: ${knownIds()})`);
+  if (!accepted(pkg.name)) return fail(`unknown plugin id "${pkg.name}" (known: ${knownIds()})`);
   if (!isHostedPluginManifest(pkg.piWebapp)) return fail('package.json "piWebapp" is not a valid hosted v2 manifest (apiVersion, hostRange, backend, frontend, resourcesManifest, capabilities)', pkg.name);
   return { pluginId: pkg.name };
 }
@@ -111,7 +115,7 @@ export class HostedDevSources {
       const id = inspected.pluginId!;
       if (next.has(id)) { notices.push({ level: "error", pluginId: id, source: spec.source, message: `${spec.path}: plugin ${id} is already provided by ${next.get(id)}` }); continue; }
       if (this.archives.has(id)) { notices.push({ level: "warning", pluginId: id, source: spec.source, message: `${spec.path}: PI_WEBAPP_HOSTED_DEV_ARCHIVES also provides ${id}; the dev directory wins` }); }
-      if (!this.catalog.some(p => p.id === id)) {
+      if (!official(id) && !this.catalog.some(p => p.id === id)) {
         if (!initial) { notices.push({ level: "warning", pluginId: id, source: spec.source, message: `${spec.path}: ${id} was not part of this host's startup configuration. Restart pi-webapp once (npm run stop && npm run start) to list it.` }); continue; }
         this.catalog.push(KNOWN[id]!);
       }
