@@ -45,6 +45,7 @@ Choose **Open terminal** for an interactive shell that starts in the workspace f
 - Switching tabs or chats, or collapsing the sidebar, keeps the process running. A short browser disconnect reconnects without replaying uncertain input; a browser that stays away for more than five minutes loses its hold on the terminal.
 - You can have 8 terminals per chat and 32 per service.
 - Closing a terminal tab, or stopping the service, ends its process. Reloading the page doesn't bring tabs back, and restarting the service doesn't bring processes back.
+- You can ask Pi to run something in a terminal ("run the tests in this terminal"). Pi can read a terminal's recent text (up to 500 lines) on its own, but before it types anything it shows the exact command, on the terminal and in place of the message box, and waits for you to choose **Allow** or **Deny**. Every command needs its own approval. Pi only sees and types into the current chat's terminals.
 
 ::: warning The terminal is not sandboxed
 Commands run with your user's permissions. The workspace is only the starting folder. Check what you paste before you run it.

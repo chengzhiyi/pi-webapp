@@ -23,6 +23,8 @@ export class SessionTerminal {
   private readonly screen: HeadlessTerminal;
   private readonly serializer: Serializer;
   private readonly followers = new Set<Follower>();
+  /** Notified after each output chunk reaches the headless screen, and on exit. */
+  private readonly outputListeners = new Set<(data: string) => void>();
   private pending = Promise.resolve();
   private exit: Extract<TerminalFrame, { type: "exit" }> | undefined;
   private disposed = false;
@@ -56,12 +58,12 @@ export class SessionTerminal {
       this.pty.pause();
       this.pending = this.pending.then(() => new Promise<void>(resolve => {
         if (this.disposed) { resolve(); return; }
-        this.screen.write(data, () => { this.broadcast({ type: "output", data }); resolve(); });
+        this.screen.write(data, () => { this.broadcast({ type: "output", data }); for (const listener of this.outputListeners) listener(data); resolve(); });
       })).finally(() => { if (!this.exit && !this.disposed) this.pty.resume(); });
     });
     this.done = new Promise(resolve => this.pty.onExit(({ exitCode, signal }) => {
       this.exit = { type: "exit", exitCode, signal };
-      void this.pending.then(() => { this.broadcast(this.exit!); resolve(); });
+      void this.pending.then(() => { this.broadcast(this.exit!); for (const listener of this.outputListeners) listener(""); resolve(); });
     }));
     this.scheduleExpiry();
   }
@@ -87,6 +89,51 @@ export class SessionTerminal {
   write(data: string) {
     if (this.exit || this.disposed) throw new Error("终端已退出");
     this.pty.write(data);
+  }
+  get exitCode(): number | undefined { return this.exit?.exitCode; }
+  get running() { return !this.exit && !this.disposed; }
+  /**
+   * Resolve once output has paused for `quietMs`, the shell exited, `maxMs` passed or `signal` aborted.
+   * With `started`, the quiet period counts only once the output seen so far satisfies it.
+   */
+  settle(quietMs: number, maxMs: number, signal?: AbortSignal, started?: (seen: string) => boolean): Promise<void> {
+    return new Promise(resolve => {
+      let quiet: ReturnType<typeof setTimeout> | undefined;
+      let seen = "";
+      let armed = !started;
+      const done = () => {
+        clearTimeout(quiet); clearTimeout(limit);
+        this.outputListeners.delete(bump); signal?.removeEventListener("abort", done);
+        resolve();
+      };
+      const bump = (data: string) => {
+        if (!this.running) { done(); return; }
+        if (!armed && seen.length < 64 * 1024) { seen += data; armed = started!(seen); }
+        clearTimeout(quiet);
+        if (armed) quiet = setTimeout(done, quietMs);
+      };
+      const limit = setTimeout(done, maxMs);
+      this.outputListeners.add(bump);
+      signal?.addEventListener("abort", done, { once: true });
+      if (signal?.aborted) done(); else bump("");
+    });
+  }
+  /** Plain text of the last `lines` logical lines (scrollback included), after pending output is applied. */
+  async text(lines: number): Promise<string> {
+    await this.pending;
+    if (this.disposed) throw new Error("Terminal closed");
+    const buffer = this.screen.buffer.active;
+    let last = buffer.length - 1;
+    while (last >= 0 && !buffer.getLine(last)?.translateToString(true).trim()) last--;
+    const logical: string[] = [];
+    // Soft-wrapped rows continue the previous logical line; scan a bounded window.
+    for (let index = Math.max(0, last - lines * 4); index <= last; index++) {
+      const line = buffer.getLine(index);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      if (line.isWrapped && logical.length) logical[logical.length - 1] += text; else logical.push(text);
+    }
+    return logical.slice(-lines).join("\n");
   }
   resize(cols: number, rows: number) {
     if (this.exit || this.disposed) return;
@@ -114,6 +161,7 @@ export class SessionTerminal {
       await this.done;
     }
     await this.pending;
+    for (const listener of this.outputListeners) listener("");
     this.followers.clear();
     this.screen.dispose();
   }
@@ -142,6 +190,13 @@ export class TerminalRegistry {
     const terminal = this.terminals.get(id);
     if (!terminal || terminal.sessionId !== sessionId) throw new Error("终端不存在或不属于此会话");
     return terminal;
+  }
+  /** A named terminal of this session, or its only running terminal when none is named. */
+  resolve(id: string | undefined, sessionId: string): { id: string; terminal: SessionTerminal } {
+    if (id !== undefined) return { id, terminal: this.get(id, sessionId) };
+    const owned = [...this.terminals].filter(([, terminal]) => terminal.sessionId === sessionId && terminal.running);
+    if (owned.length === 1) return { id: owned[0][0], terminal: owned[0][1] };
+    throw new Error(owned.length ? `This session has ${owned.length} open terminals (${owned.map(([key]) => key).join(", ")}); pass terminalId.` : "This session has no open terminal. Ask the user to open one in the workspace panel.");
   }
   async remove(id: string, sessionId: string) {
     const terminal = this.terminals.get(id);

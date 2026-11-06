@@ -1,0 +1,8 @@
+.card { display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; width: 100%; max-width: var(--piw-composer-card-max-width, 720px); margin: 0 auto; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-elevation-panel); font-size: 13px; line-height: 20px; }
+.overlay { position: absolute; z-index: 2; left: 12px; right: 12px; bottom: 12px; width: auto; max-width: none; }
+.title { font-weight: 600; }
+.command { margin: 0; max-height: 160px; overflow: auto; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base)); font-family: var(--ds-font-family-code, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.enter { color: var(--dsw-alias-label-tertiary); }
+.hint { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }

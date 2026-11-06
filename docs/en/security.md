@@ -44,7 +44,7 @@ The same port number matters because the service only accepts requests whose ori
 ## What the agent and terminal can do
 
 - **The agent** can read, create, edit and delete files, and run shell commands, anywhere your user can. Choosing a workspace sets where it starts, not where it may go.
-- **Terminals** are your login shell. The workspace is only the starting folder.
+- **Terminals** are your login shell. The workspace is only the starting folder. The agent can read the current chat's terminals, and types into one only after you allow that exact command.
 - **File previews** are narrower than that: they read only inside the workspace and don't follow symlinks out of it. That limits the preview tool, not the agent.
 - **Git writes** (commit, branch switch) check for stale state and wait for chats that share the working tree to be idle. They are guardrails against mistakes, not access control.
 

@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { TerminalSession } from "./terminal-session.ts";
-import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
+import type { WebInteraction } from "@chengzhiyi/pi-web-protocol";
+import { answerTerminalApproval, TerminalSession } from "./terminal-session.ts";
+import { TerminalApproval, terminalApproval } from "./TerminalApproval.tsx";
+import { localize as t, useLocale } from "../../../../../web/src/ui/locale/preference.ts";
 import { Button } from "../../../../../web/src/ui/shared/primitives/Button.tsx";
 import "@xterm/xterm/css/xterm.css";
 import css from "./workspace-terminal.module.css";
@@ -15,7 +17,7 @@ function failureMessage(reason?: string) {
   }
 }
 
-export function WorkspaceTerminal({ model, visible, onNew }: { model: TerminalSession; visible: boolean; onNew(): void }) {
+export function WorkspaceTerminal({ model, visible, onNew, sessionId, interactions }: { model: TerminalSession; visible: boolean; onNew(): void; sessionId: string; interactions?: readonly WebInteraction[] }) {
   const terminal = model;
   const inputLabel = t("终端输入", "Terminal input");
   const container = useRef<HTMLDivElement>(null);
@@ -30,11 +32,15 @@ export function WorkspaceTerminal({ model, visible, onNew }: { model: TerminalSe
     model.terminal.textarea?.setAttribute("aria-label", inputLabel);
     if (visible) { model.measure(); model.terminal.focus(); }
   }, [model, visible, state.phase, inputLabel]);
+  const locale = useLocale();
+  // The agent's request for this very terminal, shown on it so it is visible even when the conversation is not.
+  const approval = interactions?.map(terminalApproval).find(item => item?.terminalId === model.id) ?? null;
   return <section className={css.root} data-workspace-terminal={model.id} data-terminal-phase={state.phase}>
     {state.phase !== "connected" && <div className={css.status} role="status">
       <span>{state.phase === "starting" ? t("正在启动终端…", "Starting terminal…") : state.phase === "disconnected" ? t("连接断开，正在重连…", "Disconnected. Reconnecting…") : state.phase === "exited" ? t(`进程已退出（${state.exitCode}）`, `Process exited (${state.exitCode})`) : failureMessage(state.reason)}</span>
       {(state.phase === "failed" || state.phase === "exited") && <Button size="sm" onClick={onNew}>{t("新建终端", "New terminal")}</Button>}
     </div>}
     <div className={css.screen} ref={container} />
+    {approval && <TerminalApproval key={approval.requestId} overlay approval={approval} locale={locale} decide={value => answerTerminalApproval(sessionId, approval.requestId, value)} />}
   </section>;
 }
