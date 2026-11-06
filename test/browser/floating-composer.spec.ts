@@ -127,6 +127,9 @@ test("the composer floats over a focused workspace, shares the draft, reports re
     // The session's model can be switched from the bar.
     const model = region.locator("[data-floating-model]").getByRole("button", { name: /^Change model/ });
     await expect(model).toBeVisible();
+    // An icon, not a name chip: it takes no more room than the row's other buttons.
+    expect(Math.round((await model.boundingBox())!.width)).toBe(32);
+    await expect(model).toHaveAttribute("title", /\S/);
     await model.click();
     await expect(page.getByRole("dialog").or(page.getByRole("menu")).or(page.getByRole("listbox")).first()).toBeVisible();
     await page.keyboard.press("Escape");

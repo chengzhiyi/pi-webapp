@@ -8,6 +8,8 @@ import { localize as t } from "../locale/preference.ts";
 
 interface Props {
   openSignal?: number;
+  /** Icon-only trigger (the floating composer); the model and effort stay in its tooltip and label. */
+  compact?: boolean;
   current: string | null;
   models: ModelOption[];
   disabled: boolean;
@@ -18,7 +20,7 @@ interface Props {
 }
 
 /** Model picker backed by Pi's available-model directory. */
-export function PiModelSelect({ openSignal = 0, current, models, disabled, onSelect, thinkingLevel, thinkingLevels, onSelectThinkingLevel }: Props) {
+export function PiModelSelect({ openSignal = 0, compact = false, current, models, disabled, onSelect, thinkingLevel, thinkingLevels, onSelectThinkingLevel }: Props) {
   const effortNames: Record<string, string> = { off: t("关闭", "Off"), minimal: t("极低", "Minimal"), low: t("低", "Low"), medium: t("中", "Medium"), high: t("高", "High"), xhigh: t("极高", "Extra high") };
   const [open, setOpen] = useState(false);
   const lastOpenSignal = useRef(openSignal);
@@ -95,11 +97,11 @@ export function PiModelSelect({ openSignal = 0, current, models, disabled, onSel
   };
 
   return <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
-    <button ref={triggerRef} className={css.trigger} type="button" aria-label={t(`切换模型，当前 ${label}${effortLabel ? `，推理强度${effortLabel}` : ""}`, `Change model, current ${label}${effortLabel ? `, reasoning effort ${effortLabel}` : ""}`)} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined} title={effortLabel ? `${label} · ${effortLabel}` : label} disabled={disabled || busy} onClick={() => open ? close() : setOpen(true)}>
+    <button ref={triggerRef} className={`${css.trigger} ${compact ? css.compact : ""}`} data-compact={compact || undefined} type="button" aria-label={t(`切换模型，当前 ${label}${effortLabel ? `，推理强度${effortLabel}` : ""}`, `Change model, current ${label}${effortLabel ? `, reasoning effort ${effortLabel}` : ""}`)} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined} title={effortLabel ? `${label} · ${effortLabel}` : label} disabled={disabled || busy} onClick={() => open ? close() : setOpen(true)}>
       <IconDataOutline16 className={css.triggerIcon} size={16} />
-      <span className={css.triggerLabel}>{label}</span>
-      {effortLabel && <span className={css.triggerEffort}>{effortLabel}</span>}
-      <IconChevronDownOutline14 className={`${css.chevron} ${open ? css.chevronOpen : ""}`} />
+      {!compact && <span className={css.triggerLabel}>{label}</span>}
+      {!compact && effortLabel && <span className={css.triggerEffort}>{effortLabel}</span>}
+      {!compact && <IconChevronDownOutline14 className={`${css.chevron} ${open ? css.chevronOpen : ""}`} />}
     </button>
     {open && createPortal(<MenuSurface ref={menuRef} id={`${id}-menu`} role="menu" aria-label={t("选择模型", "Choose model")} className={css.menu} style={position}>
       {pane === "root" ? <><button type="button" role="menuitem" className={css.cell} onClick={() => setPane("model")}><span className={css.cellLabel}>{t("模型", "Model")}</span><span className={css.cellValue}>{label}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>{effortLabel && <button type="button" role="menuitem" className={css.cell} onClick={() => setPane("effort")}><span className={css.cellLabel}>{t("推理强度", "Reasoning effort")}</span><span className={css.cellValue}>{effortLabel}</span><IconChevronRightOutline14 className={css.cellChevron} /></button>}</> : pane === "model" ? <>

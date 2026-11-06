@@ -537,12 +537,14 @@
   display: flex;
   flex: none;
   align-items: center;
-  max-width: 34%;
   height: var(--fc-row);
-  min-width: 0;
-  margin-right: 2px;
 }
 
-.model :global(button) {
-  max-width: 100%;
+/* Same weight as the row's other icon buttons. */
+.model :global(button[data-compact]) {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.model :global(button[data-compact]:hover:not(:disabled)) {
+  color: var(--dsw-alias-label-primary);
 }
