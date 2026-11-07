@@ -472,11 +472,19 @@ export class HostedPluginManager {
   async shutdown(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.operations.values());
+    // One plugin at a time, each through the reversible suspension. If a later plugin refuses (unsaved work,
+    // a view that doesn't flush), the plugins already stopped get their worker and views back, so the host keeps
+    // running as before and the next stop can freeze them again. Stopping them for good left their view
+    // barrier active, and every later stop failed with "A view barrier is already active".
+    const restores: Array<() => Promise<void>> = [];
     try {
-      await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
+      for (const [id, s] of this.supervisors) restores.push(await this.lifecycle(id, () => s.suspendForRestart(), true));
       this.scheduler.stopAll();
       this.packages.clear(); this.assetTokens.clear();
-    } catch (error) { this.closing = false; throw error; }
+    } catch (error) {
+      await Promise.allSettled(restores.reverse().map(restore => restore()));
+      this.closing = false; throw error;
+    }
   }
   /** A restart lease owns only live workers, never active pointers or asset identities.
    * Partial failure unwinds already suspended plugins so base hosting remains usable.
