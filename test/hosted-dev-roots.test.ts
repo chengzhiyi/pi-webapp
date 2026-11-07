@@ -98,7 +98,7 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   assert.equal(sources.notices().length, 5, messages.join("\n"));
   assert.match(messages[0]!, /missing: directory does not exist/);
   assert.match(messages[1]!, /package\.json not found/); assert.match(messages[2]!, /not valid JSON/);
-  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-excalidraw\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
+  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-excalidraw, @chengzhiyi\/pi-pencil\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
   assert.deepEqual([...sources.roots], [[GITHUB_ID, good]]); assert.equal(sources.enabled, true);
   assert.ok(sources.catalog.some(p => p.id === GITHUB_ID));
 
@@ -182,6 +182,28 @@ test("watcher applies a change once its files settle, never twice, and reports f
   assert.equal(watcher.info().sources[0]!.state, "not-installed");
   assert.ok(logs.some(l => /synced/.test(l)) && logs.some(l => /error/.test(l)));
   assert.equal(await devSignature(join(root, "does-not-exist")), null);
+});
+
+test("failed dev switches never exhaust the retained-version budget: unreferenced builds are collected before the next install", async t => {
+  const root = await tmp(t), dir = await pluginDir(root), store = join(root, "hosted", "packages");
+  const pkgPath = join(dir, "package.json"), pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+  pkg.piWebapp.capabilities = ["state", "panels", "scheduler", "network", "secrets", "sessions"]; await writeFile(pkgPath, JSON.stringify(pkg));
+  // Sixteen builds left behind by switches that never completed (nothing references them).
+  const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: dir }, configPath: join(root, "none.json") });
+  const inst = new HostedPluginInstaller({ root: store, hostVersion: "0.1.39", catalog: [...OFFICIAL_PLUGINS, ...sources.catalog] });
+  for (let i = 0; i < 16; i++) { await writeDist(dir, `left-${i}`); await inst.installDevDirectory(GITHUB_ID, dir); }
+  assert.equal((await inst.inventory()).versions[GITHUB_ID]!.length, 16);
+  await writeDist(dir, "next");
+  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), hostVersion: "0.1.39", workerEntry: join(root, "unused-worker.mjs"), ownerId: "o", catalog: [...OFFICIAL_PLUGINS, ...sources.catalog], devRoots: sources.roots, devArchives: sources.archives,
+    capabilities: { secrets: new MemorySecretStore(), resolve: async () => [], fetch: (async () => new Response("{}")) as unknown as typeof fetch },
+    scheduledScope: () => ({ cwd: root, workspaceId: "w", sessionId: "scheduler" }), scheduleTimers: { setInterval: () => 1, clearInterval: () => {} }, resolveSession: () => null });
+  t.after(() => integration.shutdown());
+  await integration.start();
+  const inventory = await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "install" } as never) as { plugins: Array<{ pluginId: string; version?: string }> };
+  const installed = inventory.plugins.find(p => p.pluginId === GITHUB_ID)!.version!;
+  const left = (await inst.inventory()).versions[GITHUB_ID]!.map(v => v.version);
+  assert.ok(left.includes(installed), "the new build is installed");
+  assert.ok(left.length <= 2, `stale builds were collected (left: ${left.join(", ")})`);
 });
 
 const built = existsSync(join(PLUGIN, "dist/resources.json"));

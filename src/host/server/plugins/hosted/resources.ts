@@ -5,11 +5,12 @@ import { join, relative, resolve, sep } from "node:path";
 import { hostedAssetPath, isHostedPluginManifest, type HostedPluginManifest, type HostedResource, type HostedResourceManifest } from "@chengzhiyi/pi-web-protocol";
 import { HostedPluginError } from "./errors.ts";
 
-export const RESOURCE_LIMITS = { files: 4096, total: 128 * 1024 * 1024, js: 16 * 1024 * 1024, css: 4 * 1024 * 1024, font: 8 * 1024 * 1024, other: 2 * 1024 * 1024 } as const;
+export const RESOURCE_LIMITS = { files: 4096, total: 128 * 1024 * 1024, js: 16 * 1024 * 1024, css: 4 * 1024 * 1024, font: 8 * 1024 * 1024, wasm: 16 * 1024 * 1024, other: 2 * 1024 * 1024 } as const;
 const mimeByExtension: Record<string, string[]> = {
-  js: ["text/javascript", "application/javascript"], mjs: ["text/javascript", "application/javascript"], css: ["text/css"],
+  js: ["text/javascript", "application/javascript"], mjs: ["text/javascript", "application/javascript"], cjs: ["text/javascript", "application/javascript"], css: ["text/css"],
   html: ["text/html"], json: ["application/json"], woff2: ["font/woff2"], woff: ["font/woff"],
   png: ["image/png"], svg: ["image/svg+xml"], txt: ["text/plain"],
+  ttf: ["font/ttf"], otf: ["font/otf"], wasm: ["application/wasm"],
 };
 export interface HostedPackage {
   id: string;
@@ -85,7 +86,7 @@ export async function validateHostedPackage(directory: string, expectedId?: stri
       || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || resources.has(item.path)) reject("Invalid or duplicate resource");
     const ext = item.path.split(".").at(-1)!;
     if (!mimeByExtension[ext]?.includes(item.mime)) reject("Unsupported resource MIME");
-    const limit = ext === "js" || ext === "mjs" ? RESOURCE_LIMITS.js : ext === "css" ? RESOURCE_LIMITS.css : ext === "woff" || ext === "woff2" ? RESOURCE_LIMITS.font : RESOURCE_LIMITS.other;
+    const limit = ext === "js" || ext === "mjs" || ext === "cjs" ? RESOURCE_LIMITS.js : ext === "css" ? RESOURCE_LIMITS.css : ["woff", "woff2", "ttf", "otf"].includes(ext) ? RESOURCE_LIMITS.font : ext === "wasm" ? RESOURCE_LIMITS.wasm : RESOURCE_LIMITS.other;
     if (item.bytes > limit || (total += item.bytes) > RESOURCE_LIMITS.total) reject("Resource budget exceeded");
     const bytes = await regularFile(root, item.path, limit);
     if (bytes.length !== item.bytes || sha256(bytes) !== item.sha256) reject("Resource integrity mismatch");

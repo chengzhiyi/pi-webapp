@@ -14,12 +14,17 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 ### Improvements and fixes
 
 - Updates that nothing can start any more are deleted automatically, about a minute after startup. Each one took around 400 MB. Only versions that aren't running, aren't selected and are more than 24 hours old are removed, and nothing is removed while an update is in progress.
+- **Pencil plugin (optional).** UI design on OpenPencil, installed from **Plugins**. You edit `.fig` designs in the workspace, and Pi proposes changes that you accept or reject. Pencil follows pi's theme and language.
+- Plugins can download JPG and WebP images, as well as PNG and SVG.
+- When a plugin refuses `pi-webapp stop` because of unsaved work, your other plugins keep running and the next stop works. Before, every later stop failed until `stop --force`.
 - The file editor's line-number gutter no longer turns transparent when you scroll sideways.
 - Plugin recovery warnings no longer appear for records that block nothing.
 
 ### For plugin developers
 
 - A local development folder or a package archive can stand in for an official hosted plugin.
+- Hosted plugins can ship WebAssembly (with `browser.wasm`), bind binary workspace files, set their own invoke timeout, and return images with tool results.
+- Repeated failed switches to a development build no longer use up the plugin's version budget.
 
 ## pi 0.1.53 · 2026-11-05 {#v0-1-53}
 

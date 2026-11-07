@@ -7,6 +7,9 @@ import { startBridge, type Bridge } from "../../src/host/server/transport/bridge
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 import { integrationFixture } from "../helpers/hosted-integration-fixture.ts";
+import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
+// Excalidraw fixtures: the mocked registry answers every lookup with an Excalidraw release.
+const EXCALIDRAW_ONLY = OFFICIAL_PLUGINS.filter(plugin => plugin.id === "@chengzhiyi/pi-excalidraw");
 
 // Real App + HTTP + installer; only the trusted registry's responses are local fixtures.
 for (const locale of ["en", "zh"] as const) for (const theme of ["light", "dark"] as const) for (const width of [390, 1440]) test(`official plugin status ${locale}/${theme}/${width}`, async ({ page }, info) => {
@@ -14,7 +17,7 @@ for (const locale of ["en", "zh"] as const) for (const theme of ["light", "dark"
   const root = await mkdtemp(join(tmpdir(), "ori51-ui-"));
   let mode: "metadata404" | "tarball404" | "network" | "incompatible" | "ok" = "metadata404", bridge: Bridge | undefined;
   const fixture = integrationFixture();
-  const integration = new HostedPluginIntegration({ root, workerEntry: "unused", hostVersion: "0.1.29", ownerId: "ui-fixture", resolveSession: () => null,
+  const integration = new HostedPluginIntegration({ catalog: EXCALIDRAW_ONLY, root, workerEntry: "unused", hostVersion: "0.1.29", ownerId: "ui-fixture", resolveSession: () => null,
     fetch: (async url => {
       if (mode === "network") throw new TypeError("LOCAL FIXTURE: registry offline");
       if (mode === "metadata404" || String(url).endsWith(".tgz") && mode === "tarball404") return new Response("LOCAL FIXTURE: absent", { status: 404 });

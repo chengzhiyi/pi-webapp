@@ -12,6 +12,9 @@ import { startBridge, type Bridge } from "../../src/host/server/transport/bridge
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 import { integrationFixture } from "../helpers/hosted-integration-fixture.ts";
+import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
+// Excalidraw fixtures: the mocked registry answers every lookup with an Excalidraw release.
+const EXCALIDRAW_ONLY = OFFICIAL_PLUGINS.filter(plugin => plugin.id === "@chengzhiyi/pi-excalidraw");
 
 const id = "@chengzhiyi/pi-excalidraw";
 /** A second local test release of identical payload, NOT a published upstream version. */
@@ -43,7 +46,7 @@ for (const width of [1440, 390]) test(`real hosted archive + complete host UI + 
   const workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
-  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local-test-principal",
+  const integration = new HostedPluginIntegration({ catalog: EXCALIDRAW_ONLY, root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local-test-principal",
     resolveSession: sessionId => { const retained = sessions?.hostedScope(sessionId); return retained ? scope(retained.cwd, sessionId) : null; },
     changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
     fetch: (async (url: string | URL | Request) => {
