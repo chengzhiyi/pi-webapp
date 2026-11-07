@@ -14,12 +14,12 @@ import { WorkspaceSessions } from "../src/host/server/sessions/workspace-session
 import { startBridge } from "../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "./helpers/terminal-host.ts";
-import type { OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
+import { OFFICIAL_PLUGINS } from "../src/host/server/plugins/hosted/official-catalog.ts";
 
 const TGZ = process.env.PI_PENCIL_TGZ ?? "", OUT = process.env.PI_PENCIL_REAL_OUT ?? "";
 const PROVIDER = process.env.PI_PENCIL_PROVIDER ?? "openai-codex", MODEL = process.env.PI_PENCIL_MODEL ?? "gpt-5.5";
 const ID = "@chengzhiyi/pi-pencil";
-const catalog: OfficialPlugin[] = [{ id: ID, name: "Pencil", icon: "drawing", description: { zh: "UI 设计", en: "UI design" }, registry: "https://registry.npmjs.org", recommendedVersion: "0.0.0", requiredCapabilities: ["state", "workspace", "panels", "browser.wasm"] }];
+const catalog = OFFICIAL_PLUGINS.filter(plugin => plugin.id === ID);
 const PROMPT = process.env.PI_PENCIL_PROMPT ?? "Design a mobile login screen for a Chinese note-taking app called 「轻记」: title, short subtitle, phone number and password inputs, a primary 登录 button, and a 忘记密码？ link. Use the Pencil design tools.";
 
 test("real model drives pi-pencil through the real host", { timeout: 600_000, skip: process.env.PI_PENCIL_REAL !== "1" || !existsSync(TGZ) ? "set PI_PENCIL_REAL=1 and PI_PENCIL_TGZ" : false }, async t => {

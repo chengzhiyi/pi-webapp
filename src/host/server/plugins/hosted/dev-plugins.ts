@@ -16,13 +16,6 @@ const KNOWN: Record<string, OfficialPlugin> = {
     requiredCapabilities: ["state", "panels", "scheduler", "network", "secrets", "sessions"],
   },
 };
-export const PENCIL_DEV_ID = "@chengzhiyi/pi-pencil";
-KNOWN[PENCIL_DEV_ID] = {
-  id: PENCIL_DEV_ID, name: "Pencil", icon: "drawing",
-  description: { zh: "SPIKE：agent 协作 UI 设计（open-pencil）。", en: "SPIKE: agent-assisted UI design (open-pencil)." },
-  registry: "https://registry.npmjs.org", recommendedVersion: "0.0.0",
-  requiredCapabilities: ["state", "workspace", "panels", "browser.wasm"],
-};
 export interface DevNotice { level: "error" | "warning" | "info"; pluginId?: string; source: string; message: string }
 /** Official plugins may also be developed from a local source; they are already in the host catalog. */
 const official = (id: string) => OFFICIAL_PLUGINS.some(plugin => plugin.id === id);

@@ -98,7 +98,7 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   assert.equal(sources.notices().length, 5, messages.join("\n"));
   assert.match(messages[0]!, /missing: directory does not exist/);
   assert.match(messages[1]!, /package\.json not found/); assert.match(messages[2]!, /not valid JSON/);
-  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-pencil, @chengzhiyi\/pi-excalidraw\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
+  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-excalidraw, @chengzhiyi\/pi-pencil\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
   assert.deepEqual([...sources.roots], [[GITHUB_ID, good]]); assert.equal(sources.enabled, true);
   assert.ok(sources.catalog.some(p => p.id === GITHUB_ID));
 

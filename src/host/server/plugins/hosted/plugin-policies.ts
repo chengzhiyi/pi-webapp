@@ -57,7 +57,7 @@ const GITHUB: HostedPluginPolicy = {
   },
 };
 export const PENCIL_ID = "@chengzhiyi/pi-pencil";
-/** SPIKE policy (pi-pencil feasibility spike). Reviewed tool set is deliberately small. */
+/** pi-pencil. The reviewed tool set is deliberately small; accepting a proposal stays human-only. */
 const PENCIL: HostedPluginPolicy = {
   tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_propose_changes: "propose" },
   readonlyActions: ["reference", "status", "inspect", "render"],

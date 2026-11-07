@@ -16,11 +16,11 @@ import { WorkspaceSessions } from "../src/host/server/sessions/workspace-session
 import { startBridge } from "../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "./helpers/terminal-host.ts";
-import type { OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
+import { OFFICIAL_PLUGINS } from "../src/host/server/plugins/hosted/official-catalog.ts";
 
 const TGZ = process.env.PI_PENCIL_TGZ ?? "";
 const ID = "@chengzhiyi/pi-pencil";
-const catalog: OfficialPlugin[] = [{ id: ID, name: "Pencil", icon: "drawing", description: { zh: "UI 设计", en: "UI design" }, registry: "https://registry.npmjs.org", recommendedVersion: "0.0.0", requiredCapabilities: ["state", "workspace", "panels", "browser.wasm"] }];
+const catalog = OFFICIAL_PLUGINS.filter(plugin => plugin.id === ID);
 const LOGIN = [
   { op: "create", ref: "$screen", parent: "$page", type: "FRAME", props: { name: "Login", width: 390, height: 844, fill: "#FFFFFF", layout: { mode: "VERTICAL", gap: 16, padding: { top: 64, right: 24, bottom: 24, left: 24 } } } },
   { op: "create", ref: "$title", parent: "$screen", type: "TEXT", props: { name: "Title", text: { content: "登录 / ログイン", font: { family: "Noto Sans SC", style: "Bold", size: 28 }, color: "#111827" } } },
