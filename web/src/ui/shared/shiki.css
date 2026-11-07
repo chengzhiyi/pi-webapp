@@ -2,11 +2,17 @@
    theme (--shiki-* custom properties emitted by the ui-primitives CodeBlock).
    Light values on :root, dark overrides on the body attribute — the same
    cascade as every other token sheet. Background/foreground deliberately
-   alias the markdown code-block tokens so highlighted and plain blocks agree. */
+   alias the markdown code-block tokens so highlighted and plain blocks agree.
+   Those two live on body, where the --dsw-alias-* tokens are declared: on
+   :root the var() would resolve before the tokens exist and leave them empty
+   (the file editor's sticky gutter then turns transparent over the code). */
 
-:root {
+body {
   --shiki-foreground: var(--dsw-alias-label-primary);
   --shiki-background: var(--dsw-alias-markdown-code-block);
+}
+
+:root {
   --shiki-token-constant: #1c7ed6;
   --shiki-token-string: #2f9e44;
   --shiki-token-comment: #868e96;

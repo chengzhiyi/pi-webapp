@@ -73,7 +73,7 @@ export interface Bridge {
   readonly buildId: string;
   readonly url: string;
   publish(event: BridgeEvent): void;
-  runPluginTool(pluginId: string, cwd: string, sessionId: string, action: string, input: unknown): Promise<unknown>;
+  runPluginTool(pluginId: string, cwd: string, sessionId: string, action: string, input: unknown, signal?: AbortSignal): Promise<unknown>;
   reportError(cause: unknown, context?: DiagnosticFields): string | undefined;
   breadcrumb(category: string, context?: DiagnosticFields): void;
   close(options?: { reconnect?: boolean }): Promise<void>;
@@ -707,7 +707,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   return {
     protocolVersion: 7,
     buildId,
-    runPluginTool: (id, cwd, sessionId, action, input) => pluginRegistry.runAgentAction(id, cwd, sessionId, action, input),
+    runPluginTool: (id, cwd, sessionId, action, input, signal) => pluginRegistry.runAgentAction(id, cwd, sessionId, action, input, signal),
     reportError(cause, context) { return telemetry.capture(cause, context); },
     breadcrumb(category, context) { telemetry.breadcrumb(category, context); },
     url: `${origin}/#${tokenText}`,

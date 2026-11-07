@@ -31,7 +31,7 @@ shasum -a 256 ~/Downloads/pi-*-mac-arm64.dmg
 
 Linux 上用 `sha256sum`；PowerShell 里用 `Get-FileHash <文件> -Algorithm SHA256`。如果不一致，请停下，不要安装。校验和只能证明这个文件就是当初发布的那个，不能证明软件本身是安全的。
 
-## 安装
+## 安装 {#install}
 
 ::: details macOS
 1. 先退出旧版桌面应用；如果它询问，也一并停止它启动的后台服务。不要删除 `~/.pi`。

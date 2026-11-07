@@ -8,10 +8,14 @@ import { prepareRelease, verifyRelease, assembleRelease, verifyBundle, releaseTa
 import { ensureTag, publishRelease } from "../../scripts/publish-desktop-release.mjs";
 
 const sourceCommit = "a".repeat(40), repository = "owner/project";
+const changelog = "# Changelog\n\n## Unreleased {#unreleased}\n\n- Not shipped yet.\n\n" +
+  "## Desktop build 6 · pi 0.1.21 · 2026-10-21 {#build-6}\n\n### Highlights {#build-6-highlights}\n\n- **Terminals.** See [Terminal](./workspace-tools#terminal).\n\n" +
+  "## Desktop build 5 · pi 0.1.20 · 2026-10-20 {#build-5}\n\n- The first build.\n";
 const checks = ["native-name-menu-title-pi", "custom-app-icon-loads", "native-desktop-update-menu", "native-desktop-update-download", "native-pty", "shared-browser-backend", "confirmed-stop-reaps-pi", "installer-payload-launch"];
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "pi-release-test-")); t.after(() => rm(root, { recursive: true, force: true }));
-  for (const path of ["desktop", ".desktop/runtime", "artifacts/desktop", "desktop-release"]) await mkdir(join(root, path), { recursive: true });
+  for (const path of ["desktop", ".desktop/runtime", "artifacts/desktop", "desktop-release", "docs/en"]) await mkdir(join(root, path), { recursive: true });
+  await writeFile(join(root, "docs/en/changelog.md"), changelog);
   const put = (path, value) => writeFile(join(root, path), JSON.stringify(value));
   const pkg = { version: "0.1.21", devDependencies: { "@earendil-works/pi-coding-agent": "1.3.0" } };
   const release = { productName: "pi", buildNumber: 6 };
@@ -130,6 +134,24 @@ test("all four verified target artifacts assemble into one checksum-bound public
   assert.equal(manifest.assets.length, 4); assert.equal(manifest.schemaVersion, 2);
   assert.deepEqual(await verifyBundle({ root: f.root, directory: f.options.output, sourceCommit, repository }), manifest);
   assert.deepEqual(manifest.targets.map(value => value.target), releaseTargets.map(value => value.id));
+});
+
+test("public release notes lead with the build's changelog section and the bundle stays bound to it", async t => {
+  const f = await fixture(t); await f.bundle();
+  const notes = await readFile(join(f.options.output, "release-notes.md"), "utf8");
+  assert.match(notes, /## What's new\n\n### Highlights\n\n- \*\*Terminals\.\*\* See \[Terminal\]\(https:\/\/pi\.emath\.top\/workspace-tools#terminal\)\./);
+  assert.match(notes, /Full changelog: https:\/\/pi\.emath\.top\/changelog#build-6 · 中文更新日志：https:\/\/pi\.emath\.top\/zh\/changelog#build-6/);
+  assert.ok(notes.indexOf("## What's new") < notes.indexOf("| Platform"));
+  assert.doesNotMatch(notes, /Not shipped yet|The first build|\{#/);
+  // Editing the changelog after assembly makes the bundle's notes stale.
+  await writeFile(join(f.root, "docs/en/changelog.md"), changelog.replace("Terminals.", "Shells."));
+  await assert.rejects(verifyBundle({ root: f.root, directory: f.options.output, sourceCommit, repository }));
+});
+
+test("a desktop build without a changelog section cannot be assembled", async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.root, "docs/en/changelog.md"), changelog.replace("{#build-6}", "{#build-7}"));
+  await assert.rejects(f.bundle(), /\{#build-6\}/);
 });
 
 test("optional arm64 updater ZIP is bound into native receipts, checksums and the four-platform bundle", async t => {

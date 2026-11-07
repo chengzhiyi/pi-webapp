@@ -51,7 +51,7 @@ It also lists commands from the extensions you've installed, and one `skill:` en
 
 Slash commands run only when Pi is idle. While it is working you'll see **Wait for the current reply before running slash commands**, and a queued message can't start with `/`.
 
-## Send while Pi is working
+## Send while Pi is working {#send-while-pi-is-working}
 
 You don't have to wait for a reply to finish. Type your next message while Pi is working:
 

@@ -12,11 +12,15 @@ import expandCss from "../../../web/src/ui/shared/sidebar/ExpandButton.module.cs
 import { PluginBoundary, PluginSlot, type LoadedPlugin, type PluginHostProps } from "./plugin-runtime.tsx";
 import { localize } from "../../../web/src/ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
-import type { TabResource, WorkbenchPanelProps } from "../../contracts/workbench.ts";
+import type { TabContextReport, TabResource, WorkbenchPanelProps } from "../../contracts/workbench.ts";
 import filesCss from "../../../web/src/ui/workbench/WorkspacePanel.module.css";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
 
-interface SessionDock { controller: DockController; resources: Map<string, TabResource>; owners: Map<string, string> }
+interface SessionDock {
+  controller: DockController; resources: Map<string, TabResource>; owners: Map<string, string>;
+  /** What each tab last reported about its content, for the floating composer's context. */
+  contexts: Map<string, TabContextReport>; reporters: Map<string, (context: TabContextReport | null) => void>;
+}
 /** Generic tab ownership: a capability supplies its model, cleanup and activation hooks. */
 export function usePluginPanel(sessionId: string | undefined, disabledPlugins: readonly string[] = []) {
   const controllers = useRef(new Map<string, SessionDock>());
@@ -25,18 +29,34 @@ export function usePluginPanel(sessionId: string | undefined, disabledPlugins: r
     let value = controllers.current.get(key);
     if (!value) {
       const guide = (id: TabId) => ({ id, kind: "guide", contentId: "guide", title: "开始" });
-      value = { controller: new DockController({ makeInitialTab: guide, makePaneTab: guide }), resources: new Map(), owners: new Map() };
+      value = { controller: new DockController({ makeInitialTab: guide, makePaneTab: guide }), resources: new Map(), owners: new Map(), contexts: new Map(), reporters: new Map() };
       const scope = value;
       scope.controller.subscribe(() => {
         const tabs = scope.controller.getSnapshot().state.tabs;
         for (const [id, resource] of scope.resources) if (!tabs[id as TabId]) { resource.dispose?.(); scope.resources.delete(id); }
         for (const id of scope.owners.keys()) if (!tabs[id as TabId]) scope.owners.delete(id);
+        for (const id of scope.reporters.keys()) if (!tabs[id as TabId]) { scope.reporters.delete(id); scope.contexts.delete(id); }
       });
       controllers.current.set(key, value);
     }
     return value;
   }, [sessionId]);
   const { controller, resources, owners } = owned;
+  const [contextVersion, setContextVersion] = useState(0);
+  // One stable reporter per tab, deduplicated, so a panel can report from an effect without looping.
+  const reporterFor = useCallback((tabId: string) => {
+    let reporter = owned.reporters.get(tabId);
+    if (!reporter) {
+      reporter = context => {
+        const previous = owned.contexts.get(tabId);
+        if (previous?.detail === context?.detail && previous?.reference === context?.reference) return;
+        if (context) owned.contexts.set(tabId, context); else owned.contexts.delete(tabId);
+        setContextVersion(version => version + 1);
+      };
+      owned.reporters.set(tabId, reporter);
+    }
+    return reporter;
+  }, [owned]);
   useEffect(() => { for (const [id, scope] of controllers.current) for (const resource of scope.resources.values()) resource.activate?.(id === sessionId); }, [sessionId]);
   useEffect(() => {
     for (const scope of controllers.current.values()) for (const [tabId, pluginId] of [...scope.owners]) if (disabledPlugins.includes(pluginId)) scope.controller.closeTab(tabId as TabId);
@@ -64,7 +84,8 @@ export function usePluginPanel(sessionId: string | undefined, disabledPlugins: r
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-dockkit-content="${opened}"]`)?.focus());
     return opened;
   }, [controller, owners]);
-  return { controller, snapshot, panelId, resources, owners, expand, openContent, shown: snapshot.state.expanded && Object.keys(snapshot.state.tabs).length > 0 };
+  const contexts = owned.contexts;
+  return { controller, snapshot, panelId, resources, owners, contexts, contextVersion, reporterFor, expand, openContent, shown: snapshot.state.expanded && Object.keys(snapshot.state.tabs).length > 0 };
 }
 
 export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins, props, cwd }: {
@@ -137,7 +158,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
             }
             return existing.value as ReturnType<typeof create>;
           };
-          return <PluginBoundary id={plugin.id}><Component sendMessage={props.sendMessage} session={props.session} locale={props.locale} visible={visible} contentId={tab.contentId} title={tab.title} renderMarkdown={props.renderMarkdown} resource={resource} open={(kind, id, title) => open(kind, id, title, paneId, plugin.id)} /></PluginBoundary>;
+          return <PluginBoundary id={plugin.id}><Component sendMessage={props.sendMessage} session={props.session} locale={props.locale} visible={visible} contentId={tab.contentId} title={tab.title} renderMarkdown={props.renderMarkdown} resource={resource} reportContext={panel.reporterFor(tab.id)} open={(kind, id, title) => open(kind, id, title, paneId, plugin.id)} /></PluginBoundary>;
         }
         return <PluginSlot plugins={plugins} slot="rightbar.panel" props={{ ...props, panelId: tab.contentId }} />;
       }}

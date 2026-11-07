@@ -49,6 +49,7 @@ If you changed the UI, also run the relevant browser tests with `npm run test:br
 - **Add or update tests** for every behavior change. A bug fix should come with a test that fails without it.
 - **Don't add dependencies casually.** Explain any new runtime dependency in the pull request; pin exact versions where nearby entries are pinned.
 - **Update the docs** (`docs/en/` and its `docs/zh/` counterpart) when user-visible behavior changes.
+- **Add a changelog entry** under **Unreleased** in `docs/en/changelog.md` and `docs/zh/changelog.md` for anything users will notice: one line in their words, what changed and where to find it. See "Changelog and releases" in [docs/MAINTAINING.md](docs/MAINTAINING.md).
 
 ## Commits and pull request titles
 

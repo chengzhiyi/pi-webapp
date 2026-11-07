@@ -3,6 +3,7 @@ import type { ServerPlugin } from "../../../../host/server/plugins/server-plugin
 import { metadata } from "../contract/manifest.ts";
 import { TerminalRegistry } from "./terminals.ts";
 import { terminalRoute } from "./terminal-routes.ts";
+import { terminalAgentAction } from "./agent.ts";
 
 export function createTerminalPlugin(): ServerPlugin {
   const registry = new TerminalRegistry();
@@ -15,6 +16,7 @@ export function createTerminalPlugin(): ServerPlugin {
   return {
     metadata,
     routes: ["create", "attach", "input", "resize", "close"].map(action => `/api/terminal/${action}`),
+    agentAction: (_cwd, sessionId, action, input, signal) => terminalAgentAction(registry, sessionId, action, input, signal),
     handle: context => terminalRoute(context.path, context.body, context.res, context.snapshot, registry, streams),
     restartBlocker: () => registry.size ? `有 ${registry.size} 个终端正在运行，升级会关闭它们` : null,
     releaseForRestart: clear,

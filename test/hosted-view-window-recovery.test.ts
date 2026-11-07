@@ -272,3 +272,70 @@ test("settling clears another window's lost records only when nothing they prote
   assert.deepEqual(writes.filter(write => !write.startsWith("status:")), ["reconcile:stale-controller"], "only the abandoned controller is reconciled");
   coordinator.admitAction({ ...identity, mountId: "live-controller", viewToken: liveController, action: "sync" }, scope)();
 });
+
+test("records the host no longer holds stop blocking, keep a differing copy for a while, then clear with their copies", async t => {
+  const backupKey = `pi-diagram:${identity.sessionId}:${mount.contentId}`;
+  const differing = JSON.stringify({ elements: [{ id: "a", version: 5, versionNonce: 1 }] });
+  const local = storage({ [backupKey]: differing }); browserStorage(t, local);
+  const coordinator = new HostedViewCoordinator(pluginId, identity.generation, 50, 20, 30);
+  t.after(() => coordinator.dispose());
+  const first = await newWindow("orphan-origin");
+  const lost = "7c1e2d3a-4b5c-4d6e-8f70-81a2b3c4d5e1", gone = "7c1e2d3a-4b5c-4d6e-8f70-81a2b3c4d5e2";
+  first.rememberView(identity, lost, mount); first.markViewConnecting(lost);
+  first.rememberView({ ...identity, mountId: "gone-session" }, gone, mount); first.markViewConnecting(gone);
+  t.mock.method(hostedApi, "view", async (input: HostedViewInput) => {
+    if (input.mountId === "gone-session") throw Object.assign(new Error("Session is not retained"), { code: "invalid_scope" });
+    return coordinator.handle(input, scope);
+  });
+  t.mock.method(hostedApi, "action", async () => ({ scene: { elements: [{ id: "a", version: 2, versionNonce: 7 }] } }));
+  const reopened = await newWindow("orphan-reopened");
+  const find = (token: string) => reopened.priorViews().find(item => item.viewToken === token)!;
+  const copies = () => Array.from({ length: local.length }, (_, index) => local.key(index)).filter(key => key?.startsWith(`pi:hosted:recovery-draft:v1:${lost}:`));
+  assert.equal(copies().length, 1, "the reopened window captured the lost view's copy");
+
+  const now = Date.now();
+  const lostState = await reopened.settleView(find(lost), identity.generation, now);
+  assert.equal(lostState?.state, "absent");
+  assert.equal(reopened.onlyLocalCopy(find(lost), lostState, now), true, "an absent view blocks nothing on the host");
+  const goneState = await reopened.settleView(find(gone), identity.generation, now);
+  assert.equal(goneState?.state, "absent", "a deleted session no longer throws and stays listed forever");
+  assert.equal(reopened.onlyLocalCopy(find(gone), goneState, now), true);
+  const stamped = find(lost).orphanedAt;
+  assert.equal(stamped, now);
+
+  const later = now + reopened.keepLocalCopyMs - 1;
+  assert.equal((await reopened.settleView(find(lost), identity.generation, later))?.state, "absent");
+  assert.equal(find(lost).orphanedAt, stamped, "re-checking never restarts the clock");
+  const again = await newWindow("orphan-after-reload");
+  assert.equal(again.priorViews().find(item => item.viewToken === lost)?.orphanedAt, stamped, "the clock survives a reload");
+
+  const expired = now + again.keepLocalCopyMs + 1;
+  for (const token of [lost, gone]) assert.equal((await again.settleView(again.priorViews().find(item => item.viewToken === token)!, identity.generation, expired))?.state, "retired");
+  assert.deepEqual(again.priorViews(), []);
+  assert.deepEqual(copies(), [], "retiring a record drops the copies captured for it");
+  assert.equal(local.getItem(backupKey), differing, "the editor's own drawing backup is never touched");
+});
+
+test("a retained record clears once its copy matches the saved drawing and otherwise only keeps a local copy", async t => {
+  const backupKey = `pi-diagram:${identity.sessionId}:${mount.contentId}`;
+  const saved = { elements: [{ id: "a", version: 2, versionNonce: 7 }] };
+  const local = storage({ [backupKey]: JSON.stringify(saved) }); browserStorage(t, local);
+  const coordinator = new HostedViewCoordinator(pluginId, identity.generation, 50, 20, 30);
+  t.after(() => coordinator.dispose());
+  const { viewToken } = await coordinator.handle({ ...identity, operation: "register", kind: mount.kind }, scope);
+  const first = await newWindow("retained-origin");
+  first.rememberView(identity, viewToken, mount); first.markViewConnecting(viewToken);
+  t.mock.method(hostedApi, "view", (input: HostedViewInput) => coordinator.handle(input, scope));
+  let drawing: unknown = { scene: { elements: [{ id: "a", version: 3, versionNonce: 9 }] } };
+  t.mock.method(hostedApi, "action", async () => drawing);
+  const reopened = await newWindow("retained-reopened");
+  await reopened.retainViewForRecovery(reopened.priorViews()[0]);
+  const item = reopened.priorViews()[0];
+  assert.equal(item.retained, true);
+  const state = await reopened.settleView(item, identity.generation);
+  assert.equal(state?.state, "retained");
+  assert.equal(reopened.onlyLocalCopy(item, state), true, "a retained view no longer blocks the host");
+  drawing = { scene: saved };
+  assert.equal((await reopened.settleView(reopened.priorViews()[0], identity.generation))?.state, "retired");
+  assert.deepEqual(reopened.priorViews(), []);
+});

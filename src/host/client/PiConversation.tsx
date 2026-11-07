@@ -17,7 +17,7 @@ import { conversationActivity, conversationIsWorking } from "./conversation-acti
 import { useActivityElapsed } from "./use-activity-elapsed.ts";
 import { ToolRow, TurnActions, TurnProcess } from "../../../web/src/ui/chat/ProcessRow.tsx";
 import { useHostedTranscript } from "./hosted/transcript.ts";
-import { conversationTurns, toolResults, toolViewCalls, toolViewTurnKey, type ConversationTurn } from "./conversation-turns.ts";
+import { cardAwaitsUser, conversationTurns, toolResults, toolViewCalls, toolViewTurnKey, type ConversationTurn } from "./conversation-turns.ts";
 import { PiTrajectory } from "../../../web/src/ui/trajectory/PiTrajectory.tsx";
 import { PiModelSelect } from "../../../web/src/ui/conversation/PiModelSelect.tsx";
 import { PiAttachmentItem } from "../../../web/src/ui/conversation/PiAttachmentItem.tsx";
@@ -28,7 +28,10 @@ import { executeComposerAction, selectComposerAction } from "./composer-action.t
 import { PiCommandMenu, builtInCommands } from "../../../web/src/ui/conversation/PiCommandMenu.tsx";
 import { FileTypeIcon, fileExtension } from "../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { DropOverlay } from "../../../web/src/ui/conversation/DropOverlay.tsx";
-import { displayUserMessage } from "../../contracts/user-message.ts";
+import { displayUserMessage, withWorkspaceContext, type WorkspaceTabContext } from "../../contracts/user-message.ts";
+import { FloatingComposer, type FloatingComposerApi, type FloatingIconState } from "../../../web/src/ui/conversation/FloatingComposer.tsx";
+import floatingCss from "../../../web/src/ui/conversation/FloatingComposer.module.css";
+import { formatElapsedSeconds } from "../../../web/src/ui/chat/format-elapsed.ts";
 import type { PromptDelivery, QueuedPromptAction } from "../../contracts/bridge-contract.ts";
 import { PiPromptQueue } from "./PiPromptQueue.tsx";
 import { PiPromptControls } from "./PiPromptControls.tsx";
@@ -38,7 +41,32 @@ import { useConversationScroll } from "./use-conversation-scroll.ts";
 import { parseModelError } from "./model-error.ts";
 import "./pi-conversation.css";
 
+/** Where the composer floats while the conversation is hidden behind the workspace panel. */
+export interface FloatingTarget {
+  /** Overlay layer the floating composer renders into. */
+  host: HTMLElement;
+  /** The workspace panel whose body bounds the composer. */
+  panel: HTMLElement | null;
+  /** The active workspace tab, offered as the prompt's context. */
+  context: WorkspaceTabContext | null;
+  /** Bring the conversation back into view. */
+  onShowConversation(): void;
+}
+
+/** What the floating composer shows about the agent while the transcript is out of view. */
+interface FloatingStatus {
+  working: boolean;
+  label: string;
+  elapsedSeconds: number;
+  tail: string;
+  queued: number;
+  latestReply: { id: string; text: string } | null;
+}
+
+type ComposerSend = (text: string, attachments: string[], files: File[], delivery?: PromptDelivery, context?: WorkspaceTabContext | null) => Promise<void>;
+
 interface Props {
+  floating?: FloatingTarget | null;
   composerInteraction?: ReactNode;
   rightbarControl?: ReactNode;
   renderPluginSlot: (slot: WebSlotName, turn?: TurnReference) => ReactNode;
@@ -79,9 +107,10 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   if (message.role === "tool" && message.toolCallId && results.has(message.toolCallId)) return null;
   if (message.role === "user") {
     const originalText = message.blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
+    const parsed = displayUserMessage(originalText);
     const displayed = message.localFiles
-      ? { text: originalText, attachments: message.localFiles.map((file) => ({ name: file.name, image: /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type) })) }
-      : displayUserMessage(originalText);
+      ? { ...parsed, attachments: message.localFiles.map((file) => ({ name: file.name, image: /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type) })) }
+      : parsed;
     const images = message.blocks.map((block, index) => ({ block, index })).filter(({ block }) => block.kind === "image");
     const imageNames = displayed.attachments.filter((attachment) => attachment.image);
     const imageFiles = message.localFiles?.filter((file) => /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type));
@@ -93,6 +122,10 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
             {displayed.attachments.filter((attachment) => !attachment.image).map((attachment, index) => <span key={`${attachment.name}-${index}`} className={messageCss.fileCard} title={attachment.name}><FileTypeIcon path={attachment.name} className={messageCss.fileIcon} /><span className={messageCss.fileContent}><span className={messageCss.fileName}>{attachment.name}</span><span className={messageCss.fileMeta}>{fileExtension(attachment.name).toUpperCase()} {t("文件", "file")}</span></span></span>)}
           </div>}
           {displayed.text && <div className={messageCss.bubble}>{displayed.text}</div>}
+          {displayed.context && <div className="pi-message-context" data-message-context title={t("发送时正在查看的工作区标签页", "Workspace tab in view when this was sent")}>
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3" /></svg>
+            <span>{t(`来自 ${displayed.context.detail ?? displayed.context.title}`, `From ${displayed.context.detail ?? displayed.context.title}`)}</span>
+          </div>}
         </div>
       </div>
     );
@@ -177,7 +210,12 @@ interface ComposerDraft {
   error: string;
 }
 
-function PiInputBar({ hero, suspended = false, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpdateQueuedPrompt" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; onSend: (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => Promise<void> }) {
+/**
+ * The one composer. While the conversation is hidden it renders the same state
+ * (draft, uploads, commands, send rules) into the floating shell instead of the
+ * docked card, so nothing is copied between two composers.
+ */
+function PiInputBar({ hero, suspended = false, floating = null, floatingStatus, renderTranscript, latestTurnHasCard = false, interaction, session, connection, onSend, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, plugins, onPluginAction }: Pick<Props, "session" | "connection" | "onUpdateQueuedPrompt" | "onUpload" | "onDiscardAttachment" | "onStop" | "onResume" | "onCompact" | "onNewSession" | "commands" | "models" | "modelsStatus" | "onConfigureModels" | "onSetModel" | "onSetThinkingLevel" | "renderPluginSlot" | "plugins" | "onPluginAction"> & { hero: boolean; suspended?: boolean; floating?: FloatingTarget | null; floatingStatus: FloatingStatus; renderTranscript?: () => ReactNode; latestTurnHasCard?: boolean; interaction?: ReactNode; onSend: ComposerSend }) {
   const locale = useLocale();
   // Keep unsent text and uploads scoped to their session for this tab's lifetime.
   // Setters capture the originating key, so late async replies cannot edit another chat.
@@ -242,6 +280,84 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
     running ? availableCommands.filter(command => !command.pluginId && command.name === "file") : availableCommands,
     query, commandMenu === "slash");
 
+  // Floating placement: the same draft, drawn over the workspace panel.
+  const isFloating = floating !== null;
+  const hasDraft = draft.trim().length > 0 || attachments.length > 0;
+  // The chip follows the active tab until typing starts, then stays pinned to
+  // what the user was looking at; sending (an emptied draft) releases it.
+  const [pinnedContext, setPinnedContext] = useState<WorkspaceTabContext | null>(null);
+  const [contextRemoved, setContextRemoved] = useState(false);
+  const hadDraft = useRef(hasDraft);
+  useEffect(() => {
+    if (hadDraft.current && !hasDraft) { setPinnedContext(null); setContextRemoved(false); }
+    else if (hasDraft && !pinnedContext && floating?.context) setPinnedContext(floating.context);
+    hadDraft.current = hasDraft;
+  }, [hasDraft, floating?.context, pinnedContext]);
+  useEffect(() => { setPinnedContext(null); setContextRemoved(false); }, [draftKey]);
+  // The pin holds the tab; its live report (selection, open file) still updates while it is in view.
+  const sameTab = (a: WorkspaceTabContext | null, b: WorkspaceTabContext | null) => !!a && !!b && a.kind === b.kind && a.contentId === b.contentId && a.title === b.title;
+  const chipContext = floating === null || contextRemoved ? null
+    : hasDraft && pinnedContext ? sameTab(pinnedContext, floating.context) ? floating.context : pinnedContext
+    : floating.context;
+  const chipLabel = chipContext ? chipContext.detail ?? chipContext.title : "";
+  // The floating composer can unfold the conversation itself; it starts folded.
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  // A turn that ends while the transcript is hidden leaves a reply card.
+  const [reply, setReply] = useState<{ id: string; compact: boolean } | null>(null);
+  const wasRunning = useRef(running);
+  const revealCard = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running && isFloating) {
+      if (latestTurnHasCard) { revealCard.current = true; setReply(null); setTranscriptOpen(true); }
+      else if (!transcriptOpen && floatingStatus.latestReply) setReply({ id: floatingStatus.latestReply.id, compact: false });
+    }
+    wasRunning.current = running;
+  }, [running, isFloating, transcriptOpen, latestTurnHasCard, floatingStatus.latestReply]);
+  const transcriptScroll = useRef<HTMLDivElement>(null);
+  const followTranscript = useRef(true);
+  // Keep the newest tool card's end (where plugins put Apply/Keep) in view while it loads and
+  // grows, until the user scrolls or interacts; otherwise follow the latest message.
+  const alignTranscript = useCallback(() => {
+    const element = transcriptScroll.current;
+    if (!element) return;
+    const card = revealCard.current ? [...element.querySelectorAll<HTMLElement>("[data-tool-view]")].at(-1) : undefined;
+    if (card) {
+      followTranscript.current = false;
+      const view = element.getBoundingClientRect(), box = card.getBoundingClientRect();
+      element.scrollTop = box.bottom - view.top + element.scrollTop - view.height + 12;
+    } else if (followTranscript.current) element.scrollTop = element.scrollHeight;
+  }, []);
+  useLayoutEffect(alignTranscript);
+  useEffect(() => {
+    const content = transcriptScroll.current?.firstElementChild;
+    if (!transcriptOpen || !content) return;
+    const observer = new ResizeObserver(alignTranscript);
+    observer.observe(content);
+    const stop = window.setTimeout(() => { revealCard.current = false; }, 8_000);
+    return () => { observer.disconnect(); window.clearTimeout(stop); };
+  }, [transcriptOpen, alignTranscript]);
+  useEffect(() => { if (!isFloating) { setReply(null); setTranscriptOpen(false); } }, [isFloating, draftKey]);
+  const openTranscript = (open: boolean) => { followTranscript.current = true; setTranscriptOpen(open); if (open) setReply(null); };
+  const needsInput = suspended || !!session?.interactions?.length;
+  const floatingApi = useRef<FloatingComposerApi | null>(null);
+  // Focus follows the draft across the handoff: the editor remounts in its new place.
+  const lastFloating = useRef(isFloating);
+  const handoffFocus = useRef(false);
+  if (lastFloating.current !== isFloating) {
+    handoffFocus.current = !!form.current?.contains(document.activeElement);
+    lastFloating.current = isFloating;
+  }
+  useEffect(() => {
+    if (!handoffFocus.current) return;
+    handoffFocus.current = false;
+    const frame = requestAnimationFrame(() => textarea.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isFloating]);
+  const showConversationThen = (action?: () => void) => {
+    floating?.onShowConversation();
+    if (action) requestAnimationFrame(action);
+  };
+
   useEffect(() => { setCommandMenu(null); }, [session?.sessionId, running]);
   useEffect(() => () => {
     for (const entry of Object.values(draftsRef.current)) {
@@ -272,6 +388,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
       finally { setWorking(false); }
       return;
     }
+    // The floating bar carries no model picker: bring the conversation back and open it there.
     if (!command.pluginId && command.name === "model") { setModelOpenSignal((value) => value + 1); return; }
     if (!command.pluginId && (command.name === "compact" || command.name === "new")) {
       setWorking(true);
@@ -342,6 +459,8 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
   }, [attachments.length, canAttach, uploadAttachment, onDiscardAttachment]);
 
   useEffect(() => {
+    // Floating, the panel underneath (a canvas) keeps its own drops; only the bar accepts files.
+    if (isFloating) return;
     const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;
     const reset = () => { dragDepth.current = 0; setDragActive(false); };
     const onEnter = (event: DragEvent) => { if (!hasFiles(event)) return; event.preventDefault(); dragDepth.current++; setDragActive(true); };
@@ -354,7 +473,7 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
     document.addEventListener("drop", onDrop);
     window.addEventListener("dragend", reset);
     return () => { document.removeEventListener("dragenter", onEnter); document.removeEventListener("dragover", onOver); document.removeEventListener("dragleave", onLeave); document.removeEventListener("drop", onDrop); window.removeEventListener("dragend", reset); };
-  }, [canAttach, addFiles]);
+  }, [canAttach, addFiles, isFloating]);
 
   const submit = async (delivery: PromptDelivery | undefined = running ? "followUp" : undefined) => {
     if (!canSend || primaryInFlight.current) return;
@@ -380,7 +499,10 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
         if (typeof result?.message === "string" && result.message) await onSend(result.message, sentAttachments.map(item => item.receipt!.id), sentAttachments.map(item => item.file));
         else if (sentAttachments.length) { setAttachments(sentAttachments); setAttachmentError(t("指令未发送附件，文件仍保留在输入框", "The command did not send the files; they remain in the composer")); }
         setDraft("");
-      } else await onSend(text, sentAttachments.map((item) => item.receipt!.id), sentAttachments.map((item) => item.file), delivery);
+      } else {
+        setReply(null);
+        await onSend(text, sentAttachments.map((item) => item.receipt!.id), sentAttachments.map((item) => item.file), delivery, chipContext);
+      }
     } catch {
       if (!localCommand) { setDraft(text); setAttachments(sentAttachments); }
       // The bridge displays request errors next to the composer.
@@ -413,18 +535,13 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
     }
   };
 
-  return (
-    <div hidden={suspended} className={`${inputCss.root} ${hero ? inputCss.hero : ""} ${suspended ? inputCss.suspended : ""}`}>
-      {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? t("松开以上传文件", "Drop to upload files") : t("当前无法上传文件", "Files cannot be uploaded now"), desc: canAttach ? t("最多 20 个文件，每个不超过 20 MB", "Up to 20 files, 20 MB each") : undefined }} />}
-      <PiPromptQueue key={session?.sessionId} session={session} onUpdate={onUpdateQueuedPrompt} connected={ready} />
-      <form ref={form} className={inputCss.card} data-composer-card onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        {commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} grouped={!query} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />}
-        <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label={t("选择要上传的文件", "Choose files to upload")} onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
-        {attachments.length > 0 && <div className="pi-attachment-rail" role="group" aria-label={t("待发送附件", "Pending attachments")}>
+  const menuView = commandMenu !== null && <PiCommandMenu commands={visibleCommands} active={activeCommand} grouped={!query} onHover={setActiveCommand} onPick={(command) => { void chooseCommand(command); }} />;
+  const fileInputView = <input ref={fileInput} className="pi-file-input" type="file" multiple tabIndex={-1} aria-label={t("选择要上传的文件", "Choose files to upload")} onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />;
+  const railView = attachments.length > 0 && <div className="pi-attachment-rail" role="group" aria-label={t("待发送附件", "Pending attachments")}>
           {attachments.map((item) => <PiAttachmentItem key={item.key} file={item.file} status={item.status} error={item.error} onRemove={() => removeAttachment(item)} onRetry={() => { setAttachmentError(""); setAttachments((current) => current.map((entry) => entry.key === item.key ? { ...entry, status: "uploading", error: undefined } : entry)); uploadAttachment(item.key, item.file); }} />)}
-        </div>}
-        <PiComposerEditor ref={textarea} value={draft} claimToken={claimToken} hint={claimHint}
-          editable={ready && !working && !suspended} placeholder={noModels ? t("先连接模型，再开始对话", "Connect a model to start chatting") : ready && modelsStatus === "ready" && !modelSelected ? t("先选择模型，再开始对话", "Choose a model to start chatting") : ready ? (session && plugins.map((plugin) => plugin.definition.composerPlaceholder?.(session, locale)).find(Boolean) || t("给 Pi 发送消息", "Message Pi")) : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
+        </div>;
+  const editorView = <PiComposerEditor ref={textarea} value={draft} claimToken={claimToken} hint={claimHint}
+          editable={ready && !working && !suspended} placeholder={ready && !noModels && modelsStatus === "ready" && modelSelected && isFloating ? (chipContext ? t(`询问 Pi 关于「${chipLabel}」…`, `Ask Pi about ${chipLabel}…`) : t("询问 Pi…", "Ask Pi…")) : noModels ? t("先连接模型，再开始对话", "Connect a model to start chatting") : ready && modelsStatus === "ready" && !modelSelected ? t("先选择模型，再开始对话", "Choose a model to start chatting") : ready ? (session && plugins.map((plugin) => plugin.definition.composerPlaceholder?.(session, locale)).find(Boolean) || t("给 Pi 发送消息", "Message Pi")) : t("打开 Pi 中 /web 给出的完整地址", "Open the full address provided by /web in Pi")}
           ariaLabel={t("给当前 Pi 会话发送消息", "Send a message to the current Pi session")}
           menuOpen={commandMenu !== null} activeOption={commandMenu !== null && visibleCommands[activeCommand] ? `pi-command-${activeCommand}` : undefined}
           onChange={(next) => {
@@ -444,48 +561,198 @@ function PiInputBar({ hero, suspended = false, session, connection, onSend, onUp
                   }
                   if ((event.key === "Enter" || event.key === "Tab") && visibleCommands[activeCommand]) { event.preventDefault(); void chooseCommand(visibleCommands[activeCommand]); return; }
                 }
+                if (event.key === "Escape" && isFloating) { event.preventDefault(); floatingApi.current?.releaseFocus(); return; }
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void submit(running && (event.ctrlKey || event.metaKey) ? "steer" : running ? "followUp" : undefined);
                 }
               }}
-        />
+        />;
+  const sendControls = running
+              ? <PiPromptControls hasDraft={draft.trim().length > 0 || attachments.length > 0} canSend={canSend} canStop={canStop}
+                  pauseLabel={primaryAction?.label ?? t("暂停执行", "Pause")} pauseTitle={primaryAction?.title} pauseIcon={PrimaryIcon ? <PrimaryIcon size={16} /> : undefined}
+                  onStop={() => { void stop(); }} />
+              : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
+              : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>;
+  const modelControl = noModels
+    ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button>
+    : <PiModelSelect compact={isFloating} openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />;
+  const slashHint = running && draft.trimStart().startsWith("/") && <div className="pi-prompt-hint">{t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands")}</div>;
+
+  if (floating) {
+    const latest = floatingStatus.latestReply;
+    const replyText = reply && latest?.id === reply.id ? latest.text : null;
+    const iconState: FloatingIconState = !ready ? "offline" : needsInput ? "input" : running ? "running" : replyText ? "unread" : attachmentError ? "error" : "idle";
+    const iconLabel = {
+      offline: t("Pi 未连接", "Pi is disconnected"), input: t("Pi 需要你的输入", "Pi needs your input"), running: t("Pi 正在处理", "Pi is working"),
+      unread: t("Pi 已回复", "Pi replied"), error: t("发送遇到问题", "Something went wrong"), idle: t("询问 Pi", "Ask Pi"),
+    }[iconState] + ` · ${/Mac|iPhone|iPad/u.test(navigator.platform) ? "⌘J" : "Ctrl+J"}`;
+    const workingLine = <div className={floatingCss.statusLine}>
+      <span className={floatingCss.pulse} aria-hidden="true" />
+      <span className={floatingCss.statusLabel} role="status" aria-live="polite">{floatingStatus.label}</span>
+      <span className={floatingCss.statusMeta} aria-hidden="true">{formatElapsedSeconds(floatingStatus.elapsedSeconds)}{floatingStatus.queued > 0 ? ` · ${t(`排队 ${floatingStatus.queued}`, `+${floatingStatus.queued} queued`)}` : ""}</span>
+    </div>;
+    const needsInputLine = <div className={floatingCss.statusLine}>
+      <svg className={floatingCss.warn} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.5v4.2M8 10.8v.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+      <span role="status" aria-live="polite" className={floatingCss.replyTitle}>{t("Pi 需要你的输入", "Pi needs your input")}</span>
+      <span className={floatingCss.replyActions}><button type="button" className={floatingCss.textButton} onClick={() => showConversationThen()}>{t("去回答", "Answer")}</button></span>
+    </div>;
+    const openChat = <button type="button" className={floatingCss.action} aria-label={t("在完整对话中打开", "Open the full chat")} title={t("在完整对话中打开", "Open the full chat")} onClick={() => { setReply(null); showConversationThen(); }}>
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M6.5 3.5h-2a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>;
+    const status = transcriptOpen
+      ? <div className={floatingCss.transcript} data-floating-transcript>
+          <div className={floatingCss.transcriptHead}>
+            <span className={floatingCss.replyTitle}>{t("对话", "Conversation")}</span>
+            {running && !needsInput && <span className={floatingCss.transcriptState}><span className={floatingCss.pulse} aria-hidden="true" /><span role="status" aria-live="polite">{floatingStatus.label}</span></span>}
+            <span className={floatingCss.replyActions}>
+              {openChat}
+              <button type="button" className={floatingCss.action} aria-label={t("收起对话", "Hide conversation")} title={t("收起对话", "Hide conversation")} aria-expanded onClick={() => openTranscript(false)}>
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            </span>
+          </div>
+          {needsInput && <div className={floatingCss.transcriptBanner} data-floating-interaction>{interaction ?? needsInputLine}</div>}
+          <div ref={transcriptScroll} className={floatingCss.transcriptBody} data-floating-transcript-body
+            onWheel={() => { revealCard.current = false; }} onPointerDown={() => { revealCard.current = false; }} onKeyDown={() => { revealCard.current = false; }}
+            onScroll={(event) => { if (revealCard.current) return; const element = event.currentTarget; followTranscript.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24; }}>
+            {renderTranscript?.() ?? null}
+          </div>
+        </div>
+      : needsInput ? interaction ? <div data-floating-interaction>{interaction}</div> : needsInputLine
+      : running
+        ? <>
+            {workingLine}
+            {floatingStatus.tail && <div className={floatingCss.tail}>{floatingStatus.tail}</div>}
+          </>
+        : replyText !== null && reply
+          ? reply.compact
+            ? <button type="button" className={floatingCss.summary} onClick={() => setReply({ ...reply, compact: false })}>
+                <span role="status" aria-live="polite">{t("Pi 已回复", "Pi replied")}</span><span>{t("查看", "View")}</span>
+              </button>
+            : <>
+                <div className={floatingCss.replyHead}>
+                  <span className={floatingCss.replyTitle} role="status" aria-live="polite">{t("Pi 已回复", "Pi replied")}</span>
+                  <span className={floatingCss.replyActions}>
+                    <button type="button" className={floatingCss.action} aria-label={t("复制回复", "Copy reply")} title={t("复制回复", "Copy reply")} onClick={() => { void navigator.clipboard?.writeText(replyText).catch(() => {}); }}>
+                      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M3.5 10.5h-.2A1.3 1.3 0 0 1 2 9.2V3.3A1.3 1.3 0 0 1 3.3 2h5.9a1.3 1.3 0 0 1 1.3 1.3v.2" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg>
+                    </button>
+                    {openChat}
+                    <button type="button" className={floatingCss.action} aria-label={t("关闭回复", "Dismiss reply")} title={t("关闭回复", "Dismiss reply")} onClick={() => setReply(null)}>
+                      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                    </button>
+                  </span>
+                </div>
+                <div className={floatingCss.replyBody}><PiMarkdown text={replyText} streaming={false} /></div>
+                <div className={floatingCss.replyFoot}><button type="button" className={floatingCss.textButton} onClick={() => openTranscript(true)}>{t("展开对话", "Show conversation")}</button></div>
+              </>
+          : null;
+    const hasFiles = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
+    return <FloatingComposer host={floating.host} bounds={floating.panel} status={commandMenu === null ? status : null} iconState={iconState} iconLabel={iconLabel}
+      labels={{ region: t("询问 Pi", "Ask Pi"), grip: t("移动输入框：方向键移动，Home 复位", "Move composer: arrow keys move, Home resets"), snapHint: t("拖动以移动，双击复位", "Drag to move, double-click to reset") }}
+      focusInput={() => textarea.current?.focus()}
+      onContentPointerDown={() => setReply(current => current && !current.compact ? { ...current, compact: true } : current)}>
+      {api => {
+        floatingApi.current = api;
+        return <form ref={form} className={floatingCss.form} data-composer-card data-floating-form onSubmit={(event) => { event.preventDefault(); void submit(); }}
+          onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); event.dataTransfer.dropEffect = canAttach ? "copy" : "none"; }}
+          onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); addFiles([...event.dataTransfer.files]); }}>
+          {menuView}
+          {fileInputView}
+          {railView}
+          <div className={floatingCss.line}>
+            {chipContext && <span className={floatingCss.chip} data-pinned={hasDraft || undefined} data-floating-context title={hasDraft ? t(`本条消息会附带「${chipContext.title} · ${chipLabel}」`, `This message is about ${chipContext.title} · ${chipLabel}`) : t(`当前标签页：${chipContext.title}`, `Tab in view: ${chipContext.title}`)}>
+              {chipContext.kind === "files" || chipContext.kind === "file-preview"
+                ? <FileTypeIcon {...(chipContext.detail ? { path: chipContext.detail.split(" · ")[0]! } : { kind: "folder" as const })} size={14} className={floatingCss.chipIcon} />
+                : <svg className={floatingCss.chipIcon} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M2 6.2h12" stroke="currentColor" strokeWidth="1.3" /></svg>}
+              <span className={floatingCss.chipLabel}>{chipLabel}</span>
+              <button type="button" className={floatingCss.chipRemove} aria-label={t("不附带标签页上下文", "Remove tab context")} onClick={() => { setContextRemoved(true); textarea.current?.focus(); }}>
+                <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+              </button>
+            </span>}
+            <div className={floatingCss.editor}>{editorView}</div>
+            <span className={floatingCss.model} data-floating-model>{modelControl}</span>
+            <button className={floatingCss.action} type="button" data-active={transcriptOpen || undefined} aria-expanded={transcriptOpen}
+              aria-label={transcriptOpen ? t("收起对话", "Hide conversation") : t("展开对话", "Show conversation")} title={transcriptOpen ? t("收起对话", "Hide conversation") : t("展开对话", "Show conversation")}
+              onMouseDown={(event) => event.preventDefault()} onClick={() => openTranscript(!transcriptOpen)}>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 4.6A1.6 1.6 0 0 1 4.6 3h6.8A1.6 1.6 0 0 1 13 4.6v4.8A1.6 1.6 0 0 1 11.4 11H7.2L4.4 13.2V11h0A1.6 1.6 0 0 1 3 9.4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+            </button>
+            <button className={floatingCss.action} type="button" aria-label={t("添加指令", "Add command")} title={t("添加指令", "Add command")} aria-haspopup="listbox" aria-expanded={commandMenu !== null} disabled={!canAttach} onMouseDown={(event) => event.preventDefault()} onClick={() => { setCommandMenu(commandMenu === null ? "button" : null); setActiveCommand(0); textarea.current?.focus(); }}><IconPlusOutline16 size={16} /></button>
+            <button className={floatingCss.action} type="button" aria-label={t("收起输入框", "Collapse composer")} title={t("收起输入框", "Collapse composer")} onMouseDown={(event) => event.preventDefault()} onClick={api.collapse}>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            <span className={floatingCss.send}>{sendControls}</span>
+          </div>
+          {slashHint}
+        </form>;
+      }}
+    </FloatingComposer>;
+  }
+
+  return (
+    <div hidden={suspended} className={`${inputCss.root} ${hero ? inputCss.hero : ""} ${suspended ? inputCss.suspended : ""}`}>
+      {dragActive && <DropOverlay disabled={!canAttach} labels={{ title: canAttach ? t("松开以上传文件", "Drop to upload files") : t("当前无法上传文件", "Files cannot be uploaded now"), desc: canAttach ? t("最多 20 个文件，每个不超过 20 MB", "Up to 20 files, 20 MB each") : undefined }} />}
+      <PiPromptQueue key={session?.sessionId} session={session} onUpdate={onUpdateQueuedPrompt} connected={ready} />
+      <form ref={form} className={inputCss.card} data-composer-card onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        {menuView}
+        {fileInputView}
+        {railView}
+        {editorView}
         <div className={inputCss.row}>
           <div className={inputCss.tools}>
             <button className={inputCss.add} type="button" aria-label={t("添加指令", "Add command")} title={t("添加指令", "Add command")} aria-haspopup="listbox" aria-expanded={commandMenu !== null} disabled={!canAttach} onMouseDown={(event) => event.preventDefault()} onClick={() => { setCommandMenu(commandMenu === null ? "button" : null); setActiveCommand(0); textarea.current?.focus(); }}><IconPlusOutline16 size={16} /></button>
             {renderPluginSlot("composer.controls")}
           </div>
           <div className={inputCss.trailing}>
-            {noModels ? <button className="pi-model-setup-trigger" type="button" onClick={onConfigureModels}>{t("配置模型", "Set up a model")}</button> : <PiModelSelect openSignal={modelOpenSignal} current={session?.model ?? null} models={models} disabled={!ready || !session?.idle} onSelect={onSetModel} thinkingLevel={session?.thinkingLevel ?? null} thinkingLevels={session?.thinkingLevels ?? []} onSelectThinkingLevel={onSetThinkingLevel} />}
-            {running
-              ? <PiPromptControls hasDraft={draft.trim().length > 0 || attachments.length > 0} canSend={canSend} canStop={canStop}
-                  pauseLabel={primaryAction?.label ?? t("暂停执行", "Pause")} pauseTitle={primaryAction?.title} pauseIcon={PrimaryIcon ? <PrimaryIcon size={16} /> : undefined}
-                  onStop={() => { void stop(); }} />
-              : primaryAction?.kind === "invoke" || primaryAction?.kind === "resume" ? <button className={inputCss.primary} type="button" aria-label={primaryAction.label} title={primaryAction.title} disabled={!canInvokePrimary} onClick={() => { void invokePrimary(); }}>{PrimaryIcon ? <PrimaryIcon size={16} /> : <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 2.5 13 8l-8 5.5z" fill="currentColor" /></svg>}</button>
-              : <button className={inputCss.primary} type="submit" aria-label={t("发送消息", "Send message")} disabled={!canSend}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>}
+            {modelControl}
+            {sendControls}
           </div>
         </div>
-        {running && draft.trimStart().startsWith("/") && <div className="pi-prompt-hint">{t("运行中不执行斜杠指令，请等待当前回复结束", "Wait for the current reply before running slash commands")}</div>}
+        {slashHint}
       </form>
     </div>
   );
 }
 
-export function PiConversation({ rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
+/** Condense the live turn for the floating composer: one activity label, the reply's tail, the last answer. */
+function floatingSummary(session: SessionView | null, streaming: ViewMessage | null, pending: boolean, working: boolean, elapsedSeconds: number): FloatingStatus {
+  const last = streaming?.blocks.at(-1);
+  const label = pending && !streaming ? t("正在发送", "Sending")
+    : last?.kind === "toolCall" ? t(`正在运行 ${last.toolName ?? "工具"}`, `Running ${last.toolName ?? "a tool"}`)
+    : last?.kind === "thinking" ? t("正在思考", "Thinking")
+    : last?.kind === "text" && last.text.trim() ? t("正在回复", "Writing a reply")
+    : t("正在处理", "Working");
+  const streamed = streaming?.blocks.filter(block => block.kind === "text").map(block => block.text).join("\n").trim() ?? "";
+  const tail = streamed.length > 240 ? `…${streamed.slice(-240)}` : streamed;
+  const queued = (session?.promptQueue?.steering.length ?? 0) + (session?.promptQueue?.followUp.length ?? 0) + (session?.queuedPrompts?.length ?? 0);
+  let latestReply: FloatingStatus["latestReply"] = null;
+  for (const message of [...(session?.messages ?? [])].reverse()) {
+    if (message.role === "user") break;
+    if (message.role !== "assistant") continue;
+    const text = message.blocks.filter(block => block.kind === "text").map(block => block.text).join("\n\n").trim();
+    if (text) { latestReply = { id: message.id, text }; break; }
+  }
+  return { working, label, elapsedSeconds, tail, queued, latestReply };
+}
+
+export function PiConversation({ floating = null, rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
-  const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
+  const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; wire: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
   const confirmed = optimistic && session?.sessionId === optimistic.sessionId && session.messages.some((message) => message.role === "user" && !optimistic.knownIds.has(message.id) && displayUserMessage(message.blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n")).text === optimistic.text);
   useEffect(() => {
     if (optimistic && (confirmed || (session && session.sessionId !== optimistic.sessionId))) setOptimistic(null);
   }, [optimistic, confirmed, session?.sessionId]);
   const pending = optimistic && !confirmed && session?.sessionId === optimistic.sessionId ? {
     id: optimistic.id, role: "user" as const, timestamp: optimistic.timestamp,
-    blocks: [{ kind: "text" as const, text: optimistic.text }, ...optimistic.files.filter((file) => /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type)).map(() => ({ kind: "image" as const, text: "" }))],
+    blocks: [{ kind: "text" as const, text: optimistic.wire }, ...optimistic.files.filter((file) => /\.(?:png|jpe?g|webp|gif)$/iu.test(file.name) || /^image\/(?:png|jpeg|webp|gif)$/.test(file.type)).map(() => ({ kind: "image" as const, text: "" }))],
     localFiles: optimistic.files,
   } : null;
   const activity = conversationActivity(session, streaming, connection, pending !== null);
-  const elapsedSeconds = useActivityElapsed(conversationIsWorking(session, streaming, connection, pending !== null), session?.sessionId, session?.activityId);
+  const working = conversationIsWorking(session, streaming, connection, pending !== null);
+  const elapsedSeconds = useActivityElapsed(working, session?.sessionId, session?.activityId);
+  const sending = pending !== null;
+  const floatingStatus = useMemo(() => floatingSummary(session, streaming, sending, working, elapsedSeconds), [session, streaming, sending, working, elapsedSeconds]);
   const viewTools = useMemo(() => plugins.flatMap(plugin => plugin.definition.workbench?.toolViews?.flatMap(view => view.tools) ?? []), [plugins]);
   const artifactTools = useMemo(() => plugins.flatMap((plugin) => plugin.definition.artifactTools ?? []), [plugins]);
   const inspect = useCallback((id: string) => { setInspectCallId(id); setActiveTab("trajectory"); }, []);
@@ -506,13 +773,15 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
     if (transcript.error) showToast({ key: "transcript-cleanup", message: transcript.error, action: { label: t("重试视图清理", "Retry view cleanup"), onClick: () => retryCleanup.current() } });
     else dismissToast("transcript-cleanup");
   }, [transcript.error]);
-  const sendWithEcho = async (text: string, attachments: string[], files: File[], delivery?: PromptDelivery) => {
+  const sendWithEcho: ComposerSend = async (text, attachments, files, delivery, context) => {
     if (!session) return;
+    // The tab reference rides after the user's text; the transcript hides it again.
+    const wire = withWorkspaceContext(text, context);
     // Queued prompts stay out of the transcript until Pi actually consumes them.
-    if (delivery) { await onSend(text, attachments, delivery); return; }
+    if (delivery) { await onSend(wire, attachments, delivery); return; }
     const id = `pending-${randomUUID()}`;
-    setOptimistic({ id, sessionId: session.sessionId, text, files, knownIds: new Set(session.messages.map((message) => message.id)), timestamp: new Date().toISOString() });
-    try { await onSend(text, attachments); }
+    setOptimistic({ id, sessionId: session.sessionId, text, wire, files, knownIds: new Set(session.messages.map((message) => message.id)), timestamp: new Date().toISOString() });
+    try { await onSend(wire, attachments); }
     catch (cause) { setOptimistic((current) => current?.id === id ? null : current); throw cause; }
   };
   const root = useRef<HTMLDivElement>(null);
@@ -531,6 +800,21 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
   const liveMessages = transcript.messages;
   const results = toolResults(liveMessages);
   const turns = conversationTurns(liveMessages);
+  // The floating composer's unfolded conversation renders the same turns as the chat, tool cards
+  // included: a plugin's "apply this change" lives in its card, so hiding it would strand the edit.
+  // Hosted tool views support several mounts of one call. Recent turns keep it light.
+  const renderFloatingTranscript = () => {
+    const recent = turns.slice(-20);
+    if (recent.length === 0 && !activity) return <p className="pi-floating-transcript-empty">{t("还没有对话。", "No messages yet.")}</p>;
+    return <div className="pi-floating-transcript">
+      {recent.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={artifactTools} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={inspect} />)}
+      {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
+    </div>;
+  };
+  // A finished turn whose tool card still awaits the user (a proposal to apply) opens to that card;
+  // an edit already applied in place (on the canvas) leaves the canvas uncovered.
+  const latestTurnHasCard = toolViewCalls(turns.at(-1)?.messages ?? [], viewTools)
+    .some(({ call }) => cardAwaitsUser(call.toolCallId ? results.get(call.toolCallId) : undefined));
   const heroText = (key: string) => ({
     "hero.headline": t("有什么可以帮你？", "How can I help?"),
     "hero.preview": "Pi",
@@ -565,8 +849,8 @@ export function PiConversation({ rightbarControl, composerInteraction, session, 
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
               {empty && <div className={conversationCss.heroWorkspaceRow}><span className={heroCss.workspace}><IconFolderOpen16 size={16} /><span className={heroCss.workspaceLabel}>{workspace}</span></span></div>}
-              {composerInteraction}
-              <PiInputBar suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
+              {!floating && composerInteraction}
+              <PiInputBar interaction={floating ? composerInteraction : undefined} floating={floating} floatingStatus={floatingStatus} renderTranscript={renderFloatingTranscript} latestTurnHasCard={latestTurnHasCard} suspended={composerInteraction !== undefined && composerInteraction !== null} hero={empty} session={session} connection={connection} onSend={sendWithEcho} onUpdateQueuedPrompt={onUpdateQueuedPrompt} onUpload={onUpload} onDiscardAttachment={onDiscardAttachment} onStop={onStop} onResume={onResume} onCompact={onCompact} onNewSession={onNewSession} commands={commands} models={models} modelsStatus={modelsStatus} onConfigureModels={onConfigureModels} onSetModel={onSetModel} onSetThinkingLevel={onSetThinkingLevel} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={onPluginAction} />
             </div>
           </div>
           {showLatest && <div className={chatCss.toBottomSlot}>

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { changelogPaths, docsSite, releaseChangelog } from "./changelog.mjs";
 import { inspectMacAppSignature, validateSigningManifest } from "./desktop-signing.mjs";
 import { fetchDistTags } from "./npm-dist-tags.mjs";
 import { assertDesktopVersionCurrent } from "./release-plan.mjs";
@@ -30,6 +31,7 @@ export function releaseIdentity(pkg, release, target = releaseTargets[0]) {
     // electron-builder uses the Linux deployment spelling for AppImage's arch macro.
     filename: `pi-${pkg.version}-desktop.${release.buildNumber}-${target.os}-${target.artifactArch ?? target.arch}.${target.ext}` };
 }
+const changelog = async (root, build) => releaseChangelog(await readFile(join(root, changelogPaths.en), "utf8"), build);
 async function identity(root, target) { return releaseIdentity(await json(root, "package.json"), await json(root, "desktop/release.json"), target); }
 export function validateSource(commit, repository, ref) {
   assert.match(commit, /^[a-f0-9]{40}$/);
@@ -142,9 +144,14 @@ export async function verifyRelease({ root, directory, sourceCommit, repository,
   return manifest;
 }
 
-export function releaseNotes(manifest) {
+export function releaseNotes(manifest, whatsNew) {
+  assert.ok(typeof whatsNew === "string" && whatsNew.trim(), "release notes need the build's changelog section");
+  const anchor = `changelog#build-${manifest.build}`;
   return `# pi ${manifest.version} · desktop build ${manifest.build}\n\n` +
     `**Unsigned TEST prerelease · bundled Pi ${manifest.targets[0].runtime.piVersion}.**\n\n` +
+    `## What's new\n\n${whatsNew.trim()}\n\n` +
+    `Full changelog: ${docsSite}/${anchor} · 中文更新日志：${docsSite}/zh/${anchor}\n\n` +
+    `## Download\n\n` +
     `| Platform / 平台 | Installer / 安装包 |\n| --- | --- |\n` + manifest.targets.map(value => {
       const label = releaseTargets.find(target => target.id === value.target).label;
       return `| ${label} | [${value.filename}](https://github.com/${manifest.repository}/releases/download/${manifest.tag}/${value.filename}) |\n`;
@@ -172,7 +179,7 @@ export async function assembleRelease({ root, incoming, output, sourceCommit, re
   }
   await writeFile(join(output, "desktop-release.json"), JSON.stringify(manifest, null, 2) + "\n");
   await writeFile(join(output, "SHA256SUMS"), checksumText(manifest.assets));
-  await writeFile(join(output, "release-notes.md"), releaseNotes(manifest));
+  await writeFile(join(output, "release-notes.md"), releaseNotes(manifest, await changelog(root, manifest.build)));
   return manifest;
 }
 
@@ -187,7 +194,7 @@ export async function verifyBundle({ root, directory, sourceCommit, repository }
   await filesExactly(directory, [...manifest.assets.map(value => value.name), "desktop-release.json", "SHA256SUMS", "release-notes.md"]);
   for (const asset of manifest.assets) await checkAsset(directory, asset);
   assert.equal(await readFile(join(directory, "SHA256SUMS"), "utf8"), checksumText(manifest.assets));
-  assert.equal(await readFile(join(directory, "release-notes.md"), "utf8"), releaseNotes(manifest));
+  assert.equal(await readFile(join(directory, "release-notes.md"), "utf8"), releaseNotes(manifest, await changelog(root, manifest.build)));
   return manifest;
 }
 
@@ -197,6 +204,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   if (process.argv[2] === "--check-source") {
     validateSource(options.sourceCommit, options.repository, options.ref);
     const spec = await identity(root); validateRef(options.ref, spec);
+    await changelog(root, spec.build);
     assertDesktopVersionCurrent(spec.version, fetchDistTags((await json(root, "package.json")).name));
   } else if (process.argv[2] === "--assemble") {
     await assembleRelease({ ...options, incoming: join(root, ".desktop/incoming") });

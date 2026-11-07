@@ -88,3 +88,13 @@ test("transcript snapshots compare by identity first and by content for replaced
   assert.equal(sameMessages(transcript, [user]), false);
   assert.equal(sameMessages(transcript, [reply, user]), false);
 });
+
+test("only a tool result with a pending status keeps its card waiting on the user", async () => {
+  const { cardAwaitsUser } = await import("../src/host/client/conversation-turns.ts");
+  const result = (text: string) => ({ id: "r", role: "tool" as const, timestamp: "", blocks: [{ kind: "text" as const, text }] });
+  assert.equal(cardAwaitsUser(result('{"id":"d","status":"pending_canvas_acceptance"}')), true);
+  assert.equal(cardAwaitsUser(result('{"status": "pending_review"}')), true);
+  assert.equal(cardAwaitsUser(result('{"id":"d","status":"applied_on_canvas"}')), false);
+  assert.equal(cardAwaitsUser(result("plain output")), false);
+  assert.equal(cardAwaitsUser(undefined), false);
+});

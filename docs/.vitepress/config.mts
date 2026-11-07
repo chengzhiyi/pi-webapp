@@ -55,6 +55,7 @@ const sidebar = (prefix: string, t: Labels) => [
       { text: t.glossary, link: `${prefix}/reference/glossary` },
     ],
   },
+  { text: t.changelog, link: `${prefix}/changelog` },
   { text: t.developers, link: `${prefix}/developers` },
 ];
 
@@ -66,7 +67,7 @@ const en: Labels = {
   extensions: 'Packages, skills and plugins', updates: 'Updates', security: 'Security and privacy', help: 'Help',
   troubleshooting: 'Troubleshooting', faq: 'FAQ', reference: 'Reference', cli: 'Command line',
   env: 'Environment variables', files: 'Files and directories', limits: 'Limits', glossary: 'Glossary',
-  developers: 'Developers',
+  developers: 'Developers', changelog: 'Changelog',
 };
 const zh: Labels = {
   gettingStarted: '开始使用', introduction: '简介', quickStart: '快速开始', desktop: '桌面版',
@@ -76,7 +77,7 @@ const zh: Labels = {
   extensions: '包、技能与插件', updates: '更新', security: '安全与隐私', help: '帮助',
   troubleshooting: '排错', faq: '常见问题', reference: '参考',  cli: '命令行',
   env: '环境变量', files: '文件与目录', limits: '限制', glossary: '术语表',
-  developers: '开发者',
+  developers: '开发者', changelog: '更新日志',
 };
 
 export default defineConfig({
@@ -103,9 +104,10 @@ export default defineConfig({
       description: 'User guide for pi-webapp: a browser and desktop workbench for the Pi coding agent.',
       themeConfig: {
         nav: [
-          { text: 'Guide', link: '/introduction', activeMatch: '^/(?!reference/|troubleshooting|faq|developers)' },
+          { text: 'Guide', link: '/introduction', activeMatch: '^/(?!reference/|troubleshooting|faq|developers|changelog)' },
           { text: 'Reference', link: '/reference/cli', activeMatch: '^/reference/' },
           { text: 'Troubleshooting', link: '/troubleshooting', activeMatch: '^/(troubleshooting|faq)' },
+          { text: 'Changelog', link: '/changelog' },
           { text: 'Developers', link: '/developers' },
         ],
         sidebar: sidebar('', en),
@@ -123,9 +125,10 @@ export default defineConfig({
       description: 'pi-webapp 使用指南：Pi 编程代理的浏览器与桌面工作台。',
       themeConfig: {
         nav: [
-          { text: '指南', link: '/zh/introduction', activeMatch: '^/zh/(?!reference/|troubleshooting|faq|developers)' },
+          { text: '指南', link: '/zh/introduction', activeMatch: '^/zh/(?!reference/|troubleshooting|faq|developers|changelog)' },
           { text: '参考', link: '/zh/reference/cli', activeMatch: '^/zh/reference/' },
           { text: '排错', link: '/zh/troubleshooting', activeMatch: '^/zh/(troubleshooting|faq)' },
+          { text: '更新日志', link: '/zh/changelog' },
           { text: '开发者', link: '/zh/developers' },
         ],
         sidebar: sidebar('/zh', zh),
