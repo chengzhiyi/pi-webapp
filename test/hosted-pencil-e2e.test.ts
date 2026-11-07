@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { build } from "esbuild";
-import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, type AssistantMessage, type ToolCall } from "@earendil-works/pi-ai";
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import { WorkspaceSessions } from "../src/host/server/sessions/workspace-sessions.ts";
 import { startBridge } from "../src/host/server/transport/bridge.ts";
@@ -77,8 +77,8 @@ test("pi-pencil through the real host: install, CSP, agent tools with images, hu
   let stage = 0;
   session.agent.streamFunction = async m => {
     stage++;
-    const content = stage === 1 ? [{ type: "toolCall" as const, id: "c1", name: "pencil_read_me", arguments: {} }]
-      : stage === 2 ? [{ type: "toolCall" as const, id: "c2", name: "pencil_propose_changes", arguments: { title: "Login", ops: LOGIN } }]
+    const content: AssistantMessage["content"] = stage === 1 ? [{ type: "toolCall" as const, id: "c1", name: "pencil_read_me", arguments: {} }]
+      : stage === 2 ? [{ type: "toolCall" as const, id: "c2", name: "pencil_propose_changes", arguments: { title: "Login", ops: LOGIN } as unknown as ToolCall["arguments"] }]
       : [{ type: "text" as const, text: "Proposed a login screen; please review it." }];
     const message: AssistantMessage = { role: "assistant", api: m.api, provider: m.provider, model: m.id, timestamp: Date.now(), content, stopReason: stage < 3 ? "toolUse" : "stop",
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };

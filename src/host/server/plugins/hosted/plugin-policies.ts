@@ -61,8 +61,9 @@ export const PENCIL_ID = "@chengzhiyi/pi-pencil";
 const PENCIL: HostedPluginPolicy = {
   tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_propose_changes: "propose" },
   readonlyActions: ["reference", "status", "inspect", "render"],
-  actions: ["list", "get", "accept", "reject", "save", "open", "selection", "sync", "lock"],
-  checkpointActions: ["get", "list", "sync"],
+  actions: ["list", "get", "accept", "reject", "save", "open", "create", "rename", "selection", "sync", "lock"],
+  // A freeze flushes a person's first edits in an empty workspace, which creates their design.
+  checkpointActions: ["get", "list", "sync", "create"],
   contribution: {
     entry: { label: "Pencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" },
     panels: ["workspace", "editor"], artifactTools: ["pencil_propose_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "Pencil" },

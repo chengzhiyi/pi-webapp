@@ -106,9 +106,14 @@ export class HostedPluginManager {
   /** Developer-supplied source (directory or tgz) for this plugin, or null for the registry. */
   private devSource(id: string): ((signal?: AbortSignal) => Promise<HostedPackage>) | null {
     const root = this.options.devRoots?.get(id), archive = this.options.devArchives?.get(id);
-    if (root) return signal => this.installer.installDevDirectory(id, root, signal);
-    if (archive) return signal => this.installer.installDevArchive(id, archive, signal);
-    return null;
+    if (!root && !archive) return null;
+    return async signal => {
+      // A switch that fails (e.g. an open editor never acknowledges its flush) skips the usual post-operation
+      // collection and leaves its build installed. Collect first, so repeated saves cannot exhaust the
+      // retained-version budget and wedge the dev loop. Best effort: the post-operation collection still reports.
+      await this.collectSettled(id).catch(() => {});
+      return root ? this.installer.installDevDirectory(id, root, signal) : this.installer.installDevArchive(id, archive!, signal);
+    };
   }
   isDevPlugin(id: string): boolean { return !!(this.options.devRoots?.has(id) || this.options.devArchives?.has(id)); }
   private supervisor(id: string) {
