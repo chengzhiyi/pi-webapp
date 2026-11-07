@@ -51,7 +51,7 @@ async function run(t: { after(fn: () => Promise<void>): void }, tool: { name: st
   return integration;
 }
 test("policy registry: built-in policies are reviewed ids only; unknown ids are unreviewed", () => {
-  assert.deepEqual([...DEFAULT_POLICIES.keys()], [EXCALIDRAW_ID, "@chengzhiyi/pi-github"]);
+  assert.deepEqual([...DEFAULT_POLICIES.keys()], [EXCALIDRAW_ID, "@chengzhiyi/pi-github", "@chengzhiyi/pi-pencil"]);
   assert.throws(() => policyFor(DEFAULT_POLICIES, ID), { code: "unreviewed_plugin" });
 });
 test("a non-excalidraw catalog plugin installs, enables and publishes its own reviewed contribution", async t => {

@@ -13,7 +13,7 @@ export interface HostedBridgeHandlers {
   secret?(pluginId: string, name: string, value: string | null): unknown | Promise<unknown>;
   /** Browser sign-in for a declared secret (OAuth device flow). Tokens are stored host-side and never returned. */
   secretAuth?(input: { phase: "start"; pluginId: string; name: string } | { phase: "poll" | "cancel"; deviceId: string }): unknown | Promise<unknown>;
-  asset(path: string): Promise<{bytes: Buffer; mime: string} | null>;
+  asset(path: string): Promise<{bytes: Buffer; mime: string; csp?: string} | null>;
 }
 export const HOSTED_API_PATHS = ["/api/hosted-plugins/manage", "/api/hosted-plugins/action", "/api/hosted-plugins/views", "/api/hosted-plugins/approvals", "/api/hosted-plugins/secrets"];
 /** Parse only authenticated wire DTOs. cwd/workspace from an iframe are never propagated. */

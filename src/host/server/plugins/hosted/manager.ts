@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import type { HostedInvocation, HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
+import type { WorkspaceFileRule } from "./plugin-policies.ts";
 import { CapabilityBroker, type CapabilityBrokerOptions } from "./capabilities/broker.ts";
 import { parseDeclarations } from "./capabilities/declarations.ts";
 import { PluginScheduler } from "./capabilities/scheduler.ts";
@@ -32,6 +33,10 @@ export interface HostedManagerOptions {
   /** Enter the all-Agent settled barrier only for activation/disable, AFTER background preparation. */
   lifecycle?<T>(pluginId: string, operation: () => Promise<T>, shutdown?: boolean): Promise<T>;
   legacy?(id: string): (request: HostedInvocation) => Promise<unknown>;
+  /** Reviewed workspace file rules per plugin (policy data). */
+  workspaceRules?(id: string): readonly WorkspaceFileRule[];
+  /** Reviewed per-invocation timeout per plugin. */
+  invokeTimeoutMs?(id: string): number | undefined;
   /** Enables network/sessions for plugins that declare them. Without it every capability call is denied. */
   capabilities?: CapabilityBrokerOptions;
   /** Host-authenticated scope for scheduled ticks; null skips the tick. The plugin never chooses it. */
@@ -78,7 +83,7 @@ export class HostedPluginManager {
       ...options.scheduleTimers,
     });
     for (const plugin of this.installer.catalog) {
-      const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id));
+      const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id), undefined, options.workspaceRules?.(plugin.id));
       const hooks = options.hooks(plugin.id);
       this.supervisors.set(plugin.id, new HostedPluginSupervisor(broker, options.workerEntry, {
         validateCandidate: tools => hooks.validateCandidate?.(tools),
@@ -346,7 +351,7 @@ export class HostedPluginManager {
   invoke(id: string, generation: number, request: Omit<HostedInvocation, "generation">): Promise<unknown> {
     const s = this.supervisor(id);
     if (generation !== s.generation) return Promise.reject(new HostedPluginError("stale_generation", "Reconnect the plugin view before editing", { status: 409 }));
-    return s.invoke(request);
+    return s.invoke(request, this.options.invokeTimeoutMs?.(id));
   }
   /** Flush-only host endpoint for a registered switch barrier, NEVER normal browser admission. */
   flush(id: string, generation: number, request: Omit<HostedInvocation, "generation" | "kind">): Promise<unknown> {
@@ -375,8 +380,11 @@ export class HostedPluginManager {
     let id: string; try { id = decodeURIComponent(match[1]!); } catch { return null; }
     const token = this.assetTokens.get(id), candidate = Buffer.from(match[2]!);
     if (!token || candidate.length !== Buffer.byteLength(token) || !timingSafeEqual(candidate, Buffer.from(token))) return null;
-    return this.asset(id, match[3]!, match[4]!);
+    const asset = await this.asset(id, match[3]!, match[4]!);
+    return asset ? { ...asset, pluginId: id } : null;
   }
+  /** Manifest of the package whose assets are currently served (for reviewed browser permissions). */
+  servedManifest(id: string): unknown { return this.packages.get(id)?.manifest ?? null; }
   /** Host-upgrade/startup reconciliation: only installed items; preserve disabled choices.
    * Registry failure never discards compatible local code. Incompatibility remains a visible error.
    */

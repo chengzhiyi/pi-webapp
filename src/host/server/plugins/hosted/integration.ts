@@ -8,7 +8,9 @@ import { HostedPluginManager, type HostedManagerOptions } from "./manager.ts";
 import { HostedViewCoordinator, type AuthenticatedViewScope } from "./views.ts";
 import type { HostedBridgeHandlers } from "./routes.ts";
 import { HostedStateBroker } from "./state-broker.ts";
-import { DEFAULT_POLICIES, policyFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import { DEFAULT_POLICIES, invokeTimeoutFor, policyFor, workspaceRulesFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import { hostedFrameCsp, manifestRequestsWasm } from "./frame-csp.ts";
+import { toToolResult } from "./tool-result.ts";
 import type { ExecuteApprovals } from "./capabilities/execute-approvals.ts";
 import { parseDeclarations } from "./capabilities/declarations.ts";
 import { DeviceFlows, secretAuthFor } from "./capabilities/oauth.ts";
@@ -79,10 +81,12 @@ export class HostedPluginIntegration {
         const live = this.manager.tools.find(t => t.pluginId === id);
         if (!live) throw new HostedPluginError("plugin_unavailable", "Hosted tool unavailable");
         const value = await this.manager.invoke(id, live.generation, request);
-        return { content: [{ type: "text", text: JSON.stringify(value) ?? "null" }], details: value };
+        return toToolResult(value) as never;
       },
     });
     this.manager = new HostedPluginManager({ ...options,
+      workspaceRules: id => workspaceRulesFor(this.trusted, id),
+      invokeTimeoutMs: id => invokeTimeoutFor(this.trusted, id),
       // Terminal intent belongs to the operation, not the mutable closing flag:
       // an enable still preparing when shutdown starts must not retain its freeze.
       lifecycle: (id, operation, shutdown) => this.lifecycle(id, operation, shutdown),
@@ -159,7 +163,13 @@ export class HostedPluginIntegration {
         if (input.operation === "register") this.generation(input.pluginId, input.generation);
         return this.coordinator(input.pluginId).handle(input, this.viewScope(scope));
       },
-      asset: path => this.manager.assetRequest(path),
+      asset: async path => {
+        const asset = await this.manager.assetRequest(path);
+        if (!asset) return null;
+        // Both the reviewed host policy and the served package must ask for WebAssembly.
+        const wasm = this.trusted.get(asset.pluginId)?.browser?.wasm === true && manifestRequestsWasm(this.manager.servedManifest(asset.pluginId));
+        return { bytes: asset.bytes, mime: asset.mime, csp: hostedFrameCsp({ wasm }) };
+      },
     };
   }
   private verifyTools(id: string, descriptors: readonly HostedToolDescriptor[]) {
