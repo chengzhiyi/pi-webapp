@@ -24,6 +24,7 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 ### For plugin developers
 
 - A local development folder or a package archive can stand in for an official hosted plugin.
+- A plugin that isn't official yet can be developed from a local folder: it describes itself in a `piWebappCatalog` block in its `package.json` (name, description and reviewed policy, the same shape as an official catalog entry) and is never labelled Official. Package archives are for official plugins only.
 - Hosted plugins can ship WebAssembly (with `browser.wasm`), bind binary workspace files, set their own invoke timeout, and return images with tool results.
 - Repeated failed switches to a development build no longer use up the plugin's version budget.
 

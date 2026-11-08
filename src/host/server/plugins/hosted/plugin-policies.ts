@@ -18,6 +18,18 @@ export interface HostedPluginPolicy {
   workspace?: { files: readonly WorkspaceFileRule[] };
   /** Reviewed per-invocation timeout (default 30 s, max 180 s). */
   runtime?: { invokeTimeoutMs?: number };
+  /** Reviewed browser sign-in for secrets the package declares. Absent = the user pastes the value. */
+  secrets?: Readonly<Record<string, SecretAuthPolicy>>;
+}
+/** How the host helps the user obtain one secret. Only GitHub's OAuth device flow is implemented. */
+export interface SecretAuthPolicy {
+  provider: "github";
+  /** OAuth scope requested by the device flow. */
+  scope: string;
+  /** Pre-filled "create a token" page, opened when browser sign-in is unavailable. */
+  createUrl: string;
+  /** Public OAuth App client id (device flow, no secret). Absent = the host's own pi-webapp OAuth App. */
+  clientId?: string;
 }
 /** One workspace file kind a plugin may read/commit through the broker. */
 export interface WorkspaceFileRule {
@@ -32,49 +44,6 @@ export interface WorkspaceFileRule {
 export const MAX_WORKSPACE_FILE_BYTES = 64 * 1024 * 1024;
 /** Exactly the pre-rule behavior: text `.excalidraw`, 512 KiB, may create `diagrams/`. */
 export const DEFAULT_WORKSPACE_FILES: readonly WorkspaceFileRule[] = Object.freeze([Object.freeze({ extension: ".excalidraw", binary: false, maxBytes: 512 * 1024, createDirectory: "diagrams" })]);
-export const EXCALIDRAW_ID = "@chengzhiyi/pi-excalidraw";
-// Reviewed data from package 6328c63, not imported domain code or frontend authorization.
-const EXCALIDRAW: HostedPluginPolicy = {
-  tools: { excalidraw_read_me: "reference", excalidraw_create_view: "view", diagram_reference: "reference", diagram_create: "create", diagram_read: "read", diagram_patch: "patch" },
-  readonlyActions: ["read", "reference"],
-  actions: ["list", "new", "open", "import", "get", "focus", "sync", "initialize", "accept", "reject", "save"],
-  checkpointActions: ["sync", "get", "list"],
-  contribution: {
-    entry: { label: "Excalidraw", description: { zh: "手绘图稿", en: "Editable drawings" }, kind: "workspace" },
-    panels: ["workspace", "editor"], artifactTools: ["excalidraw_create_view", "diagram_create", "diagram_patch"],
-    toolViews: ["excalidraw_create_view", "diagram_create", "diagram_patch"], panelAlias: { prefix: "diagram:", kind: "editor", title: "Excalidraw" },
-  },
-};
-export const GITHUB_PLUGIN_ID = "@chengzhiyi/pi-github";
-/** No agent tools: the plugin drives its own background sessions. Its UI may only call the board actions below. */
-const GITHUB: HostedPluginPolicy = {
-  tools: {}, readonlyActions: [],
-  actions: ["get", "configure", "pickup", "sync", "cancel", "approve", "reject", "answer", "remove"],
-  checkpointActions: ["get"],
-  contribution: {
-    entry: { label: "GitHub", description: { zh: "GitHub 任务", en: "GitHub tasks" }, kind: "workspace" },
-    panels: ["workspace"], artifactTools: [], toolViews: [], panelAlias: { prefix: "github:", kind: "workspace", title: "GitHub" },
-  },
-};
-export const PENCIL_ID = "@chengzhiyi/pi-pencil";
-/** pi-pencil. The reviewed tool set is deliberately small; accepting a proposal stays human-only. */
-const PENCIL: HostedPluginPolicy = {
-  tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_propose_changes: "propose" },
-  readonlyActions: ["reference", "status", "inspect", "render"],
-  actions: ["list", "get", "accept", "reject", "save", "open", "create", "rename", "selection", "sync", "lock"],
-  // A freeze flushes a person's first edits in an empty workspace, which creates their design.
-  checkpointActions: ["get", "list", "sync", "create"],
-  contribution: {
-    entry: { label: "Pencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" },
-    panels: ["workspace", "editor"], artifactTools: ["pencil_propose_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "Pencil" },
-  },
-  browser: { wasm: true },
-  workspace: { files: [{ extension: ".fig", binary: true, maxBytes: MAX_WORKSPACE_FILE_BYTES, createDirectory: "designs" }] },
-  runtime: { invokeTimeoutMs: 120_000 },
-};
-/** Policies are inert without a matching catalog entry, so shipping GitHub's here shows no card by itself. */
-export const DEFAULT_POLICIES: ReadonlyMap<string, HostedPluginPolicy> = new Map([[EXCALIDRAW_ID, EXCALIDRAW], [GITHUB_PLUGIN_ID, GITHUB], [PENCIL_ID, PENCIL]]);
-
 export function policyFor(policies: ReadonlyMap<string, HostedPluginPolicy>, id: string): HostedPluginPolicy {
   const policy = policies.get(id);
   if (!policy) throw new HostedPluginError("unreviewed_plugin", "No trusted tool policy for this package");

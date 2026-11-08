@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HostedPluginError } from "../errors.ts";
+import type { HostedPluginPolicy } from "../plugin-policies.ts";
 
 /** How the user can obtain one declared secret in a browser. Host-owned; plugin code never sees any of it. */
 export interface SecretAuth {
@@ -9,14 +10,13 @@ export interface SecretAuth {
   /** Pre-filled "create a token" page, opened when browser sign-in is unavailable. */
   createUrl: string;
 }
-const GITHUB_TOKEN_PAGE = "https://github.com/settings/personal-access-tokens/new?" + new URLSearchParams({
-  name: "pi-webapp", description: "pi-webapp GitHub plugin", issues: "write", pull_requests: "write", contents: "write",
-});
 /** Public client id of the pi-webapp GitHub OAuth App (Device Flow enabled; no client secret is used). `PI_WEBAPP_GITHUB_CLIENT_ID` overrides it for forks. */
 export const GITHUB_CLIENT_ID = "Ov23limJmKiuu8cOP83E";
-export function secretAuthFor(pluginId: string, name: string, env: NodeJS.ProcessEnv = process.env): SecretAuth | undefined {
-  if (pluginId === "@chengzhiyi/pi-github" && name === "github-token") return { clientId: env.PI_WEBAPP_GITHUB_CLIENT_ID?.trim() || GITHUB_CLIENT_ID, scope: "repo", createUrl: GITHUB_TOKEN_PAGE };
-  return undefined;
+/** Sign-in help for one secret comes only from the plugin's reviewed policy; the host names no plugin here. */
+export function secretAuthFor(policy: Pick<HostedPluginPolicy, "secrets"> | undefined, name: string, env: NodeJS.ProcessEnv = process.env): SecretAuth | undefined {
+  const declared = policy?.secrets && Object.hasOwn(policy.secrets, name) ? policy.secrets[name] : undefined;
+  if (declared?.provider !== "github") return undefined;
+  return { clientId: env.PI_WEBAPP_GITHUB_CLIENT_ID?.trim() || declared.clientId || GITHUB_CLIENT_ID, scope: declared.scope, createUrl: declared.createUrl };
 }
 
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;

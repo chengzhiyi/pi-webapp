@@ -50,7 +50,7 @@ export interface HostedManagerOptions {
   scheduleTimers?: { setInterval(fn: () => void, ms: number): unknown; clearInterval(handle: unknown): void };
 }
 export interface ManagedHostedPlugin {
-  id: string; name: string; description: { zh: string; en: string }; official: true;
+  id: string; name: string; description: { zh: string; en: string }; official: boolean;
   installed: boolean; installedVersions: string[]; version: string | null; activeVersion: string | null;
   enabled: boolean; phase: string; generation: number | null; pendingVersion: string | null;
   updatePolicy: UpdatePolicy; pinnedVersion?: string; updateDiagnostic?: UpdateDiagnostic; availableVersion: string | null; error?: ReturnType<typeof failure>;
@@ -256,7 +256,7 @@ export class HostedPluginManager {
       const s = this.supervisor(plugin.id), active = await s.broker.active(), pkg = this.packages.get(plugin.id);
       const versions = (installed.versions[plugin.id] ?? []).map(v => v.version).sort((a, b) => compareVersions(b, a));
       return {
-        id: plugin.id, name: plugin.name, description: plugin.description, official: true as const,
+        id: plugin.id, name: plugin.name, description: plugin.description, official: plugin.official !== false,
         installed: !!versions.length, installedVersions: versions, version: versions[0] ?? null,
         activeVersion: active?.version ?? null, enabled: active?.enabled ?? false,
         phase: s.phase, generation: s.generation, pendingVersion: s.pendingVersion,

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "@chengzhiyi/pi-excalidraw",
+      "name": "Excalidraw",
+      "icon": "drawing",
+      "description": {
+        "zh": "本地手绘画布、AI 绘图及工作区图稿。按需安装。",
+        "en": "Local sketch canvas, AI diagrams and workspace drawings. Optional download."
+      },
+      "registry": "https://registry.npmjs.org",
+      "recommendedVersion": "0.1.0",
+      "requiredCapabilities": ["state", "workspace", "legacy", "panels", "messages"],
+      "reviewed": "Policy reviewed against package 6328c63.",
+      "policy": {
+        "tools": {
+          "excalidraw_read_me": "reference",
+          "excalidraw_create_view": "view",
+          "diagram_reference": "reference",
+          "diagram_create": "create",
+          "diagram_read": "read",
+          "diagram_patch": "patch"
+        },
+        "readonlyActions": ["read", "reference"],
+        "actions": ["list", "new", "open", "import", "get", "focus", "sync", "initialize", "accept", "reject", "save"],
+        "checkpointActions": ["sync", "get", "list"],
+        "contribution": {
+          "entry": { "label": "Excalidraw", "description": { "zh": "手绘图稿", "en": "Editable drawings" }, "kind": "workspace" },
+          "panels": ["workspace", "editor"],
+          "artifactTools": ["excalidraw_create_view", "diagram_create", "diagram_patch"],
+          "toolViews": ["excalidraw_create_view", "diagram_create", "diagram_patch"],
+          "panelAlias": { "prefix": "diagram:", "kind": "editor", "title": "Excalidraw" }
+        }
+      }
+    },
+    {
+      "id": "@chengzhiyi/pi-pencil",
+      "name": "Pencil",
+      "icon": "drawing",
+      "description": {
+        "zh": "基于 OpenPencil 的 UI 设计：编辑工作区里的 .fig 设计稿，agent 提出修改，由你确认。按需安装。",
+        "en": "UI design on OpenPencil: edit .fig designs in your workspace; the agent proposes changes and you accept them. Optional download."
+      },
+      "registry": "https://registry.npmjs.org",
+      "recommendedVersion": "0.0.1",
+      "requiredCapabilities": ["state", "workspace", "panels", "browser.wasm"],
+      "reviewed": "The tool set is deliberately small; accepting a proposal stays human-only. A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
+      "policy": {
+        "tools": {
+          "pencil_read_me": "reference",
+          "pencil_status": "status",
+          "pencil_inspect": "inspect",
+          "pencil_render": "render",
+          "pencil_propose_changes": "propose"
+        },
+        "readonlyActions": ["reference", "status", "inspect", "render"],
+        "actions": ["list", "get", "accept", "reject", "save", "open", "create", "rename", "selection", "sync", "lock"],
+        "checkpointActions": ["get", "list", "sync", "create"],
+        "contribution": {
+          "entry": { "label": "Pencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },
+          "panels": ["workspace", "editor"],
+          "artifactTools": ["pencil_propose_changes"],
+          "toolViews": [],
+          "panelAlias": { "prefix": "pencil:", "kind": "editor", "title": "Pencil" }
+        },
+        "browser": { "wasm": true },
+        "workspace": { "files": [{ "extension": ".fig", "binary": true, "maxBytes": 67108864, "createDirectory": "designs" }] },
+        "runtime": { "invokeTimeoutMs": 120000 }
+      }
+    }
+  ]
+}

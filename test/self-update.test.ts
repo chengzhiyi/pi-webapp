@@ -87,7 +87,7 @@ test("installs a checked npm array release before requesting a supervised restar
   try {
     await mkdir(packageRoot);
     await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "pi-webapp", version: "0.1.0" }));
-    const warning = { pluginId: "@chengzhiyi/pi-github", message: "Plugin is not installed" };
+    const warning = { pluginId: "@example/pi-tasks", message: "Plugin is not installed" };
     const updater = new SelfUpdater({ agentDir, packageRoot, launcherNonce: "nonce-a", pluginWarnings: async version => {
       warningChecks++; assert.equal(version, "0.2.0"); return [warning];
     }, runNpm: async (args) => {

@@ -7,7 +7,10 @@ import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { HostedStateBroker } from "../src/host/server/plugins/hosted/state-broker.ts";
 import { HOSTED_FRAME_CSP, hostedFrameCsp, manifestRequestsWasm } from "../src/host/server/plugins/hosted/frame-csp.ts";
-import { DEFAULT_POLICIES, DEFAULT_WORKSPACE_FILES, PENCIL_ID, EXCALIDRAW_ID, workspaceRulesFor, invokeTimeoutFor } from "../src/host/server/plugins/hosted/plugin-policies.ts";
+import { DEFAULT_WORKSPACE_FILES, workspaceRulesFor, invokeTimeoutFor } from "../src/host/server/plugins/hosted/plugin-policies.ts";
+import { DEFAULT_POLICIES } from "../src/host/server/plugins/hosted/official-catalog.ts";
+
+const PENCIL_ID = "@chengzhiyi/pi-pencil", EXCALIDRAW_ID = "@chengzhiyi/pi-excalidraw";
 import { validateHostedPackage } from "../src/host/server/plugins/hosted/resources.ts";
 
 const sha = (b: Uint8Array | string) => createHash("sha256").update(b).digest("hex");
@@ -31,7 +34,7 @@ test("H1: a package must declare both browser.wasm and the capability; policy is
 
 test("H3 policy: excalidraw keeps the historical rule; pencil gets binary .fig and a bounded timeout", () => {
   assert.deepEqual(workspaceRulesFor(DEFAULT_POLICIES, EXCALIDRAW_ID), DEFAULT_WORKSPACE_FILES);
-  assert.deepEqual(workspaceRulesFor(DEFAULT_POLICIES, "@chengzhiyi/pi-github"), DEFAULT_WORKSPACE_FILES);
+  assert.deepEqual(workspaceRulesFor(DEFAULT_POLICIES, "@example/unlisted"), DEFAULT_WORKSPACE_FILES);
   assert.deepEqual(workspaceRulesFor(DEFAULT_POLICIES, PENCIL_ID).map(r => [r.extension, r.binary]), [[".fig", true]]);
   assert.equal(invokeTimeoutFor(DEFAULT_POLICIES, EXCALIDRAW_ID), undefined);
   assert.equal(invokeTimeoutFor(DEFAULT_POLICIES, PENCIL_ID), 120_000);

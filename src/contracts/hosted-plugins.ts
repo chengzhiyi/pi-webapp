@@ -7,7 +7,7 @@ export interface HostedContribution {
 export interface HostedPluginCard {
   pluginId: string; name: string; official: boolean; installed: boolean; enabled: boolean;
   /** Reviewed host artwork key; never arbitrary plugin HTML or executable code. */
-  icon?: "drawing" | "github";
+  icon?: "drawing";
   /** A previous activation/checkpoint remains available after uninstall. */
   hasRetainedData?: boolean;
   /** Catalog blurb, shown before the plugin is enabled. */
