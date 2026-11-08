@@ -12,7 +12,7 @@ type Loose = Record<string, any>;
 const entry = () => structuredClone(OFFICIAL_ENTRIES.find(e => e.id === PENCIL)!) as unknown as Loose;
 
 test("official-plugins.json lists exactly the released plugins, in order", () => {
-  assert.deepEqual(OFFICIAL_PLUGINS.map(p => [p.id, p.name, p.icon, p.recommendedVersion]), [[EXCALIDRAW, "Excalidraw", "drawing", "0.1.0"], [PENCIL, "Pencil", "drawing", "0.0.1"]]);
+  assert.deepEqual(OFFICIAL_PLUGINS.map(p => [p.id, p.name, p.icon, p.recommendedVersion]), [[EXCALIDRAW, "Excalidraw", "drawing", "0.1.0"], [PENCIL, "OpenPencil", "design", "0.0.2"]]);
   assert.deepEqual([...DEFAULT_POLICIES.keys()], [EXCALIDRAW, PENCIL]);
   assert.ok(OFFICIAL_PLUGINS.every(p => !("policy" in p) && p.official === undefined), "catalog cards carry no policy and stay official");
 });
@@ -25,9 +25,9 @@ test("the data file reproduces the previously hardcoded policies field for field
       toolViews: ["excalidraw_create_view", "diagram_create", "diagram_patch"], panelAlias: { prefix: "diagram:", kind: "editor", title: "Excalidraw" } },
   });
   assert.deepEqual(DEFAULT_POLICIES.get(PENCIL), {
-    tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_propose_changes: "propose" },
-    readonlyActions: ["reference", "status", "inspect", "render"], actions: ["list", "get", "accept", "reject", "save", "open", "create", "rename", "selection", "sync", "lock"], checkpointActions: ["get", "list", "sync", "create"],
-    contribution: { entry: { label: "Pencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" }, panels: ["workspace", "editor"], artifactTools: ["pencil_propose_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "Pencil" } },
+    tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_apply_changes: "apply" },
+    readonlyActions: ["reference", "status", "inspect", "render"], actions: ["list", "get", "accept", "reject", "revert", "save", "open", "create", "rename", "selection", "sync", "lock"], checkpointActions: ["get", "list", "sync", "create"],
+    contribution: { entry: { label: "OpenPencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" }, panels: ["workspace", "editor"], artifactTools: ["pencil_apply_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "OpenPencil" } },
     browser: { wasm: true }, workspace: { files: [{ extension: ".fig", binary: true, maxBytes: 64 * 1024 * 1024, createDirectory: "designs" }] }, runtime: { invokeTimeoutMs: 120_000 },
   });
 });

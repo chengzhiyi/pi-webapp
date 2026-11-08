@@ -43,7 +43,7 @@
         "en": "UI design on OpenPencil: edit .fig designs in your workspace; the agent's changes appear on the canvas directly and you can undo them. Optional download."
       },
       "registry": "https://registry.npmjs.org",
-      "recommendedVersion": "0.0.1",
+      "recommendedVersion": "0.0.2",
       "requiredCapabilities": ["state", "workspace", "panels", "browser.wasm"],
       "reviewed": "The tool set is deliberately small. Agent changes apply directly as new revisions; undoing one (revert), saving, syncing and locking stay human-only. accept/reject remain for proposals stored by older builds. A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
       "policy": {
@@ -60,7 +60,7 @@
         "contribution": {
           "entry": { "label": "OpenPencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },
           "panels": ["workspace", "editor"],
-          "artifactTools": ["pencil_apply_changes", "pencil_propose_changes"],
+          "artifactTools": ["pencil_apply_changes"],
           "toolViews": [],
           "panelAlias": { "prefix": "pencil:", "kind": "editor", "title": "OpenPencil" }
         },

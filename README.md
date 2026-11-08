@@ -54,6 +54,10 @@ npx pi-webapp
 
 **Ask → see it land → undo or refine.** Ask Pi for a login screen, a dashboard, or a component. Its changes appear on the [OpenPencil](https://github.com/open-pencil/open-pencil) canvas as it makes them, with the changed frames selected and an **Undo** for the latest one.
 
+[![The OpenPencil plugin beside a conversation: Pi has added a sign-in screen and a dashboard to the canvas, and a toast offers Undo](assets/readme/openpencil.png)](assets/readme/openpencil.png)
+
+*Real plugin UI with a scripted agent turn, not a live model transcript. Click the image for full size.*
+
 - **A full design editor:** frames, auto layout, components, pen, text, boolean operations, pages and layers, plus Code (JSX / React + Tailwind / HTML) and Inspect panels and PNG/JPG/WebP/SVG export.
 - **Stay in charge:** Pi sends typed operations, never code. Lock layers or limit Pi to the selection; undo, saving and locking are yours only, and Pi can't overwrite edits it hasn't seen.
 - **Preview it live:** **Preview** runs the design on the canvas, with buttons, switches, sliders, tabs and text fields working as real controls.
