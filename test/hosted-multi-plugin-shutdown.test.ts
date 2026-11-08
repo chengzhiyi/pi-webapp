@@ -55,3 +55,52 @@ test("host shutdown still lets a LATER plugin's open workspace view freeze (cons
   assert.ok(acked, "the open workspace view was asked to freeze");
   await stopping;
 });
+
+test("a stop that a later plugin refuses gives earlier plugins back their worker and views, and the next stop succeeds", { timeout: 60_000 }, async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "pi-multi-"))), workerEntry = join(root, "worker.mjs"), packs = { [A]: archive(A), [B]: archive(B) };
+  await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+  const pack = (url: string) => url.includes("second") ? packs[B] : packs[A];
+  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), hostVersion: "0.1.29", workerEntry, ownerId: "o", catalog: [entry(A), entry(B)], policies: new Map([[A, policy], [B, policy]]),
+    resolveSession: id => id === "chat" ? { cwd: root, workspaceId: "w", sessionId: "chat" } : null,
+    fetch: (async (url: string | URL | Request) => {
+      const p = pack(String(url));
+      if (String(url).endsWith(".tgz")) return new Response(new Uint8Array(p.bytes));
+      return new Response(JSON.stringify({ versions: { "0.1.0": { ...p.release, dist: { ...p.release.dist, tarball: `https://registry.npmjs.org/${p.release.name.replace("/", "-")}.tgz` } } } }));
+    }) as typeof fetch });
+  t.after(async () => { integration.adapter.thaw(); await rm(root, { recursive: true, force: true }); });
+  await integration.start();
+  const views: Record<string, { identity: Record<string, unknown>; viewToken: string }> = {};
+  for (const id of [A, B]) {
+    await integration.handlers.manage({ pluginId: id, operation: "install" } as never);
+    await integration.handlers.manage({ pluginId: id, operation: "enable" } as never);
+    const generation = (await integration.inventory()).plugins.find(p => p.pluginId === id)!.generation!;
+    const identity = { pluginId: id, sessionId: "chat", generation, mountId: `m-${id}` }, viewToken = crypto.randomUUID();
+    await integration.handlers.views({ ...identity, operation: "register", kind: "workspace", viewToken });
+    await integration.handlers.views({ ...identity, viewToken, operation: "change", dirty: false, busy: false });
+    views[id] = { identity, viewToken };
+  }
+  /** Answer the next freeze request for a view: ok, or refuse it the way an unsaved editor does. */
+  async function answer(id: string, ok: boolean) {
+    const { identity, viewToken } = views[id]!;
+    for (let i = 0; i < 100; i++) {
+      const poll = await integration.handlers.views({ ...identity, viewToken, operation: "poll", after: 0, immediate: true }) as { commands: Array<{ id: number; type: string }> };
+      const freeze = poll.commands.find(c => c.type === "freeze");
+      if (freeze) { await integration.handlers.views({ ...identity, viewToken, operation: "ack", commandId: freeze.id, ok, ...(ok ? {} : { error: "unsaved drawing" }) }); return; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    assert.fail(`${id} was never asked to freeze`);
+  }
+  const refused = integration.shutdown();
+  refused.catch(() => {});
+  await answer(A, true);
+  await answer(B, false);
+  await assert.rejects(refused, /unsaved drawing/);
+  // A was stopped first; it must be running again, not left stopped behind an active barrier.
+  const after = await integration.inventory();
+  for (const id of [A, B]) assert.equal(after.plugins.find(p => p.pluginId === id)?.enabled, true, `${id} stays enabled`);
+  assert.ok(integration.manager.tools.some(tool => tool.pluginId === A), "A's worker is back");
+  const stopping = integration.shutdown();
+  await answer(A, true);
+  await answer(B, true);
+  await stopping;
+});

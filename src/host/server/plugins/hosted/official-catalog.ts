@@ -1,23 +1,30 @@
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
 import { HostedPluginError } from "./errors.ts";
 import { compareVersions, satisfiesHost, stableVersion } from "./versions.ts";
+import { deepFreeze, parseCatalog, type CatalogEntry } from "./catalog-schema.ts";
+import type { HostedPluginPolicy } from "./plugin-policies.ts";
+import officialData from "./official-plugins.json" with { type: "json" };
 
 export interface OfficialPlugin {
   id: string;
   name: string;
-  icon?: "drawing" | "github";
+  icon?: "drawing" | "design";
   description: { zh: string; en: string };
   registry: string;
   recommendedVersion: string;
   requiredCapabilities: readonly string[];
+  /** Only a developer's self-described package sets this; it is then never labelled "Official". */
+  official?: false;
 }
-/** Offline metadata only. Never imports the editor or downloads it on first launch. */
-export const OFFICIAL_PLUGINS: readonly OfficialPlugin[] = Object.freeze([Object.freeze({
-  id: "@chengzhiyi/pi-excalidraw", name: "Excalidraw", icon: "drawing" as const,
-  description: { zh: "本地手绘画布、AI 绘图及工作区图稿。按需安装。", en: "Local sketch canvas, AI diagrams and workspace drawings. Optional download." },
-  registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0",
-  requiredCapabilities: ["state", "workspace", "legacy", "panels", "messages"],
-})]);
+/**
+ * The reviewed official plugins live in `official-plugins.json`, one entry per plugin (catalog card + trust policy).
+ * Adding or changing a plugin is a data edit; `parseCatalog` rejects anything malformed at startup.
+ * Offline metadata only: listing a plugin never imports or downloads its code.
+ */
+export const OFFICIAL_ENTRIES: readonly CatalogEntry[] = deepFreeze(parseCatalog(officialData, "official-plugins.json"));
+export const OFFICIAL_PLUGINS: readonly OfficialPlugin[] = Object.freeze(OFFICIAL_ENTRIES.map(({ policy: _policy, ...plugin }) => Object.freeze(plugin)));
+/** Reviewed trust data for each official plugin, keyed by catalog id. */
+export const DEFAULT_POLICIES: ReadonlyMap<string, HostedPluginPolicy> = new Map(OFFICIAL_ENTRIES.map(entry => [entry.id, entry.policy]));
 export function officialPlugin(id: string, catalog = OFFICIAL_PLUGINS): OfficialPlugin {
   const found = catalog.find(p => p.id === id);
   if (!found) throw new HostedPluginError("unknown_plugin", "Plugin is not in the trusted official catalog");

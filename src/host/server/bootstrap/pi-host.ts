@@ -21,7 +21,7 @@ import { HostedPluginIntegration } from "../plugins/hosted/integration.ts";
 import { legacyCheckpointLoader } from "../plugins/hosted/legacy-checkpoints.ts";
 import { hostedCapabilities } from "../plugins/hosted/capabilities/bootstrap.ts";
 import { HostedDevSources, hostedDevConfigPath, hostedDevStatusPath } from "../plugins/hosted/dev-plugins.ts";
-import { OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
+import { DEFAULT_POLICIES, OFFICIAL_PLUGINS } from "../plugins/hosted/official-catalog.ts";
 import { invokeWebAction, requestWebInteraction, WebInteractionHost, PLUGIN_CHANGED } from "@chengzhiyi/pi-web-protocol";
 import { builtinAgentTools } from "../../../plugins/builtin/server.ts";
 import { BUILTIN_IDS } from "../../../contracts/plugins.ts";
@@ -343,7 +343,8 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
     ...(dev.enabled ? { dev, devStatusPath: hostedDevStatusPath(getAgentDir()) } : {}),
     // Dev sources may stand in for an official plugin too, so they are wired whenever dev mode is on.
     ...(dev.enabled ? { devArchives: dev.archives, devRoots: dev.roots } : {}),
-    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog] } : {}),
+    // Self-described dev packages join the official data for this host only; official entries keep their reviewed policy.
+    ...(dev.catalog.length ? { catalog: [...OFFICIAL_PLUGINS, ...dev.catalog], policies: new Map([...DEFAULT_POLICIES, ...dev.policies]) } : {}),
     // Inert for plugins that declare no secrets/network/scheduler/sessions (every shipped plugin today).
     ...hostedCapabilities({ root: hostedRoot, sessions: () => shared.workspaceSessions, activeWorkspace: () => shared.workspaceSessions?.path ?? null, trustedScope,
       sessionTitle: id => shared.workspaceSessions?.retainedSessions().find(session => session.sessionId === id)?.name,

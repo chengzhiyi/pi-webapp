@@ -9,7 +9,8 @@ import { build } from "esbuild";
 import type { HostedPluginCatalog } from "../src/contracts/hosted-plugins.ts";
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import type { OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
-import { DEFAULT_POLICIES, EXCALIDRAW_ID, policyFor, type HostedPluginPolicy } from "../src/host/server/plugins/hosted/plugin-policies.ts";
+import { policyFor, type HostedPluginPolicy } from "../src/host/server/plugins/hosted/plugin-policies.ts";
+import { DEFAULT_POLICIES } from "../src/host/server/plugins/hosted/official-catalog.ts";
 
 const ID = "@example/tasks";
 const plugin: OfficialPlugin = { id: ID, name: "Tasks", description: { zh: "任务", en: "Tasks" }, registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0", requiredCapabilities: ["state"] };
@@ -51,7 +52,7 @@ async function run(t: { after(fn: () => Promise<void>): void }, tool: { name: st
   return integration;
 }
 test("policy registry: built-in policies are reviewed ids only; unknown ids are unreviewed", () => {
-  assert.deepEqual([...DEFAULT_POLICIES.keys()], [EXCALIDRAW_ID, "@chengzhiyi/pi-github"]);
+  assert.deepEqual([...DEFAULT_POLICIES.keys()], ["@chengzhiyi/pi-excalidraw", "@chengzhiyi/pi-pencil"]);
   assert.throws(() => policyFor(DEFAULT_POLICIES, ID), { code: "unreviewed_plugin" });
 });
 test("a non-excalidraw catalog plugin installs, enables and publishes its own reviewed contribution", async t => {

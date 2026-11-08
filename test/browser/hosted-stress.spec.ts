@@ -16,8 +16,11 @@ import { execFileSync } from "node:child_process";
 import { localRelease } from "../helpers/hosted-local-release.ts";
 import { installLifecycleProbe } from "../helpers/hosted-lifecycle-probe.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
+import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
 
 const id = "@chengzhiyi/pi-excalidraw";
+// Measures the Excalidraw archive alone: other official entries would add their own view coordinators.
+const EXCALIDRAW_ONLY = OFFICIAL_PLUGINS.filter(plugin => plugin.id === id);
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const percentile = (values: number[], fraction: number) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * fraction) - 1]!;
 
@@ -36,7 +39,7 @@ test("100-element local switch: 20 warmups + 50 different-version controller/edi
   const workerEntry = join(root, "worker.mjs"), hostedRoot = join(root, "hosted");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "reference" });
-  const integration = new HostedPluginIntegration({ root: hostedRoot, workerEntry, hostVersion: "0.1.29", ownerId: "local-stress-principal",
+  const integration = new HostedPluginIntegration({ catalog: EXCALIDRAW_ONLY, root: hostedRoot, workerEntry, hostVersion: "0.1.29", ownerId: "local-stress-principal",
     resolveSession: sessionId => { const value = sessions?.hostedScope(sessionId); return value ? scope(value.cwd, sessionId) : null; },
     changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
     fetch: (async () => { throw new Error("Reference benchmark forbids registry access"); }) as typeof fetch });

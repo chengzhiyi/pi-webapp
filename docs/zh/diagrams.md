@@ -66,4 +66,4 @@ Excalidraw 是官方插件，**不随应用内置，也不会自动安装**。�
 - 如果停止服务时还有编辑器视图处于打开且未保存的状态，`pi-webapp stop` 可能会被拒绝。见[排错](./troubleshooting#stop-is-refused-because-a-plugin-view-has-not-saved)。
 - 在 Excalidraw 成为插件之前由旧版 pi-webapp 创建的图，会在你安装插件时迁移。它们的原始文件保留在 `pi-web/diagrams/`（[文件与目录](./reference/files)）。
 
-下一页：[模型与提供方](./models)。
+下一页：[用 OpenPencil 做 UI 设计](./design)。

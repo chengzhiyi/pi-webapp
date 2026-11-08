@@ -8,13 +8,16 @@ import { startBridge, type Bridge } from "../../src/host/server/transport/bridge
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
 import { terminalHost } from "../helpers/terminal-host.ts";
 import { integrationFixture } from "../helpers/hosted-integration-fixture.ts";
+import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
+// Excalidraw fixtures: the mocked registry answers every lookup with an Excalidraw release.
+const EXCALIDRAW_ONLY = OFFICIAL_PLUGINS.filter(plugin => plugin.id === "@chengzhiyi/pi-excalidraw");
 
 for (const width of [390, 768, 1440]) test(`official rows keep actions independent from accessible detail navigation at ${width}px`, async ({ page }, info) => {
   test.setTimeout(45_000);
   const root = await mkdtemp(join(tmpdir(), "ori51-navigation-")), workerEntry = join(root, "worker.mjs");
   await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   let release = integrationFixture(), bridge: Bridge | undefined;
-  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local", resolveSession: () => null,
+  const integration = new HostedPluginIntegration({ catalog: EXCALIDRAW_ONLY, root: join(root, "hosted"), workerEntry, hostVersion: "0.1.29", ownerId: "local", resolveSession: () => null,
     fetch: (async url => String(url).endsWith(".tgz") ? new Response(new Uint8Array(release.bytes)) : Response.json({ versions: { [release.release.version]: release.release } })) as typeof fetch });
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   let releaseEnable: (() => void) | undefined;

@@ -73,7 +73,7 @@ Attachments you upload are copied under `pi-web/attachments/`. Removing a worksp
 | What | To whom | When |
 | --- | --- | --- |
 | Your messages, tool output, attached files | Your model provider | Every request. They follow that provider's data policy. |
-| Package and release downloads | The npm registry, GitHub | When you start with `npx`, check for or install an update, or download a plugin such as Excalidraw. |
+| Package and release downloads | The npm registry, GitHub | When you start with `npx`, check for or install an update, or download a plugin such as Excalidraw or OpenPencil. |
 | Error reports | Sentry | **Never, unless you turn them on.** |
 
 A local web page does not mean local inference. If you need nothing to leave the machine, point a custom provider at a model server that runs on it ([Models and providers](./models#custom-provider)).
@@ -89,8 +89,9 @@ If you ever set it and want it off again, unset the variable or set it to `false
 ## Plugins, packages and extensions
 
 - **Pi packages, extensions and skills** run with the same permissions as Pi. Install only from sources you trust, as you would with any code you run on your machine.
-- **Optional plugins** such as Excalidraw come from npm as verified packages. They run in a separate Node.js process and their pages in a separate browser frame, which separates their lifecycle from the main page. That is **not a hostile-code sandbox**.
+- **Optional plugins** such as Excalidraw and OpenPencil come from npm as verified packages. They run in a separate Node.js process and their pages in a separate browser frame, which separates their lifecycle from the main page. That is **not a hostile-code sandbox**.
 - Excalidraw runs entirely locally, with no Excalidraw cloud service, collaboration or upload.
+- OpenPencil also runs locally and leaves out OpenPencil's own AI chat. Design requests go through Pi to the provider you connected, like any other message, and Pi gets rendered images of the frames it changes.
 
 ## Report a vulnerability or a bug safely
 

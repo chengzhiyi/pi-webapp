@@ -43,10 +43,10 @@ features:
     linkText: Workspace tools
   - icon:
       src: /icons/shapes.svg
-    title: Editable diagrams
-    details: Ask for an architecture diagram or flowchart and edit it on a native Excalidraw canvas.
-    link: /diagrams
-    linkText: Diagrams
+    title: Diagrams and UI design
+    details: Ask for a flowchart on an Excalidraw canvas or a screen design in OpenPencil, then keep editing it by hand. Both plugins are optional.
+    link: /extensions#official-plugins
+    linkText: Official plugins
   - icon:
       src: /icons/shield.svg
     title: Your models, your data

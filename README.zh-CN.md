@@ -48,7 +48,22 @@ npx pi-webapp
 - **亲手调整细节：** 移动图形、修改文字、调整布局，支持原生撤销与重做。
 - **保留可编辑成果：** 将 `.excalidraw` 源文件保存到工作区，或从编辑器导出 PNG。
 
-**可选插件：** 在「**插件 → Hosted 插件**」中显式安装并启用 `@chengzhiyi/pi-excalidraw`，需要可用的兼容发行版。插件不随宿主内置，也不会自动安装，无需额外绘图服务账号。[安装、保存与恢复说明](docs/diagrams.md)。
+**可选插件：** 在「**插件 → 官方插件**」中显式安装并启用 `@chengzhiyi/pi-excalidraw`，需要可用的兼容发行版。插件不随宿主内置，也不会自动安装，无需额外绘图服务账号。[安装、保存与恢复说明](docs/diagrams.md)。
+
+## OpenPencil：和 Pi 一起在真正的设计画布上做界面
+
+**提出需求 → 即时看到 → 撤销或继续调整。** 让 Pi 设计一个登录页、一个仪表盘或一个组件，它的修改会在 [OpenPencil](https://github.com/open-pencil/open-pencil) 画布上即时出现：被修改的画框会被选中，最近一次修改可以直接 **撤销**。
+
+[![OpenPencil 插件与对话并排：Pi 在画布上加了登录页和仪表盘，提示条提供撤销按钮](assets/readme/openpencil.png)](assets/readme/openpencil.png)
+
+*截图来自真实插件界面，Agent 回合为脚本预设，并非实时模型生成记录。点击图片可查看原图。*
+
+- **完整的设计编辑器：** 画框、自动布局、组件、钢笔、文字、布尔运算、页面与图层，另有代码（JSX / React + Tailwind / HTML）和 Lint（设计检查）面板，可导出 PNG/JPG/WebP/SVG。
+- **主动权在你：** Pi 发送的是带类型的操作，而不是代码。可以锁定图层，或把 Pi 限制在选中范围内；撤销、保存和锁定只能由你来做，Pi 也无法覆盖它没看到的改动。
+- **实时预览：** **预览** 会在画布上运行设计稿，按钮、开关、滑块、标签页和输入框都能真正操作。
+- **纳入代码仓库：** 设计稿以 `.fig` 文件保存在工作区的 `designs/` 下，和代码一起提交。
+
+**可选插件：** 在「**插件 → 官方插件**」中安装并启用 `@chengzhiyi/pi-pencil`（**OpenPencil**）。插件不随宿主内置，也不会自动安装，在本地运行，无需账号；不包含 OpenPencil 自带的 AI 对话，这件事由 Pi 来做。尚未进入稳定版。[安装、设计与保存](docs/zh/design.md)。
 
 ## 核心功能
 
@@ -60,7 +75,7 @@ npx pi-webapp
 | **真正的交互式终端** | 在工作区启动 shell，交互输入、Ctrl+C；切换聊天或面板时保留进程与输出。 |
 | **Git 审查与操作** | 查看改动和内联差异、逐文件暂存/取消暂存、提交暂存区、创建/切换本地分支，并用分支关系图浏览提交历史。 |
 | **灵活的工作台布局** | 调宽、分栏、展开工具面板，或进入工作区专注模式，同时保留导航入口。各聊天保留自己的工具标签，直到网页刷新。 |
-| **模型、技能与插件** | 配置提供方和模型，管理 Pi 软件包/扩展/技能，启停内置文件、终端与 Git；兼容的 Web 插件还可贡献自己的界面。 |
+| **模型、技能与插件** | 配置提供方和模型，管理 Pi 软件包/扩展/技能，启停内置文件、终端与 Git；可选的官方插件提供 Excalidraw 图表和 OpenPencil UI 设计，兼容的 Web 插件还可贡献自己的界面。 |
 | **浏览器与桌面入口** | 用后台启动器打开 Web，从 Pi 终端输入 `/web`，或运行自带 Node/Pi 的 Electron 桌面应用。 |
 
 > 聊天独立运行，但同一工作树中的文件和 Git 改动是共享的。切换聊天不会停止任务；停止服务会结束其后台任务。终端与 Agent 工具使用你的系统权限，不是沙箱环境。
@@ -147,7 +162,7 @@ pi
 | **宿主边界上的操作保护** | 本地传输校验令牌与请求来源；文件预览限制工作区及符号链接范围；Git 写入拒绝过期状态，并协调同工作树的已知聊天。这些检查不等于操作系统沙箱。 |
 | **多入口复用同一套界面** | React + TypeScript 构建工作台，Vite/esbuild 完成打包，Electron 提供桌面外壳，无需另维护一套桌面对话 UI。 |
 
-**绘图为可选扩展，而非内置能力：** 在插件管理中显式安装、启用官方 `@chengzhiyi/pi-excalidraw`。宿主不携带编辑器和专用字体，首次离线启动不会自动安装。Hosted 插件使用独立 Node 子进程管理生命周期，但不是安全沙箱。本分支开发协议和插件产物仅用于验证，并非已发布版本。更新行为、旧图稿及备份保留方式见[绘图迁移与恢复](docs/diagrams.md)。
+**绘图与 UI 设计为可选扩展，而非内置能力：** 在插件管理中显式安装、启用官方 `@chengzhiyi/pi-excalidraw`（绘图）或 `@chengzhiyi/pi-pencil`（OpenPencil UI 设计）。宿主不携带编辑器和专用字体，首次离线启动不会自动安装。Hosted 插件使用独立 Node 子进程管理生命周期，但不是安全沙箱。本分支开发协议和插件产物仅用于验证，并非已发布版本。更新行为、旧图稿及备份保留方式见[绘图迁移与恢复](docs/diagrams.md)。
 
 ### 源码导航
 
@@ -164,7 +179,7 @@ pi
 
 ## 使用指南与开发
 
-- **新用户：** [快速开始](docs/zh/getting-started.md) · [对话](docs/zh/conversation.md) · [会话与工作区](docs/zh/sessions.md) · [文件、终端与 Git](docs/zh/workspace-tools.md) · [图表](docs/zh/diagrams.md)
+- **新用户：** [快速开始](docs/zh/getting-started.md) · [对话](docs/zh/conversation.md) · [会话与工作区](docs/zh/sessions.md) · [文件、终端与 Git](docs/zh/workspace-tools.md) · [图表](docs/zh/diagrams.md) · [UI 设计](docs/zh/design.md)
 - **配置：** [配置概览](docs/zh/configuration.md) · [模型与提供方](docs/zh/models.md) · [包、技能与插件](docs/zh/extensions.md) · [更新](docs/zh/updates.md) · [安全与隐私](docs/zh/security.md)
 - **帮助与参考：** [排错](docs/zh/troubleshooting.md) · [常见问题](docs/zh/faq.md) · [命令行](docs/zh/reference/cli.md) · [环境变量](docs/zh/reference/environment.md)
 - **参与开发：** [架构说明](docs/architecture.md) · [Web 插件](docs/web-plugins.md) · [桌面构建](docs/desktop.md) · [开发者](docs/zh/developers.md)

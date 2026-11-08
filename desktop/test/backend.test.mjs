@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { DesktopBackend, externalAddress, localAddress, runtimeEnvironment, sameDocument } from "../backend.mjs";
+import { spawnSync } from "node:child_process";
+import { createServer } from "node:net";
+import { backendIdentity, DesktopBackend, externalAddress, formatStopCommand, localAddress, runtimeEnvironment, sameDocument } from "../backend.mjs";
+import { setDesktopLocale } from "../locale.mjs";
 
 const token = "a".repeat(32);
 const address = `http://127.0.0.1:12345/#${token}`;
@@ -262,4 +265,66 @@ test("an unreadable startup state during a pending stop is not proof the owner e
     await stopped;
     assert.equal(result, "stopped");
   } finally { backend.owned = false; }
+});
+
+test("health failures say whether the backend timed out or was unreachable, and which backend it was", async t => {
+  const backend = await fixture(t);
+  await save(backend, { ...state, cwd: "/Users/me/pi-webapp-spike-pencil" });
+  backend.fetchRequest = async () => { throw new DOMException(`The operation was aborted ${address}`, "TimeoutError"); };
+  for (const [locale, text] of [["zh", "5 秒内没有响应"], ["en", "did not answer its health check within 5 seconds"]]) {
+    setDesktopLocale(locale);
+    try {
+      await assert.rejects(backend.connect(), error => error.code === "health-failed" && error.reason === "timeout" && error.message.includes(text)
+        && !error.message.includes(token) && !error.browserUrl && !JSON.stringify(error.backend).includes(token)
+        && error.backend.version === pkg.version && error.backend.runtimeKind === "npm" && error.backend.pid === 123
+        && error.backend.cwd === "/Users/me/pi-webapp-spike-pencil" && error.backend.stoppable === true);
+    } finally { setDesktopLocale("zh"); }
+  }
+  // A stalled body hits the same 5s signal and is a timeout, not "invalid data".
+  backend.fetchRequest = async () => ({ ok: true, json: async () => { throw new DOMException("aborted", "TimeoutError"); } });
+  await assert.rejects(backend.connect(), { code: "health-failed", reason: "timeout" });
+  assert.equal(JSON.parse(await readFile(backend.statePath, "utf8")).pid, 123, "launcher.json is left untouched");
+  await assert.rejects(readFile(backend.stopPath), { code: "ENOENT" });
+
+  // A real closed loopback port is refused, never a timeout.
+  const server = createServer();
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise(resolve => server.close(resolve));
+  await save(backend, { ...state, url: `http://127.0.0.1:${port}/#${token}` });
+  backend.fetchRequest = fetch;
+  for (const [locale, text] of [["zh", "连接被拒绝或被关闭"], ["en", "the connection was refused or closed"]]) {
+    setDesktopLocale(locale);
+    try {
+      await assert.rejects(backend.connect(), error => error.reason === "unreachable" && error.message.includes(text) && !error.message.includes(token));
+    } finally { setDesktopLocale("zh"); }
+  }
+  await assert.rejects(readFile(backend.stopPath), { code: "ENOENT" });
+});
+
+test("backend identity only carries allow-listed launcher.json fields", () => {
+  assert.deepEqual(backendIdentity({ ...state, cwd: "/work/repo" }), { version: pkg.version, runtimeKind: "npm", pid: 123, cwd: "/work/repo", stoppable: true });
+  assert.equal(backendIdentity({ pid: 9, launcherVersion: "0.1.52" }).version, "0.1.52");
+  const hostile = backendIdentity({ pid: -1, nonce: "", version: "1.0.0\nInstall now", runtimeKind: "<b>evil</b>", url: address,
+    cwd: `/tmp/${token}` });
+  assert.deepEqual(hostile, { version: "未知", runtimeKind: "未知", pid: undefined, cwd: undefined, stoppable: false });
+  for (const cwd of ["relative/path", "/tmp/a\u202eb", "/tmp/a\nb", `/${"x".repeat(400)}`, 42]) assert.equal(backendIdentity({ cwd }).cwd, undefined);
+  assert.equal(backendIdentity({ cwd: "C:\\Users\\me\\repo" }).cwd, "C:\\Users\\me\\repo");
+  assert.equal(backendIdentity(null), undefined);
+});
+
+test("the copyable stop command is quoted for its shell and targets the same agent directory", { skip: process.platform === "win32" }, async t => {
+  assert.equal(formatStopCommand({ node: "/A/node", launcher: "/A/pi.mjs", agentDir: "/home/me/.pi/agent", home: "/home/me", platform: "darwin" }),
+    "'/A/node' '/A/pi.mjs' stop");
+  assert.equal(formatStopCommand({ node: "/A/node", launcher: "/it's/pi.mjs", agentDir: "/agent dir", force: true, home: "/home/me", platform: "linux" }),
+    "PI_CODING_AGENT_DIR='/agent dir' '/A/node' '/it'\\''s/pi.mjs' stop --force");
+  assert.equal(formatStopCommand({ node: "C:\\pi\\node.exe", launcher: "C:\\pi\\it's.mjs", agentDir: "D:\\agent", home: "C:\\Users\\me", platform: "win32" }),
+    "$env:PI_CODING_AGENT_DIR='D:\\agent'; & 'C:\\pi\\node.exe' 'C:\\pi\\it''s.mjs' stop");
+  // Run the exact text through a real shell (paths with spaces and CJK) against an empty agent dir.
+  const backend = await fixture(t);
+  const command = backend.stopCommand();
+  assert.ok(command.startsWith("PI_CODING_AGENT_DIR="));
+  const result = spawnSync("/bin/sh", ["-c", command], { encoding: "utf8", env: { PATH: process.env.PATH, PI_WEB_SENTRY_ENABLED: "false" } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /pi-webapp 未运行/);
 });

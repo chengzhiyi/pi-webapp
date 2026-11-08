@@ -3,41 +3,43 @@ import { lstat, readdir, writeFile, mkdir, rename } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
 import type { HostedDevInfo, HostedPluginCatalog } from "../../../../contracts/hosted-plugins.ts";
-import { failure } from "./errors.ts";
+import { failure, HostedPluginError } from "./errors.ts";
 import { OFFICIAL_PLUGINS, type OfficialPlugin } from "./official-catalog.ts";
+import { parseCatalogEntry, type CatalogEntry } from "./catalog-schema.ts";
+import type { HostedPluginPolicy } from "./plugin-policies.ts";
 
-export const GITHUB_ID = "@chengzhiyi/pi-github";
-/** Catalog metadata for plugins that exist only as developer-supplied sources (no registry listing yet). */
-const KNOWN: Record<string, OfficialPlugin> = {
-  [GITHUB_ID]: {
-    id: GITHUB_ID, name: "GitHub", icon: "github",
-    description: { zh: "把 GitHub issue 交给 agent：先出方案，经你批准后实现并提交草稿 PR。", en: "Hand GitHub issues to an agent: it plans, you approve, then it implements and opens a draft PR." },
-    registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0",
-    requiredCapabilities: ["state", "panels", "scheduler", "network", "secrets", "sessions"],
-  },
-};
 export interface DevNotice { level: "error" | "warning" | "info"; pluginId?: string; source: string; message: string }
-/** Official plugins may also be developed from a local source; they are already in the host catalog. */
 const official = (id: string) => OFFICIAL_PLUGINS.some(plugin => plugin.id === id);
-const accepted = (id: string) => !!KNOWN[id] || official(id);
-const knownIds = () => [...Object.keys(KNOWN), ...OFFICIAL_PLUGINS.map(plugin => plugin.id)].join(", ");
+const officialIds = () => OFFICIAL_PLUGINS.map(plugin => plugin.id).join(", ");
+/** The `package.json` key a not-yet-official package uses to describe itself in dev mode. Same shape as an `official-plugins.json` entry,
+ * minus what the package already states: `id` is its name, `requiredCapabilities` default to its manifest's, and it has no registry release. */
+export const DEV_CATALOG_KEY = "piWebappCatalog";
+const NPM_REGISTRY = "https://registry.npmjs.org";
 
-/** `PI_WEBAPP_HOSTED_DEV_ARCHIVES="<id>=<path.tgz>;<id>=<path.tgz>"`. Unknown ids are rejected rather than trusted. */
-export function devPluginsFromEnv(value = process.env.PI_WEBAPP_HOSTED_DEV_ARCHIVES): { catalog: OfficialPlugin[]; archives: Map<string, string>; notices: DevNotice[] } {
-  const catalog: OfficialPlugin[] = [], archives = new Map<string, string>(), notices: DevNotice[] = [];
+/** A developer's own package description. Trusted only because dev mode is an explicit local opt-in; it never makes the plugin "Official". */
+export function devCatalogEntry(pkg: { name: string; piWebapp: { capabilities: readonly string[] }; [DEV_CATALOG_KEY]?: unknown }, where: string): CatalogEntry {
+  const block = pkg[DEV_CATALOG_KEY];
+  if (block === undefined) throw new HostedPluginError("invalid_catalog", `${where}: ${pkg.name} is not an official plugin (official: ${officialIds()}). Describe it in package.json "${DEV_CATALOG_KEY}" with name, description and policy`);
+  if (!block || typeof block !== "object" || Array.isArray(block)) throw new HostedPluginError("invalid_catalog", `${where}: ${DEV_CATALOG_KEY} must be an object`);
+  if ("id" in block || "registry" in block) throw new HostedPluginError("invalid_catalog", `${where}: ${DEV_CATALOG_KEY} must not set id or registry; the package name is the id`);
+  const entry = parseCatalogEntry({ registry: NPM_REGISTRY, recommendedVersion: "0.0.0", requiredCapabilities: [...pkg.piWebapp.capabilities], ...block, id: pkg.name }, where, DEV_CATALOG_KEY);
+  return { ...entry, official: false };
+}
+
+/** `PI_WEBAPP_HOSTED_DEV_ARCHIVES="<id>=<path.tgz>;<id>=<path.tgz>"`, for official plugins only; other packages use a dev directory. */
+export function devPluginsFromEnv(value = process.env.PI_WEBAPP_HOSTED_DEV_ARCHIVES): { archives: Map<string, string>; notices: DevNotice[] } {
+  const archives = new Map<string, string>(), notices: DevNotice[] = [];
   const source = "PI_WEBAPP_HOSTED_DEV_ARCHIVES";
   for (const part of (value ?? "").split(/[;\n]/).map(s => s.trim()).filter(Boolean)) {
     const eq = part.lastIndexOf("="), id = part.slice(0, eq), file = part.slice(eq + 1);
-    const known = KNOWN[id];
     const problem = eq < 1 ? `entry "${part}" is not <id>=<path.tgz>`
-      : !accepted(id) ? `unknown plugin id "${id}" (known: ${knownIds()})`
+      : !official(id) ? `"${id}" is not an official plugin (official: ${officialIds()}); develop other packages from a directory in PI_WEBAPP_HOSTED_DEV_ROOTS`
       : !file.endsWith(".tgz") ? `"${file}" is not a .tgz archive`
       : !existsSync(resolve(file)) ? `archive not found: ${resolve(file)}` : null;
-    if (problem) { notices.push({ level: "error", source, ...(accepted(id) ? { pluginId: id } : {}), message: problem }); continue; }
-    if (known) catalog.push(known);
+    if (problem) { notices.push({ level: "error", source, ...(official(id) ? { pluginId: id } : {}), message: problem }); continue; }
     archives.set(id, resolve(file));
   }
-  return { catalog, archives, notices };
+  return { archives, notices };
 }
 
 /** Where the persistent developer configuration lives. The file is read again on every poll, so a running host picks up edits. */
@@ -68,23 +70,27 @@ export function readDevRootSpecs(env: NodeJS.ProcessEnv, configPath: string | un
   return { specs, notices, configured };
 }
 /** Identify and sanity-check one developer package directory without running or copying anything. Full validation happens at install. */
-export function inspectDevRoot(spec: RootSpec): { pluginId?: string; notice?: DevNotice } {
+export function inspectDevRoot(spec: RootSpec): { pluginId?: string; entry?: CatalogEntry; notice?: DevNotice } {
   const fail = (message: string, pluginId?: string): { notice: DevNotice } => ({ notice: { level: "error", source: spec.source, ...(pluginId ? { pluginId } : {}), message: `${spec.path}: ${message}` } });
   let info;
   try { info = statSync(spec.path); } catch { return fail("directory does not exist"); }
   if (!info.isDirectory()) return fail("not a directory (expected the package directory containing package.json)");
-  let pkg: { name?: unknown; piWebapp?: unknown };
+  let pkg: { name?: unknown; piWebapp?: unknown; [DEV_CATALOG_KEY]?: unknown };
   try { pkg = JSON.parse(readFileSync(join(spec.path, "package.json"), "utf8")); }
   catch (error) { return fail((error as NodeJS.ErrnoException).code === "ENOENT" ? "package.json not found (point at the package directory, not its parent)" : "package.json is not valid JSON"); }
   if (typeof pkg.name !== "string") return fail("package.json has no name");
-  if (!accepted(pkg.name)) return fail(`unknown plugin id "${pkg.name}" (known: ${knownIds()})`);
   if (!isHostedPluginManifest(pkg.piWebapp)) return fail('package.json "piWebapp" is not a valid hosted v2 manifest (apiVersion, hostRange, backend, frontend, resourcesManifest, capabilities)', pkg.name);
-  return { pluginId: pkg.name };
+  // An official plugin always runs under its reviewed policy, even from a dev directory, so dev behaves like production.
+  if (official(pkg.name)) return { pluginId: pkg.name };
+  try { return { pluginId: pkg.name, entry: devCatalogEntry({ name: pkg.name, piWebapp: pkg.piWebapp, [DEV_CATALOG_KEY]: pkg[DEV_CATALOG_KEY] }, "package.json") }; }
+  catch (error) { return fail(failure(error).message, pkg.name); }
 }
 
 /** Live developer configuration shared with the manager: `roots` is mutated in place when the config file changes. */
 export class HostedDevSources {
-  readonly catalog: OfficialPlugin[];
+  /** Self-described (non-official) packages accepted at startup, and their policies. Official plugins are never repeated here. */
+  readonly catalog: OfficialPlugin[] = [];
+  readonly policies = new Map<string, HostedPluginPolicy>();
   readonly archives: Map<string, string>;
   readonly roots = new Map<string, string>();
   readonly rootSource = new Map<string, string>();
@@ -99,7 +105,7 @@ export class HostedDevSources {
   constructor(options: { env?: NodeJS.ProcessEnv; configPath?: string; cwd?: string } = {}) {
     this.env = options.env ?? process.env; this.configPath = options.configPath; this.cwd = options.cwd ?? process.cwd();
     const archives = devPluginsFromEnv(this.env.PI_WEBAPP_HOSTED_DEV_ARCHIVES);
-    this.catalog = [...archives.catalog]; this.archives = archives.archives; this.archiveNotices = archives.notices; this.fileNotices = [];
+    this.archives = archives.archives; this.archiveNotices = archives.notices; this.fileNotices = [];
     this.enabled = !!this.env.PI_WEBAPP_HOSTED_DEV_ARCHIVES;
     const roots = this.refresh(true);
     this.enabled ||= roots.configured;
@@ -117,7 +123,10 @@ export class HostedDevSources {
       if (this.archives.has(id)) { notices.push({ level: "warning", pluginId: id, source: spec.source, message: `${spec.path}: PI_WEBAPP_HOSTED_DEV_ARCHIVES also provides ${id}; the dev directory wins` }); }
       if (!official(id) && !this.catalog.some(p => p.id === id)) {
         if (!initial) { notices.push({ level: "warning", pluginId: id, source: spec.source, message: `${spec.path}: ${id} was not part of this host's startup configuration. Restart pi-webapp once (npm run stop && npm run start) to list it.` }); continue; }
-        this.catalog.push(KNOWN[id]!);
+        const { policy, ...plugin } = inspected.entry!;
+        this.catalog.push(plugin); this.policies.set(id, policy);
+      } else if (inspected.entry && JSON.stringify(inspected.entry.policy) !== JSON.stringify(this.policies.get(id))) {
+        notices.push({ level: "warning", pluginId: id, source: spec.source, message: `${spec.path}: the ${DEV_CATALOG_KEY} policy changed; restart pi-webapp once (npm run stop && npm run start) to apply it. Code still reloads live.` });
       }
       next.set(id, spec.path); sources.set(id, spec.source);
     }
@@ -131,10 +140,12 @@ export class HostedDevSources {
 }
 
 type RootState = "waiting-build" | "switching" | "synced" | "pending" | "not-installed" | "error";
-interface WatchedRoot { seen?: string; applied?: string; state: RootState; message?: string; code?: string; version?: string; at: string; root: string }
+interface WatchedRoot { seen?: string; applied?: string; retry?: boolean; state: RootState; message?: string; code?: string; version?: string; at: string; root: string }
 export interface DevSwitcher {
   /** Install-if-needed is NOT done here: a plugin the user never installed is left alone. */
   update(pluginId: string): Promise<HostedPluginCatalog>;
+  /** Apply a build the host parked as pending (the "Apply pending update" path); no reinstall. */
+  retry?(pluginId: string): Promise<HostedPluginCatalog>;
 }
 export interface HostedDevWatcherOptions {
   sources: HostedDevSources;
@@ -190,7 +201,10 @@ export class HostedDevWatcher {
       const signature = await devSignature(root);
       if (signature === null) { this.set(id, state, "waiting-build", { message: "dist/ or package.json is missing; waiting for a build" }); state.seen = undefined; continue; }
       if (signature !== state.seen) { state.seen = signature; continue; }
-      if (signature === state.applied || this.stopped) continue;
+      if (this.stopped) continue;
+      // Dev switches reopen editors, so a parked (pending) build only ever waited on in-flight work, such
+      // as an editor mid-save: apply it again on each poll instead of waiting for a click that never comes.
+      if (signature === state.applied) { if (state.retry && this.options.switcher.retry) await this.apply(id, state, signature, true); continue; }
       await this.apply(id, state, signature);
     }
     await this.publish();
@@ -200,21 +214,27 @@ export class HostedDevWatcher {
     state.state = next; state.message = detail.message; state.code = detail.code; state.version = detail.version ?? state.version;
     if (changed) { state.at = new Date().toISOString(); this.log(`${id}: ${next}${detail.version ? ` ${detail.version}` : ""}${detail.message ? ` — ${detail.message}` : ""}`); }
   }
-  private async apply(id: string, state: WatchedRoot, signature: string): Promise<void> {
-    this.set(id, state, "switching");
+  private async apply(id: string, state: WatchedRoot, signature: string, retry = false): Promise<void> {
+    if (!retry) this.set(id, state, "switching"); // a retry stays "pending" until it lands, without flapping the status
     try {
-      const catalog = await this.options.switcher.update(id);
+      const catalog = await (retry ? this.options.switcher.retry!(id) : this.options.switcher.update(id));
       const card = catalog.plugins.find(p => p.pluginId === id);
-      state.applied = signature;
+      state.applied = signature; state.retry = !!card?.installed && !!card.pendingVersion;
       if (!card?.installed) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
       else if (card.pendingVersion) this.set(id, state, "pending", { version: card.version, message: `Waiting for editors to close before switching to ${card.pendingVersion}` });
       else this.set(id, state, "synced", { version: card.version });
     } catch (error) {
       const detail = failure(error);
       // Busy/shutdown conditions say nothing about the files, so try again; validation failures wait for the next save.
-      if (!["storage_busy", "manager_closed", "download_pending", "plugin_unavailable"].includes(detail.code)) state.applied = signature;
+      // An open editor that is mid-save (view_busy) finishes within a request: retry on the next poll, not an error.
+      const saving = detail.reason === "view_busy";
+      const transient = saving || ["storage_busy", "manager_closed", "download_pending", "plugin_unavailable"].includes(detail.code);
+      // A failed retry keeps the parked build as the one to apply while the failure is transient.
+      if (retry) { state.applied = signature; state.retry = transient; }
+      else if (!transient) state.applied = signature;
       const notInstalled = detail.code === "not_installed";
-      if (notInstalled) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
+      if (saving) this.set(id, state, "pending", { message: "An open editor is saving; switching once it finishes" });
+      else if (notInstalled) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
       else this.set(id, state, "error", { code: detail.code, message: `${detail.message} (${detail.code}). Fix and save again.` });
     }
     state.at = new Date().toISOString(); // tooling waits for "an outcome newer than my build", even when the outcome text repeats

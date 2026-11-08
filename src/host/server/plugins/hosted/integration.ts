@@ -8,13 +8,15 @@ import { HostedPluginManager, type HostedManagerOptions } from "./manager.ts";
 import { HostedViewCoordinator, type AuthenticatedViewScope } from "./views.ts";
 import type { HostedBridgeHandlers } from "./routes.ts";
 import { HostedStateBroker } from "./state-broker.ts";
-import { DEFAULT_POLICIES, policyFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import { invokeTimeoutFor, policyFor, workspaceRulesFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import { hostedFrameCsp, manifestRequestsWasm } from "./frame-csp.ts";
+import { toToolResult } from "./tool-result.ts";
 import type { ExecuteApprovals } from "./capabilities/execute-approvals.ts";
 import { parseDeclarations } from "./capabilities/declarations.ts";
 import { DeviceFlows, secretAuthFor } from "./capabilities/oauth.ts";
 import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
-import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
+import { DEFAULT_POLICIES, OFFICIAL_PLUGINS } from "./official-catalog.ts";
 import { HostedDevWatcher, type HostedDevSources } from "./dev-plugins.ts";
 
 function declaredSecrets(manifest: unknown): string[] { try { return [...parseDeclarations(manifest).secrets]; } catch { return []; } }
@@ -64,7 +66,7 @@ export class HostedPluginIntegration {
           // Never "update" what the user has not installed: the manager would record that as a failed update check on the card.
           const catalog = await this.inventory();
           return catalog.plugins.find(p => p.pluginId === pluginId)?.installed ? this.manage({ pluginId, operation: "update", reopenEditors: true }) : catalog;
-        } } });
+        }, retry: pluginId => this.manage({ pluginId, operation: "retry", reopenEditors: true }) } });
     }
     this.adapter = new HostedAgentAdapter({
       policy: (id, scope) => {
@@ -79,10 +81,12 @@ export class HostedPluginIntegration {
         const live = this.manager.tools.find(t => t.pluginId === id);
         if (!live) throw new HostedPluginError("plugin_unavailable", "Hosted tool unavailable");
         const value = await this.manager.invoke(id, live.generation, request);
-        return { content: [{ type: "text", text: JSON.stringify(value) ?? "null" }], details: value };
+        return toToolResult(value) as never;
       },
     });
     this.manager = new HostedPluginManager({ ...options,
+      workspaceRules: id => workspaceRulesFor(this.trusted, id),
+      invokeTimeoutMs: id => invokeTimeoutFor(this.trusted, id),
       // Terminal intent belongs to the operation, not the mutable closing flag:
       // an enable still preparing when shutdown starts must not retain its freeze.
       lifecycle: (id, operation, shutdown) => this.lifecycle(id, operation, shutdown),
@@ -135,7 +139,7 @@ export class HostedPluginIntegration {
         if (!store) throw new HostedPluginError("hosted_unavailable", "Secrets are not available", { status: 503 });
         if (input.phase === "cancel") { this.deviceFlows.cancel(input.deviceId); return { status: "cancelled" }; }
         if (input.phase === "start") {
-          const auth = this.documents.get(input.pluginId)?.secrets.includes(input.name) ? secretAuthFor(input.pluginId, input.name) : undefined;
+          const auth = this.documents.get(input.pluginId)?.secrets.includes(input.name) ? secretAuthFor(this.trusted.get(input.pluginId), input.name) : undefined;
           if (!auth) throw new HostedPluginError("secret_undeclared", "The enabled plugin does not declare browser sign-in for this secret", { status: 404 });
           return this.deviceFlows.start(input.pluginId, input.name, auth);
         }
@@ -159,7 +163,13 @@ export class HostedPluginIntegration {
         if (input.operation === "register") this.generation(input.pluginId, input.generation);
         return this.coordinator(input.pluginId).handle(input, this.viewScope(scope));
       },
-      asset: path => this.manager.assetRequest(path),
+      asset: async path => {
+        const asset = await this.manager.assetRequest(path);
+        if (!asset) return null;
+        // Both the reviewed host policy and the served package must ask for WebAssembly.
+        const wasm = this.trusted.get(asset.pluginId)?.browser?.wasm === true && manifestRequestsWasm(this.manager.servedManifest(asset.pluginId));
+        return { bytes: asset.bytes, mime: asset.mime, csp: hostedFrameCsp({ wasm }) };
+      },
     };
   }
   private verifyTools(id: string, descriptors: readonly HostedToolDescriptor[]) {
@@ -278,7 +288,7 @@ export class HostedPluginIntegration {
     const secrets = new Map<string, NonNullable<HostedPluginCard["secrets"]>>();
     for (const p of inventory.plugins) {
       const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
-      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => { const auth = secretAuthFor(p.id, name); return { name, configured: await store.has(p.id, name), ...(auth ? { signIn: auth.clientId ? "browser" as const : "token-page" as const, ...(auth.createUrl ? { createUrl: auth.createUrl } : {}) } : {}) }; })));
+      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => { const auth = secretAuthFor(this.trusted.get(p.id), name); return { name, configured: await store.has(p.id, name), ...(auth ? { signIn: auth.clientId ? "browser" as const : "token-page" as const, ...(auth.createUrl ? { createUrl: auth.createUrl } : {}) } : {}) }; })));
     }
     return { ...(this.devWatcher ? { dev: this.devWatcher.info() } : {}), plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,

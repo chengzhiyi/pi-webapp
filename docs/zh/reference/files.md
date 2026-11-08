@@ -39,7 +39,7 @@
 | `pi-web/trash/` | 你在侧栏里删除的会话，会带着时间戳前缀移到这里，而不是被抹掉。把文件移回 `sessions/` 下即可恢复。 | **是** |
 | `pi-web/plugins.json` | 哪些内置工具开着或关着。你改动开关时创建。 | 否 |
 | `pi-web/attachments/` | 你在会话里上传的文件。 | **是** |
-| `pi-web/hosted/` | 已下载的插件（比如 Excalidraw）、它们的数据和策略。 | 图稿数据可能敏感。 |
+| `pi-web/hosted/` | 已下载的插件（比如 Excalidraw 和 OpenPencil）、它们的数据和策略。 | 图稿和设计稿数据可能敏感。 |
 | `pi-web/diagrams/` | Excalidraw 成为插件之前创建的图的原始数据。迁移后仍保留。 | 可能 |
 | `pi-web/releases/`、`update.json`、`update-preferences.json` | **升级并重启** 下载的版本、当前选中的是哪个，以及你选的稳定版/体验版。 | 否 |
 | `pi-web/launcher.stop`、`launcher.restart` | 用来请求停止或重启服务的短暂文件。你可能会短暂看到它们。 | 否 |

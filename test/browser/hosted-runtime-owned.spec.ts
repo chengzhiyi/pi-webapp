@@ -42,5 +42,7 @@ for (const locale of ["zh", "en"] as const) test(`retained runtime lock is unava
     assert.equal(await readFile(lock, "utf8"), bytes);
     assert.deepEqual(await broker.active(), before);
     await page.screenshot({ path: info.outputPath(`runtime-owned-${locale}.png`), fullPage: true });
-  } finally { await page.close(); await bridge?.close(); await integration.shutdown(); await rm(root, { recursive: true, force: true }); }
+  } finally { await page.close(); await bridge?.close(); await integration.shutdown();
+    // A request still settling after shutdown can add a storage file under packages/ mid-delete (ENOTEMPTY); rm retries that.
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
