@@ -40,6 +40,8 @@ export class HostedViewCoordinator {
     ? !view.activeActions
     : this.switching ? view.frozen && !view.dirty && !view.busy
     : view.frozen || (!view.busy && (this.immediate || !["editor", "workspace"].includes(view.kind))));
+  /** True when nothing but in-flight work blocks a switch: a busy (saving) view or a running controller action. */
+  private blockedOnlyByWork = () => [...this.views.values()].every(view => view.kind === "controller" || view.frozen || this.immediate || !["editor", "workspace"].includes(view.kind));
   private authoringViews() { return [...this.views.values()].filter(view => view.kind !== "controller"); }
   /** Lets an owner see views that may never acknowledge a barrier, so each can be discarded explicitly. */
   pendingViews(ownerId: string) {
@@ -201,7 +203,11 @@ export class HostedViewCoordinator {
     if (this.switching) throw fail("A view barrier is already active");
     if (!this.canSwitch()) {
       const blocked = [...this.views.values()].filter(view => view.activeActions || view.kind !== "controller" && !view.frozen && (view.busy || !this.immediate && ["editor", "workspace"].includes(view.kind)));
-      throw fail(`Close editors before updating; old version retained. Pending views: ${blocked.map(view => `${view.kind}:${view.identity.mountId}${view.activeActions ? ` (action in flight x${view.activeActions})` : view.busy ? " (busy)" : ""}`).join(", ")}`);
+      const error = fail(`Close editors before updating; old version retained. Pending views: ${blocked.map(view => `${view.kind}:${view.identity.mountId}${view.activeActions ? ` (action in flight x${view.activeActions})` : view.busy ? " (busy)" : ""}`).join(", ")}`);
+      // Only in-flight work (a view mid-save, a running action) is in the way: it clears within a request, so a
+      // caller that retries on its own (the dev source watcher) may try again instead of reporting a failure.
+      // The code stays view_barrier for everyone else; waiting here would hold the plugin's switch serialization.
+      throw this.blockedOnlyByWork() ? Object.assign(error, { reason: "view_busy" }) : error;
     }
     this.switching = true;
     const id = ++this.sequence;

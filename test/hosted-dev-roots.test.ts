@@ -176,14 +176,22 @@ test("a self-described dev package is validated like an official entry, and a po
 
 test("watcher applies a change once its files settle, never twice, and reports failures instead of retrying them", async t => {
   const root = await tmp(t), dir = await pluginDir(root), updates: string[] = [];
-  let behavior: "ok" | "fail" | "busy" | "uninstalled" = "ok";
+  let behavior: "ok" | "fail" | "busy" | "saving" | "barrier" | "parked" | "uninstalled" = "ok";
+  const retries: string[] = [];
   const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: dir }, configPath: join(root, "none.json") });
   const switcher: DevSwitcher = { update: async id => {
     updates.push(id);
     if (behavior === "fail") throw new HostedPluginError("invalid_package", "Resource integrity mismatch");
     if (behavior === "busy") throw new HostedPluginError("storage_busy", "busy");
+    if (behavior === "saving") throw new HostedPluginError("view_barrier", "Close editors before updating; Pending views: editor:m (busy)", { status: 409, reason: "view_busy" });
+    if (behavior === "barrier") throw new HostedPluginError("view_barrier", "Close editors before updating; Pending views: editor:m", { status: 409 });
     if (behavior === "uninstalled") throw new HostedPluginError("not_installed", "Install the plugin first");
+    if (behavior === "parked") return { plugins: [{ pluginId: id, name: "Tasks", official: false, installed: true, enabled: true, phase: "pending", version: "0.1.0", pendingVersion: "0.1.9" }] };
     return { plugins: [{ pluginId: id, name: "Tasks", official: false, installed: true, enabled: true, phase: "active", version: `0.1.${updates.length}` }] };
+  }, retry: async id => {
+    retries.push(id);
+    if (behavior === "parked") return { plugins: [{ pluginId: id, name: "Tasks", official: false, installed: true, enabled: true, phase: "pending", version: "0.1.0", pendingVersion: "0.1.9" }] };
+    return { plugins: [{ pluginId: id, name: "Tasks", official: false, installed: true, enabled: true, phase: "active", version: "0.1.9" }] };
   } };
   const statusPath = join(root, "status", "hosted-dev-status.json"), logs: string[] = [];
   const watcher = new HostedDevWatcher({ sources, switcher, statusPath, log: m => logs.push(m) });
@@ -210,6 +218,24 @@ test("watcher applies a change once its files settle, never twice, and reports f
 
   behavior = "busy"; await touch("six"); await watcher.tick(); await watcher.tick(); await watcher.tick();
   assert.ok(updates.length >= 6, "transient busy errors are retried on the next poll");
+  // An open editor mid-save: shown as pending (not an error) and retried on each poll until it switches.
+  behavior = "saving"; await touch("saving"); await watcher.tick(); const before = updates.length; await watcher.tick();
+  source = watcher.info().sources[0]!;
+  assert.equal(source.state, "pending"); assert.match(source.message!, /saving/);
+  await watcher.tick(); assert.ok(updates.length > before, "a view_busy refusal is retried on the next poll");
+  behavior = "ok"; await watcher.tick(); assert.equal(watcher.info().sources[0]!.state, "synced", "it switches as soon as the save finishes");
+  // A switch parked as pending (an editor was mid-save at the first check) is applied again on each poll
+  // through retry, without reinstalling, and lands once nothing is in flight.
+  behavior = "parked"; await touch("parked"); await watcher.tick(); await watcher.tick();
+  assert.equal(watcher.info().sources[0]!.state, "pending");
+  const updatesWhileParked = updates.length; await watcher.tick(); await watcher.tick();
+  assert.equal(updates.length, updatesWhileParked, "no reinstall while parked"); assert.ok(retries.length >= 2, "the parked build is retried on each poll");
+  behavior = "ok"; await watcher.tick();
+  assert.equal(watcher.info().sources[0]!.state, "synced"); assert.equal(watcher.info().sources[0]!.version, "0.1.9");
+  const settled = retries.length; await watcher.tick(); await watcher.tick(); assert.equal(retries.length, settled, "nothing more to retry once it switched");
+  // A barrier that is not just in-flight work (an editor open outside immediate mode) is still reported, once.
+  behavior = "barrier"; await touch("barrier"); await watcher.tick(); await watcher.tick(); const refused = updates.length;
+  assert.equal(watcher.info().sources[0]!.state, "error"); await watcher.tick(); await watcher.tick(); assert.equal(updates.length, refused);
   behavior = "uninstalled"; await touch("seven"); await watcher.tick(); await watcher.tick();
   assert.equal(watcher.info().sources[0]!.state, "not-installed");
   assert.ok(logs.some(l => /synced/.test(l)) && logs.some(l => /error/.test(l)));

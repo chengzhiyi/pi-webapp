@@ -140,10 +140,12 @@ export class HostedDevSources {
 }
 
 type RootState = "waiting-build" | "switching" | "synced" | "pending" | "not-installed" | "error";
-interface WatchedRoot { seen?: string; applied?: string; state: RootState; message?: string; code?: string; version?: string; at: string; root: string }
+interface WatchedRoot { seen?: string; applied?: string; retry?: boolean; state: RootState; message?: string; code?: string; version?: string; at: string; root: string }
 export interface DevSwitcher {
   /** Install-if-needed is NOT done here: a plugin the user never installed is left alone. */
   update(pluginId: string): Promise<HostedPluginCatalog>;
+  /** Apply a build the host parked as pending (the "Apply pending update" path); no reinstall. */
+  retry?(pluginId: string): Promise<HostedPluginCatalog>;
 }
 export interface HostedDevWatcherOptions {
   sources: HostedDevSources;
@@ -199,7 +201,10 @@ export class HostedDevWatcher {
       const signature = await devSignature(root);
       if (signature === null) { this.set(id, state, "waiting-build", { message: "dist/ or package.json is missing; waiting for a build" }); state.seen = undefined; continue; }
       if (signature !== state.seen) { state.seen = signature; continue; }
-      if (signature === state.applied || this.stopped) continue;
+      if (this.stopped) continue;
+      // Dev switches reopen editors, so a parked (pending) build only ever waited on in-flight work, such
+      // as an editor mid-save: apply it again on each poll instead of waiting for a click that never comes.
+      if (signature === state.applied) { if (state.retry && this.options.switcher.retry) await this.apply(id, state, signature, true); continue; }
       await this.apply(id, state, signature);
     }
     await this.publish();
@@ -209,21 +214,27 @@ export class HostedDevWatcher {
     state.state = next; state.message = detail.message; state.code = detail.code; state.version = detail.version ?? state.version;
     if (changed) { state.at = new Date().toISOString(); this.log(`${id}: ${next}${detail.version ? ` ${detail.version}` : ""}${detail.message ? ` — ${detail.message}` : ""}`); }
   }
-  private async apply(id: string, state: WatchedRoot, signature: string): Promise<void> {
-    this.set(id, state, "switching");
+  private async apply(id: string, state: WatchedRoot, signature: string, retry = false): Promise<void> {
+    if (!retry) this.set(id, state, "switching"); // a retry stays "pending" until it lands, without flapping the status
     try {
-      const catalog = await this.options.switcher.update(id);
+      const catalog = await (retry ? this.options.switcher.retry!(id) : this.options.switcher.update(id));
       const card = catalog.plugins.find(p => p.pluginId === id);
-      state.applied = signature;
+      state.applied = signature; state.retry = !!card?.installed && !!card.pendingVersion;
       if (!card?.installed) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
       else if (card.pendingVersion) this.set(id, state, "pending", { version: card.version, message: `Waiting for editors to close before switching to ${card.pendingVersion}` });
       else this.set(id, state, "synced", { version: card.version });
     } catch (error) {
       const detail = failure(error);
       // Busy/shutdown conditions say nothing about the files, so try again; validation failures wait for the next save.
-      if (!["storage_busy", "manager_closed", "download_pending", "plugin_unavailable"].includes(detail.code)) state.applied = signature;
+      // An open editor that is mid-save (view_busy) finishes within a request: retry on the next poll, not an error.
+      const saving = detail.reason === "view_busy";
+      const transient = saving || ["storage_busy", "manager_closed", "download_pending", "plugin_unavailable"].includes(detail.code);
+      // A failed retry keeps the parked build as the one to apply while the failure is transient.
+      if (retry) { state.applied = signature; state.retry = transient; }
+      else if (!transient) state.applied = signature;
       const notInstalled = detail.code === "not_installed";
-      if (notInstalled) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
+      if (saving) this.set(id, state, "pending", { message: "An open editor is saving; switching once it finishes" });
+      else if (notInstalled) this.set(id, state, "not-installed", { message: "Not installed; install it from the plugin page to start using this source" });
       else this.set(id, state, "error", { code: detail.code, message: `${detail.message} (${detail.code}). Fix and save again.` });
     }
     state.at = new Date().toISOString(); // tooling waits for "an outcome newer than my build", even when the outcome text repeats

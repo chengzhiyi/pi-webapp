@@ -77,14 +77,16 @@ test("tab close retires only its still-mounted scoped frame; refusal cannot manu
   await assert.rejects(registry.retireWithin("session", root), /unacknowledged edits/);
 });
 
-test("editor updates wait by default; explicit immediate mode still refuses busy views", async () => {
+test("editor updates wait by default; explicit immediate mode still refuses busy views, marked as in-flight work", async () => {
   const coordinator = new HostedViewCoordinator("plugin", 1, 50, 40);
   const editor = await register(coordinator, "editor", "editor");
   assert.equal(coordinator.canSwitch(), false);
+  await assert.rejects(coordinator.freeze(), (e: { code?: string; reason?: string }) => e.code === "view_barrier" && e.reason === undefined, "an open editor is not in-flight work");
   coordinator.allowImmediateReopen(true); assert.equal(coordinator.canSwitch(), true);
   await editor({ operation: "change", dirty: true, busy: true });
   assert.equal(coordinator.canSwitch(), false);
-  await assert.rejects(coordinator.freeze(), /Close editors/);
+  await assert.rejects(coordinator.freeze(), (e: { code?: string; reason?: string; message: string }) => e.code === "view_barrier" && e.reason === "view_busy" && /\(busy\)/.test(e.message),
+    "only a save in flight is in the way: same code, tagged so a self-retrying caller can try again");
   await assert.rejects(editor({ operation: "close" }), /Dirty view/);
   coordinator.dispose();
 });

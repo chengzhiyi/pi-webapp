@@ -66,7 +66,7 @@ export class HostedPluginIntegration {
           // Never "update" what the user has not installed: the manager would record that as a failed update check on the card.
           const catalog = await this.inventory();
           return catalog.plugins.find(p => p.pluginId === pluginId)?.installed ? this.manage({ pluginId, operation: "update", reopenEditors: true }) : catalog;
-        } } });
+        }, retry: pluginId => this.manage({ pluginId, operation: "retry", reopenEditors: true }) } });
     }
     this.adapter = new HostedAgentAdapter({
       policy: (id, scope) => {
