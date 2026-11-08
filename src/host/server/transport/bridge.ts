@@ -28,6 +28,7 @@ import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandle
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
+import { HOSTED_FRAME_CSP } from "../plugins/hosted/frame-csp.ts";
 
 export interface BridgeHost {
   hosted?: HostedBridgeHandlers;
@@ -210,7 +211,8 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           const asset = await host.hosted?.asset(path);
           if (!asset) { json(res, 404, { error: "插件资源不存在" }); return; }
           // Only capability-qualified local v2 documents may be framed. Parent CSP is unchanged.
-          res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'");
+          // Per-plugin policy (e.g. reviewed 'wasm-unsafe-eval'); default is the historical hosted CSP.
+          res.setHeader("Content-Security-Policy", asset.csp ?? HOSTED_FRAME_CSP);
           res.writeHead(200, { "Content-Type": asset.mime, "Cache-Control": "private, no-store" });
           res.end(asset.bytes);
         } catch { json(res, 404, { error: "插件资源不可用" }); }

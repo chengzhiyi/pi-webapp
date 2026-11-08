@@ -17,6 +17,11 @@ export const OFFICIAL_PLUGINS: readonly OfficialPlugin[] = Object.freeze([Object
   description: { zh: "本地手绘画布、AI 绘图及工作区图稿。按需安装。", en: "Local sketch canvas, AI diagrams and workspace drawings. Optional download." },
   registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0",
   requiredCapabilities: ["state", "workspace", "legacy", "panels", "messages"],
+}), Object.freeze({
+  id: "@chengzhiyi/pi-pencil", name: "Pencil", icon: "drawing" as const,
+  description: { zh: "基于 OpenPencil 的 UI 设计：编辑工作区里的 .fig 设计稿，agent 提出修改，由你确认。按需安装。", en: "UI design on OpenPencil: edit .fig designs in your workspace; the agent proposes changes and you accept them. Optional download." },
+  registry: "https://registry.npmjs.org", recommendedVersion: "0.0.1",
+  requiredCapabilities: ["state", "workspace", "panels", "browser.wasm"],
 })]);
 export function officialPlugin(id: string, catalog = OFFICIAL_PLUGINS): OfficialPlugin {
   const found = catalog.find(p => p.id === id);

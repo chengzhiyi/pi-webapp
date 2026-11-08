@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import type { HostedInvocation, HostedScope, HostedToolDescriptor } from "@chengzhiyi/pi-web-protocol";
+import type { WorkspaceFileRule } from "./plugin-policies.ts";
 import { CapabilityBroker, type CapabilityBrokerOptions } from "./capabilities/broker.ts";
 import { parseDeclarations } from "./capabilities/declarations.ts";
 import { PluginScheduler } from "./capabilities/scheduler.ts";
@@ -32,6 +33,10 @@ export interface HostedManagerOptions {
   /** Enter the all-Agent settled barrier only for activation/disable, AFTER background preparation. */
   lifecycle?<T>(pluginId: string, operation: () => Promise<T>, shutdown?: boolean): Promise<T>;
   legacy?(id: string): (request: HostedInvocation) => Promise<unknown>;
+  /** Reviewed workspace file rules per plugin (policy data). */
+  workspaceRules?(id: string): readonly WorkspaceFileRule[];
+  /** Reviewed per-invocation timeout per plugin. */
+  invokeTimeoutMs?(id: string): number | undefined;
   /** Enables network/sessions for plugins that declare them. Without it every capability call is denied. */
   capabilities?: CapabilityBrokerOptions;
   /** Host-authenticated scope for scheduled ticks; null skips the tick. The plugin never chooses it. */
@@ -78,7 +83,7 @@ export class HostedPluginManager {
       ...options.scheduleTimers,
     });
     for (const plugin of this.installer.catalog) {
-      const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id));
+      const broker = new HostedStateBroker(join(options.root, "data"), plugin.id, options.legacy?.(plugin.id), undefined, options.workspaceRules?.(plugin.id));
       const hooks = options.hooks(plugin.id);
       this.supervisors.set(plugin.id, new HostedPluginSupervisor(broker, options.workerEntry, {
         validateCandidate: tools => hooks.validateCandidate?.(tools),
@@ -101,9 +106,14 @@ export class HostedPluginManager {
   /** Developer-supplied source (directory or tgz) for this plugin, or null for the registry. */
   private devSource(id: string): ((signal?: AbortSignal) => Promise<HostedPackage>) | null {
     const root = this.options.devRoots?.get(id), archive = this.options.devArchives?.get(id);
-    if (root) return signal => this.installer.installDevDirectory(id, root, signal);
-    if (archive) return signal => this.installer.installDevArchive(id, archive, signal);
-    return null;
+    if (!root && !archive) return null;
+    return async signal => {
+      // A switch that fails (e.g. an open editor never acknowledges its flush) skips the usual post-operation
+      // collection and leaves its build installed. Collect first, so repeated saves cannot exhaust the
+      // retained-version budget and wedge the dev loop. Best effort: the post-operation collection still reports.
+      await this.collectSettled(id).catch(() => {});
+      return root ? this.installer.installDevDirectory(id, root, signal) : this.installer.installDevArchive(id, archive!, signal);
+    };
   }
   isDevPlugin(id: string): boolean { return !!(this.options.devRoots?.has(id) || this.options.devArchives?.has(id)); }
   private supervisor(id: string) {
@@ -346,7 +356,7 @@ export class HostedPluginManager {
   invoke(id: string, generation: number, request: Omit<HostedInvocation, "generation">): Promise<unknown> {
     const s = this.supervisor(id);
     if (generation !== s.generation) return Promise.reject(new HostedPluginError("stale_generation", "Reconnect the plugin view before editing", { status: 409 }));
-    return s.invoke(request);
+    return s.invoke(request, this.options.invokeTimeoutMs?.(id));
   }
   /** Flush-only host endpoint for a registered switch barrier, NEVER normal browser admission. */
   flush(id: string, generation: number, request: Omit<HostedInvocation, "generation" | "kind">): Promise<unknown> {
@@ -375,8 +385,11 @@ export class HostedPluginManager {
     let id: string; try { id = decodeURIComponent(match[1]!); } catch { return null; }
     const token = this.assetTokens.get(id), candidate = Buffer.from(match[2]!);
     if (!token || candidate.length !== Buffer.byteLength(token) || !timingSafeEqual(candidate, Buffer.from(token))) return null;
-    return this.asset(id, match[3]!, match[4]!);
+    const asset = await this.asset(id, match[3]!, match[4]!);
+    return asset ? { ...asset, pluginId: id } : null;
   }
+  /** Manifest of the package whose assets are currently served (for reviewed browser permissions). */
+  servedManifest(id: string): unknown { return this.packages.get(id)?.manifest ?? null; }
   /** Host-upgrade/startup reconciliation: only installed items; preserve disabled choices.
    * Registry failure never discards compatible local code. Incompatibility remains a visible error.
    */
@@ -459,11 +472,19 @@ export class HostedPluginManager {
   async shutdown(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.operations.values());
+    // One plugin at a time, each through the reversible suspension. If a later plugin refuses (unsaved work,
+    // a view that doesn't flush), the plugins already stopped get their worker and views back, so the host keeps
+    // running as before and the next stop can freeze them again. Stopping them for good left their view
+    // barrier active, and every later stop failed with "A view barrier is already active".
+    const restores: Array<() => Promise<void>> = [];
     try {
-      await Promise.all([...this.supervisors].map(([id, s]) => this.lifecycle(id, () => s.shutdown(), true)));
+      for (const [id, s] of this.supervisors) restores.push(await this.lifecycle(id, () => s.suspendForRestart(), true));
       this.scheduler.stopAll();
       this.packages.clear(); this.assetTokens.clear();
-    } catch (error) { this.closing = false; throw error; }
+    } catch (error) {
+      await Promise.allSettled(restores.reverse().map(restore => restore()));
+      this.closing = false; throw error;
+    }
   }
   /** A restart lease owns only live workers, never active pointers or asset identities.
    * Partial failure unwinds already suspended plugins so base hosting remains usable.

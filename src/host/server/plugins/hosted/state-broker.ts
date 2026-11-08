@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { HostedInvocation, HostedStateRecord } from "@chengzhiyi/pi-web-protocol";
 import { HostedPluginError, isMissing } from "./errors.ts";
 import { sha256 } from "./resources.ts";
+import { DEFAULT_WORKSPACE_FILES, type WorkspaceFileRule } from "./plugin-policies.ts";
 import { atomicJson, boundedRead, privateDirectory, readJson, readJournal, withStorageLock } from "./storage.ts";
 
 const MAX_STATE = 192 * 1024 * 1024;
@@ -32,9 +33,15 @@ export class HostedStateBroker {
   readonly pluginId: string;
   private readonly legacy?: (invocation: HostedInvocation) => Promise<unknown>;
   private readonly checkpoint?: (stage: "forked" | "prepared" | "committed" | "cleaned") => Promise<void>;
+  private readonly files: readonly WorkspaceFileRule[];
   constructor(storageRoot: string, pluginId: string, legacy?: (invocation: HostedInvocation) => Promise<unknown>,
-    checkpoint?: (stage: "forked" | "prepared" | "committed" | "cleaned") => Promise<void>) {
-    this.root = join(storageRoot, sha256(pluginId)); this.pluginId = pluginId; this.legacy = legacy; this.checkpoint = checkpoint;
+    checkpoint?: (stage: "forked" | "prepared" | "committed" | "cleaned") => Promise<void>, files: readonly WorkspaceFileRule[] = DEFAULT_WORKSPACE_FILES) {
+    this.root = join(storageRoot, sha256(pluginId)); this.pluginId = pluginId; this.legacy = legacy; this.checkpoint = checkpoint; this.files = files;
+  }
+  private rule(path: unknown): WorkspaceFileRule {
+    const rule = typeof path === "string" ? this.files.find(item => path.toLowerCase().endsWith(item.extension)) : undefined;
+    if (!rule) throw new HostedPluginError("invalid_path", `Use a workspace-relative ${this.files.map(item => item.extension).join("/")} path`);
+    return rule;
   }
   active(): Promise<ActiveHostedPlugin | null> { return readJson<ActiveHostedPlugin>(join(this.root, "active.json")).then(validateActive); }
   async recover(): Promise<{ active: ActiveHostedPlugin | null; recovered: "none" | "committed" | "not_committed" }> {
@@ -191,12 +198,14 @@ export class HostedStateBroker {
           return { revision: next.revision, schema: next.schema, value: next.value };
         }
         case "workspace.read": {
+          const rule = this.rule(input.path);
           const { target } = await this.fileTarget(request.scope.cwd, input.path);
-          const max = input.maxBytes === undefined ? MAX_FILE : input.maxBytes;
-          if (!Number.isSafeInteger(max) || (max as number) <= 0 || (max as number) > MAX_FILE) throw new HostedPluginError("invalid_input", "Invalid workspace read limit");
+          const max = input.maxBytes === undefined ? rule.maxBytes : input.maxBytes;
+          if (!Number.isSafeInteger(max) || (max as number) <= 0 || (max as number) > rule.maxBytes) throw new HostedPluginError("invalid_input", "Invalid workspace read limit");
+          if (input.encoding !== undefined && input.encoding !== (rule.binary ? "base64" : "utf-8")) throw new HostedPluginError("invalid_input", "Encoding does not match the reviewed file rule");
           const bytes = await boundedRead(target, max as number);
           if (!bytes) return null;
-          return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), hash: sha256(bytes) };
+          return rule.binary ? { base64: bytes.toString("base64"), bytes: bytes.length, hash: sha256(bytes) } : { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), hash: sha256(bytes) };
         }
         case "workspace.commit": return this.commitFile(active, request, input);
         case "legacy.read": return this.legacy ? this.legacy(request) : null;
@@ -208,7 +217,8 @@ export class HostedStateBroker {
     if (!Number.isSafeInteger(value.revision) || value.revision < 1 || !Number.isSafeInteger(value.schema) || value.schema < 1 || !Object.hasOwn(value, "value") || typeof value.requestId !== "string" || !/^[a-f0-9]{64}$/.test(value.inputHash)) throw new HostedPluginError("invalid_storage", "Invalid plugin state; original bytes preserved");
   }
   private async fileTarget(cwd: string, path: unknown, createParent = false): Promise<{ target: string; parent: string }> {
-    if (typeof path !== "string" || path.length > 4096 || !path.endsWith(".excalidraw") || path.includes("\\") || path.includes("\0") || isAbsolute(path) || win32.isAbsolute(path)) throw new HostedPluginError("invalid_path", "Use a workspace-relative .excalidraw path");
+    const rule = this.rule(path);
+    if (typeof path !== "string" || path.length > 4096 || path.includes("\\") || path.includes("\0") || isAbsolute(path) || win32.isAbsolute(path)) throw new HostedPluginError("invalid_path", `Use a workspace-relative ${rule.extension} path`);
     const root = await realpath(cwd), target = resolve(root, path), rel = relative(root, target);
     if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new HostedPluginError("invalid_path", "Workspace path escapes root");
     let current = root;
@@ -220,7 +230,7 @@ export class HostedStateBroker {
       catch (error) {
         if (!isMissing(error)) throw error;
         if (i < parts.length - 1) {
-          if (!createParent || relative(root, current) !== "diagrams") throw new HostedPluginError("invalid_path", "Workspace directory does not exist");
+          if (!createParent || !rule.createDirectory || relative(root, current) !== rule.createDirectory) throw new HostedPluginError("invalid_path", "Workspace directory does not exist");
           try { await mkdir(current, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
           info = await lstat(current);
         }
@@ -232,10 +242,14 @@ export class HostedStateBroker {
     return { target, parent };
   }
   private async commitFile(active: ActiveHostedPlugin, request: HostedInvocation, input: Record<string, unknown>): Promise<{ hash: string }> {
-    if (typeof input.text !== "string" || Buffer.byteLength(input.text) > MAX_FILE || !(input.expectedHash === null || typeof input.expectedHash === "string" && /^[a-f0-9]{64}$/.test(input.expectedHash))) throw new HostedPluginError("invalid_input", "Invalid file content or expected hash");
+    const rule = this.rule(input.path);
+    const content = rule.binary
+      ? (typeof input.base64 === "string" && input.text === undefined && /^[A-Za-z0-9+/]*={0,2}$/.test(input.base64) ? Buffer.from(input.base64, "base64") : null)
+      : (typeof input.text === "string" && input.base64 === undefined ? Buffer.from(input.text) : null);
+    if (!content || content.length > rule.maxBytes || !(input.expectedHash === null || typeof input.expectedHash === "string" && /^[a-f0-9]{64}$/.test(input.expectedHash))) throw new HostedPluginError("invalid_input", "Invalid file content or expected hash");
     const { target, parent } = await this.fileTarget(request.scope.cwd, input.path, true);
     const path = join(this.root, "states", active.stateRef, `${sha256(this.scopeKey(request) + ":file:" + request.requestId + ":" + String(input.path))}.json`);
-    const inputHash = sha256(JSON.stringify(input)), nextHash = sha256(input.text);
+    const inputHash = sha256(JSON.stringify(input)), nextHash = sha256(content);
     const intent = await readJson<FileIntent>(path);
     if (intent && (intent.requestId !== request.requestId || intent.inputHash !== inputHash || intent.nextHash !== nextHash)) throw new HostedPluginError("duplicate_request", "Request ID was reused with different content");
     let lock;
@@ -244,16 +258,16 @@ export class HostedStateBroker {
     let temp: string | undefined;
     try {
       await lock.writeFile(JSON.stringify({ pid: process.pid, requestId: request.requestId }));
-      const before = await boundedRead(target, MAX_FILE), beforeHash = before ? sha256(before) : null;
+      const before = await boundedRead(target, rule.maxBytes), beforeHash = before ? sha256(before) : null;
       if (intent && beforeHash === nextHash) return { hash: nextHash }; // Recover a committed intent after a lost response.
       if (intent?.committed || beforeHash !== input.expectedHash) throw new HostedPluginError("file_conflict", "Workspace file already exists or changed externally");
       await atomicJson(path, { requestId: request.requestId, inputHash, nextHash, committed: false } satisfies FileIntent);
       temp = join(parent, `.plugin-${randomUUID()}.tmp`);
       const file = await open(temp, "wx", 0o600);
-      try { await file.writeFile(input.text); await file.sync(); } finally { await file.close(); }
+      try { await file.writeFile(content); await file.sync(); } finally { await file.close(); }
       const checked = await this.fileTarget(request.scope.cwd, input.path);
       if (checked.parent !== parent) throw new HostedPluginError("file_conflict", "Workspace directory changed during save");
-      const latest = await boundedRead(target, MAX_FILE);
+      const latest = await boundedRead(target, rule.maxBytes);
       if ((latest ? sha256(latest) : null) !== input.expectedHash) throw new HostedPluginError("file_conflict", "Workspace file changed during save");
       await this.assertGeneration(request.generation); // Still inside the shared activation/commit lock.
       if (input.expectedHash === null) {
