@@ -8,7 +8,7 @@ import { stableVersion } from "./versions.ts";
 export interface CatalogEntry extends OfficialPlugin { policy: HostedPluginPolicy }
 
 /** Artwork keys the host ships. Anything else would be plugin-supplied markup, which the catalog never carries. */
-export const CATALOG_ICONS = ["drawing"] as const;
+export const CATALOG_ICONS = ["drawing", "design"] as const;
 const PACKAGE_NAME = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 const CAPABILITY = /^[a-z][a-z0-9.-]{0,79}$/;
 const TOOL = /^[a-z][a-z0-9_]{0,63}$/;

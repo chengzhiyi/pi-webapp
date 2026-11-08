@@ -8,7 +8,7 @@ import officialData from "./official-plugins.json" with { type: "json" };
 export interface OfficialPlugin {
   id: string;
   name: string;
-  icon?: "drawing";
+  icon?: "drawing" | "design";
   description: { zh: string; en: string };
   registry: string;
   recommendedVersion: string;

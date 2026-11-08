@@ -1,6 +1,6 @@
 // pi-pencil spike end to end through the REAL host: authenticated HTTP bridge, manager + forked
 // worker running the packed plugin, retained SDK AgentSession (scripted model stream), per-plugin
-// CSP on served assets, image tool results, human-only accept and binary .fig save via the broker.
+// CSP on served assets, image tool results, agent changes applied directly, human-only undo and binary .fig save via the broker.
 // Needs PI_PENCIL_TGZ (packed @chengzhiyi/pi-pencil); skipped otherwise.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +30,7 @@ const LOGIN = [
   { op: "create", ref: "$buttonText", parent: "$button", type: "TEXT", props: { text: { content: "登录", font: { style: "Medium", size: 16 }, color: "#FFFFFF" } } },
 ];
 
-test("pi-pencil through the real host: install, CSP, agent tools with images, human accept, .fig save", { timeout: 120_000, skip: !TGZ || !existsSync(TGZ) ? "set PI_PENCIL_TGZ" : false }, async t => {
+test("pi-pencil through the real host: install, CSP, agent tools with images, applied change, human undo, .fig save", { timeout: 120_000, skip: !TGZ || !existsSync(TGZ) ? "set PI_PENCIL_TGZ" : false }, async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "hosted-pencil-")));
   const prior = process.env.PI_CODING_AGENT_DIR; process.env.PI_CODING_AGENT_DIR = join(root, "agent");
   const workerEntry = join(root, "worker.mjs");
@@ -70,15 +70,15 @@ test("pi-pencil through the real host: install, CSP, agent tools with images, hu
   const wasmName = /canvaskit-[\w-]+\.wasm/.exec(await js.text() + await (async () => { const chunks = [...html.matchAll(/href="([^"]+\.js)"/g)].map(m => m[1]); let s = ""; for (const c of chunks) s += await (await fetch(new URL(c!, base))).text(); return s; })())?.[0];
   if (wasmName) { const w = await fetch(new URL(`assets/${wasmName}`, base)); assert.equal(w.status, 200); assert.equal(w.headers.get("content-type"), "application/wasm"); }
 
-  // Agent: read_me → propose (scripted model stream; tool execution is real).
-  assert.ok(session.getActiveToolNames().includes("pencil_propose_changes"));
+  // Agent: read_me → apply (scripted model stream; tool execution is real).
+  assert.ok(session.getActiveToolNames().includes("pencil_apply_changes"));
   const model = session.modelRuntime.getModels("openai")[0]!;
   await session.modelRuntime.setRuntimeApiKey("openai", "fixture-no-network"); await session.setModel(model);
   let stage = 0;
   session.agent.streamFunction = async m => {
     stage++;
     const content: AssistantMessage["content"] = stage === 1 ? [{ type: "toolCall" as const, id: "c1", name: "pencil_read_me", arguments: {} }]
-      : stage === 2 ? [{ type: "toolCall" as const, id: "c2", name: "pencil_propose_changes", arguments: { title: "Login", ops: LOGIN } as unknown as ToolCall["arguments"] }]
+      : stage === 2 ? [{ type: "toolCall" as const, id: "c2", name: "pencil_apply_changes", arguments: { title: "Login", ops: LOGIN } as unknown as ToolCall["arguments"] }]
       : [{ type: "text" as const, text: "Proposed a login screen; please review it." }];
     const message: AssistantMessage = { role: "assistant", api: m.api, provider: m.provider, model: m.id, timestamp: Date.now(), content, stopReason: stage < 3 ? "toolUse" : "stop",
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
@@ -93,14 +93,17 @@ test("pi-pencil through the real host: install, CSP, agent tools with images, hu
   const image = proposeResult.content.find(c => c.type === "image");
   assert.ok(image && image.type === "image" && image.mimeType === "image/png", "H4: the agent sees the rendered preview");
   const proposal = JSON.parse((proposeResult.content.find(c => c.type === "text") as { text: string }).text);
-  assert.equal(proposal.status, "pending_review");
+  assert.equal(proposal.status, "applied");
 
-  // Human (frame action over authenticated HTTP) accepts and saves; the agent cannot.
+  // The change is the design at once. The person (frame action over authenticated HTTP) can undo it and save; the agent cannot.
   const generation = (await integration.inventory()).plugins.find(p => p.pluginId === ID)!.generation!;
   const action = (name: string, input: unknown) => post("action", { pluginId: ID, generation, sessionId, action: name, input });
-  assert.equal((await action("get", { docId: proposal.docId })).body.value?.rev ?? (await action("get", { docId: proposal.docId })).body.rev, 0);
-  const accepted = await action("accept", { docId: proposal.docId, proposalId: proposal.proposalId });
-  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  const got = (await action("get", { docId: proposal.docId })).body;
+  assert.equal((got.value ?? got).rev, 1);
+  assert.equal((got.value ?? got).changes[0].undoable, true);
+  const undone = await action("revert", { docId: proposal.docId, rev: 1 });
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.equal((undone.body.value ?? undone.body).rev, 2);
   const saved = await action("save", { docId: proposal.docId, path: "designs/login.fig" });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
   const onDisk = await readFile(join(root, "designs/login.fig"));
