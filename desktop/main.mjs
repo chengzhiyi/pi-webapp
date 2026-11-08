@@ -245,7 +245,7 @@ else {
         PI_WEBAPP_DESKTOP_VERSION: app.getVersion(), PI_WEBAPP_DESKTOP_BUILD: String(release.buildNumber) } });
     const state = await connectBackend(backend, {
       showMessageBox: options => dialog.showMessageBox(options), openExternal: url => shell.openExternal(url),
-      checkDesktopUpdates: () => updater.run(), isInstalling: () => quitting || updater.nativeAttempted,
+      checkDesktopUpdates: () => updater.run(), copyText: text => clipboard.writeText(text), isInstalling: () => quitting || updater.nativeAttempted,
     });
     if (!state) { if (!quitting) { startup = false; quitting = true; app.exit(0); } return; }
     backendUrl = localAddress(state.url).href;

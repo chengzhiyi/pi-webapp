@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { openSync, closeSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { delimiter, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { desktopProtocolVersion, readDesktopRelease, rollbackDesktopRelease } from "./managed-release.mjs";
 import { randomUUID } from "node:crypto";
@@ -50,11 +51,52 @@ export function runtimeEnvironment(base, { node, npmCli, piCli }) {
     npm_execpath: npmCli };
 }
 
+export const safeVersion = value => typeof value === "string" && /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : t("未知", "unknown");
+
+/** Display-only identity of a published backend. launcher.json is untrusted input:
+ * allow-list every field, cap lengths, strip control/bidi characters and never
+ * carry the URL (its fragment is the access token). */
+export function backendIdentity(state) {
+  if (!state || typeof state !== "object") return undefined;
+  const token = typeof state.url === "string" ? state.url.split("#")[1] : undefined;
+  const cwd = typeof state.cwd === "string" && state.cwd.length < 400 && !/[\p{Cc}\p{Cf}]/u.test(state.cwd)
+    && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(state.cwd) && !(token && state.cwd.includes(token)) ? state.cwd : undefined;
+  const pid = Number.isInteger(state.pid) && state.pid > 0 && state.pid < 2 ** 31 ? state.pid : undefined;
+  return { version: safeVersion(state.version ?? state.launcherVersion), runtimeKind: ["desktop", "npm"].includes(state.runtimeKind) ? state.runtimeKind : t("未知", "unknown"),
+    pid, cwd, stoppable: pid !== undefined && typeof state.nonce === "string" && state.nonce.length > 0 };
+}
+
+const quotePosix = value => `'${value.replaceAll("'", "'\\''")}'`;
+const quotePowerShell = value => `'${value.replaceAll("'", "''")}'`;
+
+/** The exact `pi-webapp stop` invocation through this shell's bundled Node and launcher,
+ * so it works without a global install. It reads the same launcher.json and uses the
+ * same nonce stop marker; the backend's cwd does not affect which instance it stops. */
+export function formatStopCommand({ node, launcher, agentDir, force = false, platform = process.platform, home = homedir() }) {
+  const args = force ? "stop --force" : "stop";
+  const customDir = resolve(agentDir) !== resolve(join(home, ".pi", "agent"));
+  if (platform === "win32") return `${customDir ? `$env:PI_CODING_AGENT_DIR=${quotePowerShell(agentDir)}; ` : ""}& ${quotePowerShell(node)} ${quotePowerShell(launcher)} ${args}`;
+  return `${customDir ? `PI_CODING_AGENT_DIR=${quotePosix(agentDir)} ` : ""}${quotePosix(node)} ${quotePosix(launcher)} ${args}`;
+}
+
+const unreachableCodes = new Set(["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "EADDRNOTAVAIL", "EPIPE", "UND_ERR_SOCKET"]);
+function healthFailure(error) {
+  if (error?.name === "TimeoutError" || error?.cause?.name === "TimeoutError") {
+    return new DesktopConnectionError("health-failed", t("已有本地服务在 5 秒内没有响应健康检查，可能正忙或已卡住。未停止或修改该服务。", "The existing local service did not answer its health check within 5 seconds. It may be busy or hung. It was not stopped or modified."), undefined, "timeout");
+  }
+  if (unreachableCodes.has(error?.cause?.code) || unreachableCodes.has(error?.code)) {
+    return new DesktopConnectionError("health-failed", t("无法连接已有本地服务：连接被拒绝或被关闭。它可能已退出或仍在启动。未停止或修改该服务。", "Could not reach the existing local service: the connection was refused or closed. It may have exited or still be starting. It was not stopped or modified."), undefined, "unreachable");
+  }
+  // Fetch/redirect errors can contain URLs: never expose their raw messages/tokens.
+  return new DesktopConnectionError("health-failed", t("已有本地服务的健康检查返回了异常响应。请检查原服务后重试；未停止或修改该服务。", "The existing local service returned an unexpected health check response. Check the original service and retry; it was not stopped or modified."), undefined, "failed");
+}
+
 export class DesktopConnectionError extends Error {
-  constructor(code, message, browserUrl) {
+  constructor(code, message, browserUrl, reason) {
     super(message);
     this.name = "DesktopConnectionError";
     this.code = code;
+    if (reason) this.reason = reason; // health-failed only: timeout | unreachable | failed | invalid
     // Only validated loopback URLs may be offered as a browser recovery action.
     this.browserUrl = browserUrl ? localAddress(browserUrl).href : undefined;
   }
@@ -110,6 +152,11 @@ export class DesktopBackend {
     this.bundled = { version, launcher, piCli };
   }
 
+  /** Display-only: never run by the shell. A backend this desktop did not start is never stopped by it. */
+  stopCommand({ force = false } = {}) {
+    return formatStopCommand({ node: this.node, launcher: this.bundled.launcher, agentDir: this.agentDir, force });
+  }
+
   async readState() {
     for (let attempt = 0; ; attempt++) {
       try { return JSON.parse(await readFile(this.statePath, "utf8")); }
@@ -144,8 +191,7 @@ export class DesktopBackend {
       return response;
     } catch (error) {
       if (error instanceof DesktopConnectionError) throw error;
-      // Fetch/redirect errors can contain URLs: never expose their raw messages/tokens.
-      throw new DesktopConnectionError("health-failed", t("本地服务健康检查失败或连接超时。请检查原服务后重试；未停止或修改该服务。", "The local service health check failed or timed out. Check the original service and retry; it was not stopped or modified."));
+      throw healthFailure(error);
     }
   }
 
@@ -156,14 +202,17 @@ export class DesktopBackend {
     const result = await this.request(url, "/api/update/version");
     let current; let protocol;
     try { const identity = await result.json(); current = identity.current; protocol = identity.desktopProtocolVersion; }
-    catch { throw new DesktopConnectionError("health-failed", t("本地服务健康检查返回无效数据；未停止或修改该服务。", "The local service health check returned invalid data; the service was not stopped or modified.")); }
+    catch (error) {
+      // The 5s signal also bounds the body: a stalled body is a timeout, not bad data.
+      if (error?.name === "TimeoutError") throw healthFailure(error);
+      throw new DesktopConnectionError("health-failed", t("本地服务健康检查返回无效数据；未停止或修改该服务。", "The local service health check returned invalid data; the service was not stopped or modified."), undefined, "invalid");
+    }
     const browserUrl = typeof current === "string" ? url.href : undefined;
-    if (typeof current !== "string") throw new DesktopConnectionError("health-failed", t("无法确认已有服务版本；未停止或修改该服务。", "Could not confirm the existing service version; it was not stopped or modified."));
+    if (typeof current !== "string") throw new DesktopConnectionError("health-failed", t("无法确认已有服务版本；未停止或修改该服务。", "Could not confirm the existing service version; it was not stopped or modified."), undefined, "invalid");
     const compatibleProtocol = state.desktopProtocolVersion === desktopProtocolVersion && protocol === desktopProtocolVersion;
     const migration = migrationVersions.has(current) && state.version === current && state.bridgeVersion === 1
       && state.runtimeKind === "npm" && state.desktopProtocolVersion === undefined && protocol === undefined;
     if ((current !== this.version && !compatibleProtocol && !migration) || (state.version !== undefined && state.version !== current)) {
-      const safeVersion = value => /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(value) && value.length < 80 ? value : t("未知", "unknown");
       throw new DesktopConnectionError("version-incompatible", t(`尚未验证此版本组合的连接兼容性，或启动元数据与实际后台版本不一致。桌面内置后台 ${safeVersion(this.version)}；现有后台 ${safeVersion(current)}。可检查桌面更新，或在浏览器继续使用原服务；不会自动停止或升级后台。`, `Compatibility between these versions has not been verified, or the launch metadata does not match the actual backend version. Bundled desktop backend: ${safeVersion(this.version)}; existing backend: ${safeVersion(current)}. Check for desktop updates or continue using the original service in the browser; the backend will not be stopped or upgraded automatically.`), browserUrl);
     }
     if ((state.desktopProtocolVersion !== undefined && state.desktopProtocolVersion !== desktopProtocolVersion)
@@ -216,7 +265,13 @@ export class DesktopBackend {
         continue;
       }
       if (state.starting) { await delay(100); continue; }
-      const validated = await this.validate(state);
+      let validated;
+      try { validated = await this.validate(state); }
+      catch (error) {
+        // Say WHICH published backend failed; recovery stays display-only.
+        if (error instanceof DesktopConnectionError && !error.backend) error.backend = backendIdentity(state);
+        throw error;
+      }
       const current = await this.readState();
       if (current?.pid !== state.pid || current?.nonce !== state.nonce || current?.url !== state.url
           || current?.version !== state.version || current?.bridgeVersion !== state.bridgeVersion

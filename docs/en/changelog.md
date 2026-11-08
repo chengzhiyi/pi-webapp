@@ -17,6 +17,7 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 - **Pencil plugin (optional).** UI design on OpenPencil, installed from **Plugins**. You edit `.fig` designs in the workspace, and Pi proposes changes that you accept or reject. Pencil follows pi's theme and language.
 - Plugins can download JPG and WebP images, as well as PNG and SVG.
 - When a plugin refuses `pi-webapp stop` because of unsaved work, your other plugins keep running and the next stop works. Before, every later stop failed until `stop --force`.
+- When the desktop app can't connect to an existing service, it now says whether the service timed out or couldn't be reached, shows which one it is (version, how it was started, process ID, working directory), and offers its exact stop command to copy. See [Desktop app](./desktop#cannot-connect).
 - The file editor's line-number gutter no longer turns transparent when you scroll sideways.
 - Plugin recovery warnings no longer appear for records that block nothing.
 

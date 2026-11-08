@@ -108,6 +108,26 @@ Quitting asks **是否同时停止后台服务？** ("Also stop the background s
 
 If the app is connected to a service it didn't start, quitting says **当前连接的是已有服务，关闭桌面不会停止它** ("this is an existing service; closing the desktop won't stop it") and only closes the window.
 
+## When the app can't connect to the existing service {#cannot-connect}
+
+If a pi-webapp service is already running but doesn't pass the desktop's checks, the app shows **Cannot connect to the existing service** (**暂时无法连接已有服务**) instead of opening a window. The message says what went wrong:
+
+| Message | Meaning |
+| --- | --- |
+| Did not answer its health check within 5 seconds | The service is running but stuck or very busy. |
+| The connection was refused or closed | Nothing is answering at its address. It may have exited or still be starting. |
+| Returned an unexpected health check response / invalid data | It answered, but not like a pi-webapp service the desktop can use. |
+
+Under the message, the dialog names the service from `~/.pi/agent/pi-web/launcher.json`: its version, how it was started (`npm` for the web launcher or a development checkout, `desktop` for a desktop app), its process ID and its working directory. Use these to tell which copy it is, for example a development backend left running from another checkout.
+
+**Check Again** only checks again. It never restarts, upgrades or stops the service.
+
+The desktop app doesn't stop a service it didn't start, so a half-finished save in someone else's window can't be lost by a click here. When the service can be stopped, the dialog shows the exact stop command instead, and **Copy Stop Command** (**复制停止命令**) copies it. The command runs `pi-webapp stop` with the Node.js and launcher bundled in the app, so it works even if `pi-webapp` isn't installed. Paste it into a terminal:
+
+1. Run the copied command. It asks the service to finish saving plugin views and exit, the same as `pi-webapp stop`.
+2. If it keeps waiting or times out, run it again with ` --force` at the end. This skips plugin save confirmations, so **unsaved plugin edits may be lost**. If the service doesn't respond within 5 seconds, it ends the service and its child processes.
+3. Back in the app, choose **Check Again**. With no service running, the app starts its own.
+
 ## Update the desktop app {#update-the-desktop-app}
 
 The shell and the pi-webapp package inside it update separately:
