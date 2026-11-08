@@ -17,6 +17,7 @@ pi-webapp 自己的设置不多。你想改的东西，大多在 **Pi 设置** �
 | 添加技能 | **Pi 设置 → 技能** | Pi 自己发现的技能 |
 | 开关文件、终端或 Git | 侧栏里的 **插件** | 三个都开着 |
 | 安装 Excalidraw 插件 | **插件 → 官方插件**（[图表](./diagrams)） | 未安装 |
+| 安装 OpenPencil 插件 | **插件 → 官方插件**（[UI 设计](./design)） | 未安装 |
 | 添加或移除工作区 | 侧栏（[会话与工作区](./sessions)） | 启动目录，以及所有有已保存会话的目录 |
 | 移动 Pi 的数据目录 | `PI_CODING_AGENT_DIR`（[环境变量](./reference/environment)） | `~/.pi/agent` |
 | 启动时不要打开浏览器 | `PI_WEBAPP_AUTO_OPEN=0` | 会打开 |

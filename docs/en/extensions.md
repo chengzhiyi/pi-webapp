@@ -11,7 +11,7 @@ These terms are easy to mix up because they sit near each other in the interface
 | **Pi package** | A bundle you install from npm, Git or a local folder. It can contain extensions and skills. | **Pi Settings → Packages** |
 | **Pi extension** | Code that adds capabilities to Pi itself, such as new commands and tools. It can come from a package or be loaded on its own from a path. | **Pi Settings → Packages** |
 | **Skill** | A folder or `SKILL.md` file of task guidance that Pi can load on demand. | **Pi Settings → Skills** |
-| **Plugin** | A pi-webapp feature with its own screen: the built-in Files, Terminal and Git tools, and optional ones such as Excalidraw. | **Plugins** in the sidebar |
+| **Plugin** | A pi-webapp feature with its own screen: the built-in Files, Terminal and Git tools, and optional ones such as Excalidraw and OpenPencil. | **Plugins** in the sidebar |
 
 Installing a package is not the same as switching a plugin on or off, and the two live in different places on purpose.
 
@@ -64,9 +64,16 @@ Click **Plugins** in the sidebar, under **New session**. The page has two groups
 - Turning a tool off closes its open tabs and blocks its requests. Turning off **Terminal** also ends every terminal on the service: a **Disable Terminal?** dialog warns that unsaved shell work may be lost, and you confirm with **Disable and stop terminals**.
 - The switch shows what the service confirmed, not what you clicked.
 
-### Official plugins
+### Official plugins {#official-plugins}
 
-Optional plugins that you download on demand. At the moment this is **Excalidraw (Official)**. Press **Download** first, then enable it; the switch is unavailable until the plugin is installed. Click a row for its description, version, **Check updates** and **Uninstall**. The full flow is in [Diagrams with Excalidraw](./diagrams).
+Optional plugins that you download on demand. At the moment there are two:
+
+| Plugin | What it adds | Guide |
+| --- | --- | --- |
+| **Excalidraw (Official)** | Editable diagrams in the conversation. | [Diagrams with Excalidraw](./diagrams) |
+| **OpenPencil (Official)** | UI design on `.fig` files, edited by you and by Pi. | [UI design with OpenPencil](./design) |
+
+Press **Download** first, then enable it; the switch is unavailable until the plugin is installed. Click a row for its description, version, **Check updates** and **Uninstall**.
 
 Installed plugins can update on their own without replacing the page or interrupting your chats. An open editor delays the version switch, and a failed download is not retried automatically and never discards the version you have.
 

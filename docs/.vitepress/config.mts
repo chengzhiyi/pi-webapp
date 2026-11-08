@@ -26,6 +26,7 @@ const sidebar = (prefix: string, t: Labels) => [
       { text: t.sessions, link: `${prefix}/sessions` },
       { text: t.tools, link: `${prefix}/workspace-tools` },
       { text: t.diagrams, link: `${prefix}/diagrams` },
+      { text: t.design, link: `${prefix}/design` },
     ],
   },
   {
@@ -62,7 +63,7 @@ const sidebar = (prefix: string, t: Labels) => [
 const en: Labels = {
   gettingStarted: 'Getting started', introduction: 'Introduction', quickStart: 'Quick start', desktop: 'Desktop app',
   usePi: 'Use it from the Pi terminal', using: 'Using pi-webapp', conversation: 'Conversations',
-  sessions: 'Sessions and workspaces', tools: 'Files, terminal and Git', diagrams: 'Diagrams with Excalidraw',
+  sessions: 'Sessions and workspaces', tools: 'Files, terminal and Git', diagrams: 'Diagrams with Excalidraw', design: 'UI design with OpenPencil',
   configuration: 'Configuration', overview: 'Overview', models: 'Models and providers',
   extensions: 'Packages, skills and plugins', updates: 'Updates', security: 'Security and privacy', help: 'Help',
   troubleshooting: 'Troubleshooting', faq: 'FAQ', reference: 'Reference', cli: 'Command line',
@@ -72,7 +73,7 @@ const en: Labels = {
 const zh: Labels = {
   gettingStarted: '开始使用', introduction: '简介', quickStart: '快速开始', desktop: '桌面版',
   usePi: '在 Pi 终端里使用', using: '日常使用', conversation: '对话',
-  sessions: '会话与工作区', tools: '文件、终端与 Git', diagrams: '用 Excalidraw 画图',
+  sessions: '会话与工作区', tools: '文件、终端与 Git', diagrams: '用 Excalidraw 画图', design: '用 OpenPencil 做 UI 设计',
   configuration: '配置', overview: '概览', models: '模型与提供方',
   extensions: '包、技能与插件', updates: '更新', security: '安全与隐私', help: '帮助',
   troubleshooting: '排错', faq: '常见问题', reference: '参考',  cli: '命令行',

@@ -10,7 +10,7 @@ Click the panel icon in the upper right of a conversation to open the right side
 
 Each tool opens in a tab. Use the **+** at the end of the tab bar to open more, **Split** to place two tools side by side, and **Fullscreen** to give the panel the whole window. Every chat keeps its own tabs while the page stays open; reloading the page resets them.
 
-If you [install the Excalidraw plugin](./diagrams), its entry appears on the same start page.
+If you install the [Excalidraw](./diagrams) or [OpenPencil](./design) plugin, its entry appears on the same start page.
 
 ## Files {#files}
 

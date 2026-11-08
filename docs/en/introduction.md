@@ -16,6 +16,7 @@ Pi still does the real work. It runs the agent, calls your model provider, execu
 | [Sessions and workspaces](./sessions) | Every project folder is a workspace with its own saved chats. Chats run independently, so switching to another one does not interrupt the first. |
 | [Files, terminal and Git](./workspace-tools) | Read-only file previews, real interactive shells, and a Git panel for reviewing diffs, staging, committing and switching local branches. |
 | [Diagrams](./diagrams) | An optional Excalidraw plugin that turns a request into an editable diagram. |
+| [UI design](./design) | An optional OpenPencil plugin: Pi designs screens on a real design canvas, and you edit, undo and save them as `.fig` files. |
 | [Models and providers](./models) | Sign in to a provider or add an API key, pick models, and add your own OpenAI- or Anthropic-compatible endpoint. |
 | [Packages, skills and plugins](./extensions) | Manage Pi packages and skills, and switch the built-in Files, Terminal and Git capabilities on or off. |
 

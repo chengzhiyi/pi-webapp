@@ -39,7 +39,7 @@ Everything lives under Pi's data folder, `~/.pi/agent` on macOS and Linux and `%
 | `pi-web/trash/` | Chats you deleted in the sidebar, moved here with a timestamp prefix instead of being erased. Move a file back under `sessions/` to restore it. | **Yes** |
 | `pi-web/plugins.json` | Which built-in tools are switched on or off. Created when you change a switch. | No |
 | `pi-web/attachments/` | Files you uploaded in chats. | **Yes** |
-| `pi-web/hosted/` | Downloaded plugins (such as Excalidraw), their data, and their policies. | Drawing data may be sensitive. |
+| `pi-web/hosted/` | Downloaded plugins (such as Excalidraw and OpenPencil), their data, and their policies. | Drawing and design data may be sensitive. |
 | `pi-web/diagrams/` | Original data of drawings made before Excalidraw became a plugin. Kept after migration. | Maybe |
 | `pi-web/releases/`, `update.json`, `update-preferences.json` | Releases downloaded by **Update and restart**, which one is selected, and your Stable/Preview choice. | No |
 | `pi-web/launcher.stop`, `launcher.restart` | Short-lived request files used to stop or restart the service. You may see them for a moment. | No |
