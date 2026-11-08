@@ -58,7 +58,7 @@ npx pi-webapp
 
 *Real plugin UI with a scripted agent turn, not a live model transcript. Click the image for full size.*
 
-- **A full design editor:** frames, auto layout, components, pen, text, boolean operations, pages and layers, plus Code (JSX / React + Tailwind / HTML) and Inspect panels and PNG/JPG/WebP/SVG export.
+- **A full design editor:** frames, auto layout, components, pen, text, boolean operations, pages and layers, plus Code (JSX / React + Tailwind / HTML) and Lint (design check) panels and PNG/JPG/WebP/SVG export.
 - **Stay in charge:** Pi sends typed operations, never code. Lock layers or limit Pi to the selection; undo, saving and locking are yours only, and Pi can't overwrite edits it hasn't seen.
 - **Preview it live:** **Preview** runs the design on the canvas, with buttons, switches, sliders, tabs and text fields working as real controls.
 - **Keep it in your repo:** save designs as `.fig` files under `designs/` in the workspace and commit them with the rest of your code.

@@ -22,7 +22,7 @@ test("both READMEs have accessible, packaged product images and localized diagra
     const visual = images(tree);
     assert.deepEqual(visual.map(image => image.url), [
       "assets/readme/workbench.png", "assets/readme/git-review.png", "assets/readme/terminal.png",
-      "assets/readme/excalidraw.png", `assets/readme/architecture-${locale}.png`,
+      "assets/readme/excalidraw.png", "assets/readme/openpencil.png", `assets/readme/architecture-${locale}.png`,
     ]);
     for (const image of visual) {
       assert.ok(image.alt && image.alt.length > 20, `${file}: descriptive alt text for ${image.url}`);
@@ -36,7 +36,7 @@ test("both READMEs have accessible, packaged product images and localized diagra
 test("screenshots are high-resolution PNGs and diagrams have no external dependencies", async () => {
   for (const [name, width, height] of [
     ["workbench", 2160, 1140], ["git-review", 972, 1140], ["terminal", 972, 1140],
-    ["excalidraw", 1488, 722], ["architecture-en", 2840, 2280], ["architecture-zh", 2036, 1642],
+    ["excalidraw", 1488, 722], ["openpencil", 2160, 1350], ["architecture-en", 2840, 2280], ["architecture-zh", 2036, 1642],
   ] as const) {
     const png = await readFile(new URL(`../assets/readme/${name}.png`, import.meta.url));
     assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
