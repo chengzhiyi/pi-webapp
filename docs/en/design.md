@@ -45,7 +45,7 @@ Pi reads OpenPencil's design guide, looks at the current design and sends its ch
 
 Keep asking for changes in the conversation ("make the button full width", "add a dark variant"). If you edited the design since Pi last looked at it, Pi's change is refused and Pi reads the design again first, so it never silently overwrites your edits.
 
-## 4. Control what Pi may change
+## 4. Control what Pi may change {#agent-access}
 
 The **Agent** tab in the right panel lists Pi's recent changes, each with its revision, how many operations it had and when it happened. The latest one has **Undo**; undone changes are marked **undone**.
 
@@ -61,12 +61,12 @@ Undo, saving, locking and limiting are yours only: Pi has no tool for them.
 
 ## 5. Edit by hand
 
-The canvas is OpenPencil's own editor: frames, shapes, pen, text, auto layout, components, boolean operations, pages and layers. The right panel also has:
+The canvas is OpenPencil's own editor: frames, shapes, pen, text, auto layout, components, boolean operations, pages and layers. The right panel has **Preview** and **Save** at the top, then these tabs:
 
-- **Design**: the selected layer's properties.
+- **Design**: the selected layer's properties, including export to PNG, JPG, WebP or SVG.
 - **Code**: the selection as JSX, React with Tailwind, or HTML.
-- **Inspect**: design checks.
-- Export to PNG, JPG, WebP or SVG.
+- **Agent**: Pi's changes and what it may touch ([above](#agent-access)).
+- **Lint**: design checks.
 
 **Preview** (⌥⌘↩ on macOS) runs the design on the canvas. The editing interface goes away, animated fills play, and components with a behaviour (buttons, switches, sliders, tabs, text fields and so on) work as live controls. **Reset** restarts them, and Esc exits.
 
@@ -74,7 +74,7 @@ Theme and language follow **Pi Settings → General**.
 
 ## 6. Save {#save}
 
-Your edits and Pi's are kept by the service as revisions while you work. To get a file into your project, choose **Save as .fig**. The first save writes `designs/<title>.fig` in the workspace, creating the `designs/` folder if needed; later saves go to the same file. Then commit it from the [Git panel](./workspace-tools#git) like any other file.
+Your edits and Pi's are kept by the service as revisions while you work. To get a file into your project, click **Save** (or **Save as .fig** in the file menu). The first save writes `designs/<title>.fig` in the workspace, creating the `designs/` folder if needed; later saves go to the same file. Then commit it from the [Git panel](./workspace-tools#git) like any other file.
 
 Saving checks the file's content first. If the `.fig` file changed on disk since you last saved it, the save is refused instead of overwriting that change.
 
