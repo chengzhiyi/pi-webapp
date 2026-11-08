@@ -8,7 +8,7 @@ import { HostedPluginManager, type HostedManagerOptions } from "./manager.ts";
 import { HostedViewCoordinator, type AuthenticatedViewScope } from "./views.ts";
 import type { HostedBridgeHandlers } from "./routes.ts";
 import { HostedStateBroker } from "./state-broker.ts";
-import { DEFAULT_POLICIES, invokeTimeoutFor, policyFor, workspaceRulesFor, type HostedPluginPolicy } from "./plugin-policies.ts";
+import { invokeTimeoutFor, policyFor, workspaceRulesFor, type HostedPluginPolicy } from "./plugin-policies.ts";
 import { hostedFrameCsp, manifestRequestsWasm } from "./frame-csp.ts";
 import { toToolResult } from "./tool-result.ts";
 import type { ExecuteApprovals } from "./capabilities/execute-approvals.ts";
@@ -16,7 +16,7 @@ import { parseDeclarations } from "./capabilities/declarations.ts";
 import { DeviceFlows, secretAuthFor } from "./capabilities/oauth.ts";
 import { HostedPluginError } from "./errors.ts";
 import { atomicJson, privateDirectory, readJson } from "./storage.ts";
-import { OFFICIAL_PLUGINS } from "./official-catalog.ts";
+import { DEFAULT_POLICIES, OFFICIAL_PLUGINS } from "./official-catalog.ts";
 import { HostedDevWatcher, type HostedDevSources } from "./dev-plugins.ts";
 
 function declaredSecrets(manifest: unknown): string[] { try { return [...parseDeclarations(manifest).secrets]; } catch { return []; } }
@@ -139,7 +139,7 @@ export class HostedPluginIntegration {
         if (!store) throw new HostedPluginError("hosted_unavailable", "Secrets are not available", { status: 503 });
         if (input.phase === "cancel") { this.deviceFlows.cancel(input.deviceId); return { status: "cancelled" }; }
         if (input.phase === "start") {
-          const auth = this.documents.get(input.pluginId)?.secrets.includes(input.name) ? secretAuthFor(input.pluginId, input.name) : undefined;
+          const auth = this.documents.get(input.pluginId)?.secrets.includes(input.name) ? secretAuthFor(this.trusted.get(input.pluginId), input.name) : undefined;
           if (!auth) throw new HostedPluginError("secret_undeclared", "The enabled plugin does not declare browser sign-in for this secret", { status: 404 });
           return this.deviceFlows.start(input.pluginId, input.name, auth);
         }
@@ -288,7 +288,7 @@ export class HostedPluginIntegration {
     const secrets = new Map<string, NonNullable<HostedPluginCard["secrets"]>>();
     for (const p of inventory.plugins) {
       const names = p.enabled ? this.documents.get(p.id)?.secrets ?? [] : [];
-      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => { const auth = secretAuthFor(p.id, name); return { name, configured: await store.has(p.id, name), ...(auth ? { signIn: auth.clientId ? "browser" as const : "token-page" as const, ...(auth.createUrl ? { createUrl: auth.createUrl } : {}) } : {}) }; })));
+      if (store && names.length) secrets.set(p.id, await Promise.all(names.map(async name => { const auth = secretAuthFor(this.trusted.get(p.id), name); return { name, configured: await store.has(p.id, name), ...(auth ? { signIn: auth.clientId ? "browser" as const : "token-page" as const, ...(auth.createUrl ? { createUrl: auth.createUrl } : {}) } : {}) }; })));
     }
     return { ...(this.devWatcher ? { dev: this.devWatcher.info() } : {}), plugins: inventory.plugins.map(p => ({
       pluginId: p.id, name: p.name, official: p.official, installed: p.installed, enabled: p.enabled,

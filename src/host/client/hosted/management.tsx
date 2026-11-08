@@ -11,7 +11,7 @@ import rows from "../PluginManagementPage.module.css";
 import css from "./management.module.css";
 import { managementConfirmation, type ConfirmationOperation } from "./confirmation.ts";
 
-/** Browser sign-in (device flow) when the host supports it, else a pre-filled GitHub token page; a pasted token is always accepted. Values are write-only. */
+/** Browser sign-in (GitHub device flow) when the plugin's reviewed policy offers it, else its pre-filled token page; a pasted token is always accepted. Values are write-only. */
 function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCard; t: (zh: string, en: string) => string; onCatalog(next: HostedPluginCatalog): void; disabled: boolean }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -58,7 +58,7 @@ function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCa
     void copyCode(f.userCode);
   };
   const cancel = () => { if (flow) void hostedApi.signIn({ auth: "cancel", deviceId: flow.deviceId }).catch(() => {}); setFlow(null); };
-  return <section className={css.configuration}><h2>{t("GitHub 授权", "GitHub authorization")}</h2>
+  return <section className={css.configuration}><h2>{t("授权", "Authorization")}</h2>
     <p className={rows.scope}>{t("令牌只保存在本机，由主程序代为发起请求；插件进程和页面永远读不到它。", "The token is stored on this machine and used by the host on the plugin's behalf; plugin code and pages can never read it.")}</p>
     {card.secrets.map(secret => <div key={secret.name} className={css.configuration}>
       <div className={css.actions}>
@@ -86,7 +86,7 @@ function SecretsSection({ card, t, onCatalog, disabled }: { card: HostedPluginCa
           <Button variant="outline" size="sm" onClick={cancel}>{t("取消", "Cancel")}</Button>
         </div>
       </div>}
-      <details open={secret.signIn === "token-page" && !secret.configured}><summary>{secret.signIn === "token-page" ? t("创建后在此粘贴令牌（仅限目标仓库的 fine-grained token，Issues、Pull requests、Contents 读写）", "Paste the token here after creating it (fine-grained, limited to the target repository, Issues / Pull requests / Contents read-write)") : t("改用手动粘贴令牌", "Paste a token instead")}</summary>
+      <details open={secret.signIn === "token-page" && !secret.configured}><summary>{secret.signIn === "token-page" ? t("创建后在此粘贴令牌（建议只授予该插件所需的仓库和权限）", "Paste the token here after creating it (grant only the repositories and permissions this plugin needs)") : t("改用手动粘贴令牌", "Paste a token instead")}</summary>
         <div className={css.actions}>
           <input type="password" autoComplete="off" aria-label={secret.name} value={values[secret.name] ?? ""} onChange={event => setValues(previous => ({ ...previous, [secret.name]: event.target.value }))} />
           <Button variant="outline" size="sm" disabled={disabled || !(values[secret.name] ?? "").trim()} onClick={() => void save(secret.name, (values[secret.name] ?? "").trim())}>{t("保存", "Save")}</Button>

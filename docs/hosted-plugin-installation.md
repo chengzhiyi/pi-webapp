@@ -12,7 +12,19 @@ builtin drawings remain registered until parity and migration are verified.
 
 ## Modules
 
-- `official-catalog.ts`: offline metadata only, trusted exact package identity,
+- `official-plugins.json`: the reviewed official plugins, one entry per plugin —
+  the catalog card (`id`, `name`, `icon`, `description`, `registry`,
+  `recommendedVersion`, `requiredCapabilities`) and its trust `policy` (tools,
+  readonly/UI/checkpoint actions, contribution, and optional browser, workspace,
+  runtime and secret sign-in rules). It is the only place the host names a plugin
+  (Excalidraw's legacy-drawing migration excepted); adding or changing one is a
+  data edit plus a host release. `catalog-schema.ts` validates it strictly at
+  startup (unknown keys, bounds, subset rules) and deep-freezes the result. The
+  same entry shape is what a dev package declares in `package.json`
+  `piWebappCatalog` (minus `id`/`registry`) and what a signed remote catalog will
+  carry later.
+- `official-catalog.ts`: loads that file into `OFFICIAL_PLUGINS` and
+  `DEFAULT_POLICIES`; offline metadata only, trusted exact package identity,
   compatible stable-version selection, explicit independent/host-update policy.
   Never follows `latest`, installs absent plugins during host updates, enables
   disabled plugins, or silently downgrades a newer compatible version.

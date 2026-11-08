@@ -3,11 +3,16 @@ import test from "node:test";
 import { DeviceFlows, secretAuthFor } from "../src/host/server/plugins/hosted/capabilities/oauth.ts";
 
 const reply = (value: unknown, ok = true) => ({ ok, status: ok ? 200 : 400, json: async () => value });
-test("secretAuthFor defaults to the built-in client id and allows an override", () => {
-  assert.equal(secretAuthFor("@chengzhiyi/pi-github", "github-token", {})?.clientId, "Ov23limJmKiuu8cOP83E");
-  assert.equal(secretAuthFor("@chengzhiyi/pi-github", "github-token", { PI_WEBAPP_GITHUB_CLIENT_ID: " abc " })?.clientId, "abc");
-  assert.match(secretAuthFor("@chengzhiyi/pi-github", "github-token", {})!.createUrl, /^https:\/\/github\.com\/settings\/personal-access-tokens\/new\?/);
-  assert.equal(secretAuthFor("other", "x", {}), undefined);
+test("secretAuthFor comes only from the plugin's reviewed policy, with the host's client id as default and an override", () => {
+  const createUrl = "https://github.com/settings/personal-access-tokens/new?name=x";
+  const policy = { secrets: { "github-token": { provider: "github" as const, scope: "repo", createUrl } } };
+  assert.equal(secretAuthFor(policy, "github-token", {})?.clientId, "Ov23limJmKiuu8cOP83E");
+  assert.equal(secretAuthFor(policy, "github-token", { PI_WEBAPP_GITHUB_CLIENT_ID: " abc " })?.clientId, "abc");
+  assert.equal(secretAuthFor({ secrets: { "github-token": { ...policy.secrets["github-token"], clientId: "own" } } }, "github-token", {})?.clientId, "own");
+  assert.deepEqual(secretAuthFor(policy, "github-token", {}), { clientId: "Ov23limJmKiuu8cOP83E", scope: "repo", createUrl });
+  assert.equal(secretAuthFor(policy, "other", {}), undefined, "a secret the policy does not describe gets no sign-in");
+  assert.equal(secretAuthFor(policy, "toString", {}), undefined);
+  assert.equal(secretAuthFor(undefined, "github-token", {}), undefined);
 });
 test("device flow: start, pending, slow_down, granted; device code never leaves the host", async () => {
   let clock = 0; const calls: string[] = []; const answers: unknown[] = [{ error: "authorization_pending" }, { error: "slow_down" }, { access_token: "gho_TOKEN" }];

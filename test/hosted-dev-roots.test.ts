@@ -5,24 +5,29 @@ import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "esbuild";
-import { HostedDevSources, HostedDevWatcher, devPluginsFromEnv, devSignature, GITHUB_ID, type DevSwitcher } from "../src/host/server/plugins/hosted/dev-plugins.ts";
+import { HostedDevSources, HostedDevWatcher, devPluginsFromEnv, devSignature, type DevSwitcher } from "../src/host/server/plugins/hosted/dev-plugins.ts";
 import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/installer.ts";
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
-import { OFFICIAL_PLUGINS, type OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
+import { DEFAULT_POLICIES, OFFICIAL_PLUGINS, type OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
 import { hostedAsset, sha256 } from "../src/host/server/plugins/hosted/resources.ts";
 import { HostedPluginError } from "../src/host/server/plugins/hosted/errors.ts";
 import { MemorySecretStore } from "../src/host/server/plugins/hosted/capabilities/secrets.ts";
 
-const PLUGIN = new URL("../../pi-extensions/packages/github/", import.meta.url).pathname;
+const PLUGIN = new URL("../../pi-extensions/packages/excalidraw/", import.meta.url).pathname;
+const EXCALIDRAW = "@chengzhiyi/pi-excalidraw";
+/** A package that is not in the official catalog: in dev mode it describes itself, exactly like an official-plugins.json entry. */
+const DEV_ID = "@example/pi-tasks";
+const DEV_BLOCK = { name: "Tasks", description: { zh: "任务", en: "Tasks" }, policy: { tools: {}, readonlyActions: [], actions: ["get"], checkpointActions: ["get"],
+  contribution: { entry: { label: "Tasks", description: { zh: "任务", en: "Tasks" }, kind: "workspace" }, panels: ["workspace"], artifactTools: [], toolViews: [], panelAlias: { prefix: "tasks:", kind: "workspace", title: "Tasks" } } } };
 const code = (expected: string) => (e: unknown) => (e as { code?: string }).code === expected;
 const tmp = async (t: { after(fn: () => Promise<void>): void }, cleanup = true) => { const root = await realpath(await mkdtemp(join(tmpdir(), "pi-dev-roots-"))); if (cleanup) t.after(() => rm(root, { recursive: true, force: true })); return root; };
 const MANIFEST = { apiVersion: 2, hostRange: ">=0.1.0 <1.0.0", runtimeProtocol: 1, backend: { entry: "./dist/runtime.js" }, frontend: { document: "./dist/frame.html", controller: "./dist/frame.html" }, resourcesManifest: "./dist/resources.json", dataSchemaVersion: 1, supportedDataSchemas: [1], capabilities: ["state"] };
-const CATALOG: OfficialPlugin[] = [{ id: GITHUB_ID, name: "GitHub", description: { zh: "", en: "" }, registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0", requiredCapabilities: ["state"] }];
+const CATALOG: OfficialPlugin[] = [{ id: DEV_ID, name: "Tasks", description: { zh: "", en: "" }, registry: "https://registry.npmjs.org", recommendedVersion: "0.1.0", requiredCapabilities: ["state"] }];
 /** A minimal dev package directory (with the source-tree extras a real checkout has). */
-async function pluginDir(root: string, options: { name?: string; hostRange?: string; label?: string } = {}) {
+async function pluginDir(root: string, options: { name?: string; hostRange?: string; label?: string; catalog?: unknown } = {}) {
   const dir = join(root, "plugin"); await mkdir(join(dir, "dist"), { recursive: true }); await mkdir(join(dir, "src"), { recursive: true });
   await writeFile(join(dir, "src", "index.ts"), "// source, never copied"); await writeFile(join(dir, "tsconfig.json"), "{}");
-  await writeFile(join(dir, "package.json"), JSON.stringify({ name: options.name ?? GITHUB_ID, version: "0.1.0", private: true, type: "module", piWebapp: { ...MANIFEST, hostRange: options.hostRange ?? MANIFEST.hostRange } }));
+  await writeFile(join(dir, "package.json"), JSON.stringify({ name: options.name ?? DEV_ID, version: "0.1.0", private: true, type: "module", piWebapp: { ...MANIFEST, hostRange: options.hostRange ?? MANIFEST.hostRange }, piWebappCatalog: "catalog" in options ? options.catalog : DEV_BLOCK }));
   await writeDist(dir, options.label ?? "one");
   return dir;
 }
@@ -38,24 +43,24 @@ const installer = (root: string) => new HostedPluginInstaller({ root, hostVersio
 
 test("dev directory install: validated snapshot, fresh version per content, unchanged content reuses the version", async t => {
   const root = await tmp(t), dir = await pluginDir(root), inst = installer(join(root, "store"));
-  const first = await inst.installDevDirectory(GITHUB_ID, dir);
+  const first = await inst.installDevDirectory(DEV_ID, dir);
   assert.match(first.version, /^0\.1\.\d+$/); assert.notEqual(first.version, "0.1.0");
   assert.ok(!existsSync(join(first.root, "src")) && !existsSync(join(first.root, "tsconfig.json")), "only package.json + dist are snapshotted");
-  const again = await inst.installDevDirectory(GITHUB_ID, dir);
+  const again = await inst.installDevDirectory(DEV_ID, dir);
   assert.equal(again.version, first.version); assert.equal(again.digest, first.digest);
   await writeDist(dir, "two");
-  const second = await inst.installDevDirectory(GITHUB_ID, dir);
+  const second = await inst.installDevDirectory(DEV_ID, dir);
   assert.ok(Number(second.version.split(".")[2]) > Number(first.version.split(".")[2]), "strictly increasing");
-  assert.deepEqual((await inst.inventory()).versions[GITHUB_ID]!.map(v => v.version), [first.version, second.version]);
-  assert.equal((await inst.load(GITHUB_ID, first.version)).digest, first.digest, "the earlier snapshot stays intact and loadable");
+  assert.deepEqual((await inst.inventory()).versions[DEV_ID]!.map(v => v.version), [first.version, second.version]);
+  assert.equal((await inst.load(DEV_ID, first.version)).digest, first.digest, "the earlier snapshot stays intact and loadable");
   await writeDist(dir, "one");
-  assert.notEqual((await inst.installDevDirectory(GITHUB_ID, dir)).version, first.version, "going back is a new version: installed versions stay immutable");
+  assert.notEqual((await inst.installDevDirectory(DEV_ID, dir)).version, first.version, "going back is a new version: installed versions stay immutable");
 });
 
 test("a freshly installed package is servable even when the data directory is reached through a symlink", async t => {
   const root = await tmp(t), dir = await pluginDir(root); await symlink(root, join(tmpdir(), `pi-dev-link-${process.pid}`));
   const link = join(tmpdir(), `pi-dev-link-${process.pid}`); t.after(() => rm(link, { force: true }));
-  const pkg = await installer(join(link, "store")).installDevDirectory(GITHUB_ID, dir);
+  const pkg = await installer(join(link, "store")).installDevDirectory(DEV_ID, dir);
   assert.ok((await hostedAsset(pkg, "dist/frame.html", pkg.digest))?.bytes.length);
 });
 
@@ -63,7 +68,7 @@ test("dev directory install keeps every package check", async t => {
   const root = await tmp(t), inst = installer(join(root, "store"));
   const reject = async (label: string, prepare: (dir: string) => Promise<void>, expected: string, options: Parameters<typeof pluginDir>[1] = {}) => {
     const dir = await pluginDir(join(await mkdtemp(join(root, "case-")), "x") && await mkdtemp(join(root, "case-")), options); await prepare(dir);
-    await assert.rejects(inst.installDevDirectory(GITHUB_ID, dir), code(expected), label);
+    await assert.rejects(inst.installDevDirectory(DEV_ID, dir), code(expected), label);
   };
   await reject("resource hash mismatch", dir => writeDist(dir, "x", files => { files[0]!.sha256 = "0".repeat(64); }), "invalid_package");
   await reject("undeclared dist file", dir => writeFile(join(dir, "dist", "extra.js"), "x"), "invalid_package");
@@ -77,12 +82,12 @@ test("dev directory install keeps every package check", async t => {
 
 test("production paths are unchanged: archives still need publisher SRI, and dev mode is off without an explicit opt-in", async t => {
   const root = await tmp(t), dir = await pluginDir(root), inst = installer(join(root, "store"));
-  await inst.installDevDirectory(GITHUB_ID, dir);
+  await inst.installDevDirectory(DEV_ID, dir);
   // A tgz still needs a real SHA-512 integrity; the dev directory's synthetic one is not accepted anywhere else.
-  await assert.rejects(inst.installArchive(GITHUB_ID, Buffer.from("not a package"), "sha512-" + "A".repeat(86) + "==", "0.1.1"), code("integrity_mismatch"));
-  await assert.rejects(inst.installArchive(GITHUB_ID, Buffer.from("x"), "sha1-abc", "0.1.1"), code("invalid_integrity"));
+  await assert.rejects(inst.installArchive(DEV_ID, Buffer.from("not a package"), "sha512-" + "A".repeat(86) + "==", "0.1.1"), code("integrity_mismatch"));
+  await assert.rejects(inst.installArchive(DEV_ID, Buffer.from("x"), "sha1-abc", "0.1.1"), code("invalid_integrity"));
   await assert.rejects(inst.installDevDirectory("@someone/else", dir), code("unknown_plugin"), "ids outside the catalog are never trusted");
-  assert.equal(devPluginsFromEnv("").catalog.length, 0);
+  assert.equal(devPluginsFromEnv("").archives.size, 0);
   assert.equal(new HostedDevSources({ env: {}, configPath: join(root, "none.json") }).enabled, false, "no env and no config file means dev mode is off");
 });
 
@@ -90,7 +95,7 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   const root = await tmp(t), good = await pluginDir(root), configPath = join(root, "hosted-dev.json");
   const bad = async (name: string, files: Record<string, string>) => { const d = join(root, name); await mkdir(d, { recursive: true }); for (const [f, c] of Object.entries(files)) await writeFile(join(d, f), c); return d; };
   const notAPlugin = await bad("unknown", { "package.json": JSON.stringify({ name: "@x/y", piWebapp: MANIFEST }) });
-  const badManifest = await bad("manifest", { "package.json": JSON.stringify({ name: GITHUB_ID, piWebapp: { apiVersion: 1 } }) });
+  const badManifest = await bad("manifest", { "package.json": JSON.stringify({ name: DEV_ID, piWebapp: { apiVersion: 1 } }) });
   const notJson = await bad("json", { "package.json": "{" });
   const noPackage = await bad("empty", {});
   const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: [join(root, "missing"), noPackage, notJson, notAPlugin, badManifest, good].join(":") }, configPath });
@@ -98,9 +103,10 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   assert.equal(sources.notices().length, 5, messages.join("\n"));
   assert.match(messages[0]!, /missing: directory does not exist/);
   assert.match(messages[1]!, /package\.json not found/); assert.match(messages[2]!, /not valid JSON/);
-  assert.match(messages[3]!, /unknown plugin id "@x\/y" \(known: @chengzhiyi\/pi-github, @chengzhiyi\/pi-excalidraw, @chengzhiyi\/pi-pencil\)/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
-  assert.deepEqual([...sources.roots], [[GITHUB_ID, good]]); assert.equal(sources.enabled, true);
-  assert.ok(sources.catalog.some(p => p.id === GITHUB_ID));
+  assert.match(messages[3]!, /@x\/y is not an official plugin \(official: @chengzhiyi\/pi-excalidraw, @chengzhiyi\/pi-pencil\)\. Describe it in package\.json "piWebappCatalog"/); assert.match(messages[4]!, /not a valid hosted v2 manifest/);
+  assert.deepEqual([...sources.roots], [[DEV_ID, good]]); assert.equal(sources.enabled, true);
+  assert.deepEqual(sources.catalog.map(p => [p.id, p.name, p.official]), [[DEV_ID, "Tasks", false]], "self-described, never labelled official");
+  assert.deepEqual(sources.policies.get(DEV_ID)?.actions, ["get"]);
 
   await writeFile(configPath, JSON.stringify({ roots: ["relative/path", 7] }));
   const file = new HostedDevSources({ env: {}, configPath });
@@ -108,9 +114,9 @@ test("diagnostics explain every kind of bad dev configuration", async t => {
   await writeFile(configPath, "{ nope"); assert.match(new HostedDevSources({ env: {}, configPath }).notices()[0]!.message, /cannot read dev configuration/);
   await writeFile(configPath, JSON.stringify({ wrong: true })); assert.match(new HostedDevSources({ env: {}, configPath }).notices()[0]!.message, /roots/);
 
-  const archive = devPluginsFromEnv(`@x/y=${join(root, "a.tgz")};${GITHUB_ID}=${join(root, "a.txt")};${GITHUB_ID}=${join(root, "gone.tgz")};junk`);
-  assert.equal(archive.catalog.length, 0);
-  assert.match(archive.notices.map(n => n.message).join("\n"), /unknown plugin id "@x\/y"[\s\S]*not a \.tgz[\s\S]*archive not found[\s\S]*not <id>=<path\.tgz>/);
+  const archive = devPluginsFromEnv(`@x/y=${join(root, "a.tgz")};${EXCALIDRAW}=${join(root, "a.txt")};${EXCALIDRAW}=${join(root, "gone.tgz")};junk`);
+  assert.equal(archive.archives.size, 0);
+  assert.match(archive.notices.map(n => n.message).join("\n"), /"@x\/y" is not an official plugin[\s\S]*PI_WEBAPP_HOSTED_DEV_ROOTS[\s\S]*not a \.tgz[\s\S]*archive not found[\s\S]*not <id>=<path\.tgz>/);
 });
 
 test("an official plugin can be developed from a local directory or archive without joining the dev catalog", async t => {
@@ -124,7 +130,7 @@ test("an official plugin can be developed from a local directory or archive with
   assert.equal(sources.catalog.some(p => p.id === "@chengzhiyi/pi-excalidraw"), false);
   await writeFile(join(root, "x.tgz"), "");
   const archive = devPluginsFromEnv(`@chengzhiyi/pi-excalidraw=${join(root, "x.tgz")}`);
-  assert.deepEqual(archive.notices, []); assert.equal(archive.catalog.length, 0);
+  assert.deepEqual(archive.notices, []);
   assert.equal(archive.archives.get("@chengzhiyi/pi-excalidraw"), join(root, "x.tgz"));
 });
 
@@ -135,11 +141,37 @@ test("a root added to the config after startup is reported, not silently ignored
   await writeFile(configPath, JSON.stringify({ roots: [dir] })); sources.refresh();
   assert.equal(sources.roots.size, 0); assert.match(sources.notices()[0]!.message, /Restart pi-webapp once/);
   const started = new HostedDevSources({ env: {}, configPath });
-  assert.equal(started.roots.get(GITHUB_ID), dir);
+  assert.equal(started.roots.get(DEV_ID), dir);
   const moved = await pluginDir(await mkdtemp(join(root, "moved-"))); await writeFile(configPath, JSON.stringify({ roots: [moved] })); started.refresh();
-  assert.equal(started.roots.get(GITHUB_ID), moved, "same plugin, new directory: picked up live");
+  assert.equal(started.roots.get(DEV_ID), moved, "same plugin, new directory: picked up live");
   await writeFile(configPath, JSON.stringify({ roots: [] })); started.refresh();
   assert.equal(started.roots.size, 0, "removing a root returns the plugin to the registry path");
+});
+
+test("a self-described dev package is validated like an official entry, and a policy edit asks for a restart", async t => {
+  const root = await tmp(t), configPath = join(root, "hosted-dev.json");
+  const reject = async (catalog: unknown, pattern: RegExp) => {
+    const dir = await pluginDir(await mkdtemp(join(root, "case-")), { catalog });
+    const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: dir }, configPath });
+    assert.equal(sources.roots.size, 0); assert.equal(sources.catalog.length, 0);
+    assert.match(sources.notices()[0]!.message, pattern);
+  };
+  await reject(undefined, /not an official plugin/);
+  await reject({ ...DEV_BLOCK, id: "@chengzhiyi/pi-excalidraw" }, /must not set id or registry/);
+  await reject({ ...DEV_BLOCK, official: true }, /piWebappCatalog\.official is not a known field/);
+  await reject({ ...DEV_BLOCK, icon: "github" }, /piWebappCatalog\.icon must be one of drawing/);
+  await reject({ ...DEV_BLOCK, policy: { ...DEV_BLOCK.policy, checkpointActions: ["sync"] } }, /checkpointActions lists "sync", which is not one of its actions/);
+  await reject({ ...DEV_BLOCK, policy: { ...DEV_BLOCK.policy, secrets: { token: { provider: "gitlab", scope: "api", createUrl: "https://gitlab.com/x" } } } }, /provider must be "github"/);
+
+  const dir = await pluginDir(join(root, "live"));
+  await writeFile(configPath, JSON.stringify({ roots: [dir] }));
+  const sources = new HostedDevSources({ env: {}, configPath });
+  assert.deepEqual(sources.notices(), []);
+  const pkgPath = join(dir, "package.json"), pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+  pkg.piWebappCatalog.policy.actions = ["get", "list"]; await writeFile(pkgPath, JSON.stringify(pkg)); sources.refresh();
+  assert.match(sources.notices()[0]!.message, /policy changed; restart pi-webapp once/);
+  assert.deepEqual(sources.policies.get(DEV_ID)?.actions, ["get"], "the running host keeps the policy it started with");
+  assert.equal(sources.roots.get(DEV_ID), dir, "code still reloads live");
 });
 
 test("watcher applies a change once its files settle, never twice, and reports failures instead of retrying them", async t => {
@@ -151,7 +183,7 @@ test("watcher applies a change once its files settle, never twice, and reports f
     if (behavior === "fail") throw new HostedPluginError("invalid_package", "Resource integrity mismatch");
     if (behavior === "busy") throw new HostedPluginError("storage_busy", "busy");
     if (behavior === "uninstalled") throw new HostedPluginError("not_installed", "Install the plugin first");
-    return { plugins: [{ pluginId: id, name: "GitHub", official: true, installed: true, enabled: true, phase: "active", version: `0.1.${updates.length}` }] };
+    return { plugins: [{ pluginId: id, name: "Tasks", official: false, installed: true, enabled: true, phase: "active", version: `0.1.${updates.length}` }] };
   } };
   const statusPath = join(root, "status", "hosted-dev-status.json"), logs: string[] = [];
   const watcher = new HostedDevWatcher({ sources, switcher, statusPath, log: m => logs.push(m) });
@@ -161,7 +193,7 @@ test("watcher applies a change once its files settle, never twice, and reports f
   await watcher.tick(); await watcher.tick(); assert.equal(updates.length, 1, "no change -> no more switches");
   assert.equal(watcher.info().sources[0]!.state, "synced");
   const status = JSON.parse(await readFile(statusPath, "utf8"));
-  assert.equal(status.plugins[GITHUB_ID].state, "synced"); assert.deepEqual(status.catalog, [GITHUB_ID]); assert.equal(status.pid, process.pid);
+  assert.equal(status.plugins[DEV_ID].state, "synced"); assert.deepEqual(status.catalog, [DEV_ID]); assert.equal(status.pid, process.pid);
 
   await touch("two"); await watcher.tick(); assert.equal(updates.length, 1, "a changing file waits for the next poll (debounce)");
   await touch("three"); await watcher.tick(); assert.equal(updates.length, 1); await watcher.tick(); assert.equal(updates.length, 2);
@@ -191,24 +223,24 @@ test("failed dev switches never exhaust the retained-version budget: unreference
   // Sixteen builds left behind by switches that never completed (nothing references them).
   const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: dir }, configPath: join(root, "none.json") });
   const inst = new HostedPluginInstaller({ root: store, hostVersion: "0.1.39", catalog: [...OFFICIAL_PLUGINS, ...sources.catalog] });
-  for (let i = 0; i < 16; i++) { await writeDist(dir, `left-${i}`); await inst.installDevDirectory(GITHUB_ID, dir); }
-  assert.equal((await inst.inventory()).versions[GITHUB_ID]!.length, 16);
+  for (let i = 0; i < 16; i++) { await writeDist(dir, `left-${i}`); await inst.installDevDirectory(DEV_ID, dir); }
+  assert.equal((await inst.inventory()).versions[DEV_ID]!.length, 16);
   await writeDist(dir, "next");
-  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), hostVersion: "0.1.39", workerEntry: join(root, "unused-worker.mjs"), ownerId: "o", catalog: [...OFFICIAL_PLUGINS, ...sources.catalog], devRoots: sources.roots, devArchives: sources.archives,
+  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), hostVersion: "0.1.39", workerEntry: join(root, "unused-worker.mjs"), ownerId: "o", catalog: [...OFFICIAL_PLUGINS, ...sources.catalog], policies: new Map([...DEFAULT_POLICIES, ...sources.policies]), devRoots: sources.roots, devArchives: sources.archives,
     capabilities: { secrets: new MemorySecretStore(), resolve: async () => [], fetch: (async () => new Response("{}")) as unknown as typeof fetch },
     scheduledScope: () => ({ cwd: root, workspaceId: "w", sessionId: "scheduler" }), scheduleTimers: { setInterval: () => 1, clearInterval: () => {} }, resolveSession: () => null });
   t.after(() => integration.shutdown());
   await integration.start();
-  const inventory = await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "install" } as never) as { plugins: Array<{ pluginId: string; version?: string }> };
-  const installed = inventory.plugins.find(p => p.pluginId === GITHUB_ID)!.version!;
-  const left = (await inst.inventory()).versions[GITHUB_ID]!.map(v => v.version);
+  const inventory = await integration.handlers.manage({ pluginId: DEV_ID, operation: "install" } as never) as { plugins: Array<{ pluginId: string; version?: string }> };
+  const installed = inventory.plugins.find(p => p.pluginId === DEV_ID)!.version!;
+  const left = (await inst.inventory()).versions[DEV_ID]!.map(v => v.version);
   assert.ok(left.includes(installed), "the new build is installed");
   assert.ok(left.length <= 2, `stale builds were collected (left: ${left.join(", ")})`);
 });
 
 const built = existsSync(join(PLUGIN, "dist/resources.json"));
-test("integration: saving the plugin's dist switches the live plugin without any manual update", { skip: !built && "build packages/github first (pnpm --filter @chengzhiyi/pi-github build)", timeout: 60_000 }, async t => {
-  const root = await tmp(t, false), workerEntry = join(root, "worker.mjs"), dir = join(root, "github");
+test("integration: saving the plugin's dist switches the live plugin without any manual update", { skip: !built && "build packages/excalidraw first (pnpm --filter @chengzhiyi/pi-excalidraw build)", timeout: 60_000 }, async t => {
+  const root = await tmp(t, false), workerEntry = join(root, "worker.mjs"), dir = join(root, "excalidraw");
   await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
   await mkdir(dir); await cp(join(PLUGIN, "dist"), join(dir, "dist"), { recursive: true }); await cp(join(PLUGIN, "package.json"), join(dir, "package.json"));
   const sources = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: dir }, configPath: join(root, "none.json") });
@@ -218,12 +250,13 @@ test("integration: saving the plugin's dist switches the live plugin without any
     scheduledScope: () => scope("scheduler"), scheduleTimers: { setInterval: () => 1, clearInterval: () => {} }, resolveSession: id => id === "chat" ? scope("chat") : null });
   t.after(async () => { integration.adapter.thaw(); await integration.shutdown(); await rm(root, { recursive: true, force: true }); });
   await integration.start();
-  const card = async () => (await integration.inventory()).plugins.find(p => p.pluginId === GITHUB_ID)!;
-  const until = async (what: string, ok: () => Promise<boolean>) => { for (let i = 0; i < 150; i++) { if (await ok()) return; await new Promise(r => setTimeout(r, 40)); } assert.fail(`timed out waiting for ${what}`); };
+  const card = async () => (await integration.inventory()).plugins.find(p => p.pluginId === EXCALIDRAW)!;
+  // Excalidraw is a large package: under a parallel full-suite run a switch holds the storage lock for seconds, so a poll may see storage_busy.
+  const until = async (what: string, ok: () => Promise<boolean>) => { for (let i = 0; i < 500; i++) { if (await ok().catch(error => { if ((error as { code?: string }).code === "storage_busy") return false; throw error; })) return; await new Promise(r => setTimeout(r, 40)); } assert.fail(`timed out waiting for ${what}`); };
   await until("the watcher to notice the plugin is not installed", async () => (await integration.inventory()).dev?.sources[0]?.state === "not-installed");
   assert.equal((await card()).updateDiagnostic, undefined, "polling an uninstalled plugin must not leave a failed-update diagnostic on its card");
-  await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "install" } as never);
-  await integration.handlers.manage({ pluginId: GITHUB_ID, operation: "enable" } as never);
+  await integration.handlers.manage({ pluginId: EXCALIDRAW, operation: "install" } as never);
+  await integration.handlers.manage({ pluginId: EXCALIDRAW, operation: "enable" } as never);
   const first = await card(); assert.equal(first.enabled, true); assert.equal(first.phase, "active");
   await until("the watcher to settle on the installed source", async () => (await integration.inventory()).dev?.sources[0]?.state === "synced");
   assert.equal((await card()).version, first.version, "unchanged dist: nothing is switched");
@@ -238,9 +271,9 @@ test("integration: saving the plugin's dist switches the live plugin without any
   await until("the automatic switch", async () => { const c = await card(); return c.version !== first.version && c.phase === "active" && !c.pendingVersion; });
   const second = await card(); assert.equal(second.enabled, true); assert.ok(second.generation! > first.generation!, "a new runtime generation was published");
   await until("the watcher to record the switch", async () => (await integration.inventory()).dev?.sources[0]?.version === second.version);
-  await until("the status file", async () => JSON.parse(await readFile(statusPath, "utf8")).plugins[GITHUB_ID].version === second.version);
+  await until("the status file", async () => JSON.parse(await readFile(statusPath, "utf8")).plugins[EXCALIDRAW].version === second.version);
   assert.match(second.documentUrl!, /frame\.html$/);
-  const status = JSON.parse(await readFile(statusPath, "utf8")); assert.equal(status.plugins[GITHUB_ID].state, "synced"); assert.equal(status.plugins[GITHUB_ID].version, second.version);
+  const status = JSON.parse(await readFile(statusPath, "utf8")); assert.equal(status.plugins[EXCALIDRAW].state, "synced"); assert.equal(status.plugins[EXCALIDRAW].version, second.version);
 
   await edit("body{}", true);
   await until("the broken build to be reported", async () => (await integration.inventory()).dev?.sources[0]?.state === "error");
