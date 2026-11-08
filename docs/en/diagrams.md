@@ -66,4 +66,4 @@ Move the downloaded `.excalidraw` file into your project if you want it versione
 - If an editor view is open and unsaved when you stop the service, `pi-webapp stop` can refuse. See [Troubleshooting](./troubleshooting#stop-is-refused-because-a-plugin-view-has-not-saved).
 - Drawings created by older pi-webapp versions, before Excalidraw became a plugin, are migrated when you install the plugin. Their original files are left in `pi-web/diagrams/` ([Files and directories](./reference/files)).
 
-Next: [Models and providers](./models).
+Next: [UI design with OpenPencil](./design).

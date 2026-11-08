@@ -11,14 +11,24 @@
     "ownershipProtocol": 2,
     "capabilities": ["state", "workspace", "legacy", "panels", "messages"]
   },
-  "description": "A browser interface for Pi with live chat, workspaces, models, and attachments",
+  "description": "One workspace for your Pi coding agent: live chat, files, real terminals, and Git review side by side, plus optional Excalidraw diagrams and OpenPencil UI design, in your browser or on desktop",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chengzhiyi/pi-webapp.git"
   },
   "license": "MIT",
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "ai-agent",
+    "workbench",
+    "web-ui",
+    "terminal",
+    "git",
+    "excalidraw",
+    "openpencil",
+    "ui-design"
   ],
   "bin": {
     "pi-webapp": "./bin/pi-webapp.mjs"

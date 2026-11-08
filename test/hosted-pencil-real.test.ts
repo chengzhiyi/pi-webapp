@@ -74,25 +74,21 @@ test("real model drives pi-pencil through the real host", { timeout: 600_000, sk
   }
   const finalText = session.messages.filter(m => m.role === "assistant").flatMap(m => m.content.filter(c => c.type === "text").map(c => (c as { text: string }).text)).join("\n").slice(-2000);
   const pencilCalls = calls.filter(c => c.name.startsWith("pencil_"));
-  const firstValid = pencilCalls.findIndex(c => c.name === "pencil_propose_changes" && c.ok);
+  const firstValid = pencilCalls.findIndex(c => c.name === "pencil_apply_changes" && c.ok);
 
-  // Human accepts the latest pending proposal and saves; render the accepted design for review.
+  // The agent's changes are already applied; save each design and keep the .fig for review.
   const generation = (await integration.inventory()).plugins.find(p => p.pluginId === ID)!.generation!;
   const action = (name: string, input: unknown) => post("action", { pluginId: ID, generation, sessionId, action: name, input });
   const designs = (await action("list", {})).body;
-  const list = (designs.value ?? designs) as Array<{ docId: string; pending: number }>;
-  const summary: Record<string, unknown> = { provider: PROVIDER, model: MODEL, turnMs, toolCalls: calls.map(c => `${c.name}${c.ok ? "" : " (error)"}`), pencilCallsToFirstValidProposal: firstValid < 0 ? null : firstValid + 1, designs: list };
+  const list = (designs.value ?? designs) as Array<{ docId: string; rev: number }>;
+  const summary: Record<string, unknown> = { provider: PROVIDER, model: MODEL, turnMs, toolCalls: calls.map(c => `${c.name}${c.ok ? "" : " (error)"}`), pencilCallsToFirstValidChange: firstValid < 0 ? null : firstValid + 1, designs: list };
   for (const d of list) {
-    const got = (await action("get", { docId: d.docId })).body; const doc = got.value ?? got;
-    const pending = doc.proposals.filter((p: { status: string }) => p.status === "pending");
-    const last = pending.at(-1);
-    if (!last) continue;
-    const accepted = await action("accept", { docId: d.docId, proposalId: last.id });
-    const saved = accepted.status === 200 ? await action("save", { docId: d.docId, path: `designs/${d.docId}.fig` }) : null;
-    summary[`accept:${d.docId}`] = { status: accepted.status, body: accepted.body, saved: saved && { status: saved.status, bytes: (saved.body.value ?? saved.body).bytes } };
-    if (saved?.status === 200) await writeFile(join(out, `${d.docId}.fig`), await readFile(join(workspace, `designs/${d.docId}.fig`)));
+    if (!d.rev) continue;
+    const saved = await action("save", { docId: d.docId, path: `designs/${d.docId}.fig` });
+    summary[`save:${d.docId}`] = { status: saved.status, bytes: (saved.body.value ?? saved.body).bytes };
+    if (saved.status === 200) await writeFile(join(out, `${d.docId}.fig`), await readFile(join(workspace, `designs/${d.docId}.fig`)));
   }
   await writeFile(join(out, "transcript.json"), JSON.stringify({ summary, calls, finalText }, null, 2));
   console.log(JSON.stringify({ ...summary, finalText: finalText.slice(-600) }, null, 2));
-  assert.ok(firstValid >= 0, "the model produced a valid pencil proposal");
+  assert.ok(firstValid >= 0, "the model produced a valid pencil change");
 });

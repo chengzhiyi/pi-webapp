@@ -10,11 +10,11 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 
 - **Floating message box.** When the tool panel is fullscreen and covers the conversation, the message box floats over the panel. It shares its draft, attachments, queue and slash commands with the normal one. Collapse it to an icon that shows what Pi is doing, drag it where you like, or toggle it with ⌘/Ctrl+J. Messages you send from it tell Pi which tab you're looking at, and from the file browser, which file and lines you've selected. While Pi works it shows progress, then the reply; expand it to read the conversation or answer a pending approval.
 - **Pi can use your terminals.** Ask Pi to run something in a terminal tab ("run the tests in this terminal"). It can read a terminal's recent output on its own, but every command it wants to type is shown to you first and waits for **Allow** or **Deny**. See [Terminal](./workspace-tools#terminal).
+- **OpenPencil plugin (optional).** UI design on [OpenPencil](https://github.com/open-pencil/open-pencil), installed from **Plugins → Official plugins**. Ask Pi to design a screen and its changes appear on the canvas as it makes them; **Undo** reverts the latest one. You can lock layers or limit Pi to a selection, and save designs into the workspace as `.fig` files. OpenPencil follows pi's theme and language. See [UI design with OpenPencil](./design).
 
 ### Improvements and fixes
 
 - Updates that nothing can start any more are deleted automatically, about a minute after startup. Each one took around 400 MB. Only versions that aren't running, aren't selected and are more than 24 hours old are removed, and nothing is removed while an update is in progress.
-- **Pencil plugin (optional).** UI design on OpenPencil, installed from **Plugins**. You edit `.fig` designs in the workspace, and Pi proposes changes that you accept or reject. Pencil follows pi's theme and language.
 - Plugins can download JPG and WebP images, as well as PNG and SVG.
 - When a plugin refuses `pi-webapp stop` because of unsaved work, your other plugins keep running and the next stop works. Before, every later stop failed until `stop --force`.
 - When the desktop app can't connect to an existing service, it now says whether the service timed out or couldn't be reached, shows which one it is (version, how it was started, process ID, working directory), and offers its exact stop command to copy. See [Desktop app](./desktop#cannot-connect).

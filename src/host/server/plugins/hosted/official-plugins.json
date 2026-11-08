@@ -36,33 +36,33 @@
     },
     {
       "id": "@chengzhiyi/pi-pencil",
-      "name": "Pencil",
-      "icon": "drawing",
+      "name": "OpenPencil",
+      "icon": "design",
       "description": {
-        "zh": "基于 OpenPencil 的 UI 设计：编辑工作区里的 .fig 设计稿，agent 提出修改，由你确认。按需安装。",
-        "en": "UI design on OpenPencil: edit .fig designs in your workspace; the agent proposes changes and you accept them. Optional download."
+        "zh": "基于 OpenPencil 的 UI 设计：编辑工作区里的 .fig 设计稿，agent 的修改直接出现在画布上，可随时撤销。按需安装。",
+        "en": "UI design on OpenPencil: edit .fig designs in your workspace; the agent's changes appear on the canvas directly and you can undo them. Optional download."
       },
       "registry": "https://registry.npmjs.org",
-      "recommendedVersion": "0.0.1",
+      "recommendedVersion": "0.0.2",
       "requiredCapabilities": ["state", "workspace", "panels", "browser.wasm"],
-      "reviewed": "The tool set is deliberately small; accepting a proposal stays human-only. A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
+      "reviewed": "The tool set is deliberately small. Agent changes apply directly as new revisions; undoing one (revert), saving, syncing and locking stay human-only. accept/reject remain for proposals stored by older builds. A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
       "policy": {
         "tools": {
           "pencil_read_me": "reference",
           "pencil_status": "status",
           "pencil_inspect": "inspect",
           "pencil_render": "render",
-          "pencil_propose_changes": "propose"
+          "pencil_apply_changes": "apply"
         },
         "readonlyActions": ["reference", "status", "inspect", "render"],
-        "actions": ["list", "get", "accept", "reject", "save", "open", "create", "rename", "selection", "sync", "lock"],
+        "actions": ["list", "get", "accept", "reject", "revert", "save", "open", "create", "rename", "selection", "sync", "lock"],
         "checkpointActions": ["get", "list", "sync", "create"],
         "contribution": {
-          "entry": { "label": "Pencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },
+          "entry": { "label": "OpenPencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },
           "panels": ["workspace", "editor"],
-          "artifactTools": ["pencil_propose_changes"],
+          "artifactTools": ["pencil_apply_changes"],
           "toolViews": [],
-          "panelAlias": { "prefix": "pencil:", "kind": "editor", "title": "Pencil" }
+          "panelAlias": { "prefix": "pencil:", "kind": "editor", "title": "OpenPencil" }
         },
         "browser": { "wasm": true },
         "workspace": { "files": [{ "extension": ".fig", "binary": true, "maxBytes": 67108864, "createDirectory": "designs" }] },

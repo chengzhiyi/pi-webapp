@@ -1,18 +1,5 @@
 import { test, expect, type FrameLocator, type Page } from "@playwright/test";
-import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createHash } from "node:crypto";
-import { build } from "esbuild";
-import { createAssistantMessageEventStream, type AssistantMessage, type ToolCall } from "@earendil-works/pi-ai";
-import { HostedPluginIntegration } from "../../src/host/server/plugins/hosted/integration.ts";
-import { HostedDevSources } from "../../src/host/server/plugins/hosted/dev-plugins.ts";
-import { OFFICIAL_PLUGINS } from "../../src/host/server/plugins/hosted/official-catalog.ts";
-import { WorkspaceSessions } from "../../src/host/server/sessions/workspace-sessions.ts";
-import { startBridge, type Bridge } from "../../src/host/server/transport/bridge.ts";
-import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
-import { terminalHost } from "../helpers/terminal-host.ts";
+import { pencilBuilt, pencilHost } from "../helpers/hosted-pencil.ts";
 
 // pi-pencil inside the REAL host client. The built App's HostedFrame drives FrameAdapter and
 // HostedViewClient (register → MessagePort handshake on iframe load → initialize → long poll) for
@@ -22,96 +9,15 @@ import { terminalHost } from "../helpers/terminal-host.ts";
 // or be restored when the switch is cancelled after the freeze. Nothing in the view protocol is
 // mocked; only the model stream is scripted.
 // Needs a built plugin: PI_PENCIL_ROOT=<pi-extensions>/packages/pencil (with dist/).
-const ID = "@chengzhiyi/pi-pencil";
-const source = process.env.PI_PENCIL_ROOT ?? new URL("../../../pi-extensions/packages/pencil", import.meta.url).pathname;
 // Opt-in, like the real-model test: without a build these tests are not registered at all. CI's hosted
 // gate counts a skipped test as a failure, and CI has no pi-extensions checkout.
-const pencilTest = existsSync(join(source, "dist", "frame.html")) ? test : (() => {}) as unknown as typeof test;
+const pencilTest = pencilBuilt ? test : (() => {}) as unknown as typeof test;
 const LOGIN = [
   { op: "create", ref: "$screen", parent: "$page", type: "FRAME", props: { name: "Login", width: 390, height: 844, fill: "#FFFFFF", layout: { mode: "VERTICAL", gap: 16, padding: { top: 64, right: 24, bottom: 24, left: 24 } } } },
   { op: "create", ref: "$title", parent: "$screen", type: "TEXT", props: { name: "Title", text: { content: "登录 / ログイン", font: { family: "Noto Sans SC", style: "Bold", size: 28 }, color: "#111827" } } },
   { op: "create", ref: "$button", parent: "$screen", type: "FRAME", props: { name: "Primary button", fill: "#4F46E5", radius: 12, sizingH: "FILL", layout: { mode: "HORIZONTAL", justify: "CENTER", align: "CENTER", padding: { top: 14, bottom: 14 } } } },
   { op: "create", ref: "$buttonText", parent: "$button", type: "TEXT", props: { text: { content: "登录", font: { style: "Medium", size: 16 }, color: "#FFFFFF" } } },
 ];
-
-async function pencilHost(page: Page) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "hosted-pencil-mount-")));
-  const plugin = join(root, "pencil"), cwd = join(root, "workspace");
-  await cp(join(source, "package.json"), join(plugin, "package.json"));
-  await cp(join(source, "dist"), join(plugin, "dist"), { recursive: true });
-  await mkdir(cwd, { recursive: true });
-  const prior = process.env.PI_CODING_AGENT_DIR; process.env.PI_CODING_AGENT_DIR = join(root, "agent");
-  const workerEntry = join(root, "worker.mjs");
-  await build({ entryPoints: [new URL("../../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
-  const dev = new HostedDevSources({ env: { PI_WEBAPP_HOSTED_DEV_ROOTS: plugin }, configPath: join(root, "none.json") });
-  const statusPath = join(root, "hosted-dev-status.json");
-  let bridge: Bridge | undefined, sessions!: WorkspaceSessions;
-  const scope = (cwd: string, sessionId: string) => ({ cwd, sessionId, workspaceId: "workspace" });
-  const integration = new HostedPluginIntegration({ root: join(root, "hosted"), workerEntry, hostVersion: "0.1.52", ownerId: "local-test-principal",
-    dev, devStatusPath: statusPath, devPollMs: 100, devArchives: dev.archives, devRoots: dev.roots, catalog: [...OFFICIAL_PLUGINS, ...dev.catalog],
-    resolveSession: sessionId => { const retained = sessions?.hostedScope(sessionId); return retained ? scope(retained.cwd, sessionId) : null; },
-    changed: () => bridge?.publish({ type: "hosted_plugins_changed" }),
-    fetch: (async () => { throw new Error("no registry access in this test"); }) as typeof fetch,
-  });
-  sessions = new WorkspaceSessions(event => bridge?.publish(event), () => undefined, () => false, undefined, undefined, undefined, [], { adapter: integration.adapter, scope });
-  await integration.start(); await sessions.open(cwd, "new");
-  const retained = sessions.session!, sessionId = retained.sessionManager.getSessionId();
-  const { host } = terminalHost(cwd); host.hosted = integration.handlers; host.snapshot = () => sessions.snapshot();
-  host.plugins = () => sessions.catalog!.view();
-  host.pluginAsset = path => sessions.catalog!.asset(path);
-  host.workspaces = async () => ({ items: [{ id: "workspace", title: "Local workspace", path: cwd }], activeId: "workspace", sessions: [{ id: sessionId, workspaceId: "workspace", path: null, name: "Pencil test", modified: new Date().toISOString() }] });
-  host.selectSession = async () => {};
-  bridge = await startBridge(host, new URL("../../web/dist", import.meta.url).pathname, new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(root, "plugins.json") });
-  const address = new URL(bridge.url), headers = { Authorization: `Bearer ${address.hash.slice(1)}`, Origin: address.origin, "Content-Type": "application/json" };
-  const manage = async (operation: string) => {
-    const r = await fetch(`${address.origin}/api/hosted-plugins/manage`, { method: "POST", headers, body: JSON.stringify({ pluginId: ID, operation }) });
-    expect(r.status, (await r.clone().text()).slice(0, 800)).toBe(200);
-  };
-  const model = retained.modelRuntime.getModels("openai")[0]!;
-  await retained.modelRuntime.setRuntimeApiKey("openai", "fixture-no-network"); await retained.setModel(model);
-  let calls = 0;
-  /** One agent turn through the retained SDK session: a scripted model, real tool execution. */
-  const agent = async (name: string, args: Record<string, unknown>) => {
-    const callId = `pencil-${++calls}`; let stage = 0;
-    retained.agent.streamFunction = async m => {
-      const first = stage++ === 0;
-      const message: AssistantMessage = { role: "assistant", api: m.api, provider: m.provider, model: m.id, timestamp: Date.now(), content: first ? [{ type: "toolCall", id: callId, name, arguments: args as ToolCall["arguments"] }] : [{ type: "text", text: "Done" }], stopReason: first ? "toolUse" : "stop", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
-      const stream = createAssistantMessageEventStream(); stream.push({ type: "start", partial: message }); stream.push({ type: "done", reason: message.stopReason as "toolUse" | "stop", message }); stream.end(message); return stream;
-    };
-    await retained.prompt(`pencil step ${callId}`);
-    const result = retained.messages.find(message => message.role === "toolResult" && message.toolCallId === callId);
-    expect(result?.role === "toolResult" && !result.isError, JSON.stringify(result).slice(0, 600)).toBeTruthy();
-    return JSON.parse(((result as { content: { type: string; text?: string }[] }).content.find(c => c.type === "text"))!.text!);
-  };
-  const errors: string[] = [], external: string[] = [];
-  page.on("pageerror", error => errors.push(error.message));
-  page.on("request", request => { if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== address.origin) external.push(request.url()); });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.addInitScript(() => { localStorage.setItem("pi-web-locale", "en"); localStorage.setItem("pi-web-theme", "light"); });
-  const devState = async () => (JSON.parse(await readFile(statusPath, "utf8").catch(() => "{}")).plugins?.[ID] ?? {}) as { state?: string; version?: string; code?: string; message?: string };
-  /** Server-side record of every registered view (controller and authoring mounts). */
-  const views = () => [...((integration as any).views.get(ID)?.views.values() ?? [])].map((v: any) => ({ kind: v.kind as string, initialized: v.initialized as boolean, dirty: v.dirty as boolean, busy: v.busy as boolean, frozen: v.frozen as boolean, generation: v.identity.generation as number }));
-  /** A developer rebuild of dist/: `edit` may rewrite the backend; resources.json is re-hashed like the real build does. */
-  const rebuild = async (edit: (backend: string) => string = s => s) => {
-    const runtime = join(plugin, "dist", "runtime.js"), manifestPath = join(plugin, "dist", "resources.json");
-    const original = join(root, "runtime.original.js");
-    if (!existsSync(original)) await cp(runtime, original);
-    const bytes = Buffer.from(edit(await readFile(original, "utf8")) + `\n// rebuild ${Date.now()}\n`);
-    await writeFile(runtime, bytes);
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    const entry = manifest.files.find((f: { path: string }) => f.path === "./dist/runtime.js");
-    entry.bytes = bytes.length; entry.sha256 = createHash("sha256").update(bytes).digest("hex");
-    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-  };
-  const close = async () => {
-    try { await integration.shutdown(); } finally {
-      await bridge!.close(); await sessions.dispose();
-      if (prior === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = prior;
-      await rm(root, { recursive: true, force: true }).catch(() => {});
-    }
-  };
-  return { bridge, manage, agent, errors, external, devState, views, rebuild, close };
-}
 
 const generationOf = async (page: Page, title: string) => Number(new URL((await page.locator(`iframe[title="${title}"]`).getAttribute("src"))!, "http://x").searchParams.get("generation"));
 const frameOf = async (page: Page, title: string) => (await page.locator(`iframe[title="${title}"]`).elementHandle())!.contentFrame().then(f => f!);
@@ -123,47 +29,47 @@ pencilTest("pencil in the real host: controller/workspace/editor mounts, freeze�
   try {
     await h.manage("install"); await h.manage("enable");
     await expect.poll(async () => (await h.devState()).state, { timeout: 30_000 }).toBe("synced");
-    const proposal = await h.agent("pencil_propose_changes", { title: "Login", ops: LOGIN });
-    expect(proposal.status).toBe("pending_review");
+    const applied = await h.agent("pencil_apply_changes", { title: "Login", ops: LOGIN });
+    expect(applied.status).toBe("applied");
 
     // Controller: handshake + initialize complete, and it never loads the editor runtime.
     await page.goto(h.bridge.url);
-    await expect(page.locator('iframe[title="Pencil controller"]')).toBeAttached();
+    await expect(page.locator('iframe[title="OpenPencil controller"]')).toBeAttached();
     await expect.poll(() => h.views().find(v => v.kind === "controller")?.initialized ?? false).toBe(true);
 
     // Workspace mount from the workbench entry. The frame's handshake must not race the host's
     // one-shot connect (the editor graph has a top-level await).
     await page.getByRole("button", { name: "Open right sidebar" }).click();
-    await page.getByRole("button", { name: "Pencil", exact: true }).click();
-    const workspace: FrameLocator = page.frameLocator('iframe[title="Pencil workspace"]');
+    await page.getByRole("button", { name: "OpenPencil", exact: true }).click();
+    const workspace: FrameLocator = page.frameLocator('iframe[title="OpenPencil workspace"]');
     await expect(workspace.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
-    const controllerAssets = await (await frameOf(page, "Pencil controller")).evaluate(() => performance.getEntriesByType("resource").map(e => e.name).filter(n => /canvaskit|\.wasm|\.ttf/.test(n)));
+    const controllerAssets = await (await frameOf(page, "OpenPencil controller")).evaluate(() => performance.getEntriesByType("resource").map(e => e.name).filter(n => /canvaskit|\.wasm|\.ttf/.test(n)));
     expect(controllerAssets, "hidden controller loads no CanvasKit/Yoga/fonts").toEqual([]);
 
-    // Human accepts the agent's proposal through the real view capability.
-    await workspace.locator(`[data-proposal="${proposal.proposalId}"] [data-testid="accept"]`).click();
-    await expect(workspace.getByTestId("message")).toContainText("Applied “Login” as rev 1");
+    // The agent's change is already the design; the workspace shows it at rev 1 with no review step.
+    await expect(workspace.getByTestId("doc-meta")).toContainText("rev 1");
+    await expect(workspace.getByTestId("accept")).toHaveCount(0);
 
     // Editor mount: the workspace opens the design in its own tab via the declared panel alias.
     await workspace.getByTestId("open-tab").click();
-    const editor = page.frameLocator('iframe[title="Pencil editor"]');
+    const editor = page.frameLocator('iframe[title="OpenPencil editor"]');
     await expect(editor.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
     await expect(editor.getByTestId("doc-meta")).toContainText("rev 1");
     await expect.poll(() => h.views().filter(v => v.kind !== "controller").map(v => `${v.kind}:${v.initialized}:${v.dirty}:${v.busy}`).sort()).toEqual(["editor:true:false:false", "workspace:true:false:false"]);
 
     // 1) Rebuild → freeze barrier → commit → every view remounts on the new generation.
     // A human edit is still inside the editor's 800 ms sync debounce: the freeze must flush it.
-    const generation = await generationOf(page, "Pencil workspace");
-    const title = await nodeByName(page, "Pencil editor", "Title");
-    await (await frameOf(page, "Pencil editor")).evaluate(id => (globalThis as any).__pencil.editor.updateNodeWithUndo(id, { name: "Heading" }), title);
+    const generation = await generationOf(page, "OpenPencil workspace");
+    const title = await nodeByName(page, "OpenPencil editor", "Title");
+    await (await frameOf(page, "OpenPencil editor")).evaluate(id => (globalThis as any).__pencil.editor.updateNodeWithUndo(id, { name: "Heading" }), title);
     await h.rebuild();
-    await expect.poll(async () => generationOf(page, "Pencil workspace"), { timeout: 30_000 }).toBe(generation + 1);
-    await expect.poll(async () => generationOf(page, "Pencil editor")).toBe(generation + 1);
+    await expect.poll(async () => generationOf(page, "OpenPencil workspace"), { timeout: 30_000 }).toBe(generation + 1);
+    await expect.poll(async () => generationOf(page, "OpenPencil editor")).toBe(generation + 1);
     await expect.poll(async () => (await h.devState()).state).toBe("synced");
     await expect(workspace.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
     await expect(editor.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
     await expect(editor.getByTestId("doc-meta")).toContainText("rev 2");
-    expect(await nodeByName(page, "Pencil workspace", "Heading"), "the flushed human edit survived the switch").toBe(title);
+    expect(await nodeByName(page, "OpenPencil workspace", "Heading"), "the flushed human edit survived the switch").toBe(title);
     await expect.poll(() => h.views().map(v => `${v.kind}@${v.generation}`).sort()).toEqual([`controller@${generation + 1}`, `editor@${generation + 1}`, `workspace@${generation + 1}`]);
 
     // 2) Rebuild whose backend exposes an unreviewed tool: the switch is refused AFTER the freeze,
@@ -171,24 +77,51 @@ pencilTest("pencil in the real host: controller/workspace/editor mounts, freeze�
     await h.rebuild(backend => backend.replaceAll('"pencil_status"', '"pencil_statux"'));
     await expect.poll(async () => (await h.devState()).state, { timeout: 30_000 }).toBe("error");
     expect((await h.devState()).message).toMatch(/tool/i);
-    expect(await generationOf(page, "Pencil workspace")).toBe(generation + 1);
-    await expect(page.locator('iframe[title="Pencil workspace"]')).toHaveCount(1);
+    expect(await generationOf(page, "OpenPencil workspace")).toBe(generation + 1);
+    await expect(page.locator('iframe[title="OpenPencil workspace"]')).toHaveCount(1);
     for (const frame of [workspace, editor]) await expect(frame.locator(".shell")).not.toHaveAttribute("data-frozen", /.*/);
     await expect.poll(() => h.views().every(v => !v.frozen)).toBe(true);
     // Restored views are live: a human edit in the workspace syncs and reaches the editor tab.
-    const button = await nodeByName(page, "Pencil workspace", "Primary button");
-    await (await frameOf(page, "Pencil workspace")).evaluate(id => (globalThis as any).__pencil.editor.updateNodeWithUndo(id, { name: "CTA" }), button);
+    const button = await nodeByName(page, "OpenPencil workspace", "Primary button");
+    await (await frameOf(page, "OpenPencil workspace")).evaluate(id => (globalThis as any).__pencil.editor.updateNodeWithUndo(id, { name: "CTA" }), button);
     await expect(workspace.getByTestId("message")).toContainText("rev 3", { timeout: 10_000 });
     await expect(editor.getByTestId("doc-meta")).toContainText("rev 3", { timeout: 10_000 });
-    expect(await nodeByName(page, "Pencil editor", "CTA")).toBe(button);
+    expect(await nodeByName(page, "OpenPencil editor", "CTA")).toBe(button);
 
     // 3) The fixed rebuild switches normally again.
     await h.rebuild();
-    await expect.poll(async () => generationOf(page, "Pencil workspace"), { timeout: 30_000 }).toBe(generation + 2);
+    await expect.poll(async () => generationOf(page, "OpenPencil workspace"), { timeout: 30_000 }).toBe(generation + 2);
     await expect(editor.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
     await expect(editor.getByTestId("doc-meta")).toContainText("rev 3");
 
-    await expect(page.getByText("Pencil lost its connection")).toHaveCount(0);
+    // 4) A rebuild that lands while an editor is mid-save. The editor's sync request is held open, so the view
+    // reports busy for the whole switch attempt: the host must neither fail the switch nor park it until
+    // someone clicks "Apply pending update". The dev watcher retries, and it lands once the save finishes.
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const saving = new Promise<void>(resolve => {
+      let holding = false;
+      void page.route("**/api/hosted-plugins/action", async route => {
+        if (!holding && (route.request().postDataJSON() as { action?: string } | null)?.action === "sync") { holding = true; resolve(); await held; }
+        await route.continue();
+      });
+    });
+    await (await frameOf(page, "OpenPencil editor")).evaluate(id => (globalThis as any).__pencil.editor.updateNodeWithUndo(id, { name: "Mid-save" }), title);
+    await saving;
+    await expect.poll(() => h.views().find(v => v.kind === "editor")?.busy).toBe(true);
+    await h.rebuild();
+    await expect.poll(async () => (await h.devState()).state, { timeout: 20_000 }).toBe("pending");
+    expect(await generationOf(page, "OpenPencil workspace"), "nothing switched while the save was in flight").toBe(generation + 2);
+    release();
+    await expect.poll(async () => generationOf(page, "OpenPencil workspace"), { timeout: 30_000 }).toBe(generation + 3);
+    await expect.poll(async () => generationOf(page, "OpenPencil editor")).toBe(generation + 3);
+    // The watcher records "synced" once the host has finished the post-commit work, not at the commit itself.
+    await expect.poll(async () => (await h.devState()).state, { timeout: 20_000 }).toBe("synced");
+    await page.unroute("**/api/hosted-plugins/action");
+    await expect(editor.getByTestId("status")).toHaveText("ready", { timeout: 20_000 });
+    expect(await nodeByName(page, "OpenPencil workspace", "Mid-save"), "the save that was in flight survived the switch").toBe(title);
+
+    await expect(page.getByText("OpenPencil lost its connection")).toHaveCount(0);
     expect(h.errors).toEqual([]);
     expect(h.external).toEqual([]);
   } catch (error) {
@@ -207,8 +140,8 @@ pencilTest("pencil in the real host: a person designs by hand in the OpenPencil 
     await expect.poll(async () => (await h.devState()).state, { timeout: 30_000 }).toBe("synced");
     await page.goto(h.bridge.url);
     await page.getByRole("button", { name: "Open right sidebar" }).click();
-    await page.getByRole("button", { name: "Pencil", exact: true }).click();
-    const ws: FrameLocator = page.frameLocator('iframe[title="Pencil workspace"]');
+    await page.getByRole("button", { name: "OpenPencil", exact: true }).click();
+    const ws: FrameLocator = page.frameLocator('iframe[title="OpenPencil workspace"]');
     // The full editor is there before any design exists: menus, pages, layers, toolbar, design panel.
     await expect(ws.getByTestId("status")).toContainText(/No design yet|还没有设计/, { timeout: 20_000 });
     // The host sidebar is narrow, so Pages/Layers is a drawer opened from the canvas corner.
@@ -239,7 +172,7 @@ pencilTest("pencil in the real host: a person designs by hand in the OpenPencil 
     await ws.locator(".op-psection", { hasText: /^Fill|填充/ }).locator(".op-hex").first().fill("16A34A");
     await ws.locator(".op-psection", { hasText: /^Fill|填充/ }).locator(".op-hex").first().press("Enter");
     await expect.poll(async () => (await h.agent("pencil_inspect", { docId })).nodes.find((n: { id: string }) => n.id === rect.id)?.w, { timeout: 10_000 }).toBe(200);
-    const fill = await (await frameOf(page, "Pencil workspace")).evaluate(id => (globalThis as any).__pencil.editor.graph.getNode(id).fills[0].color, rect.id);
+    const fill = await (await frameOf(page, "OpenPencil workspace")).evaluate(id => (globalThis as any).__pencil.editor.graph.getNode(id).fills[0].color, rect.id);
     expect([fill.r, fill.g, fill.b].map((v: number) => Math.round(v * 255))).toEqual([0x16, 0xa3, 0x4a]);
 
     // Rename the design from its name, then start a second one from the designs menu.
@@ -265,8 +198,13 @@ pencilTest("pencil in the real host: a person designs by hand in the OpenPencil 
     await page.screenshot({ path: test.info().outputPath("manual-design-full.png") });
 
     // The agent can work on the person's design like any other.
-    const proposal = await h.agent("pencil_propose_changes", { docId, baseRev: (await h.agent("pencil_inspect", { docId })).rev, title: "Round it", ops: [{ op: "update", id: rect.id, props: { radius: 16 } }] });
-    expect(proposal.status).toBe("pending_review");
+    const rounded = await h.agent("pencil_apply_changes", { docId, baseRev: (await h.agent("pencil_inspect", { docId })).rev, title: "Round it", ops: [{ op: "update", id: rect.id, props: { radius: 16 } }] });
+    expect(rounded.status).toBe("applied");
+    // It shows on the person's canvas with an undo, and the undo goes through the real view capability.
+    await expect(ws.getByTestId("agent-toast")).toContainText("Round it", { timeout: 10_000 });
+    await ws.getByTestId("agent-undo").click();
+    await expect(ws.getByTestId("agent-toast")).toHaveCount(0);
+    await expect(ws.getByTestId("doc-meta")).toContainText(`rev ${rounded.rev + 1}`);
     expect(h.errors).toEqual([]);
     expect(h.external).toEqual([]);
   } catch (error) {

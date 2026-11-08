@@ -10,7 +10,7 @@ No. Pi runs the agent, calls the model, executes tools and stores the sessions. 
 
 ### Is it free? Do I need an account?
 
-pi-webapp is open source under the MIT license and has no account of its own. Model usage is billed by the provider you connect, and you need a credential for it ([Models and providers](./models)). The optional Excalidraw plugin needs no account either.
+pi-webapp is open source under the MIT license and has no account of its own. Model usage is billed by the provider you connect, and you need a credential for it ([Models and providers](./models)). The optional Excalidraw and OpenPencil plugins need no account either.
 
 ### Does it work offline?
 

@@ -134,7 +134,7 @@ pi-webapp: 停止已取消：插件保存或释放未完成，服务及数据已
 
 Meaning: "Stop cancelled: a plugin save or release did not finish. The service and your data are kept."
 
-**Cause.** A plugin view, such as an open Excalidraw editor, hasn't confirmed that its content is saved. Closing the browser without closing the editor leaves it in that state.
+**Cause.** A plugin view, such as an open Excalidraw or OpenPencil editor, hasn't confirmed that its content is saved. Closing the browser without closing the editor leaves it in that state.
 
 **Fix.** Reopen the page, save and close the drawing or editor, and run `pi-webapp stop` again. If the view is gone for good, use the plugin recovery dialog to keep or discard its unconfirmed edits. As a last resort:
 
@@ -197,7 +197,7 @@ pi-webapp 已强制停止
 
 **Fix.** Wait for chats to finish or pause them, then try again. An official plugin must be downloaded before its switch works.
 
-### Downloading the Excalidraw plugin fails
+### Downloading an official plugin fails
 
 **Cause.** The service couldn't reach npm, or no compatible release was available. Failed downloads aren't retried automatically and the version you already have stays in place.
 

@@ -58,9 +58,9 @@
 
 **技能（Skill）。** 一个 `SKILL.md` 文件或一个目录，里面是 Pi 可以为某个任务加载的指引。技能以 `skill:<名称>` 指令的形式出现。
 
-**插件（Plugin）。** pi-webapp 里有自己界面的功能：内置的文件、终端和 Git 工具，以及 Excalidraw 这类可选工具。在侧栏的 **插件** 下管理。
+**插件（Plugin）。** pi-webapp 里有自己界面的功能：内置的文件、终端和 Git 工具，以及 Excalidraw、OpenPencil 这类可选工具。在侧栏的 **插件** 下管理。
 
-**托管插件（Hosted plugin）。** 下载后运行在自己的进程和浏览器框架里的那类插件，比如 Excalidraw。这个词会出现在一些日志和消息里。
+**托管插件（Hosted plugin）。** 下载后运行在自己的进程和浏览器框架里的那类插件，比如 Excalidraw 和 OpenPencil。这个词会出现在一些日志和消息里。
 
 ## 更新
 

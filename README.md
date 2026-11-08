@@ -50,6 +50,21 @@ npx pi-webapp
 
 **Optional plugin:** explicitly install and enable `@chengzhiyi/pi-excalidraw` in **Plugins → Official plugins**, using an available compatible release. It is not bundled or auto-installed, and needs no drawing-service account. [Setup, saving & recovery](docs/diagrams.md).
 
+## OpenPencil: design screens with Pi, on a real design canvas
+
+**Ask → see it land → undo or refine.** Ask Pi for a login screen, a dashboard, or a component. Its changes appear on the [OpenPencil](https://github.com/open-pencil/open-pencil) canvas as it makes them, with the changed frames selected and an **Undo** for the latest one.
+
+[![The OpenPencil plugin beside a conversation: Pi has added a sign-in screen and a dashboard to the canvas, and a toast offers Undo](assets/readme/openpencil.png)](assets/readme/openpencil.png)
+
+*Real plugin UI with a scripted agent turn, not a live model transcript. Click the image for full size.*
+
+- **A full design editor:** frames, auto layout, components, pen, text, boolean operations, pages and layers, plus Code (JSX / React + Tailwind / HTML) and Lint (design check) panels and PNG/JPG/WebP/SVG export.
+- **Stay in charge:** Pi sends typed operations, never code. Lock layers or limit Pi to the selection; undo, saving and locking are yours only, and Pi can't overwrite edits it hasn't seen.
+- **Preview it live:** **Preview** runs the design on the canvas, with buttons, switches, sliders, tabs and text fields working as real controls.
+- **Keep it in your repo:** save designs as `.fig` files under `designs/` in the workspace and commit them with the rest of your code.
+
+**Optional plugin:** install and enable `@chengzhiyi/pi-pencil` (**OpenPencil**) in **Plugins → Official plugins**. It is not bundled or auto-installed, runs locally, and needs no account; OpenPencil's own AI chat is left out because Pi does that job. Not in a stable release yet. [Install, design & save](docs/en/design.md).
+
 ## Core features
 
 | Capability | What you can do |
@@ -60,7 +75,7 @@ npx pi-webapp
 | **Real integrated terminals** | Run interactive shells in the workspace, use Ctrl+C, and keep processes and output when switching chats or panels. |
 | **Git review and workflow** | Review changes and inline diffs, stage/unstage files, commit the staged index, create/switch local branches, and explore commit history with a branch graph. |
 | **A flexible workbench** | Resize, split, or expand tool panels; use workspace focus mode while keeping navigation within reach. Each chat retains its own tool tabs until the page reloads. |
-| **Models, skills, and plugins** | Configure providers and models, manage Pi packages/extensions/skills, and toggle bundled Files, Terminal, and Git capabilities. Supported Web plugins can add their own UI. |
+| **Models, skills, and plugins** | Configure providers and models, manage Pi packages/extensions/skills, and toggle bundled Files, Terminal, and Git capabilities. Optional official plugins add Excalidraw diagrams and OpenPencil UI design, and supported Web plugins can add their own UI. |
 | **Browser and desktop entry points** | Use the background launcher, open `/web` from Pi's terminal, or launch the Electron desktop app with bundled Node/Pi. |
 
 > Chats run independently, but files and Git changes in the same worktree are shared. Switching chats does not stop work; stopping the service ends its background tasks. Terminals and agent tools run with your system permissions, not in a sandbox.
@@ -147,7 +162,7 @@ The **pi** desktop app bundles Node and Pi—no separate runtime installation ne
 | **Guardrails at the host boundary** | Loopback transport uses token/origin checks; file previews enforce workspace and symlink boundaries. Git writes reject stale state and coordinate known chats sharing the worktree. These checks are not an OS sandbox. |
 | **One UI across entry points** | React + TypeScript power the workbench, Vite/esbuild bundle the app, and Electron provides the desktop shell without a separate conversation UI. |
 
-**Optional, not built in:** drawings belong to the official `@chengzhiyi/pi-excalidraw` plugin, installed and enabled explicitly in Plugins. The host ships no editor/fonts and does not auto-install it on offline startup. Hosted plugins use a separate Node process for lifecycle management—not a security sandbox. Development protocol/plugin artifacts on this branch are verification-only, not a published release. See [drawing migration and recovery](docs/diagrams.md) for update behavior and preserved backups.
+**Optional, not built in:** drawings belong to the official `@chengzhiyi/pi-excalidraw` plugin and UI designs to `@chengzhiyi/pi-pencil` (OpenPencil), each installed and enabled explicitly in Plugins. The host ships no editor/fonts and does not auto-install it on offline startup. Hosted plugins use a separate Node process for lifecycle management—not a security sandbox. Development protocol/plugin artifacts on this branch are verification-only, not a published release. See [drawing migration and recovery](docs/diagrams.md) for update behavior and preserved backups.
 
 ### Source map
 
@@ -164,7 +179,7 @@ Read the [architecture and ownership guide](docs/architecture.md) or [Web plugin
 
 ## Guides & development
 
-- **New users:** [Quick start](docs/en/getting-started.md) · [Conversations](docs/en/conversation.md) · [Sessions and workspaces](docs/en/sessions.md) · [Files, terminal and Git](docs/en/workspace-tools.md) · [Diagrams](docs/en/diagrams.md)
+- **New users:** [Quick start](docs/en/getting-started.md) · [Conversations](docs/en/conversation.md) · [Sessions and workspaces](docs/en/sessions.md) · [Files, terminal and Git](docs/en/workspace-tools.md) · [Diagrams](docs/en/diagrams.md) · [UI design](docs/en/design.md)
 - **Configuration:** [Overview](docs/en/configuration.md) · [Models and providers](docs/en/models.md) · [Packages, skills and plugins](docs/en/extensions.md) · [Updates](docs/en/updates.md) · [Security and privacy](docs/en/security.md)
 - **Help and reference:** [Troubleshooting](docs/en/troubleshooting.md) · [FAQ](docs/en/faq.md) · [Command line](docs/en/reference/cli.md) · [Environment variables](docs/en/reference/environment.md)
 - **Contributors:** [Architecture](docs/architecture.md) · [Web plugins](docs/web-plugins.md) · [Desktop builds](docs/desktop.md) · [Developers](docs/en/developers.md)

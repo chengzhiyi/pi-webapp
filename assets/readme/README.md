@@ -8,6 +8,7 @@ The UI screenshots illustrate the real pi-webapp interface using **seeded demo c
 | `git-review.png` | Git tool panel: staged regression tests and the actual `>` → `>=` working-tree diff. |
 | `terminal.png` | Terminal tool panel: actual Node test execution in the disposable project, with two passing tests. |
 | `excalidraw.png` | Actual optional Excalidraw plugin tool card, with a seeded hand-drawn workflow and native Edit entry. Captured at 2× density, not a fabricated UI or live model transcript. |
+| `openpencil.png` | Actual optional OpenPencil plugin in the workbench beside a conversation, after a scripted agent turn added two seeded mobile screens; the Undo toast is the plugin's own. Captured at 1.5× density. |
 | `architecture-zh.png` | User-supplied hand-drawn architecture image, embedded directly in the Chinese README. Preserve this original when regenerating SVGs. |
 | `architecture-en.png` | User-supplied English hand-drawn architecture image (2840 × 2280), embedded directly in the English README. Preserve this original when regenerating SVGs. |
 | `architecture-en.svg` / `architecture-zh.svg` | Editable vector counterparts using the same layered composition; the Chinese PNG retains the supplied hand-drawn styling. No remote fonts, scripts, or embedded private data. |
@@ -38,6 +39,18 @@ CAPTURE_README_EXCALIDRAW=1 HOSTED_EXCALIDRAW_TGZ=/absolute/path/plugin.tgz \
 
 Unset inherited `PI_WEBAPP_RESTART_PORT`, `PI_WEBAPP_RESTART_TOKEN`, and `PI_WEBAPP_LAUNCHER_NONCE` when capturing from inside a running Pi Web service, so the temporary bridge uses its own port and token. The opt-in capture uses the actual host, plugin worker, preview, and native editor with deterministic local registry/model fixtures; it makes no external requests. It saves only the tool-card crop, verifies the editor opens, and cleans up its temporary workspace. A local verification archive is not evidence of an npm release. Both READMEs share the English demo image with localized surrounding text.
 
+## Regenerate the OpenPencil showcase
+
+Build the host and the plugin (`node scripts/build.mjs` in `pi-extensions/packages/pencil`), then:
+
+```bash
+npm run build
+CAPTURE_README_PENCIL=1 PI_PENCIL_ROOT=/absolute/path/pi-extensions/packages/pencil \
+  npx playwright test test/browser/readme-pencil.spec.ts --workers=1
+```
+
+`PI_PENCIL_ROOT` defaults to a `pi-extensions` checkout next to this one. The same environment-variable caveat as the Excalidraw capture applies. The capture runs the actual host, plugin worker and editor as a developer root, scripts one agent turn without calling a model, makes no external requests, and writes the full-page `openpencil.png`.
+
 ## Maintain the diagrams
 
 The architecture diagrams use the chat-authored three-layer composition: shared UI, local Node host, and execution capabilities, with only three vertical connectors. The side rail shows contracts, optional hosted extensions, and diagnostics. Excalidraw is an optional plugin, not a builtin.
@@ -48,7 +61,7 @@ Regenerate both localized SVGs from their shared layout and copy:
 node scripts/generate-readme-architecture.mjs
 ```
 
-READMEs embed PNGs for image-renderer compatibility; keep the workbench, Git, and terminal screenshots visible as well. Both architecture PNGs are user-supplied hand-drawn originals, not generated SVG exports. Do not overwrite them when regenerating the vector counterparts. Verify all five embedded images load in each README.
+READMEs embed PNGs for image-renderer compatibility; keep the workbench, Git, and terminal screenshots visible as well. Both architecture PNGs are user-supplied hand-drawn originals, not generated SVG exports. Do not overwrite them when regenerating the vector counterparts. Verify all six embedded images load in each README.
 
 Edit the generator rather than the generated SVGs. Keep both languages, dimensions, and palette in sync; check responsibilities against the current source and `docs/architecture.md`. The diagrams include accessible titles/descriptions and use only local text and vector shapes. Validate XML and browser rendering, including text bounds, after regeneration. Same-layer placement does not imply sequential calls; process boundaries do not imply security sandboxes.
 

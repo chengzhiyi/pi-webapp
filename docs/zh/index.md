@@ -43,10 +43,10 @@ features:
     linkText: 工作区工具
   - icon:
       src: /icons/shapes.svg
-    title: 可编辑的图表
-    details: 让 Pi 画架构图或流程图，再在原生 Excalidraw 画布上继续修改。
-    link: /zh/diagrams
-    linkText: 图表
+    title: 图表与 UI 设计
+    details: 让 Pi 在 Excalidraw 画布上画流程图，或在 OpenPencil 里设计界面，再继续手动修改。两个插件都是可选的。
+    link: /zh/extensions#official-plugins
+    linkText: 官方插件
   - icon:
       src: /icons/shield.svg
     title: 你的模型，你的数据
