@@ -5,7 +5,7 @@ import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "esbuild";
-import { HostedDevSources, HostedDevWatcher, devPluginsFromEnv, devSignature, type DevSwitcher } from "../src/host/server/plugins/hosted/dev-plugins.ts";
+import { HostedDevSources, HostedDevWatcher, devPluginsFromEnv, devSignature, inspectDevRoot, type DevSwitcher } from "../src/host/server/plugins/hosted/dev-plugins.ts";
 import { HostedPluginInstaller } from "../src/host/server/plugins/hosted/installer.ts";
 import { HostedPluginIntegration } from "../src/host/server/plugins/hosted/integration.ts";
 import { DEFAULT_POLICIES, OFFICIAL_PLUGINS, type OfficialPlugin } from "../src/host/server/plugins/hosted/official-catalog.ts";
@@ -317,4 +317,16 @@ test("without developer opt-in the catalog carries no dev information", async t 
   t.after(async () => { integration.adapter.thaw(); await integration.shutdown(); await rm(root, { recursive: true, force: true }); });
   await integration.start();
   assert.equal("dev" in (await integration.inventory()), false);
+});
+
+test("a dev root without package.json is named a parent folder only when it holds packages", async t => {
+  const root = await tmp(t), source = "hosted-dev.json";
+  await pluginDir(root);
+  const parent = inspectDevRoot({ path: root, source }).notice!.message;
+  assert.match(parent, /looks like a parent folder \(packages inside: plugin\)/);
+  const leftover = join(root, "leftover"); await mkdir(join(leftover, "dist"), { recursive: true }); await mkdir(join(leftover, "node_modules", "dep"), { recursive: true });
+  await writeFile(join(leftover, "node_modules", "dep", "package.json"), "{}");
+  const stale = inspectDevRoot({ path: leftover, source }).notice!.message;
+  assert.match(stale, /the folder is not a package \(is the right branch checked out\?\)/);
+  assert.doesNotMatch(stale, /parent/);
 });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { lstat, readdir, writeFile, mkdir, rename } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { isHostedPluginManifest } from "@chengzhiyi/pi-web-protocol";
@@ -69,6 +69,14 @@ export function readDevRootSpecs(env: NodeJS.ProcessEnv, configPath: string | un
   }
   return { specs, notices, configured };
 }
+/** Say "parent" only when a subdirectory really is a package; otherwise the folder is usually build output left by another branch. */
+function missingPackageJson(dir: string) {
+  let children: string[] = [];
+  try { children = readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name !== "node_modules" && existsSync(join(dir, entry.name, "package.json"))).map(entry => entry.name); } catch { /* unreadable: fall through to the generic hint */ }
+  return children.length
+    ? `package.json not found; this looks like a parent folder (packages inside: ${children.slice(0, 3).join(", ")}). Point at the package directory itself`
+    : "package.json not found; the folder is not a package (is the right branch checked out?)";
+}
 /** Identify and sanity-check one developer package directory without running or copying anything. Full validation happens at install. */
 export function inspectDevRoot(spec: RootSpec): { pluginId?: string; entry?: CatalogEntry; notice?: DevNotice } {
   const fail = (message: string, pluginId?: string): { notice: DevNotice } => ({ notice: { level: "error", source: spec.source, ...(pluginId ? { pluginId } : {}), message: `${spec.path}: ${message}` } });
@@ -77,7 +85,7 @@ export function inspectDevRoot(spec: RootSpec): { pluginId?: string; entry?: Cat
   if (!info.isDirectory()) return fail("not a directory (expected the package directory containing package.json)");
   let pkg: { name?: unknown; piWebapp?: unknown; [DEV_CATALOG_KEY]?: unknown };
   try { pkg = JSON.parse(readFileSync(join(spec.path, "package.json"), "utf8")); }
-  catch (error) { return fail((error as NodeJS.ErrnoException).code === "ENOENT" ? "package.json not found (point at the package directory, not its parent)" : "package.json is not valid JSON"); }
+  catch (error) { return fail((error as NodeJS.ErrnoException).code === "ENOENT" ? missingPackageJson(spec.path) : "package.json is not valid JSON"); }
   if (typeof pkg.name !== "string") return fail("package.json has no name");
   if (!isHostedPluginManifest(pkg.piWebapp)) return fail('package.json "piWebapp" is not a valid hosted v2 manifest (apiVersion, hostRange, backend, frontend, resourcesManifest, capabilities)', pkg.name);
   // An official plugin always runs under its reviewed policy, even from a dev directory, so dev behaves like production.

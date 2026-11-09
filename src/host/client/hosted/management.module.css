@@ -3,6 +3,13 @@
 .section p { margin: 0; }
 .notice { color: var(--dsw-alias-state-success-primary); }
 .error { color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; font-size: 12px; line-height: 18px; }
+.devInfo { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
+.devProblems { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); border-radius: 8px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.devProblems strong { font-weight: 500; color: var(--dsw-alias-state-error-primary); }
+.devProblems ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.devProblems code { overflow-wrap: anywhere; font-size: 11px; }
+.devProblems li[data-level='warning'] { color: var(--dsw-alias-label-tertiary); }
+.section .devProblems p { color: var(--dsw-alias-label-tertiary); }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .actions button { max-width: 100%; white-space: normal; height: auto; min-height: 28px; }
 .section > button { align-self: flex-start; max-width: 100%; white-space: normal; height: auto; min-height: 28px; }
