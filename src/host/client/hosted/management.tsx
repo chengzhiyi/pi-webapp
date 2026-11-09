@@ -191,6 +191,20 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       : t("按需下载安装的官方插件。", "An official plugin available on demand."));
   }
   const name = (card: HostedPluginCard) => `${card.name}${card.official ? t("（官方）", " (Official)") : ""}`;
+  // Dev-mode facts live on the plugin they concern: a synced directory is a row tag, and only problems stay above the list.
+  const devSources = new Map((catalog.dev?.sources ?? []).map(source => [source.pluginId, source]));
+  type DevSource = NonNullable<HostedPluginCatalog["dev"]>["sources"][number];
+  const devState = (source: DevSource) => ({ "waiting-build": t("等待构建", "Waiting for build"), switching: t("正在切换", "Switching"), synced: t("已同步", "Synced"), pending: t("待应用", "Pending"), "not-installed": t("未安装", "Not installed"), error: t("出错", "Error") }[source.state]);
+  const devTag = (card: HostedPluginCard) => {
+    const source = devSources.get(card.pluginId);
+    return source && <span className={rows.tag} data-tone={source.state === "error" ? "danger" : "info"} title={source.root} data-hosted-dev-source={source.pluginId}>{t("开发目录", "Dev directory")} · {devState(source)}</span>;
+  };
+  const devProblems = [
+    ...(catalog.dev?.notices ?? []).filter(item => item.level !== "info"),
+    ...(catalog.dev?.sources ?? []).filter(source => source.state === "error").map(source => ({ level: "error" as const, pluginId: source.pluginId, message: `${source.root}${source.message ? `: ${source.message}` : ""}` })),
+  ];
+  // A healthy source with no row to carry its tag still gets a plain line.
+  const devUnlisted = (catalog.dev?.sources ?? []).filter(source => source.state !== "error" && !cards.some(card => card.pluginId === source.pluginId));
   const failureFor = (card: HostedPluginCard): Problem | null => operationError?.id === card.pluginId ? operationError.problem : card.error ? { code: card.errorCode, message: card.error } : card.updateDiagnostic?.status === "failed" ? card.updateDiagnostic : null;
   const status = (card: HostedPluginCard) => !known ? t("安装状态未知 · 启用状态未知", "Installation unknown · Enablement unknown") : `${card.installed ? t("已安装", "Installed") : t("未安装", "Not installed")} · ${card.enabled ? t("已启用", "Enabled") : t("未启用", "Disabled")}${card.version ? ` ${card.version}` : ""}${card.enabled && card.phase !== "active" ? t(" · 运行时不可用", " · Runtime unavailable") : ""}`;
   const switchFor = (card: HostedPluginCard) => <button type="button" role="switch" className={rows.switch} aria-label={t(`启用 ${card.name}`, `Enable ${card.name}`)} aria-checked={known && card.enabled} disabled={unavailableControls || !card.installed} title={!known ? t("请先读取插件状态", "Read plugin status first") : !card.installed ? t("请先下载插件", "Download the plugin first") : undefined} onClick={() => request(card, card.enabled ? "disable" : "enable")}><span className={rows.thumb} /></button>;
@@ -214,10 +228,15 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
   return <section className={css.section} data-hosted-management aria-busy={busy || reading} style={!visible ? { display: "none" } : undefined}>
     {!selected && <h2 className={rows.groupTitle}>{t("官方插件", "Official plugins")}</h2>}
     {error && <div role="alert" className={css.error}>{t("无法读取插件状态，请重试。", "Cannot read plugin status. Please retry.")}<details><summary>{t("诊断信息", "Diagnostics")}</summary>{error.message}</details><Button variant="outline" size="sm" disabled={busy || reading || disabled} onClick={() => setRetryRead(value => value + 1)}>{t("重试", "Retry")}</Button></div>}
-    {catalog.dev && <div data-hosted-dev>
-      {catalog.dev.notices.map((item, index) => <div key={index} className={item.level === "info" ? css.notice : css.error} role={item.level === "error" ? "alert" : "status"}><strong>{t("开发模式", "Dev mode")}{item.pluginId ? ` · ${item.pluginId}` : ""}</strong>: {item.message}</div>)}
-      {catalog.dev.sources.map(source => <p key={source.pluginId} className={css.notice} role="status" data-hosted-dev-source={source.pluginId}>{t("开发目录", "Dev directory")} · <code>{source.root}</code> · {source.state}{source.version ? ` ${source.version}` : ""}{source.message ? ` — ${source.message}` : ""}</p>)}
-    </div>}
+    {!selected && catalog.dev && <>
+      {catalog.dev.notices.filter(item => item.level === "info").map((item, index) => <p key={index} className={css.devInfo} role="status">{t("开发模式", "Dev mode")}{item.pluginId ? ` · ${item.pluginId}` : ""}: {item.message}</p>)}
+      {devUnlisted.map(source => <p key={source.pluginId} className={css.devInfo} role="status" data-hosted-dev-source={source.pluginId}>{t("开发目录", "Dev directory")} · {source.pluginId} · {devState(source)} · <code>{source.root}</code></p>)}
+      {devProblems.length > 0 && <div className={css.devProblems} data-hosted-dev role="alert">
+        <strong>{t(`开发模式：${devProblems.length} 个配置问题`, `Dev mode: ${devProblems.length} configuration ${devProblems.length === 1 ? "issue" : "issues"}`)}</strong>
+        <ul>{devProblems.map((item, index) => <li key={index} data-level={item.level}>{item.pluginId && <span>{item.pluginId}: </span>}<code>{item.message}</code></li>)}</ul>
+        <p>{t("来自 hosted-dev.json 或 PI_WEBAPP_HOSTED_DEV_ROOTS，修改后会自动重新读取。其余插件不受影响。", "From hosted-dev.json or PI_WEBAPP_HOSTED_DEV_ROOTS; edits are picked up automatically. Other plugins are unaffected.")}</p>
+      </div>}
+    </>}
     {notice && <p className={css.notice} role="status">{notice}</p>}
     {download && <Button variant="outline" onClick={() => {
       void hostedApi.manage({ pluginId: download.pluginId, operation: "cancel-download", downloadId: download.id }).then(() => setNotice(t("已请求取消，已完成的安装不会回滚。", "Cancellation requested; committed installations are not rolled back."))).catch(cause => setOperationError({ id: download.pluginId, problem: problem(cause) }));
@@ -225,13 +244,13 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
     {selected ? <div className={rows.detail} data-hosted-detail={selected.pluginId}>
       <div className={rows.detailHead}><span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={selected} size={30} /></span>{switchFor(selected)}</div>
       <div className={rows.detailMain}>
-        <div className={rows.titleRow}><h1>{selected.name}</h1>{selected.official && <span className={rows.tag} data-tone="info">{t("官方", "Official")}</span>}{selected.version && <span className={rows.tag}>v{selected.version}</span>}{failureFor(selected) && <span className={rows.tag} data-tone="danger">{t("需要处理", "Needs attention")}</span>}</div>
+        <div className={rows.titleRow}><h1>{selected.name}</h1>{selected.official && <span className={rows.tag} data-tone="info">{t("官方", "Official")}</span>}{selected.version && <span className={rows.tag}>v{selected.version}</span>}{devTag(selected)}{failureFor(selected) && <span className={rows.tag} data-tone="danger">{t("需要处理", "Needs attention")}</span>}</div>
         <p className={rows.detailDesc}>{description(selected)}</p>
         <p className={rows.detailName}><code>{selected.pluginId}</code></p>
       </div>
       {failureView(selected, true)}
       <section className={rows.detailSection}><h2>{t("详细信息", "Details")}</h2>
-        <dl><dt>{t("来源", "Source")}</dt><dd>{t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
+        <dl><dt>{t("来源", "Source")}</dt><dd>{devSources.has(selected.pluginId) ? <>{t("开发目录", "Dev directory")} · {devState(devSources.get(selected.pluginId)!)}<br /><code>{devSources.get(selected.pluginId)!.root}</code>{devSources.get(selected.pluginId)!.message && <><br />{devSources.get(selected.pluginId)!.message}</>}</> : t("按需下载的官方插件", "Official on-demand package")}</dd><dt>{t("状态", "Status")}</dt><dd>{status(selected)}</dd>{selected.availableVersion && <><dt>{t("可用版本", "Available release")}</dt><dd>{selected.availableVersion}</dd></>}{selected.pendingVersion && <><dt>{t("待更新版本", "Pending release")}</dt><dd>{selected.pendingVersion}</dd></>}</dl>
       </section>
       <SecretsSection card={selected} t={t} disabled={unavailableControls} onCatalog={next => { setCatalog(next); window.dispatchEvent(new Event("pi:hosted-catalog-changed")); }} />
       <section className={`${css.configuration} ${rows.detailSection}`}><h2>{t("配置与更新", "Configuration & updates")}</h2>
@@ -249,6 +268,7 @@ export function HostedPluginManagement({ locale, generation = 0, reload = 0, que
       <span className={rows.artwork} aria-hidden="true"><HostedPluginIcon card={card} size={30} /></span>
       <div className={rows.cardMain}><div className={rows.titleRow}><button className={rows.cardOpen} type="button" onClick={() => onSelect({ id: card.pluginId, name: card.name })}>{name(card)}</button>
           <span className={rows.tag} data-tone={busy ? "info" : undefined}>{busy ? t("正在应用…", "Applying…") : status(card)}</span>
+          {devTag(card)}
           {!busy && failureFor(card) && <span className={rows.tag} data-tone="danger">{t("需要处理", "Needs attention")}</span>}
           {card.pendingVersion ? <span className={rows.tag} data-tone="info">{t("关闭编辑器后更新至：", "Close editors to update to: ")}{card.pendingVersion}</span> : card.availableVersion && card.availableVersion !== card.version && <span className={rows.tag} data-tone="info">{t("可用版本：", "Available release: ")}{card.availableVersion}</span>}
         </div><p>{description(card)}</p>
