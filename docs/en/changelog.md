@@ -6,27 +6,54 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 
 ## Unreleased {#unreleased}
 
+### Improvements and fixes
+
+- **Open design files in OpenPencil.** **File → Open…** (⌘/Ctrl+O), or dropping a file onto the editor, opens a Figma (`.fig`), FigJam (`.jam`), Pencil (`.pen`) or draw.io (`.drawio`) file from your computer as a new design, up to 32 MB. Before, OpenPencil answered that this pi-webapp version couldn't open files yet. See [Open a file from your computer](./design#open-files).
+- The **Plugins** page is quieter. Unsaved drafts left by closed plugin views are a single line below the list, not a banner above it, when they block nothing. The warning that does block updates and uninstalls is unchanged.
+- When the desktop app can't connect to an existing service, it now says whether the service timed out or couldn't be reached, shows which one it is (version, how it was started, process ID, working directory), and offers its exact stop command to copy. This arrives with the next desktop build. See [Desktop app](./desktop#cannot-connect).
+
+### For plugin developers
+
+- A plugin running from a development folder shows a **Dev directory** tag on its row, with the path on hover and under **Source** on its detail page. Only problems with the development configuration stay above the list, in one box.
+- A development folder without a `package.json` is called a parent folder only when one of its subfolders holds a package. Otherwise the hint asks whether the right branch is checked out.
+
+## pi 0.1.55 · 2026-11-08 {#v0-1-55}
+
+npm release. Install it with **Update and restart**, in the web launcher or the desktop app.
+
+### Highlights
+
+- **OpenPencil plugin (optional).** UI design on [OpenPencil](https://github.com/open-pencil/open-pencil), installed from **Plugins → Official plugins**. Ask Pi to design a screen and its changes appear on the canvas as it makes them; **Undo** reverts the latest one. Pi can build components that work as live controls, and **Preview** runs the design on the canvas. You can lock layers or limit Pi to a selection, and save designs into the workspace as `.fig` files. OpenPencil follows pi's theme and language. See [UI design with OpenPencil](./design).
+
+### Improvements and fixes
+
+- Plugins can download JPG and WebP images, as well as PNG and SVG.
+- When a plugin refuses `pi-webapp stop` because of unsaved work, your other plugins keep running and the next stop works. Before, every later stop failed until `stop --force`.
+
+### For plugin developers
+
+- A plugin that isn't official yet can be developed from a local folder: it describes itself in a `piWebappCatalog` block in its `package.json` (name, description and reviewed policy, the same shape as an official catalog entry) and is never labelled Official. Package archives are for official plugins only.
+- Hosted plugins can ship WebAssembly (with `browser.wasm`), bind binary workspace files, set their own invoke timeout, and return images with tool results.
+- Repeated failed switches to a development build no longer use up the plugin's version budget, and a switch that meets an editor in the middle of saving waits and tries again.
+
+## pi 0.1.54 · 2026-11-07 {#v0-1-54}
+
+npm release. Install it with **Update and restart**, in the web launcher or the desktop app.
+
 ### Highlights
 
 - **Floating message box.** When the tool panel is fullscreen and covers the conversation, the message box floats over the panel. It shares its draft, attachments, queue and slash commands with the normal one. Collapse it to an icon that shows what Pi is doing, drag it where you like, or toggle it with ⌘/Ctrl+J. Messages you send from it tell Pi which tab you're looking at, and from the file browser, which file and lines you've selected. While Pi works it shows progress, then the reply; expand it to read the conversation or answer a pending approval.
 - **Pi can use your terminals.** Ask Pi to run something in a terminal tab ("run the tests in this terminal"). It can read a terminal's recent output on its own, but every command it wants to type is shown to you first and waits for **Allow** or **Deny**. See [Terminal](./workspace-tools#terminal).
-- **OpenPencil plugin (optional).** UI design on [OpenPencil](https://github.com/open-pencil/open-pencil), installed from **Plugins → Official plugins**. Ask Pi to design a screen and its changes appear on the canvas as it makes them; **Undo** reverts the latest one. You can lock layers or limit Pi to a selection, and save designs into the workspace as `.fig` files. OpenPencil follows pi's theme and language. See [UI design with OpenPencil](./design).
 
 ### Improvements and fixes
 
 - Updates that nothing can start any more are deleted automatically, about a minute after startup. Each one took around 400 MB. Only versions that aren't running, aren't selected and are more than 24 hours old are removed, and nothing is removed while an update is in progress.
-- Plugins can download JPG and WebP images, as well as PNG and SVG.
-- When a plugin refuses `pi-webapp stop` because of unsaved work, your other plugins keep running and the next stop works. Before, every later stop failed until `stop --force`.
-- When the desktop app can't connect to an existing service, it now says whether the service timed out or couldn't be reached, shows which one it is (version, how it was started, process ID, working directory), and offers its exact stop command to copy. See [Desktop app](./desktop#cannot-connect).
 - The file editor's line-number gutter no longer turns transparent when you scroll sideways.
 - Plugin recovery warnings no longer appear for records that block nothing.
 
 ### For plugin developers
 
 - A local development folder or a package archive can stand in for an official hosted plugin.
-- A plugin that isn't official yet can be developed from a local folder: it describes itself in a `piWebappCatalog` block in its `package.json` (name, description and reviewed policy, the same shape as an official catalog entry) and is never labelled Official. Package archives are for official plugins only.
-- Hosted plugins can ship WebAssembly (with `browser.wasm`), bind binary workspace files, set their own invoke timeout, and return images with tool results.
-- Repeated failed switches to a development build no longer use up the plugin's version budget.
 
 ## pi 0.1.53 · 2026-11-05 {#v0-1-53}
 

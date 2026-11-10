@@ -22,11 +22,10 @@ const links = computed(() => zh.value ? ['本机+令牌', 'RPC', 'HTTPS'] : ['lo
 </script>
 
 <template>
-  <section class="home-flow" :aria-label="zh ? '架构示意' : 'Architecture'">
+  <section class="home-flow home-reveal" :aria-label="zh ? '架构示意' : 'Architecture'">
     <div class="home-section-head">
       <p class="home-eyebrow">{{ zh ? '工作原理' : 'how it fits together' }}</p>
       <h2>{{ zh ? '代理在你的机器上，只有模型请求会出门' : 'The agent runs on your machine. Only model requests leave it.' }}</h2>
-      <p class="home-lead">{{ zh ? '浏览器和 Pi 之间只隔着一个本地服务，没有 pi-webapp 自己的云。' : 'One local service sits between the browser and Pi. There is no pi-webapp cloud.' }}</p>
     </div>
 
     <div class="flow">

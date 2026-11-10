@@ -127,6 +127,15 @@ test('home page: install command, screenshot tabs and the Chinese home', async (
   await expect(image).not.toHaveAttribute('src', before!);
   await expect(image).toHaveAttribute('src', /\/images\/terminal\.png$/);
   await expect(page.locator('.home-way')).toHaveCount(3);
+  // The animated stage: one button per plugin, and picking one switches the scene.
+  await expect(page.locator('.film-dock button')).toHaveCount(4);
+  await page.locator('.film-dock').getByRole('button', { name: 'Terminal' }).click();
+  await expect(page.locator('.film')).toHaveClass(/sc-terminal/);
+  await expect(page.locator('.film-composer')).toBeVisible();
+  // The OpenPencil tab uses its own capture.
+  await page.getByRole('tab', { name: 'Design' }).click();
+  await expect(image).toHaveAttribute('src', /\/images\/openpencil\.webp$/);
+  await expect(page.locator('.home-cta-cmd')).toContainText('npx pi-webapp');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
   await page.goto('./zh/');
