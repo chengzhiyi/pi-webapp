@@ -264,7 +264,8 @@ test("failed dev switches never exhaust the retained-version budget: unreference
   assert.ok(left.length <= 2, `stale builds were collected (left: ${left.join(", ")})`);
 });
 
-const built = existsSync(join(PLUGIN, "dist/resources.json"));
+// Both: a branch without packages/github can leave an ignored dist/ behind with no package.json.
+const built = existsSync(join(PLUGIN, "dist/resources.json")) && existsSync(join(PLUGIN, "package.json"));
 test("integration: saving the plugin's dist switches the live plugin without any manual update", { skip: !built && "build packages/excalidraw first (pnpm --filter @chengzhiyi/pi-excalidraw build)", timeout: 60_000 }, async t => {
   const root = await tmp(t, false), workerEntry = join(root, "worker.mjs"), dir = join(root, "excalidraw");
   await build({ entryPoints: [new URL("../src/host/server/plugins/hosted/worker-entry.ts", import.meta.url).pathname], outfile: workerEntry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
