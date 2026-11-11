@@ -106,7 +106,7 @@
     "@earendil-works/pi-coding-agent": "1.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.4",
+    "@biomejs/biome": "2.6.6",
     "@chengzhiyi/pi-web-protocol": "0.1.1",
     "@codemirror/commands": "6.11.1",
     "@codemirror/language": "6.13.1",
@@ -119,12 +119,12 @@
     "@lexical/history": "0.53.0",
     "@lexical/plain-text": "0.53.0",
     "@lezer/highlight": "1.2.5",
-    "@playwright/test": "1.64.1",
-    "@sentry/core": "11.10.0",
-    "@sentry/esbuild-plugin": "11.10.0",
-    "@sentry/node": "11.10.0",
-    "@sentry/react": "11.10.0",
-    "@sentry/vite-plugin": "11.10.0",
+    "@playwright/test": "1.65.0",
+    "@sentry/core": "11.11.0",
+    "@sentry/esbuild-plugin": "11.11.0",
+    "@sentry/node": "11.11.0",
+    "@sentry/react": "11.11.0",
+    "@sentry/vite-plugin": "11.11.0",
     "@shikijs/langs": "^4.3.1",
     "@types/katex": "^0.16.7",
     "@types/mdast": "^4.0.4",
@@ -136,7 +136,7 @@
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
     "codemirror": "6.0.2",
-    "electron": "44.10.0",
+    "electron": "44.10.2",
     "electron-builder": "26.18.0",
     "esbuild": "^0.28.2",
     "katex": "^0.19.1",
@@ -168,6 +168,6 @@
     "@xterm/headless": "6.0.0",
     "cross-spawn": "^7.0.6",
     "node-pty": "1.1.0",
-    "undici": "7.30.1"
+    "undici": "7.30.2"
   }
 }
