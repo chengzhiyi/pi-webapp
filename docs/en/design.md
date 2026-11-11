@@ -1,12 +1,14 @@
 # UI design with OpenPencil
 
-This page shows how to install the optional OpenPencil plugin, ask Pi to design a screen, edit it by hand, control what Pi may change, and save the design into your project.
+This page shows how to install the optional OpenPencil plugin, ask Pi to design a screen, open an existing design file, edit it by hand, control what Pi may change, and save the design into your project.
 
 OpenPencil is an official plugin built on the open-source [OpenPencil](https://github.com/open-pencil/open-pencil) design editor. It is **not bundled and not installed automatically**. Designs are `.fig` files. Pi edits them directly: its changes appear on the canvas as it makes them, and you can undo the latest one. The editor runs locally in your browser and needs no account. OpenPencil's own AI chat is not included, because Pi does that job with the model you've connected.
 
-::: info New
-OpenPencil isn't in a stable release yet. See [Unreleased](./changelog#unreleased) in the changelog.
+::: info New in 0.1.55
+OpenPencil needs pi-webapp 0.1.55 or later. Opening files from your computer needs a newer version still: see [Unreleased](./changelog#unreleased) in the changelog.
 :::
+
+![OpenPencil beside a conversation: Pi has added a sign-in screen and a dashboard to the canvas, and a toast offers Undo](/images/openpencil.webp)
 
 ## 1. Install and enable the plugin
 
@@ -26,8 +28,25 @@ The left panel lists the workspace's designs, so you can switch between them or 
 | Item | What it does |
 | --- | --- |
 | **New design** | Starts another design. |
+| **Open…** (⌘/Ctrl+O) | Opens a design file from your computer as a new design ([below](#open-files)). |
+| **Place image…** | Puts a PNG, JPG, WebP, GIF or SVG image on the current page. You can also drop an image onto the canvas. |
 | **Save as .fig** | Writes the design into the workspace ([Save](#save)). |
 | **Open in tab** | Opens the current design in its own editor tab, which you can split or make fullscreen like any other tool. |
+
+### Open a file from your computer {#open-files}
+
+Choose **Open…** in the file menu, press ⌘O (Ctrl+O on Windows and Linux), or drop the file onto the editor. These formats open:
+
+| Format | From |
+| --- | --- |
+| `.fig` | Figma |
+| `.jam` | FigJam |
+| `.pen` | Pencil |
+| `.drawio` | draw.io |
+
+The file becomes a new design on the canvas, and a notification reads **Opened** and its title. The original file is not changed and isn't linked to the design: [Save](#save) writes a `.fig` copy under `designs/` in the workspace. A file can be up to 32 MB.
+
+If you see **This pi-webapp version cannot open files yet; update pi-webapp and try again.**, the plugin is newer than your pi-webapp. Update pi-webapp ([Updates](./updates)); until then, everything else in the editor works.
 
 ## 3. Ask Pi for a design
 
@@ -42,6 +61,8 @@ Pi reads OpenPencil's design guide, looks at the current design and sends its ch
 - The frames it changed are selected and brought into view on your canvas.
 - A toast reads **Agent changed:** and the change's title, with an **Undo** button. Undo stays available until you edit after it.
 - Pi gets a picture of what it changed, so it can check its own work and fix it in a follow-up.
+
+Pi can also build components: variant sets, component properties and behaviours such as a button, switch, checkbox or text field. Screens made from them work as live controls in [Preview](#edit-by-hand).
 
 Keep asking for changes in the conversation ("make the button full width", "add a dark variant"). If you edited the design since Pi last looked at it, Pi's change is refused and Pi reads the design again first, so it never silently overwrites your edits.
 
@@ -59,7 +80,7 @@ Under **Agent access**, select layers on the canvas or in **Layers** first, then
 
 Undo, saving, locking and limiting are yours only: Pi has no tool for them.
 
-## 5. Edit by hand
+## 5. Edit by hand {#edit-by-hand}
 
 The canvas is OpenPencil's own editor: frames, shapes, pen, text, auto layout, components, boolean operations, pages and layers. The right panel has **Preview** and **Save** at the top, then these tabs:
 
@@ -80,7 +101,7 @@ Saving checks the file's content first. If the `.fig` file changed on disk since
 
 ## Limits and good to know
 
-- A single `.fig` file can be up to 64 MB.
+- A single `.fig` file can be up to 64 MB. A file you open from your computer can be up to 32 MB.
 - Disabling or uninstalling the plugin keeps your `.fig` files in the workspace.
 - The plugin updates on its own, and an open editor delays the switch to the new version ([Official plugins](./extensions#official-plugins)).
 - If an editor is open and unsaved when you stop the service, `pi-webapp stop` can refuse. See [Troubleshooting](./troubleshooting#stop-is-refused-because-a-plugin-view-has-not-saved).

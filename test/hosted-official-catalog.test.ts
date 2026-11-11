@@ -26,7 +26,7 @@ test("the data file reproduces the previously hardcoded policies field for field
   });
   assert.deepEqual(DEFAULT_POLICIES.get(PENCIL), {
     tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_apply_changes: "apply" },
-    readonlyActions: ["reference", "status", "inspect", "render"], actions: ["list", "get", "accept", "reject", "revert", "save", "open", "create", "rename", "selection", "sync", "lock"], checkpointActions: ["get", "list", "sync", "create"],
+    readonlyActions: ["reference", "status", "inspect", "render"], actions: ["list", "get", "accept", "reject", "revert", "save", "open", "import", "upload", "create", "rename", "selection", "sync", "lock"], checkpointActions: ["get", "list", "sync", "create"],
     contribution: { entry: { label: "OpenPencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" }, panels: ["workspace", "editor"], artifactTools: ["pencil_apply_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "OpenPencil" } },
     browser: { wasm: true }, workspace: { files: [{ extension: ".fig", binary: true, maxBytes: 64 * 1024 * 1024, createDirectory: "designs" }] }, runtime: { invokeTimeoutMs: 120_000 },
   });

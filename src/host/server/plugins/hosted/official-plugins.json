@@ -45,7 +45,7 @@
       "registry": "https://registry.npmjs.org",
       "recommendedVersion": "0.0.2",
       "requiredCapabilities": ["state", "workspace", "panels", "browser.wasm"],
-      "reviewed": "The tool set is deliberately small. Agent changes apply directly as new revisions; undoing one (revert), saving, syncing and locking stay human-only. accept/reject remain for proposals stored by older builds. A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
+      "reviewed": "The tool set is deliberately small. Agent changes apply directly as new revisions; undoing one (revert), saving, syncing and locking stay human-only. accept/reject remain for proposals stored by older builds. import turns a file the person picked (.fig/.jam/.pen/.drawio) into a new design; upload carries an action input over the 2 MB request limit in chunks (bounded and owned by the uploading session in the plugin). A checkpoint freeze may flush a person's first edits in an empty workspace, which creates their design.",
       "policy": {
         "tools": {
           "pencil_read_me": "reference",
@@ -55,7 +55,7 @@
           "pencil_apply_changes": "apply"
         },
         "readonlyActions": ["reference", "status", "inspect", "render"],
-        "actions": ["list", "get", "accept", "reject", "revert", "save", "open", "create", "rename", "selection", "sync", "lock"],
+        "actions": ["list", "get", "accept", "reject", "revert", "save", "open", "import", "upload", "create", "rename", "selection", "sync", "lock"],
         "checkpointActions": ["get", "list", "sync", "create"],
         "contribution": {
           "entry": { "label": "OpenPencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },

@@ -35,11 +35,10 @@ const facts = computed(() => zh.value
 </script>
 
 <template>
-  <section class="home-ways">
+  <section class="home-ways home-reveal">
     <div class="home-section-head">
       <p class="home-eyebrow">{{ zh ? '开始使用' : 'Get started' }}</p>
       <h2>{{ zh ? '选一种适合你的方式' : 'Pick the way that fits you' }}</h2>
-      <p class="home-lead">{{ zh ? '三种方式用的是同一个工作台，也共用同一份 Pi 数据。' : 'All three show the same workbench and share the same Pi data.' }}</p>
     </div>
     <div class="home-ways-grid">
       <a v-for="w in ways" :key="w.name" class="home-way" :href="href(w.link)">
@@ -51,7 +50,7 @@ const facts = computed(() => zh.value
     </div>
   </section>
 
-  <section class="home-trust">
+  <section class="home-trust home-reveal">
     <div class="home-facts">
       <div v-for="f in facts" :key="f.k" class="home-fact">
         <strong>{{ f.k }}</strong>

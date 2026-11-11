@@ -116,7 +116,9 @@ onBeforeUnmount(() => stop());
   <div class="home-backdrop" aria-hidden="true">
     <div class="home-orb home-orb-a"></div>
     <div class="home-orb home-orb-b"></div>
+    <div class="home-orb home-orb-c"></div>
     <div class="home-grid"></div>
     <canvas ref="canvas"></canvas>
+    <div class="home-horizon"></div>
   </div>
 </template>

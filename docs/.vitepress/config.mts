@@ -86,6 +86,8 @@ export default defineConfig({
   lang: 'en',
   base,
   cleanUrls: true,
+  // Dark unless the visitor has picked light with the switch in the navigation bar.
+  appearance: 'dark',
   lastUpdated: true,
   sitemap: { hostname: siteUrl },
   head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }]],

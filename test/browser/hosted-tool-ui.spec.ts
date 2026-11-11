@@ -55,7 +55,10 @@ test("native Chinese editing and repeated enable/dispose leave no host dialogs o
   test.skip(!process.env.HOSTED_TOOL_UI_TGZ, "Explicit UI-capable published archive required");
   test.setTimeout(100_000);
   const consoleErrors: string[] = [];
-  page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  // The pinned published Excalidraw bundle registers a window "unload" listener;
+  // the Chromium shipped with Playwright 1.65+ blocks unload by default and reports it as a console error.
+  const chromiumUnloadDeprecation = "Permissions policy violation: unload is not allowed in this document.";
+  page.on("console", message => { if (message.type() === "error" && message.text() !== chromiumUnloadDeprecation) consoleErrors.push(message.text()); });
   // Observe host listeners only; every iframe has its own document and realm.
   await page.addInitScript(() => {
     const add = document.addEventListener.bind(document), remove = document.removeEventListener.bind(document);

@@ -55,6 +55,15 @@ test("policy registry: built-in policies are reviewed ids only; unknown ids are 
   assert.deepEqual([...DEFAULT_POLICIES.keys()], ["@chengzhiyi/pi-excalidraw", "@chengzhiyi/pi-pencil"]);
   assert.throws(() => policyFor(DEFAULT_POLICIES, ID), { code: "unreviewed_plugin" });
 });
+test("pencil policy reviews File → Open: import plus chunked upload for inputs over the request limit", () => {
+  // Without these the plugin's Open shows "this pi-webapp version cannot open files yet".
+  const pencil = policyFor(DEFAULT_POLICIES, "@chengzhiyi/pi-pencil");
+  for (const action of ["import", "upload"]) {
+    assert.ok(pencil.actions.includes(action), action);
+    assert.ok(!pencil.readonlyActions.includes(action), `${action} is human-only`);
+    assert.ok(!Object.values(pencil.tools).includes(action), `${action} is not an agent tool`);
+  }
+});
 test("a non-excalidraw catalog plugin installs, enables and publishes its own reviewed contribution", async t => {
   const integration = await run(t, { name: "task_list", action: "list", readonly: true });
   await integration.handlers.manage({ pluginId: ID, operation: "install" } as never);

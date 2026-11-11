@@ -3,14 +3,14 @@ layout: home
 title: pi-webapp user guide
 
 release:
-  label: New in 0.1.53
-  text: File browser with search, Git status and editing
-  link: /changelog#v0-1-53
+  label: New in 0.1.55
+  text: OpenPencil plugin, UI design with Pi
+  link: /changelog#v0-1-55
 
 hero:
   name: pi-webapp
   text: A workbench for the Pi coding agent
-  tagline: Conversations, project files, terminals and Git side by side, in your browser or a desktop app. Pi keeps running the agent; pi-webapp adds the workspace around it.
+  tagline: Chat, files, terminals, Git and plugins your agent can operate.
   actions:
     - theme: brand
       text: Quick start
@@ -26,37 +26,37 @@ features:
   - icon:
       src: /icons/terminal.svg
     title: Start in one command
-    details: Run <code>npx pi-webapp</code> in a project folder, connect a model, and send your first message.
+    details: <code>npx pi-webapp</code> in any project folder.
     link: /getting-started
     linkText: Quick start
   - icon:
       src: /icons/layers.svg
     title: Work across projects
-    details: Chats run independently. Switch workspaces or start another chat while earlier work keeps running.
+    details: Chats keep running in the background.
     link: /sessions
     linkText: Sessions and workspaces
   - icon:
       src: /icons/panels.svg
     title: Files, terminal and Git beside the chat
-    details: Preview files, run a real shell and review diffs without leaving the conversation.
+    details: Previews, a real shell and diff review.
     link: /workspace-tools
     linkText: Workspace tools
   - icon:
       src: /icons/shapes.svg
     title: Diagrams and UI design
-    details: Ask for a flowchart on an Excalidraw canvas or a screen design in OpenPencil, then keep editing it by hand. Both plugins are optional.
+    details: Excalidraw and OpenPencil, both optional.
     link: /extensions#official-plugins
     linkText: Official plugins
   - icon:
       src: /icons/shield.svg
     title: Your models, your data
-    details: Bring your own provider. Sessions and credentials stay in Pi's data folder on your machine.
+    details: Your provider. Everything stays on your machine.
     link: /security
     linkText: Security and privacy
   - icon:
       src: /icons/help.svg
     title: Something not working?
-    details: Symptom, cause and fix for the problems people actually hit.
+    details: Symptom, cause, fix.
     link: /troubleshooting
     linkText: Troubleshooting
 ---
