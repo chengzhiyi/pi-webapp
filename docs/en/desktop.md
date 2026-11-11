@@ -96,6 +96,8 @@ The desktop menus are currently in Chinese. The ones you are likely to use:
 
 Right-click selected text to copy it. Editable fields offer the standard undo, cut, copy, paste and select-all actions, and links offer **Copy Link Address**. Right-click a workspace or chat row to open the same actions menu as its **…** button.
 
+Choose **Always Open in Browser** in the external-link confirmation to open future links immediately. Restore confirmations at any time with **pi → Ask Before Opening External Links**.
+
 ## Quit
 
 Quitting asks **是否同时停止后台服务？** ("Also stop the background service?"):
