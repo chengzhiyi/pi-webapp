@@ -19,11 +19,17 @@ export interface ViewUsage {
   totalTokens: number;
   cost: number;
 }
+export interface SubagentNotice {
+  status: "completed" | "failed" | "cancelled" | "unknown";
+  description?: string;
+}
 export interface ViewMessage {
   id: string;
   role: "user" | "assistant" | "tool" | "notice";
   timestamp: string;
   blocks: ViewBlock[];
+  /** The blocks of a subagent notice are details for the trajectory, not chat text. */
+  subagentNotice?: SubagentNotice;
   isError?: boolean;
   toolCallId?: string;
   toolName?: string;

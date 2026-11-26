@@ -2,7 +2,7 @@ import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-a
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { displayUserMessage } from "../../../contracts/user-message.ts";
 import type { PluginEntry } from "@chengzhiyi/pi-web-protocol";
-import type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../../../contracts/bridge-contract.ts";
+import type { SessionView, SubagentNotice, ViewBlock, ViewMessage } from "../../../contracts/bridge-contract.ts";
 export type { SessionView, ViewBlock, ViewMessage, ViewUsage } from "../../../contracts/bridge-contract.ts";
 
 export const PAUSED_ENTRY = 'pi-webapp/paused';
@@ -61,9 +61,23 @@ export function contentBlocks(content: string | readonly ContentPart[]): ViewBlo
   });
 }
 
+function projectSubagentNotice(entry: Extract<SessionEntry, { type: "custom_message" }>): ViewMessage {
+  const details = entry.details && typeof entry.details === "object" ? entry.details as Record<string, unknown> : {};
+  const description = typeof details.description === "string" ? details.description.replace(/\s+/g, " ").trim() : "";
+  const status: SubagentNotice["status"] = details.status === "completed" ? "completed"
+    : details.status === "failed" || details.status === "error" ? "failed"
+    : details.status === "cancelled" || details.status === "aborted" ? "cancelled" : "unknown";
+  // Older entries may only contain the model-facing envelope. Keep that fallback in the trace, never in chat.
+  const blocks = typeof details.resultPreview === "string"
+    ? details.resultPreview.trim() ? contentBlocks(details.resultPreview) : []
+    : contentBlocks(entry.content);
+  return { id: entry.id, role: "notice", timestamp: entry.timestamp, blocks, subagentNotice: { status, ...(description ? { description } : {}) } };
+}
+
 export function projectEntry(entry: SessionEntry): ViewMessage | null {
   if (entry.type === "custom_message") {
     if (!entry.display) return null;
+    if (entry.customType === "subagent-notification") return projectSubagentNotice(entry);
     return {
       id: entry.id,
       role: "notice",

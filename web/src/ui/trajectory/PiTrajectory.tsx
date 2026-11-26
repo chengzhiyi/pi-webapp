@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ViewMessage, ViewUsage } from "../../../../src/host/client/pi-bridge.ts";
 import { conversationTurns } from "../../../../src/host/client/conversation-turns.ts";
 import { PiMarkdown } from "../../../../src/host/client/PiMarkdown.tsx";
+import { subagentNoticeText } from "../../../../src/host/client/subagent-notice.ts";
 import { IconCloseOutline16, IconDatabaseOutline16, IconSearchOutline16 } from "../primitives/icons/index.tsx";
 import viewsCss from "./views.module.css";
 import tableCss from "./TrajectoryTable.module.css";
@@ -46,6 +47,20 @@ function makeRecords(messages: ViewMessage[]): TrajectoryRecord[] {
     const called = new Set(turn.messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)));
     for (const message of turn.messages) {
       if (message.role === "tool" && message.toolCallId && called.has(message.toolCallId)) continue;
+      if (message.role === "notice" && message.subagentNotice) {
+        records.push({
+          id: `${message.id}-notice`,
+          kind: "message",
+          label: t("子代理", "Subagent"),
+          preview: subagentNoticeText(message.subagentNotice),
+          text: message.blocks.map((block) => block.text).join("\n\n") || t("没有结果预览", "No result preview"),
+          timestamp: message.timestamp,
+          error: message.subagentNotice.status === "failed",
+          turn: turn.index,
+          index: ++index,
+        });
+        continue;
+      }
       for (const [blockIndex, block] of message.blocks.entries()) {
         const kind: RecordKind = message.role === "user" ? "user" : message.role === "tool" || block.kind === "toolCall" ? "tool" : "message";
         const result = block.kind === "toolCall" && block.toolCallId ? results.get(block.toolCallId) : undefined;
