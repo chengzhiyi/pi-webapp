@@ -116,7 +116,30 @@ function notifyParent(message) {
   if (process.connected) process.send?.(message);
 }
 
+function parseStartArgs(args) {
+  const piArgs = [];
+  let host, port;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--") { piArgs.push(...args.slice(i)); break; }
+    const match = /^(--host|--port)(?:=(.*))?$/.exec(arg);
+    if (!match) { piArgs.push(arg); continue; }
+    const value = match[2] ?? args[++i];
+    if (match[1] === "--host") {
+      if (host !== undefined) throw new Error("--host 只能指定一次");
+      if (value !== "127.0.0.1" && value !== "0.0.0.0") throw new Error("--host 必须是 127.0.0.1 或 0.0.0.0");
+      host = value;
+    } else {
+      if (port !== undefined) throw new Error("--port 只能指定一次");
+      if (value === undefined || !/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) throw new Error("--port 必须是 1–65535 之间的整数");
+      port = Number(value);
+    }
+  }
+  return { host, port, piArgs };
+}
+
 async function serve(pi, args) {
+  const { host = "127.0.0.1", port, piArgs } = parseStartArgs(args);
   const nonce = randomUUID();
   await mkdir(dirname(statePath), { recursive: true });
   let claimed = false;
@@ -133,8 +156,8 @@ async function serve(pi, args) {
 
   const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
   const piPrefix = process.env.PI_WEBAPP_PI_CLI ? [resolve(process.env.PI_WEBAPP_PI_CLI)] : [];
-  const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...args], {
-    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LAUNCHER_NONCE: nonce, PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL: "1", PI_WEBAPP_LAUNCHER_VERSION: packageVersion }, stdio: ["pipe", "pipe", "pipe"],
+  const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...piArgs], {
+    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LISTEN_HOST: host, PI_WEBAPP_LISTEN_PORT: port === undefined ? "" : String(port), PI_WEBAPP_LAUNCHER_NONCE: nonce, PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL: "1", PI_WEBAPP_LAUNCHER_VERSION: packageVersion }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
   let ready = false;
@@ -322,20 +345,29 @@ async function serve(pi, args) {
         fail(`Pi 拒绝打开网页：${record.error ?? "未知错误"}`);
         return;
       }
-      if (record?.type !== "extension_ui_request" || record.method !== "notify" || typeof record.message !== "string" || !record.message.startsWith("pi-webapp: ")) continue;
+      if (record?.type !== "extension_ui_request" || record.method !== "notify" || typeof record.message !== "string") continue;
+      if (record.message.startsWith("pi-webapp-start-error: ")) {
+        fail(record.message.slice("pi-webapp-start-error: ".length));
+        return;
+      }
+      if (!record.message.startsWith("pi-webapp: ")) continue;
       startupStage("web-ready-notification");
       let url;
       try { url = new URL(record.message.slice("pi-webapp: ".length)); }
       catch { continue; }
       if (url.hostname !== "127.0.0.1" || !url.hash) continue;
+      if (port !== undefined && Number(url.port || "80") !== port) {
+        fail(`Pi Web 未监听指定端口 ${port}。日志：${logPath}`);
+        return;
+      }
       runningUrl = url.href;
       opening = true;
-      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href, ...runtimeInfo })
+      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href, listenHost: host, ...runtimeInfo })
         .then(() => {
           if (closed || failed) return;
           ready = true;
           clearTimeout(startupTimer);
-          lifecycle("launcher_ready", { port: Number(url.port) });
+          lifecycle("launcher_ready", { port: Number(url.port || "80") });
           notifyParent({ type: "ready", pid: process.pid, url: url.href });
           for (const root of pluginRoots) {
             try {
@@ -364,7 +396,7 @@ async function serve(pi, args) {
       closed = true;
       lifecycle("pi_process_exit", { ready, exitCode: code, signal,
         reason: stopReason ?? (ready ? "unexpected_exit" : "startup_failure"), forceStopRequested,
-        port: runningUrl ? Number(new URL(runningUrl).port) : null });
+        port: runningUrl ? Number(new URL(runningUrl).port || "80") : null });
       if (!ready) fail(`Pi 提前退出（代码 ${code ?? "未知"}）。日志：${logPath}`);
       resolveExit();
     });
@@ -406,7 +438,7 @@ async function serve(pi, args) {
     await unlink(restartPath).catch(() => {});
     const oldUrl = new URL(runningUrl);
     const fd = openSync(logPath, "a", 0o600);
-    const restartEnv = { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RESTART_PORT: oldUrl.port, PI_WEBAPP_RESTART_TOKEN: oldUrl.hash.slice(1) };
+    const restartEnv = { ...process.env, PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_RESTART_PORT: oldUrl.port || "80", PI_WEBAPP_RESTART_TOKEN: oldUrl.hash.slice(1) };
     try {
       const runLauncher = async (path) => {
         const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : null;
@@ -490,8 +522,14 @@ async function managedLauncher() {
 }
 
 async function start(args) {
+  const { host, port, piArgs } = parseStartArgs(args);
   const existing = await activeState();
   if (existing) {
+    if ((host !== undefined || port !== undefined) && (!existing.url
+      || (host !== undefined && host !== (existing.listenHost ?? "127.0.0.1"))
+      || (port !== undefined && port !== Number(new URL(existing.url).port || "80")))) {
+      throw new Error("pi-webapp 已在启动或使用不同的监听配置。请先运行 pi-webapp stop，再使用指定参数启动。");
+    }
     console.log(existing.url ? `pi-webapp 已在后台运行：${existing.url}` : "pi-webapp 正在启动");
     if (existing.url) await openPageIfLocal(existing.url);
     return;
@@ -512,7 +550,7 @@ async function start(args) {
   const nodeVersion = versionParts(process.versions.node);
   if (!nodeVersion || !compatible(nodeVersion, [22, 19, 0])) throw new Error("需要 Node.js 22.19 或更新版本。");
   if (!existsSync(extension)) throw new Error("找不到构建后的扩展。请先运行 npm run build。");
-  if (args.some((arg) => ["--mode", "--print", "-p"].includes(arg))) throw new Error("后台启动不支持覆盖 Pi 的运行模式");
+  if (piArgs.some((arg) => ["--mode", "--print", "-p"].includes(arg))) throw new Error("后台启动不支持覆盖 Pi 的运行模式");
   const piCli = await packagePiCli(dirname(dirname(launcher))) ?? process.env.PI_WEBAPP_PI_CLI;
   const pi = piCli ? process.execPath : probe("pi") ?? installPi();
   await mkdir(dirname(statePath), { recursive: true });
@@ -600,8 +638,9 @@ async function main() {
     }
     return;
   }
-  if (argument === "--help" || argument === "-h") { console.log("用法：pi-webapp [start|status|stop [--force]] [Pi 参数]"); return; }
-  if (argument && argument !== "start" && !argument.startsWith("-")) throw new Error("用法：pi-webapp [start|status|stop] [Pi 参数]");
+  const usage = "用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]\n      pi-webapp status | stop [--force]";
+  if (argument === "--help" || argument === "-h" || (argument === "start" && rest.length === 1 && ["--help", "-h"].includes(rest[0]))) { console.log(usage); return; }
+  if (argument && argument !== "start" && !argument.startsWith("-")) throw new Error(usage);
   await start(argument === "start" || !argument ? rest : [argument, ...rest]);
 }
 

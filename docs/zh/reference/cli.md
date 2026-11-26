@@ -5,7 +5,7 @@
 ## 用法
 
 ```text
-pi-webapp [start] [Pi 参数]
+pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]
 pi-webapp status
 pi-webapp stop [--force]
 pi-webapp --help
@@ -25,11 +25,17 @@ pi-webapp --help
 | 已在运行 | 打印已有的地址并打开浏览器。当前目录**不会**被添加。 |
 | 另一次启动正在进行 | 打印 `pi-webapp 正在启动`。 |
 
-任何不是 `start`、`status` 或 `stop` 的参数都会原样传给 Pi，例如 `pi --help` 列出的选项。其中三个会被拒绝，因为服务需要 Pi 的 RPC 模式：`--mode`、`--print` 和 `-p`（`后台启动不支持覆盖 Pi 的运行模式`）。
+其他参数会原样传给 Pi，例如 `pi --help` 列出的选项。其中三个会被拒绝，因为服务需要 Pi 的 RPC 模式：`--mode`、`--print` 和 `-p`（`后台启动不支持覆盖 Pi 的运行模式`）。
 
 第一个词是未知的、又不以 `-` 开头，比如 `pi-webapp foo`，会打印用法行并以 `1` 退出。
 
 **浏览器什么时候打开。** 成功启动之后以及重新打开时，启动器会在你的默认浏览器里打开这个地址，除非出现下面任意一种情况：设置了 `PI_WEBAPP_AUTO_OPEN=0`；你在 SSH 会话里（`SSH_CONNECTION`、`SSH_TTY` 或 `SSH_CLIENT`）；你在没有 `DISPLAY` 或 `WAYLAND_DISPLAY` 的 Linux 上；或者它运行在桌面应用内部。这时请自己打开打印出来的地址。
+
+### 固定端口与 Docker
+
+默认只监听 `127.0.0.1`，端口由系统分配。`pi-webapp --port 3000` 会继续只监听本机，但指定端口 3000。如果端口无效或无法绑定，命令报错退出，不会换用其他端口。要更改已运行服务的监听配置，请先停止服务。
+
+在 Docker 宿主机只向本地发布端口，例如 `docker run -p 127.0.0.1:8080:3000 …`。在运行中的容器内执行 `pi-webapp --host 0.0.0.0 --port 3000`。启动器会在后台启动服务后退出，不要把它设为容器唯一的前台进程。在宿主机浏览器访问 `http://127.0.0.1:8080`，并保留启动地址中的 `/#<token>`。该模式仅支持本地 HTTP 访问，不用于公网或局域网托管。不要分享令牌，持有它即可操作 Pi 会话。
 
 ## `pi-webapp status`
 
@@ -60,7 +66,8 @@ pi-webapp 已停止
 打印用法行（`-h` 同样有效）：
 
 ```text
-用法：pi-webapp [start|status|stop [--force]] [Pi 参数]
+用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]
+      pi-webapp status | stop [--force]
 ```
 
 ## 消息一览 {#messages}
@@ -96,7 +103,7 @@ pi-webapp 已停止
 | `pi-webapp: 后台进程退出（代码 n）。日志：<路径>` / `Pi 提前退出（代码 n）。日志：<路径>` | 服务或 Pi 在启动期间退出了。请阅读日志。 |
 | `pi-webapp: 新版启动失败，正在恢复旧版服务` | 更新之后新版本没有启动，正在恢复旧版本。 |
 | `pi-webapp: 旧版恢复失败。日志：<路径>` | 恢复旧版本也失败了。 |
-| `用法：pi-webapp [start\|status\|stop [--force]] [Pi 参数]` | 用法说明。 |
+| `pi-webapp: 端口 n 已被占用（EADDRINUSE）` | 指定的端口已被其他进程占用。 |
 
 ## 源码目录里的脚本
 

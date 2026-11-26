@@ -39,6 +39,7 @@ import { localize as t, useLocale } from "../../../web/src/ui/locale/preference.
 import { randomUUID } from "./random-uuid.ts";
 import { useConversationScroll } from "./use-conversation-scroll.ts";
 import { parseModelError } from "./model-error.ts";
+import { subagentNoticeText } from "./subagent-notice.ts";
 import "./pi-conversation.css";
 
 /** Where the composer floats while the conversation is hidden behind the workspace panel. */
@@ -105,6 +106,9 @@ const PiToolRow = memo(function PiToolRow({ block, result, running, cwd, onInspe
 
 function PiMessage({ message, results, loadImage, running = false, onInspect, cwd }: { message: ViewMessage; results: Map<string, ViewMessage>; loadImage: Props["onLoadImage"]; running?: boolean; onInspect?: (id: string) => void; cwd?: string }) {
   if (message.role === "tool" && message.toolCallId && results.has(message.toolCallId)) return null;
+  if (message.role === "notice" && message.subagentNotice) {
+    return <div className="pi-subagent-notice" data-message-role="notice">{subagentNoticeText(message.subagentNotice)}</div>;
+  }
   if (message.role === "user") {
     const originalText = message.blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
     const parsed = displayUserMessage(originalText);
