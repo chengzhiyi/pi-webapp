@@ -877,7 +877,13 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           host.deleteSession = shared.lifecycle.wrap(host.deleteSession!);
           host.newSession = shared.lifecycle.wrap(host.newSession);
           host.updateConfig = shared.lifecycle.wrap(host.updateConfig);
-          shared.bridge = await startBridge(host, webRoot, shared.telemetry);
+          try {
+            shared.bridge = await startBridge(host, webRoot, shared.telemetry);
+          } catch (cause) {
+            // Pi RPC can acknowledge the prompt even when the /web handler fails.
+            if (process.env.PI_WEBAPP_LAUNCHER_NONCE) ctx.ui.notify(`pi-webapp-start-error: ${cause instanceof Error ? cause.message : String(cause)}`, "error");
+            throw cause;
+          }
         }
         if (shared.stopPluginWatch === null && process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS) {
           const watchers: FSWatcher[] = [];

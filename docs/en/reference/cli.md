@@ -5,7 +5,7 @@ This page is the reference for the `pi-webapp` command, its exit behavior and ev
 ## Synopsis
 
 ```text
-pi-webapp [start] [Pi arguments]
+pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi arguments]
 pi-webapp status
 pi-webapp stop [--force]
 pi-webapp --help
@@ -25,11 +25,17 @@ Starts the service, or reopens it if it is already running.
 | Already running | Prints the existing address and opens your browser. The current directory is **not** added. |
 | Another start in progress | Prints `pi-webapp 正在启动` ("starting"). |
 
-Any argument that isn't `start`, `status` or `stop` is passed to Pi unchanged, for example flags listed by `pi --help`. Three are refused because the service needs Pi's RPC mode: `--mode`, `--print` and `-p` (`后台启动不支持覆盖 Pi 的运行模式`: "background start can't override Pi's run mode").
+Other arguments are passed to Pi unchanged, for example flags listed by `pi --help`. Three are refused because the service needs Pi's RPC mode: `--mode`, `--print` and `-p` (`后台启动不支持覆盖 Pi 的运行模式`: "background start can't override Pi's run mode").
 
 An unknown first word that doesn't start with `-`, such as `pi-webapp foo`, prints the usage line and exits with `1`.
 
 **When the browser opens.** After a successful start, and when reopening, the launcher opens the address in your default browser unless one of these applies: `PI_WEBAPP_AUTO_OPEN=0` is set, you are in an SSH session (`SSH_CONNECTION`, `SSH_TTY` or `SSH_CLIENT`), you are on Linux without `DISPLAY` or `WAYLAND_DISPLAY`, or it runs inside the desktop app. Open the printed address yourself then.
+
+### Fixed ports and Docker
+
+By default the service listens on `127.0.0.1` and the OS assigns a free port. `pi-webapp --port 3000` keeps the loopback binding but requests port 3000. If the port is invalid or cannot be bound, the command fails without choosing another port. To change an already running service's binding, stop it first.
+
+Publish the port on the Docker host's loopback interface, for example `docker run -p 127.0.0.1:8080:3000 …`. In the running container, use `pi-webapp --host 0.0.0.0 --port 3000`. The launcher starts a background service and exits, so don't use it as the container's only foreground process. Use the printed URL's `/#<token>` with `http://127.0.0.1:8080` in a browser on the Docker host. This mode supports local HTTP access, not public or LAN hosting. Keep the token private; it grants control of the Pi session.
 
 ## `pi-webapp status`
 
@@ -60,7 +66,8 @@ If nothing is running, it prints `pi-webapp 未运行` and exits `0`.
 Prints the usage line (`-h` works too):
 
 ```text
-用法：pi-webapp [start|status|stop [--force]] [Pi 参数]
+用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]
+      pi-webapp status | stop [--force]
 ```
 
 ## Messages {#messages}
@@ -96,7 +103,7 @@ The launcher prints Chinese only. This table translates what you may see.
 | `pi-webapp: 后台进程退出（代码 n）。日志：<path>` / `Pi 提前退出（代码 n）。日志：<path>` | The service or Pi exited during startup. Read the log. |
 | `pi-webapp: 新版启动失败，正在恢复旧版服务` | After an update, the new version didn't start; the old one is being restored. |
 | `pi-webapp: 旧版恢复失败。日志：<path>` | Restoring the old version also failed. |
-| `用法：pi-webapp [start\|status\|stop [--force]] [Pi 参数]` | Usage. |
+| `pi-webapp: 端口 n 已被占用（EADDRINUSE）` | The requested port is already in use. |
 
 ## Source-checkout scripts
 
