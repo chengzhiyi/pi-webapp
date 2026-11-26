@@ -22,6 +22,9 @@ function message(value: unknown): value is ViewMessage {
       && string(block.text) && optionalStrings(block, ["toolName", "toolCallId"]))(value.blocks)
     && optionalStrings(value, ["toolName", "toolCallId", "model", "error"])
     && optional(value, "isError", boolean)
+    && optional(value, "subagentNotice", notice => value.role === "notice" && record(notice)
+      && ["completed", "failed", "cancelled", "unknown"].includes(notice.status as string)
+      && optional(notice, "description", string))
     && optional(value, "usage", usage => record(usage)
       && ["input", "output", "cacheRead", "cacheWrite", "totalTokens", "cost"].every(key => number(usage[key]))
       && optional(usage, "reasoning", number));

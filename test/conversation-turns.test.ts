@@ -20,6 +20,33 @@ test("projects Pi calls, results, and reported assistant usage", () => {
   assert.equal(result?.toolCallId, "call-1");
 });
 
+test("projects subagent completion from structured details without the model-facing envelope", () => {
+  const entry = { type: "custom_message", customType: "subagent-notification", id: "notice", timestamp: "2026-01-01T00:00:00Z", parentId: null,
+    display: true, content: "<task-notification><output-file>/tmp/subagent.log</output-file></task-notification>",
+    details: { status: "completed", description: "Inspect\n  browser integration", resultPreview: "**Reuse the workbench.**" },
+  } as const;
+  assert.deepEqual(projectEntry(entry), {
+    id: entry.id, role: "notice", timestamp: entry.timestamp,
+    blocks: [{ kind: "text", text: "**Reuse the workbench.**" }],
+    subagentNotice: { status: "completed", description: "Inspect browser integration" },
+  });
+  assert.deepEqual(projectEntry({ ...entry, details: { status: "failed", resultPreview: "" } })?.subagentNotice, { status: "failed" });
+  assert.deepEqual(projectEntry({ ...entry, details: { status: "cancelled", resultPreview: "" } })?.blocks, []);
+  assert.equal(projectEntry({ ...entry, display: false }), null);
+});
+
+test("older subagent notices retain trace details and other notices keep their normal text", () => {
+  const entry = { type: "custom_message", customType: "subagent-notification", id: "notice", timestamp: "2026-01-01T00:00:00Z", parentId: null,
+    display: true, content: "<task-notification>Legacy notice</task-notification>",
+  } as const;
+  const legacy = projectEntry(entry);
+  assert.deepEqual(legacy?.subagentNotice, { status: "unknown" });
+  assert.deepEqual(legacy?.blocks, [{ kind: "text", text: entry.content }]);
+  const other = projectEntry({ ...entry, customType: "other-extension", content: "**Notice**" });
+  assert.equal(other?.subagentNotice, undefined);
+  assert.deepEqual(other?.blocks, [{ kind: "text", text: "**Notice**" }]);
+});
+
 test("preserves a failed assistant response even when it has no text or tokens", () => {
   const failed = projectEntry({ id: "failed", type: "message", timestamp: "2026-01-01T00:00:00Z", parentId: null,
     message: { role: "assistant", timestamp: 0, content: [], api: "openai-codex-responses", provider: "openai-codex", model: "gpt-5.5",
