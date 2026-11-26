@@ -126,10 +126,17 @@ async function readAttachment(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function listen(server: Server, requestedPort = 0): Promise<number> {
+// Docker can publish the container port as a different host port. Accept the
+// browser's loopback authority, not an arbitrary Host or a forwarded header.
+function publishedLoopbackOrigin(authority: string | undefined): string | undefined {
+  if (!authority || !/^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i.test(authority)) return undefined;
+  try { return new URL(`http://${authority}`).origin; } catch { return undefined; }
+}
+
+async function listen(server: Server, requestedPort: number, listenHost: string): Promise<number> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(requestedPort, "127.0.0.1", () => {
+    server.listen(requestedPort, listenHost, () => {
       server.off("error", reject);
       resolve();
     });
@@ -155,6 +162,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const attachments = new Map<string, UploadedAttachment>();
   const logins = new ProviderLoginController((cause, context) => telemetry.capture(cause, context));
   const remember = (session: SessionView) => telemetry.setState({ nodeVersion: process.version, platform: process.platform, session: telemetry.session(session.sessionId), idle: session.idle, model: session.model, thinkingLevel: session.thinkingLevel, messageCount: session.messages.length });
+  const listenHost = process.env.PI_WEBAPP_LISTEN_HOST === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
   let origin = "";
   let restarting = false;
   let preparingUpdate = false;
@@ -186,6 +194,9 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       if (!path.startsWith("/api/telemetry/")) telemetry.breadcrumb("request", { ...correlation, route: path, method: req.method, status: res.statusCode, durationMs: Math.round(performance.now() - started) });
     });
     try {
+      const browserOrigin = listenHost === "0.0.0.0" ? publishedLoopbackOrigin(req.headers.host) : origin;
+      if (browserOrigin === undefined) { json(res, 403, { error: "主机地址不匹配" }); return; }
+      const originMatches = req.headers.origin === undefined || req.headers.origin === browserOrigin;
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Referrer-Policy", "no-referrer");
       res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; style-src 'self' 'nonce-${styleNonce}'; style-src-attr 'unsafe-inline'; font-src 'self' data:; connect-src 'self'${telemetry.config.browser.dsn ? ` ${new URL(telemetry.config.browser.dsn).origin}` : ""}; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`);
@@ -241,7 +252,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         return;
       }
       if (req.method === "POST" && HOSTED_API_PATHS.includes(path)) {
-        if (req.headers.origin !== undefined && req.headers.origin !== origin) { json(res, 403, { error: "来源不匹配" }); return; }
+        if (!originMatches) { json(res, 403, { error: "来源不匹配" }); return; }
         if (!req.headers["content-type"]?.startsWith("application/json")) { json(res, 415, { error: "需要 JSON 请求" }); return; }
         let body: unknown;
         try { body = await readJson(req, 2 * 1024 * 1024); }
@@ -280,7 +291,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         return;
       }
       if (req.method === "POST" && path === "/api/attachment") {
-        if (req.headers.origin !== undefined && req.headers.origin !== origin) { json(res, 403, { error: "来源不匹配" }); return; }
+        if (!originMatches) { json(res, 403, { error: "来源不匹配" }); return; }
         const url = new URL(req.url ?? path, origin);
         const sessionId = url.searchParams.get("sessionId");
         const name = url.searchParams.get("name");
@@ -370,7 +381,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         return;
       }
       if (req.method === "POST" && [...pluginRegistry.routes, "/api/desktop/handoff", "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/session/rename", "/api/session/delete", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
-        if (req.headers.origin !== undefined && req.headers.origin !== origin) {
+        if (!originMatches) {
           json(res, 403, { error: "来源不匹配" });
           return;
         }
@@ -701,11 +712,20 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       else { telemetry.capture(cause, { ...correlation, route: path, stage: "http_stream" }); res.end(); }
     }
   });
-  const requestedPort = Number(process.env.PI_WEBAPP_RESTART_PORT);
+  const validPort = (port: number) => Number.isInteger(port) && port >= 1 && port <= 65535;
+  const fixedPort = Number(process.env.PI_WEBAPP_LISTEN_PORT);
+  const restartPort = Number(process.env.PI_WEBAPP_RESTART_PORT);
+  const requestedPort = validPort(fixedPort) ? fixedPort : fixedToken === tokenText && validPort(restartPort) ? restartPort : 0;
   let port: number;
-  try { port = await listen(server, Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort < 65536 && fixedToken === tokenText ? requestedPort : 0); }
-  catch (cause) { telemetry.capture(cause, { stage: "listen" }); await telemetry.close(); throw cause; }
-  origin = `http://127.0.0.1:${port}`;
+  try { port = await listen(server, requestedPort, listenHost); }
+  catch (cause) {
+    telemetry.capture(cause, { stage: "listen" });
+    await telemetry.close();
+    const code = (cause as NodeJS.ErrnoException)?.code;
+    if (code === "EADDRINUSE") throw new Error(`端口 ${requestedPort} 已被占用（EADDRINUSE）`, { cause });
+    throw new Error(`无法监听 ${listenHost}:${requestedPort}：${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+  }
+  origin = new URL(`http://127.0.0.1:${port}`).origin;
   return {
     protocolVersion: 7,
     buildId,

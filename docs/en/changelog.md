@@ -8,6 +8,7 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 
 ### Improvements and fixes
 
+- Start `pi-webapp` with `--port` to use a fixed listening port, and opt in to `--host 0.0.0.0` for local Docker port mappings. See [Fixed ports and Docker](./reference/cli#fixed-ports-and-docker).
 - **Open design files in OpenPencil.** **File → Open…** (⌘/Ctrl+O), or dropping a file onto the editor, opens a Figma (`.fig`), FigJam (`.jam`), Pencil (`.pen`) or draw.io (`.drawio`) file from your computer as a new design, up to 32 MB. Before, OpenPencil answered that this pi-webapp version couldn't open files yet. See [Open a file from your computer](./design#open-files).
 - The **Plugins** page is quieter. Unsaved drafts left by closed plugin views are a single line below the list, not a banner above it, when they block nothing. The warning that does block updates and uninstalls is unchanged.
 - When the desktop app can't connect to an existing service, it now says whether the service timed out or couldn't be reached, shows which one it is (version, how it was started, process ID, working directory), and offers its exact stop command to copy. This arrives with the next desktop build. See [Desktop app](./desktop#cannot-connect).
