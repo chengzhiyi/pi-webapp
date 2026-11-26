@@ -11,11 +11,13 @@ import { configureLocalExport } from "./downloads.mjs";
 import { confirmDesktopQuit } from "./quit.mjs";
 import { showContextMenu } from "./context-menu.mjs";
 import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
+import { ExternalLinkPreferences } from "./external-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
 const appName = release.productName;
+const linkPreferences = new ExternalLinkPreferences(join(app.getPath("userData"), "external-links.json"));
 // Keep the pre-rename Electron profile/instance lock, but respect isolated test profiles.
 if (!app.commandLine.hasSwitch("user-data-dir")) {
   const profile = join(app.getPath("appData"), "Pi Webapp");
@@ -78,13 +80,20 @@ async function openExternal(value) {
   const url = externalAddress(value);
   if (!url) return; // Never dispatch file:, javascript:, shell:, or custom OS protocols.
   if (backendUrl && new URL(url).origin === new URL(backendUrl).origin) return;
-  if (!isDocsAddress(url)) {
+  if (!isDocsAddress(url) && !linkPreferences.always) {
     const answer = await dialog.showMessageBox({ type: "question", title: t("在浏览器中打开链接？", "Open link in browser?"),
-      message: t("此链接将交给系统默认浏览器。", "This link will open in your default browser."), detail: url, buttons: [t("取消", "Cancel"), t("打开浏览器", "Open Browser")],
+      message: t("此链接将交给系统默认浏览器。", "This link will open in your default browser."), detail: url,
+      buttons: [t("取消", "Cancel"), t("打开浏览器", "Open Browser"), t("始终在浏览器中打开", "Always Open in Browser")],
       defaultId: 0, cancelId: 0, noLink: true });
-    if (answer.response !== 1) return;
+    if (answer.response === 2) await setAlwaysOpenExternal(true);
+    if (answer.response !== 1 && answer.response !== 2) return;
   }
   await openInBrowser(url);
+}
+
+async function setAlwaysOpenExternal(value) {
+  try { await linkPreferences.setAlways(value); installMenu(); }
+  catch (error) { dialog.showErrorBox(t("无法保存浏览器偏好", "Could not save browser preference"), error.message); }
 }
 
 async function openInBrowser(url) {
@@ -180,6 +189,8 @@ function installMenu() {
       { label: t("检查桌面更新…", "Check for Desktop Updates…"), click: () => { if (!startup && !handingOff) void updater?.run(); } },
       { label: t("清理升级状态并恢复内置版本…", "Reset Update State and Use Bundled Version…"), click: () => void requestUpgradeReset() },
       { label: t("取消桌面更新下载", "Cancel Desktop Update Download"), click: () => updater?.cancelDownload() },
+      { label: t("打开外部链接前询问", "Ask Before Opening External Links"), type: "checkbox", checked: !linkPreferences.always,
+        click: item => { void setAlwaysOpenExternal(!item.checked); } },
       { type: "separator" }, { label: t("退出…", "Quit…"), accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
     ] },
     { label: t("编辑", "Edit"), submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" },
@@ -218,6 +229,7 @@ else {
   session.defaultSession.on("will-download", (event, item, contents) => configureLocalExport(event, item, contents, {
     expectedContents: window?.webContents, backendUrl, downloadsPath: app.getPath("downloads"),
   }));
+  await linkPreferences.load();
   updater = new DesktopUpdater({ current: { version: app.getVersion(), build: release.buildNumber },
     packaged: app.isPackaged, appPath: resolve(dirname(app.getPath("exe")), "../.."), cachePath: app.getPath("temp"),
     autoUpdater, showMessageBox: options => quitting ? Promise.resolve({ response: 0 }) : dialog.showMessageBox(options),
