@@ -8,9 +8,10 @@ export interface GitPanelModel {
   history: GitHistory | null;
   selected: string | null;
   message: string;
+  coAuthor: boolean;
   branch: string;
   checkout: boolean;
   pending: boolean;
   outcome: { ok: boolean; reason: string } | null;
 }
-export const createGitPanelModel = (): GitPanelModel => ({ selection: null, view: "changes", history: null, selected: null, message: "", branch: "", checkout: true, pending: false, outcome: null });
+export const createGitPanelModel = (): GitPanelModel => ({ selection: null, view: "changes", history: null, selected: null, message: "", coAuthor: false, branch: "", checkout: true, pending: false, outcome: null });

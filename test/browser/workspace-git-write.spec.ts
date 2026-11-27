@@ -27,12 +27,13 @@ for (const width of [1440, 768, 390, 320]) test(`Git staging, commits and branch
   const stage = () => panel.getByRole("button", { name: "Stage main.txt", exact: true });
   const message = panel.getByRole("textbox", { name: "Commit message", exact: true });
   const commit = panel.getByRole("button", { name: "Commit", exact: true });
+  const coAuthor = panel.getByRole("checkbox", { name: "Add pi-webapp as co-author", exact: true });
   const openBranches = async () => { await panel.getByRole("button", { name: "Manage branches", exact: true }).click(); await expect(panel.getByRole("dialog", { name: "Manage branches", exact: true })).toBeVisible(); };
   const newBranch = async () => { await openBranches(); await panel.getByRole("dialog").getByRole("button", { name: "New branch", exact: true }).click(); };
   const tab = () => panel.getByRole("tab").filter({ hasText: /^Git$/ });
   try {
     await page.goto(bridge.url); await page.getByRole("button", { name: "Open right sidebar", exact: true }).click(); await panel.getByRole("button", { name: "Git changes", exact: true }).click();
-    await expect(commit).toBeDisabled(); await expect(stage()).toBeEnabled();
+    await expect(commit).toBeDisabled(); await expect(coAuthor).not.toBeChecked(); await expect(stage()).toBeEnabled();
     busy = [join(cwd, "app")]; await refresh(); await expect(stage()).toBeDisabled();
     await expect(panel.getByText("A chat sharing this working tree is running.", { exact: false })).toBeVisible(); busy = []; await refresh();
     await expect(stage()).toBeEnabled(); await stage().focus(); await stage().press("Enter");
@@ -52,9 +53,10 @@ for (const width of [1440, 768, 390, 320]) test(`Git staging, commits and branch
     }
     await page.screenshot({ path: testInfo.outputPath(`git-write-${width}.png`) });
     // Old expected states are rejected, while the commit draft survives.
-    await writeFile(join(cwd, "main.txt"), "working\n"); await commit.click();
-    await expect(panel.getByText("Repository changed.", { exact: false })).toBeVisible(); await expect(message).toHaveValue(/Staged from Git panel/);
-    await expect(commit).toBeEnabled(); await commit.click(); await expect(panel.getByText("Commit created.", { exact: true })).toBeVisible(); await expect(message).toHaveValue("");
+    await coAuthor.check(); await writeFile(join(cwd, "main.txt"), "working\n"); await commit.click();
+    await expect(panel.getByText("Repository changed.", { exact: false })).toBeVisible(); await expect(message).toHaveValue(/Staged from Git panel/); await expect(coAuthor).toBeChecked();
+    await expect(commit).toBeEnabled(); await commit.click(); await expect(panel.getByText("Commit created.", { exact: true })).toBeVisible(); await expect(message).toHaveValue(""); await expect(coAuthor).not.toBeChecked();
+    expect(await git("log", "-1", "--format=%B")).toBe("Staged from Git panel\n\nCommit body <script>literal</script>\n\nCo-authored-by: pi-webapp <pi-webapp@emath.top>");
     expect(await git("show", "HEAD:main.txt")).toBe("staged"); expect(await readFile(join(cwd, "main.txt"), "utf8")).toBe("working\n");
     await newBranch();
     const create = panel.getByRole("form", { name: "Create branch", exact: true });
@@ -64,6 +66,7 @@ for (const width of [1440, 768, 390, 320]) test(`Git staging, commits and branch
     await checkout.uncheck(); await create.getByRole("button", { name: "Create branch", exact: true }).click(); await expect(panel.getByText("Branch created.", { exact: true })).toBeVisible();
     expect(await git("branch", "--show-current")).toBe("main");
     await expect(stage()).toBeEnabled(); await stage().click(); await message.fill("Finish working content"); await expect(commit).toBeEnabled(); await message.press("Control+Enter"); await expect(panel.getByText("Working tree clean. No uncommitted changes.", { exact: true })).toBeVisible();
+    expect(await git("log", "-1", "--format=%B")).toBe("Finish working content");
     await openBranches();
     const choose = panel.getByRole("button", { name: "Switch to branch: feature/panel", exact: true });
     await expect(choose).toBeEnabled(); await choose.click(); await expect(panel.getByText("Branch switched.", { exact: true })).toBeVisible();

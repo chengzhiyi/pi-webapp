@@ -1,4 +1,4 @@
-import type { GitControlState, GitWriteAction, GitWriteResult, GitCommitDetail, GitCommitDiff, GitDiffArea, GitHistory, WorkspaceGitDiff, WorkspaceGitStatus } from "../contract/workspace-git.ts";
+import type { GitControlState, GitWriteAction, GitWriteOptions, GitWriteResult, GitCommitDetail, GitCommitDiff, GitDiffArea, GitHistory, WorkspaceGitDiff, WorkspaceGitStatus } from "../contract/workspace-git.ts";
 import { accessToken } from "../../../../host/client/access-token.ts";
 import { bridgeFetch, bridgeJson } from "../../../../host/client/telemetry-fetch.ts";
 
@@ -11,7 +11,7 @@ async function read<T>(operation: string, sessionId: string, input: object, sign
 
 export const workspaceGitApi = {
   control: (sessionId: string, signal: AbortSignal) => read<GitControlState>("control", sessionId, {}, signal),
-  write: (sessionId: string, input: { action: GitWriteAction; expected: string; path?: string; message?: string; branch?: string; checkout?: boolean }) => read<GitWriteResult>("write", sessionId, input),
+  write: (sessionId: string, input: GitWriteOptions & { action: GitWriteAction; expected: string }) => read<GitWriteResult>("write", sessionId, input),
   status: (sessionId: string, signal: AbortSignal) => read<WorkspaceGitStatus>("status", sessionId, {}, signal),
   diff: (sessionId: string, path: string, area: GitDiffArea, signal: AbortSignal) => read<WorkspaceGitDiff>("diff", sessionId, { path, area }, signal),
   history: (sessionId: string, cursor: string | undefined, signal: AbortSignal) => read<GitHistory>("history", sessionId, { cursor }, signal),

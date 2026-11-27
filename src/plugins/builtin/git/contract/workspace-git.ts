@@ -58,6 +58,7 @@ export interface GitCommitDetail extends GitCommitSummary {
 export type GitCommitDiff = { hash: string; path: string; parentIndex: number; parentHash: string | null } & GitPatch;
 
 export type GitWriteAction = "stage" | "unstage" | "commit" | "create-branch" | "switch-branch";
+export interface GitWriteOptions { path?: string; message?: string; branch?: string; checkout?: boolean; coAuthor?: boolean }
 export type GitWriteReason = "state_changed" | "busy" | "agent_busy" | "session_changed" | "root_required" | "operation_in_progress" | "index_locked" | "too_many_changes" | "dirty_worktree" | "nothing_staged" | "identity_missing" | "invalid_branch" | "branch_exists" | "branch_in_use" | "no_commits" | "invalid_path" | "invalid_message" | "git_failed" | "outcome_unknown";
 export interface GitControlState {
   kind: WorkspaceGitStatus["kind"];

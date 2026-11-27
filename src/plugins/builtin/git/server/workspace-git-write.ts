@@ -6,6 +6,17 @@ import { git, gitRepository, validateGitPath, WorkspaceGitError, type GitReposit
 import { workspaceGitStatus } from "./workspace-git.ts";
 
 const leases = new Set<string>();
+const coAuthorTrailer = "Co-authored-by: pi-webapp <pi-webapp@emath.top>";
+const isPiCoAuthor = /^Co-authored-by:\s*[^\n]*<pi-webapp@emath\.top>\s*$/i;
+
+async function addPiCoAuthor(cwd: string, message: string) {
+  const trailers = await git(cwd, ["-c", "trailer.separators=:", "interpret-trailers", "--parse", "--no-divider"], undefined, { input: message });
+  if (trailers.split("\n").some(line => isPiCoAuthor.test(line))) return message;
+  // Preserve the message and existing trailers, replacing only trailing blank lines.
+  const newline = message.includes("\r\n") ? "\r\n" : "\n";
+  const body = message.replace(/(?:\r?\n[^\S\r\n]*)+$/, "");
+  return `${body}${trailers ? newline : newline + newline}${coAuthorTrailer}${newline}`;
+}
 const fail = (reason: GitWriteReason, status = 409): never => { throw new WorkspaceGitError("Git 状态不允许此操作，请刷新后检查", status, reason); };
 
 async function commonDirectory(cwd: string) {
@@ -99,8 +110,10 @@ export async function workspaceGitWrite(cwd: string, input: Record<string, unkno
     } else if (action === "commit") {
       if (repository.scope) return fail("root_required", 400);
       if (typeof input.message !== "string" || !input.message.trim() || input.message.includes("\0") || Buffer.byteLength(input.message) > 8192) return fail("invalid_message", 400);
+      if (input.coAuthor !== undefined && typeof input.coAuthor !== "boolean") throw new WorkspaceGitError("Git 操作参数无效");
       if (!control.staged) return fail("nothing_staged", 400);
-      message = input.message; args = ["commit", "--file=-", "--cleanup=verbatim"];
+      message = input.coAuthor ? await addPiCoAuthor(repository.cwd, input.message) : input.message;
+      args = ["commit", "--file=-", "--cleanup=verbatim"];
     } else {
       if (!control.head) return fail("no_commits", 400);
       if (typeof input.branch !== "string" || !input.branch || input.branch.length > 256 || input.branch.startsWith("-") || input.branch.startsWith("refs/") || ["HEAD", "@"].includes(input.branch) || /[\0\r\n]|@\{/.test(input.branch)) return fail("invalid_branch", 400);
