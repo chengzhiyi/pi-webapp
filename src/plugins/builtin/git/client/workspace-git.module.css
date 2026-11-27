@@ -77,7 +77,8 @@
 /* Width follows the Dock pane, including narrow panes on a wide desktop. */
 .panel { container-type: inline-size; }
 .reviewLayout { display: grid; grid-template-rows: minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-.reviewLayout[data-preview='true'] { grid-template-rows: minmax(64px, 30%) minmax(0, 1fr); }
+/* In a short pane, let the file list yield space rather than clipping the diff toolbar. */
+.reviewLayout[data-preview='true'] { grid-template-rows: minmax(min(64px, 50%), 30%) minmax(0, 1fr); }
 .inlinePreview { min-width: 0; min-height: 0; overflow: hidden; border-top: .5px solid var(--dsw-alias-border-l3); }
 .change[aria-pressed='true'] { background: var(--dsw-alias-interactive-bg-hover); box-shadow: inset 2px 0 var(--dsw-alias-label-primary); }
 .inlineDiffToolbar { display: flex; align-items: center; flex: none; gap: 4px; min-width: 0; height: 38px; padding: 0 8px; border-bottom: .5px solid var(--dsw-alias-border-l3); }
