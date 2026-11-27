@@ -8,6 +8,8 @@ pi-webapp 有两种发布方式。npm 包（也就是 Web 启动器，以及桌�
 
 ### 改进与修复
 
+- 桌面工作台新增 **网页预览**，可以直接打开网站、预览本地开发页面和使用 Google 搜索。随下一个桌面构建提供，详见[网页预览](./desktop#web-preview)。
+
 - 启动 `pi-webapp` 时可用 `--port` 指定固定端口，也可用 `--host 0.0.0.0` 配合 Docker 本地端口映射。详见[固定端口与 Docker](./reference/cli#固定端口与-docker)。
 - **在 OpenPencil 里打开设计文件。** **文件 → 打开…**（⌘/Ctrl+O），或把文件拖到编辑器上，可以把电脑里的 Figma（`.fig`）、FigJam（`.jam`）、Pencil（`.pen`）或 draw.io（`.drawio`）文件打开成一个新的设计稿，单个文件最大 32 MB。以前 OpenPencil 会提示当前 pi-webapp 版本还不支持打开文件。详见[打开电脑里的文件](./design#open-files)。
 - **插件** 页面更安静了。已关闭的插件视图留下的未保存草稿，在不影响任何操作时只在列表下方显示一行，不再是列表上方的横幅。会阻塞更新和卸载的那条警告保持不变。

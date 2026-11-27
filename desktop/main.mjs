@@ -12,6 +12,7 @@ import { confirmDesktopQuit } from "./quit.mjs";
 import { showContextMenu } from "./context-menu.mjs";
 import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
+import { installWebPreviewIpc, WebPreview } from "./web-preview.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -25,6 +26,7 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
 app.setName(appName);
 const locked = app.requestSingleInstanceLock();
 let window;
+let webPreview;
 let backend;
 let backendUrl;
 let updater;
@@ -41,7 +43,9 @@ function showWindow() {
   window = new BrowserWindow({ width: 1360, height: 900, minWidth: 720, minHeight: 480,
     title: appName, icon: iconPath, backgroundColor: "#faf9f6", show: false,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true,
-      webSecurity: true, allowRunningInsecureContent: false, spellcheck: false } });
+      webSecurity: true, allowRunningInsecureContent: false, spellcheck: false,
+      preload: fileURLToPath(new URL("./web-preview-preload.cjs", import.meta.url)) } });
+  webPreview = new WebPreview(window, () => backendUrl, openInBrowser);
   // The shared Web document may retain its own branding; keep the native app title pi.
   window.on("page-title-updated", event => event.preventDefault());
   window.once("ready-to-show", () => window?.show());
@@ -65,8 +69,8 @@ function showWindow() {
   window.on("close", event => {
     if (!quitting) { event.preventDefault(); void requestQuit(); }
   });
-  window.on("closed", () => { window = null; });
-  // Load the existing same-origin page; no Node/preload privileges are exposed to it.
+  window.on("closed", () => { window = null; webPreview = null; });
+  // Load the existing same-origin page; only the narrow, sender-checked preview API is exposed.
   void window.loadURL(backendUrl).catch(() => {
     // Closing a loading window aborts navigation. A synchronous native alert
     // here would re-enter the macOS modal loop and block shutdown itself.
@@ -210,6 +214,7 @@ else {
   // Let the ESM entry finish evaluating before Electron emits ready.
   void app.whenReady().then(async () => {
   setDesktopLocale(app.getLocale());
+  installWebPreviewIpc(() => webPreview, () => backendUrl);
   // Packaged macOS uses the bundle's ICNS; development otherwise inherits Electron's Dock icon.
   if (!app.isPackaged && process.platform === "darwin") app.dock.setIcon(iconPath);
   // Device permissions remain denied; only current trusted local export blobs may download.

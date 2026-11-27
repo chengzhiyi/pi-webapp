@@ -78,6 +78,7 @@
     "desktop:prepare": "npm run build && node scripts/prepare-desktop.mjs",
     "desktop:start": "electron desktop",
     "desktop:smoke": "node scripts/smoke-desktop.mjs",
+    "desktop:smoke:web-preview": "node scripts/smoke-desktop-web-preview.mjs",
     "desktop:smoke:handoff": "node scripts/smoke-desktop-handoff.mjs",
     "desktop:smoke:legacy": "node scripts/smoke-desktop-legacy.mjs",
     "desktop:package": "node scripts/package-desktop.mjs",
