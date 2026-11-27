@@ -39,13 +39,23 @@ The staging directory is `.desktop/runtime/`:
 
 Electron's renderer has no Node integration. It loads the same loopback HTTP
 page as a browser, with sandboxing, context isolation, normal CSP, and the
-existing bearer-token authentication. Its preload exposes only the Web Preview
-controls, with sender checks in the main process. Previewed pages run in a
+existing bearer-token authentication. Its preload exposes narrow desktop controls,
+with sender checks in the main process. Previewed pages run in a
 separate, in-memory session without that bridge. They can load HTTP(S) resources
 and WebSockets, but the Pi backend port is reserved across hostnames and URL
 aliases. The preview uses Chromium's normal network and certificate checks;
 popups, downloads and permission requests are blocked. The Pi workbench's
 external HTTP(S) links still go to the default browser.
+
+On macOS and Windows, select a local workspace file or folder and use **Open**
+in the top-right toolbar. Its arrow lists available apps from the system's file
+associations and includes Finder or File Explorer. Choosing an app changes the
+button without launching it or changing the operating system's default; Pi
+remembers the choice by file extension, with a separate preference for folders.
+Some types and folders only offer the file manager. For files that action
+selects the file; for folders it opens the directory. Right-click and the
+workspace's sidebar menu remain available. These actions are not available in
+browser sessions or on Linux.
 
 After `npm run desktop:prepare`, run `npm run desktop:smoke:web-preview` on a
 machine with a GUI to exercise the preview in a real Electron window using a

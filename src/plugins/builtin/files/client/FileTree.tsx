@@ -1,4 +1,7 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+import { fileManagerLabel, getDesktopFileManager, showInFileManager } from "../../../../host/client/desktop-file-manager.ts";
+import { MenuSurface } from "../../../../../web/src/ui/shared/primitives/MenuSurface.tsx";
 import { FileTypeIcon } from "../../../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { IconFolderOpen16 } from "../../../../../web/src/ui/primitives/index.ts";
 import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
@@ -13,6 +16,8 @@ export interface TreeProps {
   revision: number;
   expanded: Set<string>;
   selected: string | undefined;
+  selectedDirectory?: string;
+  selectDirectory?(path: string): void;
   /** Denser rows and smaller icons, for the breadcrumb menu. */
   compact?: boolean;
   /** Git decoration; absent outside a repository. */
@@ -30,7 +35,46 @@ function FolderClosed({ size, className }: { size: number; className?: string })
   </svg>;
 }
 
-function DirectoryLevel({ path, depth, tree }: { path: string; depth: number; tree: TreeProps }) {
+type FileMenuTarget = { anchor: HTMLElement; path: string; kind: "file" | "directory"; x: number; y: number };
+type ShowFileMenu = (target: FileMenuTarget) => void;
+
+function FileMenu({ target, label, onDismiss, onSelect }: {
+  target: FileMenuTarget; label: string; onDismiss(): void; onSelect(): void;
+}) {
+  const menu = useRef<HTMLDivElement>(null);
+  const action = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  useLayoutEffect(() => {
+    const surface = menu.current!;
+    setPosition({
+      left: Math.max(8, Math.min(target.x, window.innerWidth - surface.offsetWidth - 8)),
+      top: Math.max(8, Math.min(target.y, window.innerHeight - surface.offsetHeight - 8)),
+    });
+    action.current?.focus({ preventScroll: true });
+    const outside = (event: PointerEvent) => { if (!surface.contains(event.target as Node)) onDismiss(); };
+    const moved = () => { onDismiss(); target.anchor.focus({ preventScroll: true }); };
+    document.addEventListener("pointerdown", outside, true);
+    window.addEventListener("resize", moved);
+    window.addEventListener("scroll", moved, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("resize", moved);
+      window.removeEventListener("scroll", moved, true);
+    };
+  }, [target, onDismiss]);
+  const close = () => { onDismiss(); target.anchor.focus({ preventScroll: true }); };
+  return createPortal(<MenuSurface ref={menu} role="menu" aria-label={target.anchor.getAttribute("aria-label") ?? label}
+    data-file-tree-context-menu="" className={css.fileMenu} style={position} onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+      else if (event.key === "Tab") close();
+    }}>
+    <button ref={action} type="button" role="menuitem" className={css.fileMenuItem} onClick={() => { close(); onSelect(); }}>
+      <IconFolderOpen16 />{label}
+    </button>
+  </MenuSurface>, document.body);
+}
+
+function DirectoryLevel({ path, depth, tree, showMenu }: { path: string; depth: number; tree: TreeProps; showMenu?: ShowFileMenu }) {
   const [listing, setListing] = useState(() => tree.levels.get(path));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -60,14 +104,23 @@ function DirectoryLevel({ path, depth, tree }: { path: string; depth: number; tr
       const state = status.of(entry.path);
       return <li key={entry.path} role="treeitem" tabIndex={disabled ? -1 : 0} aria-label={entry.name} aria-level={depth}
         aria-expanded={directory ? expanded : undefined} aria-disabled={disabled || undefined}
+        aria-haspopup={showMenu && !disabled ? "menu" : undefined}
         aria-description={state && statusLabel(state, t)} data-git-status={state}
-        aria-selected={directory || disabled ? undefined : entry.path === tree.selected} data-files-path={entry.path}>
+        aria-selected={disabled ? undefined : directory ? (tree.selectDirectory ? entry.path === tree.selectedDirectory : undefined) : entry.path === tree.selected} data-files-path={entry.path}>
         <div className={css.row} style={{ paddingInlineStart: `${(tree.compact ? 8 : 10) + (depth - 1) * (tree.compact ? 12 : 14)}px` }}
           title={disabled ? t("此条目不可访问或位于工作区之外", "This entry is unavailable or outside the workspace") : entry.path}
+          onContextMenu={showMenu && !disabled ? event => {
+            event.preventDefault(); event.stopPropagation();
+            const anchor = event.currentTarget.parentElement!;
+            const { left, bottom } = event.currentTarget.getBoundingClientRect();
+            const atPointer = event.clientX !== 0 || event.clientY !== 0;
+            showMenu({ anchor, path: entry.path, kind: directory ? "directory" : "file",
+              x: atPointer ? event.clientX : left, y: atPointer ? event.clientY : bottom });
+          } : undefined}
           onClick={event => {
             if (disabled) return;
             event.currentTarget.parentElement?.focus();
-            if (directory) tree.toggle(entry.path); else tree.open(entry.path);
+            if (directory) { tree.toggle(entry.path); tree.selectDirectory?.(entry.path); } else tree.open(entry.path);
           }}>
           {/* The folder itself shows whether it is open; no separate disclosure arrow. */}
           {directory
@@ -76,7 +129,7 @@ function DirectoryLevel({ path, depth, tree }: { path: string; depth: number; tr
           <span className={css.name}>{entry.name}</span>
           {state && state !== "ignored" && <span className={css.statusDot} aria-hidden="true" />}
         </div>
-        {expanded && <ul role="group" className={css.level}><DirectoryLevel path={entry.path} depth={depth + 1} tree={tree} /></ul>}
+        {expanded && <ul role="group" className={css.level}><DirectoryLevel path={entry.path} depth={depth + 1} tree={tree} showMenu={showMenu} /></ul>}
       </li>;
     })}
     {listing?.truncated && <li role="none" className={css.state}>{t("条目太多，只显示前 1000 项。", "Too many entries. Showing the first 1,000.")}</li>}
@@ -85,13 +138,24 @@ function DirectoryLevel({ path, depth, tree }: { path: string; depth: number; tr
 
 /** One keyboard-navigable tree rooted at a workspace directory ("" is the workspace root). */
 export function FileTree({ root, label, ...tree }: TreeProps & { root: string; label: string }) {
-  const { toggle, open } = tree;
+  const { toggle, open, sessionId } = tree;
+  const bridge = getDesktopFileManager();
+  const [menu, setMenu] = useState<(FileMenuTarget & { sessionId: string; root: string }) | null>(null);
+  const dismiss = useRef(() => setMenu(null)).current;
+  const activeMenu = menu?.sessionId === sessionId && menu.root === root ? menu : null;
+  const showMenu: ShowFileMenu | undefined = bridge ? target => setMenu({ ...target, sessionId, root }) : undefined;
   const navigate = (event: KeyboardEvent<HTMLUListElement>) => {
     const row = event.target as HTMLElement;
     if (row.getAttribute("role") !== "treeitem" || row.getAttribute("aria-disabled") === "true") return;
     const path = row.dataset.filesPath!;
     const directory = row.hasAttribute("aria-expanded");
     const opened = row.getAttribute("aria-expanded") === "true";
+    if (showMenu && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+      event.preventDefault(); event.stopPropagation();
+      const { left, bottom } = row.firstElementChild!.getBoundingClientRect();
+      showMenu({ anchor: row, path, kind: directory ? "directory" : "file", x: left, y: bottom });
+      return;
+    }
     const rows = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="treeitem"]:not([aria-disabled="true"])')];
     const index = rows.indexOf(row);
     let focus: HTMLElement | undefined;
@@ -102,12 +166,16 @@ export function FileTree({ root, label, ...tree }: TreeProps & { root: string; l
       case "End": focus = rows.at(-1); break;
       case "ArrowRight": if (directory && !opened) toggle(path); else if (opened) focus = rows[index + 1]; break;
       case "ArrowLeft": if (opened) toggle(path); else focus = row.parentElement?.closest<HTMLElement>('[role="treeitem"]') ?? undefined; break;
-      case "Enter": case " ": if (directory) toggle(path); else open(path); break;
+      case "Enter": case " ": if (directory) { toggle(path); tree.selectDirectory?.(path); } else open(path); break;
       default: return;
     }
     event.preventDefault(); event.stopPropagation(); focus?.focus();
   };
-  return <ul role="tree" aria-label={label} className={css.tree} onKeyDown={navigate}>
-    <DirectoryLevel path={root} depth={1} tree={tree} />
-  </ul>;
+  return <>
+    <ul role="tree" aria-label={label} className={css.tree} onKeyDown={navigate}>
+      <DirectoryLevel path={root} depth={1} tree={tree} showMenu={showMenu} />
+    </ul>
+    {bridge && activeMenu && <FileMenu target={activeMenu} label={fileManagerLabel(bridge.platform, activeMenu.kind)}
+      onDismiss={dismiss} onSelect={() => { void showInFileManager(bridge, { sessionId, path: activeMenu.path, kind: activeMenu.kind }); }} />}
+  </>;
 }

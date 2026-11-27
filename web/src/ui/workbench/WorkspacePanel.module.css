@@ -1,4 +1,5 @@
 .body { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; color: var(--dsw-alias-label-primary); font-size: var(--dsh-content-font-size, 14px); }
+.body[hidden] { display: none; }
 /* DockKit's 38px tab strip + this row match the 76px conversation header. */
 .toolbar { display: flex; align-items: center; flex: none; gap: 8px; box-sizing: border-box; height: 38px; min-height: 38px; padding: 4px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l3); }
 .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); font-size: 12px; }
@@ -69,6 +70,27 @@
 .crumbCurrent { min-width: 0; overflow: hidden; padding: 3px 5px; color: var(--dsw-alias-label-primary); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 /* Portalled beside the app root, above floating panels (60) like the dock's tab menu. */
 .crumbMenu { position: fixed; z-index: 70; box-sizing: border-box; width: min(260px, calc(100vw - 16px)); border: 0.5px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 12px; outline: none; }
+.fileMenu { position: fixed; z-index: 1100; box-sizing: border-box; min-width: min(200px, calc(100vw - 16px)); max-width: calc(100vw - 16px); padding: 4px; border: 0.5px solid var(--dsw-alias-border-l2); }
+.fileMenuItem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 6px 8px; border: 0; border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
+.fileMenuItem svg { flex: none; }
+.fileMenuItem:hover, .fileMenuItem:focus-visible { background: var(--dsw-alias-interactive-bg-hover); outline: none; }
+.openWith { display: inline-flex; flex: none; align-items: stretch; height: 28px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+.openWithMain { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding-inline: 6px; color: inherit; white-space: nowrap; border-start-end-radius: 0; border-end-end-radius: 0; }
+.openWithMain:disabled { opacity: .5; cursor: default; }
+.openWithChevron { width: 24px; height: auto; padding: 3px; border-inline-start: 0.5px solid var(--dsw-alias-border-l2); border-start-start-radius: 0; border-end-start-radius: 0; }
+.openWithChevron[aria-expanded='true'] { background: var(--dsw-alias-interactive-bg-hover); }
+.openWithChevron svg { width: 12px; height: 12px; }
+.openWithIcon { width: 16px; height: 16px; flex: none; object-fit: contain; }
+.openWithInitial { display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-interactive-bg-hover); font-size: 10px; font-weight: 600; }
+.openWithMenu { width: min(252px, calc(100vw - 16px)); }
+.openWithMenuBody { max-height: min(360px, calc(100vh - 32px)); overflow: auto; }
+.openWithName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.openWithCheck, .openWithDefault, .openWithHint { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.openWithCheck { width: 12px; text-align: center; }
+.openWithHint { margin: 4px 8px; }
+.openWithSeparator { border-top: 0.5px solid var(--dsw-alias-border-l2); margin: 4px; }
+.body, .files { container-type: inline-size; }
+@container (max-width: 320px) { .openWithText { display: none; } }
 .crumbMenuScroll { overflow: auto; padding: 4px; }
 .crumbMenu .row { gap: 6px; min-height: 26px; padding-block: 2px; border-radius: var(--dsw-radius-sm); }
 .crumbMenu .name { font-size: 12px; }

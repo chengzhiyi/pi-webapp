@@ -1,4 +1,4 @@
-import { app, autoUpdater, BrowserWindow, clipboard, dialog, Menu, shell, session } from "electron";
+import { app, autoUpdater, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, session } from "electron";
 import { access, readFile } from "node:fs/promises";
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -13,6 +13,7 @@ import { showContextMenu } from "./context-menu.mjs";
 import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 import { installWebPreviewIpc, WebPreview } from "./web-preview.mjs";
+import { installFileManagerIpc } from "./file-manager.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -70,7 +71,7 @@ function showWindow() {
     if (!quitting) { event.preventDefault(); void requestQuit(); }
   });
   window.on("closed", () => { window = null; webPreview = null; });
-  // Load the existing same-origin page; only the narrow, sender-checked preview API is exposed.
+  // Load the existing same-origin page; native APIs are narrow and sender-checked.
   void window.loadURL(backendUrl).catch(() => {
     // Closing a loading window aborts navigation. A synchronous native alert
     // here would re-enter the macOS modal loop and block shutdown itself.
@@ -215,6 +216,8 @@ else {
   void app.whenReady().then(async () => {
   setDesktopLocale(app.getLocale());
   installWebPreviewIpc(() => webPreview, () => backendUrl);
+  installFileManagerIpc({ ipcMain, shell, getContents: () => window?.webContents,
+    getBackendUrl: () => quitting || handingOff || resetting ? undefined : backendUrl });
   // Packaged macOS uses the bundle's ICNS; development otherwise inherits Electron's Dock icon.
   if (!app.isPackaged && process.platform === "darwin") app.dock.setIcon(iconPath);
   // Device permissions remain denied; only current trusted local export blobs may download.
