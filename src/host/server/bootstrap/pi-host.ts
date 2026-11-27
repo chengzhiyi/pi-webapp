@@ -9,7 +9,8 @@ import { contentBlocks, projectSession, PAUSED_ENTRY, type ViewMessage } from ".
 import { WorkspaceRegistry, workspaceRegistryPath, workspaceDirectory, requireWorkspaceDirectory, WorkspaceUnavailableError } from "../workspaces/workspaces.ts";
 import { WorkspaceSessions } from "../sessions/workspace-sessions.ts";
 import { sessionsForWorkspace } from "../sessions/sessions-for-workspace.ts";
-import { moveSessionToTrash } from "../sessions/session-trash.ts";
+import { moveSessionToTrash, sessionTrashDirectory } from "../sessions/session-trash.ts";
+import { identifySubagentSessions, readSubagentMessages } from "../sessions/subagent-sessions.ts";
 import { buildResourceInventory } from "../plugins/config-inventory.ts";
 import { preferBrowserLogin, type LoginMethod } from "../models/provider-login.ts";
 import { addCustomProvider, type CustomProviderInput } from "../models/custom-provider.ts";
@@ -198,6 +199,7 @@ async function workspaceList(): Promise<WorkspaceListView> {
   if (tui && tuiPath) retained.push({ sessionId: tui.sessionId, cwd: tuiPath, path: null, name: tui.name, modified: tui.messages.at(-1)?.timestamp ?? new Date().toISOString(), idle: tui.idle,
     // A real terminal chat always stays reachable; only the background service's unseen startup chat may hide while empty.
     blank: !!process.env.PI_WEBAPP_LAUNCHER_NONCE && tui.idle && shared.tuiPrompts.length === 0 && !tui.messages.some((message) => message.role === "user") });
+  const subagents = await identifySubagentSessions(allSessions, sessionTrashDirectory(getAgentDir()), new Set(retained.filter((row) => !row.idle).map((row) => row.sessionId)));
   const sessions: WorkspaceSessionView[] = (await Promise.all(items.map(async (workspace) => {
     const saved = await sessionsForWorkspace(workspace.path, allSessions).catch((cause) => {
       if (cause instanceof WorkspaceUnavailableError) workspace.available = false;
@@ -215,7 +217,10 @@ async function workspaceList(): Promise<WorkspaceListView> {
     if (workspace.path === activePath && !rows.some((session) => session.id === active.sessionId)) {
       rows.unshift({ id: active.sessionId, workspaceId: workspace.id, path: null, name: active.name, modified: new Date().toISOString(), idle: active.idle });
     }
-    return rows;
+    return rows.map((row) => {
+      const subagent = subagents.get(row.id)?.view;
+      return subagent ? { ...row, subagent } : row;
+    });
   }))).flat();
   return { items, activeId, sessions };
 }
@@ -624,6 +629,15 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
               await shared.workspaces!.remove(id);
               await publishWorkspaces();
             },
+            async subagentHistory(workspaceId, id) {
+              const workspace = shared.workspaces?.get(workspaceId);
+              if (!workspace) return null;
+              const all = await SessionManager.listAll();
+              const saved = (await sessionsForWorkspace(workspace.path, all)).find((session) => session.id === id);
+              if (!saved) return null;
+              const evidence = (await identifySubagentSessions(all, sessionTrashDirectory(getAgentDir()))).get(id);
+              return evidence ? readSubagentMessages(saved.path, id, evidence) : null;
+            },
             async selectSession(workspaceId, id, path) {
               const workspace = shared.workspaces?.get(workspaceId);
               if (!workspace) throw new Error("工作区不存在");
@@ -638,8 +652,11 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
                 if (shared.workspaceSessions?.hasSession(workspace.path, id)) {
                   await shared.workspaceSessions.open(workspace.path, { sessionId: id });
                 } else {
-                  const saved = await sessionsForWorkspace(workspace.path);
+                  const all = await SessionManager.listAll();
+                  const saved = await sessionsForWorkspace(workspace.path, all);
                   if (!saved.some((item) => item.id === id && item.path === path)) throw new Error("会话不属于该工作区");
+                  const subagents = await identifySubagentSessions(all, sessionTrashDirectory(getAgentDir()));
+                  if (subagents.has(id)) throw new Error("子任务记录为只读");
                   await shared.workspaceSessions!.open(workspace.path, { sessionFile: path });
                 }
                 shared.selected = "sdk";

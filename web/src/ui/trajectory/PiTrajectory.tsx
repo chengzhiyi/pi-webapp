@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ViewMessage, ViewUsage } from "../../../../src/host/client/pi-bridge.ts";
 import { conversationTurns } from "../../../../src/host/client/conversation-turns.ts";
 import { PiMarkdown } from "../../../../src/host/client/PiMarkdown.tsx";
@@ -68,7 +68,7 @@ function makeRecords(messages: ViewMessage[]): TrajectoryRecord[] {
           id: `${message.id}-${blockIndex}`,
           ...(block.toolCallId || message.toolCallId ? { callId: block.toolCallId ?? message.toolCallId } : {}),
           kind,
-          label: kind === "tool" ? t("工具", "Tool") : message.role === "user" ? t("用户", "User") : t("助手", "Assistant"),
+          label: kind === "tool" ? t("工具", "Tool") : message.subagentInput === "dispatch" ? t("主 Agent 派发", "Parent agent dispatch") : message.subagentInput === "steering" ? t("主 Agent 补充指令", "Parent agent steering") : message.role === "user" ? t("用户", "User") : t("助手", "Assistant"),
           ...(kind === "tool" ? { toolName: block.kind === "toolCall" ? block.toolName || t("工具", "Tool") : message.toolName || t("工具", "Tool") } : {}),
           text: block.text,
           preview: block.kind === "toolCall" ? toolPreview(block.text) : compact(block.text),
@@ -91,7 +91,7 @@ function clampDetailsWidth(width: number, splitWidth: number): number {
 }
 
 /** Pi events displayed in the trajectory table, toolbar and timeline. */
-export function PiTrajectory({ messages, inspectCallId }: { messages: ViewMessage[]; inspectCallId: string | null }) {
+export function PiTrajectory({ messages, inspectCallId, renderCallAction }: { messages: ViewMessage[]; inspectCallId: string | null; renderCallAction?: (id: string) => ReactNode }) {
   const locale = useLocale();
   const records = useMemo(() => makeRecords(messages), [messages, locale]);
   const turnCount = records.at(-1)?.turn ?? 0;
@@ -192,6 +192,7 @@ export function PiTrajectory({ messages, inspectCallId }: { messages: ViewMessag
           }} />
         <div className={tableCss.detailsHeader}><span className={tableCss.detailsTitle}>{selected.kind === "tool" ? <span className={tableCss.requestDetailsDot} /> : <IconDatabaseOutline16 size={14} />}<span className={tableCss.requestDetailsName}>{selected.toolName ?? selected.label}</span><span className={tableCss.detailsLocation}>{t(`第 ${selected.turn} 轮`, `Turn ${selected.turn}`)} · #{selected.index}</span></span><button type="button" className={tableCss.close} aria-label={t("关闭详情", "Close details")} onClick={() => setSelectedId(null)}><IconCloseOutline16 /></button></div>
         <div className={tableCss.detailBody}>
+          {selected.callId && renderCallAction?.(selected.callId)}
           <dl className={tableCss.overview}><div><dt>{t("时间", "Time")}</dt><dd>{new Date(selected.timestamp).toLocaleString(t("zh-CN", "en-US"))}</dd></div>{selected.callId && <div><dt>{t("调用 ID", "Call ID")}</dt><dd>{selected.callId}</dd></div>}{selected.usage && <><div><dt>{t("输入", "Input")}</dt><dd>{metric(selected.usage.input)}</dd></div><div><dt>{t("缓存读取", "Cache read")}</dt><dd>{metric(selected.usage.cacheRead)}</dd></div><div><dt>{t("缓存写入", "Cache write")}</dt><dd>{metric(selected.usage.cacheWrite)}</dd></div><div><dt>{t("输出", "Output")}</dt><dd>{metric(selected.usage.output)}</dd></div></>}</dl>
           <div className={tableCss.overviewHeading}>{t("内容", "Content")}</div>{selected.kind === "tool" ? <pre className={tableCss.payload}>{selected.text}</pre> : <div className={tableCss.markdownPayload}><PiMarkdown text={selected.text} /></div>}
           {selected.result !== undefined && <><div className={tableCss.overviewHeading}>{t("结果", "Result")}</div><pre className={tableCss.payload}>{selected.result}</pre></>}

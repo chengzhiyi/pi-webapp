@@ -6,6 +6,8 @@ import { realpath } from "node:fs/promises";
 import { contentBlocks, projectEntry, projectPluginEntries, sessionTitle, sessionPaused, PAUSED_ENTRY, type SessionView, type ViewMessage } from "./view.ts";
 import { WebPluginCatalog } from "../plugins/web-plugins.ts";
 import { sessionsForWorkspace } from "./sessions-for-workspace.ts";
+import { identifySubagentSessions } from "./subagent-sessions.ts";
+import { sessionTrashDirectory } from "./session-trash.ts";
 import { requireWorkspaceDirectory } from "../workspaces/workspaces.ts";
 import { LifecycleQueue, closeAgentSession } from "./lifecycle.ts";
 import { resumeMessage } from "./execution-control.ts";
@@ -112,7 +114,10 @@ export class WorkspaceSessions {
       let manager: SessionManager;
       if (target === "new") manager = SessionManager.create(canonical);
       else if (target === "continue") {
-        const recent = (await sessionsForWorkspace(canonical))[0];
+        const all = await SessionManager.listAll();
+        const local = await sessionsForWorkspace(canonical, all);
+        const subagents = local[0]?.parentSessionPath ? await identifySubagentSessions(all, sessionTrashDirectory(getAgentDir())) : null;
+        const recent = local.find(row => !subagents?.has(row.id));
         manager = recent ? SessionManager.open(recent.path) : SessionManager.create(canonical);
       } else manager = "sessionManager" in target ? target.sessionManager : SessionManager.open(target.sessionFile);
       if (await realpath(manager.getCwd()) !== canonical) throw new Error("会话不属于该工作区");

@@ -38,8 +38,12 @@ async function post(path: string, body: object, signal?: AbortSignal) {
   }));
 }
 
-async function get<T>(path: string): Promise<T> {
-  return bridgeJson(await bridgeFetch(path, { headers: { Authorization: `Bearer ${token}` } })) as Promise<T>;
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return bridgeJson(await bridgeFetch(path, { headers: { Authorization: `Bearer ${token}` }, signal })) as Promise<T>;
+}
+
+export async function getSubagentHistory(workspaceId: string, id: string, signal?: AbortSignal) {
+  return get<ViewMessage[]>(`/api/subagent-history?${new URLSearchParams({ workspaceId, id })}`, signal);
 }
 
 export function usePiBridge() {

@@ -4,7 +4,7 @@ import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "../../../web/src/u
 import { SidebarRoot } from "../../../web/src/ui/sidebar/SidebarRoot.tsx";
 import { PiLogo, ToastViewport, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconSettingsOutline14, IconSettingsOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
-import { PiConversation, type FloatingTarget } from "./PiConversation.tsx";
+import { PiConversation, PiSubagentHistory, type FloatingTarget } from "./PiConversation.tsx";
 import { PiWorkspaceBrowser } from "./PiWorkspaceBrowser.tsx";
 import { PiSettings } from "./PiSettings.tsx";
 import { PluginManagementPage } from "./PluginManagementPage.tsx";
@@ -12,7 +12,9 @@ import { PiUpdateShortcut } from "./PiUpdateShortcut.tsx";
 import { PiHelpMenu } from "./PiHelpMenu.tsx";
 import { AppUpdateProvider } from "../../../web/src/ui/settings/AppUpdateProvider.tsx";
 import { IconPluginPinwheelOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
-import { usePiBridge } from "./pi-bridge.ts";
+import { getSubagentHistory, usePiBridge, type ViewMessage } from "./pi-bridge.ts";
+import type { WorkspaceSessionView } from "../../contracts/bridge-contract.ts";
+import { subagentTitle } from "./subagent-session-labels.ts";
 import { MarkdownDelegateProvider } from "../../../web/src/ui/shared/primitives/markdown/MarkdownDelegate.tsx";
 import { workspacePreviewPath } from "../../../web/src/ui/workspace-path.ts";
 import { PluginPanel, PluginPanelExpand, usePluginPanel } from "./PluginPanel.tsx";
@@ -46,6 +48,26 @@ export function PiApp() {
     "brand.localBuild": "pi-webapp",
   };
   const bridge = usePiBridge();
+  const [subagentId, setSubagentId] = useState(() => new URL(location.href).searchParams.get("subagent"));
+  const subagent = bridge.workspaces.sessions.find(row => row.id === subagentId && row.subagent);
+  const [history, setHistory] = useState<{ id: string; messages: ViewMessage[] } | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  useEffect(() => {
+    if (!subagent || bridge.connection !== "connected") return;
+    const controller = new AbortController();
+    setHistoryError(null);
+    void getSubagentHistory(subagent.workspaceId, subagent.id, controller.signal).then(messages => {
+      if (!controller.signal.aborted) setHistory({ id: subagent.id, messages });
+    }).catch(() => { if (!controller.signal.aborted) setHistoryError(subagent.id); });
+    return () => controller.abort();
+  }, [subagent?.id, subagent?.workspaceId, subagent?.modified, subagent?.subagent?.status, historyAttempt, bridge.connection]);
+  const showSubagent = (id: string | null) => {
+    setSubagentId(id);
+    const url = new URL(location.href);
+    if (id) url.searchParams.set("subagent", id); else url.searchParams.delete("subagent");
+    if (url.href !== location.href) window.history.replaceState(window.history.state, "", url);
+  };
   const activeSendSession = useRef(bridge.session?.sessionId);
   activeSendSession.current = bridge.session?.sessionId;
   const [preSendError, setPreSendError] = useState("");
@@ -88,15 +110,24 @@ export function PiApp() {
   const navigationLock = useRef(false);
   const [navigationBusy, setNavigationBusy] = useState(false);
   const closeSidebar = useCallback(() => setLayout(previous => ({ ...previous, narrowExpanded: false })), []);
-  const navigate = async (action: () => Promise<void>) => {
+  const navigate = async (action: () => Promise<void>, nextSubagent: string | null = null) => {
     if (navigationLock.current) return;
     navigationLock.current = true;
     setNavigationBusy(true);
     try {
       if (bridge.session?.sessionId) await hostedFrames.flush(bridge.session.sessionId);
-      await action(); setPluginsOpen(false); closeSidebar();
+      await action(); showSubagent(nextSubagent); setPluginsOpen(false); closeSidebar();
     } catch (error) { setPreSendError(error instanceof Error ? error.message : String(error)); throw error; }
     finally { navigationLock.current = false; setNavigationBusy(false); }
+  };
+  const selectSession = (workspaceId: string, id: string, path: string | null) => {
+    const row = bridge.workspaces.sessions.find(item => item.id === id && item.workspaceId === workspaceId);
+    return row?.subagent ? navigate(async () => {}, id) : navigate(() => bridge.selectSession(workspaceId, id, path));
+  };
+  const subagentParent = bridge.workspaces.sessions.find(row => row.id === subagent?.subagent?.parentSessionId);
+  const backToParent = (parent?: WorkspaceSessionView) => {
+    if (!parent || parent.id === bridge.session?.sessionId) { showSubagent(null); return; }
+    void selectSession(parent.workspaceId, parent.id, parent.path).catch(() => {});
   };
   const actions = useMemo(() => ({
     closeSidebar,
@@ -128,14 +159,15 @@ export function PiApp() {
   }, [bridge.session?.cwd, bridge.disabledPlugins, panel.openContent]);
   useEffect(() => {
     const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
-    setLayout((previous) => ({ ...previous, rightbarShown: panel.shown && !pluginsOpen, rightbarTrack: panel.shown && !pluginsOpen, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && panel.shown && !pluginsOpen && !fullscreen }));
-  }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen]);
+    const shown = panel.shown && !pluginsOpen && !subagent;
+    setLayout((previous) => ({ ...previous, rightbarShown: shown, rightbarTrack: shown, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && shown && !fullscreen }));
+  }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen, !!subagent]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
   useEffect(() => { void loadMarkdownText(); }, []);
   // The floating composer stands in for the conversation whenever the workspace covers it.
   const [floatingHost, setFloatingHost] = useState<HTMLDivElement | null>(null);
   const [floatingPanel, setFloatingPanel] = useState<HTMLElement | null>(null);
-  const floatingEligible = layout.rightbarShown && (layout.rightbarFocus || layout.rightbarFullscreen) && !pluginsOpen && !settingsOpen && bridge.session !== null;
+  const floatingEligible = layout.rightbarShown && (layout.rightbarFocus || layout.rightbarFullscreen) && !pluginsOpen && !subagent && !settingsOpen && bridge.session !== null;
   useLayoutEffect(() => {
     setFloatingPanel(floatingEligible ? document.querySelector<HTMLElement>("[data-sidebar-right-session]") : null);
   }, [floatingEligible, bridge.session?.sessionId]);
@@ -198,6 +230,7 @@ export function PiApp() {
       wide={owner.wide}
       expandSidebar={owner.expandSidebar}
       session={bridge.session}
+      selectedSubagentId={subagent?.id ?? null}
       workspaces={bridge.workspaces}
       navigationBusy={navigationBusy}
       connected={bridge.connection === "connected" && bridge.session !== null}
@@ -207,7 +240,7 @@ export function PiApp() {
       listDirectory={bridge.listDirectory}
       createDirectory={bridge.createDirectory}
       onRemove={(id) => navigate(() => bridge.removeWorkspace(id))}
-      onSelectSession={(workspaceId, id, path) => navigate(() => bridge.selectSession(workspaceId, id, path))}
+      onSelectSession={selectSession}
       onNewSession={(id) => navigate(() => bridge.newSessionInWorkspace(id))}
       onRenameSession={(workspaceId, id, path, name) => bridge.renameSession(workspaceId, id, path, name)}
       onDeleteSession={(workspaceId, id, path) => navigate(() => bridge.deleteSession(workspaceId, id, path))}
@@ -227,10 +260,10 @@ export function PiApp() {
       t={(name: string) => labels[name] ?? name}
       renderSlot={renderSidebarSlot}
     />;
-    if (key === "main") return <><div hidden={pluginsOpen} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation floating={floating} rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={preSendError || bridge.error} onDismissError={() => { setPreSendError(""); bridge.clearError(); }} onSend={send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={() => navigate(bridge.newSession)} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderToolView={(call, result, running) => <PluginToolView plugins={plugins} props={pluginProps} call={call} result={result} running={running} />} renderPluginSlot={renderPluginSlot} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{pluginsOpen && <PluginManagementPage recovery={hosted.recovery} getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
+    if (key === "main") return <><div hidden={pluginsOpen || !!subagent} style={{ height: "100%" }}><MarkdownDelegateProvider openFile={openWorkspaceFile}><PiConversation floating={floating} rightbarControl={<PluginPanelExpand panel={panel} locale={locale} />} session={bridge.session} streaming={bridge.streaming} connection={bridge.connection} error={preSendError || bridge.error} onDismissError={() => { setPreSendError(""); bridge.clearError(); }} onSend={send} onUpdateQueuedPrompt={bridge.updateQueuedPrompt} onLoadImage={bridge.loadMessageImage} onUpload={bridge.upload} onDiscardAttachment={bridge.discardAttachment} onStop={bridge.stop} onResume={bridge.resume} onCompact={bridge.compact} onNewSession={() => navigate(bridge.newSession)} commands={bridge.commands} models={bridge.models} modelsStatus={bridge.modelsStatus} onConfigureModels={() => setSettingsOpen(true)} onSetModel={bridge.setModel} onSetThinkingLevel={bridge.setThinkingLevel} composerInteraction={bridge.session?.interactions?.some((request) => plugins.some((plugin) => plugin.id === request.pluginId && plugin.definition.interactions?.some((item) => item.kind === request.kind))) ? <PluginInteraction plugins={plugins} props={pluginProps} /> : undefined} renderToolView={(call, result, running) => <PluginToolView plugins={plugins} props={pluginProps} call={call} result={result} running={running} />} renderPluginSlot={renderPluginSlot} renderCallAction={callId => bridge.workspaces.sessions.filter(row => row.subagent?.parentSessionId === bridge.session?.sessionId && row.subagent?.dispatchCallId === callId).map(row => <button key={row.id} type="button" disabled={navigationBusy} className="pi-subagent-back" onClick={() => { void selectSession(row.workspaceId, row.id, row.path).catch(() => {}); }}>{t("查看子任务", "View subtask")} · {subagentTitle(row)}</button>)} plugins={plugins} onPluginAction={bridge.invokePluginAction} /></MarkdownDelegateProvider></div>{subagent && !pluginsOpen && <PiSubagentHistory key={subagent.id} row={subagent} parent={subagentParent} cwd={bridge.workspaces.items.find(item => item.id === subagent.workspaceId)?.path ?? ""} messages={history?.id === subagent.id ? history.messages : null} error={historyError === subagent.id} retry={() => setHistoryAttempt(value => value + 1)} onBack={() => backToParent(subagentParent)} />}{pluginsOpen && <PluginManagementPage recovery={hosted.recovery} getPluginManagement={bridge.getPluginManagement} togglePlugin={bridge.togglePlugin} generation={bridge.pluginGeneration} />}</>;
     // Management hides the dock, but must not destroy a live iframe before its flush barrier.
     // Keeping realms mounted also preserves native undo while an update is pending.
-    if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
+    if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen || !!subagent} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
   return <AppUpdateProvider actions={bridge}>{hosted.controllers}<ToastViewport closeLabel={t("关闭", "Dismiss")} detailLabel={t("诊断信息", "Diagnostics")} /><ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} />{/* Floating composer layer: above the focused/fullscreen dock (40), below dock floats (60), menus and toasts. */}<div ref={setFloatingHost} data-floating-host="" style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }} /><AppFrame

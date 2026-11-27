@@ -20,6 +20,12 @@ A new chat is named after your first message, and shows **New chat** until you s
 
 Chats run independently. Switching to another chat, workspace or page does not stop one that is working: when you return, its output, history and any waiting interaction are there.
 
+## View subagent tasks
+
+Saved subagent histories with a verified dispatch appear under their parent chat, collapsed by default. Use the chevron to the left of the parent chat title or search by task name to see their status, result and trajectory. You can also select the `Agent` call in the parent chat's **Trajectory** and choose **View subtask**.
+
+The history is read-only. **Parent agent dispatch** and **Parent agent steering** identify instructions sent by the parent, not by you. Select **Back to parent conversation** to continue chatting. If the parent is no longer listed but its dispatch can still be verified, the history appears under **Unlinked subtasks**; its original file is unchanged.
+
 ## Rename or delete a chat {#rename-or-delete-a-chat}
 
 Every chat row has a **…** button (**Chat actions for** the chat's name) with two items.
