@@ -31,6 +31,19 @@
 .pi-message { color: var(--dsw-alias-label-primary); font-size: var(--piw-content-font-size, 14px); line-height: 1.65; overflow-wrap: anywhere; }
 .pi-image-note { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .pi-subagent-notice { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.pi-subagent-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pi-subagent-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-subagent-back { flex: none; border: 0; border-radius: var(--dsw-radius-sm); padding: 4px 6px; background: transparent; color: var(--dsw-alias-state-business-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.pi-subagent-back:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-subagent-status, .pi-subagent-history-meta { color: var(--dsw-alias-label-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.pi-subagent-status { flex: none; }
+.pi-subagent-status[data-status="running"] { color: var(--dsw-alias-state-business-primary); }
+.pi-subagent-status[data-status="failed"] { color: var(--dsw-alias-state-error-primary); }
+.pi-subagent-history-column { margin-inline: auto; width: min(calc(100% - 32px), 760px); padding-block: 16px; }
+.pi-subagent-instruction { border-inline-start: 2px solid var(--dsw-alias-border-l1); padding: 8px 12px; margin-block: 8px; color: var(--dsw-alias-label-primary); font-size: 13px; overflow-wrap: anywhere; }
+.pi-subagent-instruction header, .pi-subagent-instruction summary { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 600; }
+.pi-subagent-instruction summary { cursor: pointer; }
+.pi-subagent-instruction header + div { margin-top: 4px; white-space: pre-wrap; }
 .pi-model-error { display: flex; flex-direction: column; gap: 4px; width: min(100%, 560px); padding: 12px 16px; border: 1px solid var(--dsw-alias-state-error-primary, #d54941); border-radius: 12px; background: var(--dsw-alias-interactive-bg-hover-danger, #fff1f0); color: var(--dsw-alias-state-error-primary, #b42318); font-size: 13px; line-height: 1.5; }
 .pi-model-error-title { display: flex; align-items: center; gap: 8px; }
 .pi-model-error-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 400; }

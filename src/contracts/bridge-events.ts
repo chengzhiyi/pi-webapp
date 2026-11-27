@@ -22,6 +22,7 @@ function message(value: unknown): value is ViewMessage {
       && string(block.text) && optionalStrings(block, ["toolName", "toolCallId"]))(value.blocks)
     && optionalStrings(value, ["toolName", "toolCallId", "model", "error"])
     && optional(value, "isError", boolean)
+    && optional(value, "subagentInput", input => value.role === "user" && (input === "dispatch" || input === "steering"))
     && optional(value, "subagentNotice", notice => value.role === "notice" && record(notice)
       && ["completed", "failed", "cancelled", "unknown"].includes(notice.status as string)
       && optional(notice, "description", string))
@@ -55,7 +56,10 @@ function workspaces(value: unknown): value is WorkspaceListView {
   return record(value) && nullable(string)(value.activeId)
     && array(item => record(item) && strings(item, ["id", "path", "title"]) && optional(item, "available", boolean))(value.items)
     && array(item => record(item) && strings(item, ["id", "workspaceId", "name", "modified"])
-      && nullable(string)(item.path) && optional(item, "idle", boolean))(value.sessions);
+      && nullable(string)(item.path) && optional(item, "idle", boolean)
+      && optional(item, "subagent", task => record(task) && nullable(string)(task.parentSessionId)
+        && strings(task, ["agentId", "agentType"]) && optionalStrings(task, ["description", "dispatchCallId"])
+        && ["running", "completed", "failed", "cancelled", "unknown"].includes(task.status as string)))(value.sessions);
 }
 
 function errorEvent(value: unknown): value is Extract<BridgeEvent, { type: "error" }> {

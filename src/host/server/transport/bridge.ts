@@ -65,6 +65,7 @@ export interface BridgeHost {
   newSessionInWorkspace(id: string): Promise<void>;
   removeWorkspace(id: string): Promise<void>;
   selectSession(workspaceId: string, id: string, path: string): Promise<void>;
+  subagentHistory?(workspaceId: string, id: string): Promise<SessionView["messages"] | null>;
   renameSession?(workspaceId: string, id: string, path: string, name: string): Promise<void>;
   deleteSession?(workspaceId: string, id: string, path: string): Promise<void>;
 }
@@ -307,6 +308,18 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
         } catch (error) {
           fail(error, 400, error instanceof Error ? error.message : "上传失败");
         }
+        return;
+      }
+      if (req.method === "GET" && path === "/api/subagent-history") {
+        const params = new URL(req.url ?? path, origin).searchParams;
+        const workspaceId = params.get("workspaceId");
+        const id = params.get("id");
+        if (!workspaceId || !id || workspaceId.length > 256 || id.length > 256) { json(res, 400, { error: "子任务无效" }); return; }
+        try {
+          const messages = await host.subagentHistory?.(workspaceId, id);
+          if (!messages) json(res, 404, { error: "子任务记录不可用" });
+          else json(res, 200, messages);
+        } catch (cause) { fail(cause, 503, "无法读取子任务记录"); }
         return;
       }
       if (req.method === "GET" && path === "/api/session") {

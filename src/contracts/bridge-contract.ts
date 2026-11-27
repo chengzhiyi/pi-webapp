@@ -30,6 +30,8 @@ export interface ViewMessage {
   blocks: ViewBlock[];
   /** The blocks of a subagent notice are details for the trajectory, not chat text. */
   subagentNotice?: SubagentNotice;
+  /** Provenance of a user-role message in a read-only subagent transcript. */
+  subagentInput?: "dispatch" | "steering";
   isError?: boolean;
   toolCallId?: string;
   toolName?: string;
@@ -81,7 +83,15 @@ export interface WorkspaceView {
   /** Computed availability, absent in older records. */
   available?: boolean;
 }
-export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean }
+export interface SubagentSessionView {
+  parentSessionId: string | null;
+  agentId: string;
+  agentType: string;
+  dispatchCallId?: string;
+  description?: string;
+  status: SubagentNotice["status"] | "running";
+}
+export interface WorkspaceSessionView { id: string; workspaceId: string; path: string | null; name: string; modified: string; idle?: boolean; subagent?: SubagentSessionView }
 export interface WorkspaceListView { items: WorkspaceView[]; activeId: string | null; sessions: WorkspaceSessionView[] }
 export interface DirectoryEntry { name: string; path: string; hidden: boolean }
 export interface DirectoryListing { path: string; home: string; crumbs: DirectoryEntry[]; entries: DirectoryEntry[]; truncated: boolean }

@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import type { WorkspaceSessionView } from "../../contracts/bridge-contract.ts";
+import { subagentStatusText, subagentTitle } from "./subagent-session-labels.ts";
 import { IconFolderOpen16, IconProjectAddOutline16, StateDot, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconChevronDownOutline14, IconCloseFill14, IconSearchOutline16, IconFolderClose16, IconNewChatOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { Button } from "../../../web/src/ui/primitives/Button.tsx";
@@ -18,6 +20,7 @@ interface Props {
   connected?: boolean;
   expandSidebar: () => void;
   session: SessionView | null;
+  selectedSubagentId: string | null;
   workspaces: WorkspaceListView;
   onAdd: (path: string, create: boolean) => Promise<void>;
   directoryPickerKind: DirectoryPickerKind | null;
@@ -45,7 +48,7 @@ const translate = (key: string, params?: Record<string, string>) => {
   return (copy[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => params?.[name] ?? "");
 };
 
-export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = true, expandSidebar, session, workspaces, onAdd, directoryPickerKind, pickDirectory, listDirectory, createDirectory, onRemove, onSelectSession, onNewSession, onRenameSession, onDeleteSession }: Props) {
+export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = true, expandSidebar, session, selectedSubagentId, workspaces, onAdd, directoryPickerKind, pickDirectory, listDirectory, createDirectory, onRemove, onSelectSession, onNewSession, onRenameSession, onDeleteSession }: Props) {
   const locale = useLocale();
   const [now, setNow] = useState(Date.now);
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
@@ -82,17 +85,61 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
   useEffect(() => {
     if (workspaces.activeId) setExpanded((current) => current.has(workspaces.activeId!) ? current : new Set([...current, workspaces.activeId!]));
   }, [workspaces.activeId, session?.sessionId]);
-  useEffect(() => {
-    root.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
-  }, [wide, session?.sessionId, expanded]);
   const searchButton = useRef<HTMLButtonElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const needle = query.trim().toLocaleLowerCase();
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const tree = useMemo(() => {
+    const byId = new Map(workspaces.sessions.map(row => [row.id, row]));
+    const roots: WorkspaceSessionView[] = [];
+    const orphans: WorkspaceSessionView[] = [];
+    const children = new Map<string, WorkspaceSessionView[]>();
+    for (const row of workspaces.sessions) {
+      if (!row.subagent) { roots.push(row); continue; }
+      const parentId = row.subagent.parentSessionId;
+      const seen = new Set([row.id]);
+      let ancestor = parentId;
+      while (ancestor && !seen.has(ancestor)) {
+        seen.add(ancestor);
+        ancestor = byId.get(ancestor)?.subagent?.parentSessionId ?? null;
+      }
+      // A cycle cannot be a valid dispatch chain; keep the records reachable.
+      if (!parentId || !byId.has(parentId) || ancestor) { orphans.push(row); continue; }
+      const siblings = children.get(parentId) ?? [];
+      siblings.push(row);
+      children.set(parentId, siblings);
+    }
+    return { byId, roots, orphans, children };
+  }, [workspaces.sessions]);
+  const selectedLineage = new Set<string>();
+  const revealTasks = new Set<string>();
+  for (let id = selectedSubagentId; id && !selectedLineage.has(id);) {
+    selectedLineage.add(id);
+    const orphan = tree.orphans.find(row => row.id === id);
+    if (orphan) { revealTasks.add(`orphan-${orphan.workspaceId}`); break; }
+    id = tree.byId.get(id)?.subagent?.parentSessionId ?? null;
+    if (id) revealTasks.add(id);
+  }
+  const revealKey = [...revealTasks].join("\n");
+  useEffect(() => {
+    if (revealKey) setExpandedTasks(current => new Set([...current, ...revealKey.split("\n")]));
+  }, [selectedSubagentId, revealKey]);
+  useEffect(() => {
+    root.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [wide, session?.sessionId, selectedSubagentId, expanded, expandedTasks]);
+  const matchesText = (value: string) => value.toLocaleLowerCase().includes(needle);
+  const matchesRow = (row: WorkspaceSessionView): boolean => matchesText(row.name) || matchesText(subagentTitle(row)) || (tree.children.get(row.id) ?? []).some(matchesRow);
+  const workspaceMatches = (workspace: WorkspaceListView["items"][number]) => matchesText(workspace.title) || matchesText(workspace.path);
 
   const closeSearch = () => {
     setQuery(""); setSearchExpanded(false); searchButton.current?.focus();
   };
-  const matchingWorkspaces = workspaces.items.filter((workspace) => !needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || workspaces.sessions.some((item) => item.workspaceId === workspace.id && item.name.toLocaleLowerCase().includes(needle)));
+  const matchingWorkspaces = workspaces.items.filter((workspace) => workspaceMatches(workspace) || [...tree.roots, ...tree.orphans].some(row => row.workspaceId === workspace.id && matchesRow(row)));
+  const toggleTasks = (id: string) => setExpandedTasks(current => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   // Dialogs show their own failures inline; sidebar actions report through a toast.
   useErrorToast("workspace-action", dialogOpen || removeTarget || renameTarget || deleteTarget ? null : error);
   const run = async (action: () => Promise<void>) => {
@@ -124,6 +171,39 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
     } finally { setBusy(false); }
   };
 
+  const taskGroupOpen = (id: string) => expandedTasks.has(id) || !!needle;
+  function renderTaskToggle(id: string, parentTitle: string, children: WorkspaceSessionView[], unlinked = false): ReactNode {
+    const open = taskGroupOpen(id);
+    const label = unlinked ? parentTitle : t(`${parentTitle} 的子任务`, `Subtasks for ${parentTitle}`);
+    const action = open ? t('收起子任务', 'Collapse subtasks') : t('展开子任务', 'Expand subtasks');
+    const status = children.some(row => row.subagent?.status === "failed") ? "failed" : children.some(row => row.subagent?.status === "running") ? "running" : undefined;
+    return <button type="button" className={unlinked ? css.taskToggle : css.inlineTaskToggle} aria-label={label} aria-expanded={open} aria-controls={`${listId}-${id}-tasks`} title={status ? `${action} · ${subagentStatusText(status)}` : action} data-status={status} disabled={!!needle} onClick={() => toggleTasks(id)}>
+      <span className={open ? css.taskChevronOpen : css.taskChevron}><IconChevronDownOutline14 size={14} /></span>{unlinked && label}
+    </button>;
+  }
+
+  function renderTaskGroup(id: string, children: WorkspaceSessionView[], showAll: boolean, label: string): ReactNode {
+    const visible = showAll ? children : children.filter(matchesRow);
+    const open = taskGroupOpen(id) && visible.length > 0;
+    return <div className={css.taskGroup} id={`${listId}-${id}-tasks`} role="group" aria-label={label} hidden={!open}>
+        {open && visible.map(row => {
+          const task = row.subagent!;
+          const title = subagentTitle(row);
+          const nested = tree.children.get(row.id) ?? [];
+          const unavailable = workspaces.items.find(workspace => workspace.id === row.workspaceId)?.available === false;
+          return <div key={row.id}>
+            <div className={css.taskLine}>
+              {nested.length > 0 && renderTaskToggle(row.id, title, nested)}
+              <button type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${css.taskRow}`} data-has-subtasks={nested.length > 0 || undefined} aria-label={title} aria-current={selectedSubagentId === row.id ? "page" : undefined} disabled={disabled || unavailable} title={title} onClick={() => { void run(() => onSelectSession(row.workspaceId, row.id, row.path)); }}>
+                <span className={rowsCss.title}>{title}</span><span className={css.taskStatus} data-status={task.status}>{subagentStatusText(task.status)}</span>
+              </button>
+            </div>
+            {nested.length > 0 && renderTaskGroup(row.id, nested, showAll || matchesText(row.name) || matchesText(title), title)}
+          </div>;
+        })}
+    </div>;
+  }
+
   return <div ref={root} aria-busy={busy} className={`${browserCss.root} ${!wide ? browserCss.rail : ""}`}>
     <div className={browserCss.sectionHeader}>
       {wide && <span className={`${browserCss.sectionLabel} ${browserCss.wide} ${searchExpanded ? browserCss.sectionLabelHidden : ""}`}>{t("工作区", "Workspaces")}</span>}
@@ -140,7 +220,12 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
       {matchingWorkspaces.map((workspace) => {
         const active = workspace.id === workspaces.activeId;
         const unavailable = workspace.available === false;
-        const open = expanded.has(workspace.id) || !!needle;
+        const roots = tree.roots.filter(row => row.workspaceId === workspace.id);
+        const orphans = tree.orphans.filter(row => row.workspaceId === workspace.id);
+        const open = expanded.has(workspace.id) || !!needle || [...roots, ...orphans].some(row => selectedLineage.has(row.id));
+        const showAll = workspaceMatches(workspace);
+        const showOrphans = orphans.length > 0 && (showAll || orphans.some(matchesRow));
+        const orphanTitle = t("未关联子任务", "Unlinked subtasks");
         return <div key={workspace.id} className={css.group} role="listitem">
           <div className={css.workspaceLine} data-menu-open={workspaceMenuId === workspace.id || undefined}>
             <button type="button" className={`${rowsCss.projectRow} ${css.workspaceButton}`} aria-expanded={open} aria-controls={`${listId}-${workspace.id}`} title={workspace.path} disabled={busy} onContextMenu={event => {
@@ -160,12 +245,14 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
             </span>
           </div>
           <div id={`${listId}-${workspace.id}`} role="group" aria-label={workspace.title} hidden={!open}>
-          {open && workspaces.sessions.filter((item) => item.workspaceId === workspace.id && (!needle || workspace.title.toLocaleLowerCase().includes(needle) || workspace.path.toLocaleLowerCase().includes(needle) || item.name.toLocaleLowerCase().includes(needle))).map((item) => {
-            const current = active && session?.sessionId === item.id;
+          {open && roots.filter(item => showAll || matchesRow(item)).map((item) => {
+            const current = !selectedSubagentId && active && session?.sessionId === item.id;
             const running = session?.sessionId === item.id ? !session.idle : item.idle === false;
+            const childRows = tree.children.get(item.id) ?? [];
             const title = item.name || t("新会话", "New chat");
             const target = { workspaceId: workspace.id, id: item.id, path: item.path, name: item.name, running };
-            return <div key={item.id} className={css.sessionLine} data-menu-open={sessionMenuId === item.id || undefined}>
+            return <div key={item.id} className={css.sessionGroup}><div className={css.sessionLine} data-menu-open={sessionMenuId === item.id || undefined}>
+              {childRows.length > 0 && renderTaskToggle(item.id, title, childRows)}
               <button type="button" className={`${rowsCss.sessionRow} ${css.sessionButton} ${current ? rowsCss.selected : ""}`} title={title} aria-label={title} aria-describedby={`${listId}-${item.id}-status`} aria-current={current ? "page" : undefined} disabled={disabled || unavailable} onContextMenu={event => {
                 if (disabled || unavailable) return;
                 event.preventDefault();
@@ -173,7 +260,8 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
                 setWorkspaceMenuId(null);
                 setSessionMenuId(item.id);
               }} onClick={() => { void run(() => onSelectSession(workspace.id, item.id, item.path)); }}>
-                <span className={rowsCss.slot}>{running && <StateDot state="ongoing" />}</span><span className={`${rowsCss.title} ${item.name ? "" : css.untitled}`}>{title}</span>
+                <span className={rowsCss.slot}>{running && childRows.length === 0 && <StateDot state="ongoing" />}</span><span className={`${rowsCss.title} ${item.name ? "" : css.untitled}`}>{title}</span>
+                {running && childRows.length > 0 && <StateDot state="ongoing" />}
                 <time className={css.sessionTime} dateTime={item.modified} title={item.modified}>{sessionTimeLabel(item.modified, now, locale)}</time>
                 <span id={`${listId}-${item.id}-status`} className={rowsCss.visuallyHidden}>{running ? t("运行中", "Running") : t("空闲", "Idle")}</span>
               </button>
@@ -183,9 +271,13 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
                   onRename={() => { setError(""); setRenameValue(item.name); setRenameTarget(target); }}
                   onDelete={() => { setError(""); setDeleteTarget(target); }} />
               </span>
-            </div>;
+            </div>{childRows.length > 0 && renderTaskGroup(item.id, childRows, showAll || matchesText(title), title)}</div>;
           })}
-          {open && !needle && !workspaces.sessions.some(item => item.workspaceId === workspace.id) && <p className={browserCss.empty}>{t("还没有会话，创建新会话开始", "No sessions yet. Create a session to start.")}</p>}
+          {open && showOrphans && <div className={css.orphanGroup}>
+            {renderTaskToggle(`orphan-${workspace.id}`, orphanTitle, orphans, true)}
+            {renderTaskGroup(`orphan-${workspace.id}`, orphans, showAll, orphanTitle)}
+          </div>}
+          {open && !needle && roots.length === 0 && orphans.length === 0 && <p className={browserCss.empty}>{t("还没有会话，创建新会话开始", "No sessions yet. Create a session to start.")}</p>}
           </div>
         </div>;
       })}

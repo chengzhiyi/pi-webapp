@@ -40,6 +40,8 @@ import { randomUUID } from "./random-uuid.ts";
 import { useConversationScroll } from "./use-conversation-scroll.ts";
 import { parseModelError } from "./model-error.ts";
 import { subagentNoticeText } from "./subagent-notice.ts";
+import { subagentStatusText, subagentTitle } from "./subagent-session-labels.ts";
+import type { WorkspaceSessionView } from "../../contracts/bridge-contract.ts";
 import "./pi-conversation.css";
 
 /** Where the composer floats while the conversation is hidden behind the workspace panel. */
@@ -71,6 +73,7 @@ interface Props {
   composerInteraction?: ReactNode;
   rightbarControl?: ReactNode;
   renderPluginSlot: (slot: WebSlotName, turn?: TurnReference) => ReactNode;
+  renderCallAction?: (id: string) => ReactNode;
   renderToolView?: (call: ViewBlock, result: ViewMessage | undefined, running: boolean) => ReactNode;
   plugins: LoadedPlugin[];
   onPluginAction: (pluginId: string, action: string, input?: unknown) => Promise<unknown>;
@@ -108,6 +111,12 @@ function PiMessage({ message, results, loadImage, running = false, onInspect, cw
   if (message.role === "tool" && message.toolCallId && results.has(message.toolCallId)) return null;
   if (message.role === "notice" && message.subagentNotice) {
     return <div className="pi-subagent-notice" data-message-role="notice">{subagentNoticeText(message.subagentNotice)}</div>;
+  }
+  if (message.role === "user" && message.subagentInput) {
+    return <section className="pi-subagent-instruction" data-message-role="user" data-subagent-input={message.subagentInput}>
+      <header>{message.subagentInput === "dispatch" ? t("主 Agent 派发", "Parent agent dispatch") : t("主 Agent 补充指令", "Parent agent steering")}</header>
+      {message.blocks.map((block, index) => block.kind === "text" && <div key={index}>{block.text}</div>)}
+    </section>;
   }
   if (message.role === "user") {
     const originalText = message.blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
@@ -196,6 +205,48 @@ function PiTurn({ turn, results, model, loadImage, onInspect, renderPluginSlot, 
     {failures.map((message) => <ModelErrorCard key={`${message.id}-error`} error={message.error!} onDismiss={() => setDismissedFailures(current => new Set(current).add(message.id))} />)}
     {!running && failures.length === 0 && (lastAssistant || (turn.usage && turn.usage.totalTokens > 0)) && <TurnActions text={answer} timestamp={lastAssistant?.timestamp} usage={turn.usage} model={lastAssistant?.model ?? model} />}
     {renderPluginSlot("turn.tail", { id: turn.id, completed: !running, messageIds: turn.messages.map((message) => message.id), toolCallIds: turn.messages.flatMap((message) => message.blocks.filter((block) => block.kind === "toolCall" && block.toolCallId).map((block) => block.toolCallId!)) })}
+  </div>;
+}
+
+const noHistoryImage = async () => { throw new Error("Image is not available in the subtask history"); };
+const noPluginSlot = () => null;
+const noToolNames: string[] = [];
+
+/** Uses the same transcript and trajectory renderers without mounting a live runtime or composer. */
+export function PiSubagentHistory({ row, parent, cwd, messages, error, retry, onBack }: {
+  row: WorkspaceSessionView; parent?: WorkspaceSessionView; cwd: string; messages: ViewMessage[] | null;
+  error: boolean; retry: () => void; onBack: () => void;
+}) {
+  const [tab, setTab] = useState<"chat" | "trajectory">("chat");
+  const [call, setCall] = useState<string | null>(null);
+  const task = row.subagent!;
+  const results = toolResults(messages ?? []);
+  const turns = conversationTurns(messages ?? []);
+  const answer = [...(turns.at(-1)?.messages ?? [])].reverse().find(message => message.role === "assistant" && message.blocks.some(block => block.kind === "text" && block.text.trim()));
+  const answerText = answer?.blocks.filter(block => block.kind === "text").map(block => block.text).join("\n\n");
+  const backLabel = parent ? t("返回主对话", "Back to parent conversation") : t("返回对话", "Back to conversation");
+  return <div className={conversationCss.root} data-phase="active" data-subagent-history="">
+    <header className={conversationCss.header}>
+      <div className={conversationCss.titleRow}>
+        <div className="pi-subagent-title"><button type="button" className="pi-subagent-back" title={parent && (subagentTitle(parent) || undefined)} onClick={onBack}>← {backLabel}</button><span className={conversationCss.crumbCurrent}>{subagentTitle(row)}</span></div>
+        <span className="pi-subagent-status" data-status={task.status}>{subagentStatusText(task.status)}</span>
+      </div>
+      <div className={conversationCss.tabs} role="tablist" aria-label={t("子任务视图", "Subtask views")}>
+        <button className={`${conversationCss.tab} ${tab === "chat" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={tab === "chat"} type="button" onClick={() => setTab("chat")}>{t("执行记录", "Execution log")}</button>
+        <button className={`${conversationCss.tab} ${tab === "trajectory" ? conversationCss.tabActive : ""}`} role="tab" aria-selected={tab === "trajectory"} type="button" onClick={() => setTab("trajectory")}>{t("轨迹", "Trajectory")}</button>
+      </div>
+    </header>
+    <div className={conversationCss.body}><div className={conversationCss.scrollBody}>
+      <div className={conversationCss.viewArea}>
+        {error && <div className="pi-subagent-history-meta" role="alert">{t("无法读取子任务记录。", "Could not read the subtask history.")} <button type="button" className="pi-subagent-back" onClick={retry}>{t("重试", "Retry")}</button></div>}
+        {!messages && !error && <p className="pi-subagent-history-meta" role="status">{t("正在读取子任务记录…", "Loading subtask history…")}</p>}
+        {messages && (tab === "trajectory" ? <PiTrajectory messages={messages} inspectCallId={call} /> : <div className={`${chatCss.column} pi-subagent-history-column`}>
+          <div className="pi-subagent-history-meta">{t("只读子任务", "Read-only subtask")} · {task.agentType} · <code>{task.agentId}</code></div>
+          {task.status === "completed" && answerText && <details className="pi-subagent-instruction" open><summary>{t("任务结果", "Result")}</summary><PiMarkdown text={answerText} streaming={false} /></details>}
+          {turns.map(turn => <PiTurn key={turn.id} turn={turn} results={results} model={null} loadImage={noHistoryImage} cwd={cwd} renderPluginSlot={noPluginSlot} renderToolView={undefined} viewTools={noToolNames} artifactTools={noToolNames} superseded={turn !== turns.at(-1)} onInspect={id => { setCall(id); setTab("trajectory"); }} />)}
+        </div>)}
+      </div>
+    </div></div>
   </div>;
 }
 
@@ -739,7 +790,7 @@ function floatingSummary(session: SessionView | null, streaming: ViewMessage | n
   return { working, label, elapsedSeconds, tail, queued, latestReply };
 }
 
-export function PiConversation({ floating = null, rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, plugins, onPluginAction }: Props) {
+export function PiConversation({ floating = null, rightbarControl, composerInteraction, session, streaming, connection, error, onDismissError, onSend, onLoadImage, onUpload, onDiscardAttachment, onStop, onResume, onCompact, onNewSession, commands, models, modelsStatus, onConfigureModels, onSetModel, onSetThinkingLevel, onUpdateQueuedPrompt, renderPluginSlot, renderToolView, renderCallAction, plugins, onPluginAction }: Props) {
   const [activeTab, setActiveTab] = useState<"chat" | "trajectory">("chat");
   const [inspectCallId, setInspectCallId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<{ id: string; sessionId: string; text: string; wire: string; files: File[]; knownIds: Set<string>; timestamp: string } | null>(null);
@@ -848,7 +899,7 @@ export function PiConversation({ floating = null, rightbarControl, composerInter
               {turns.map((turn) => <PiTurn turn={turn} key={toolViewTurnKey(turn, viewTools)} results={results} model={session?.model ?? null} loadImage={onLoadImage} cwd={session?.cwd} renderPluginSlot={renderPluginSlot} renderToolView={renderToolView} viewTools={viewTools} artifactTools={artifactTools} running={turn === turns.at(-1) && !session?.idle || turn.messages.some((message) => message.id === "stream")} superseded={turn !== turns.at(-1)} onInspect={inspect} />)}
               {activity && <AgentActivity state={activity} elapsedSeconds={elapsedSeconds} />}
             </>
-          </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} />}</div>}
+          </div></div></div> : <PiTrajectory messages={liveMessages} inspectCallId={inspectCallId} renderCallAction={renderCallAction} />}</div>}
           <div ref={composer} className={conversationCss.composerSeat} data-composer-seat="">
             <div className={`${conversationCss.composerStack} ${empty ? conversationCss.composerHero : ""}`}>
               {empty && <HeroShell t={heroText} renderSlot={(_key: string, _props: unknown, options?: { fallback?: React.ReactNode }) => options?.fallback ?? null} />}
