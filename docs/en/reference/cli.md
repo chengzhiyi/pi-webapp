@@ -5,9 +5,12 @@ This page is the reference for the `pi-webapp` command, its exit behavior and ev
 ## Synopsis
 
 ```text
-pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi arguments]
-pi-webapp status
+pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [--foreground] [--no-open] [Pi arguments]
+pi-webapp status [--json]
 pi-webapp stop [--force]
+pi-webapp restart
+pi-webapp logs [--tail <N>] [--follow]
+pi-webapp doctor [--host <127.0.0.1|0.0.0.0>] [--port <1–65535>]
 pi-webapp --version
 pi-webapp update [--check]
 pi-webapp --help
@@ -33,11 +36,13 @@ An unknown first word that doesn't start with `-`, such as `pi-webapp foo`, prin
 
 **When the browser opens.** After a successful start, and when reopening, the launcher opens the address in your default browser unless one of these applies: `PI_WEBAPP_AUTO_OPEN=0` is set, you are in an SSH session (`SSH_CONNECTION`, `SSH_TTY` or `SSH_CLIENT`), you are on Linux without `DISPLAY` or `WAYLAND_DISPLAY`, or it runs inside the desktop app. Open the printed address yourself then.
 
+`--no-open` suppresses the browser in either mode. `pi-webapp start --foreground --no-open` stays attached, writes logs to the terminal, and requests graceful shutdown on exit signals. Use it in containers or under a service manager; in-app upgrade and restart is not available in foreground mode.
+
 ### Fixed ports and Docker
 
 By default the service listens on `127.0.0.1` and the OS assigns a free port. `pi-webapp --port 3000` keeps the loopback binding but requests port 3000. If the port is invalid or cannot be bound, the command fails without choosing another port. To change an already running service's binding, stop it first.
 
-Publish the port on the Docker host's loopback interface, for example `docker run -p 127.0.0.1:8080:3000 …`. In the running container, use `pi-webapp --host 0.0.0.0 --port 3000`. The launcher starts a background service and exits, so don't use it as the container's only foreground process. Use the printed URL's `/#<token>` with `http://127.0.0.1:8080` in a browser on the Docker host. This mode supports local HTTP access, not public or LAN hosting. Keep the token private; it grants control of the Pi session.
+Publish the port on the Docker host's loopback interface, for example `docker run -p 127.0.0.1:8080:3000 …`. Use `pi-webapp start --foreground --no-open --host 0.0.0.0 --port 3000` as the container command. Use the printed URL's `/#<token>` with `http://127.0.0.1:8080` in a browser on the Docker host. This mode supports local HTTP access, not public or LAN hosting. Keep the token private; it grants control of the Pi session.
 
 ## `pi-webapp status`
 
@@ -47,7 +52,9 @@ Prints whether the service is running and its address, and never changes anythin
 pi-webapp 正在运行：http://127.0.0.1:52395/#<token>
 ```
 
-It prints `pi-webapp 正在启动` while a start is in progress and `pi-webapp 未运行` when nothing is running. Any extra argument gives `用法：pi-webapp status`.
+It prints `pi-webapp 正在启动` while a start is in progress and `pi-webapp 未运行` when nothing is running.
+
+Use `status --json` for machine-readable status without the access token. It probes readiness locally and distinguishes the CLI version from the running version. Scripts should read the status field rather than rely on the exit code for health.
 
 ## `pi-webapp stop [--force]`
 
@@ -62,6 +69,12 @@ Stopping ends all running chats and every terminal. The service first asks its p
 `--force` skips that save check. If the service doesn't respond within five seconds, it ends the background process and its child processes directly. **Unsaved plugin edits can be lost.**
 
 If nothing is running, it prints `pi-webapp 未运行` and exits `0`.
+
+## Logs, diagnostics, and restart
+
+- `pi-webapp logs --tail 100` reads the background launcher's log (100 lines by default). Add `--follow` to watch it and press Ctrl+C to exit. Common token formats are redacted; still review logs before sharing.
+- `pi-webapp doctor --port 8080` checks Node/Pi, data directory permissions, launcher state, and (when requested) whether a port can be bound. It doesn't install or fix anything. Failed checks return a nonzero exit code.
+- `pi-webapp restart` gracefully stops and relaunches a background service started by a CLI that saved its startup settings. It keeps the working directory, bind address, actual port, and Pi arguments. It does not force a refused stop. Use the printed URL after restart, since the access token may change. For older launches, stop and start with the original options. For foreground and desktop instances, restart from their original terminal, service manager, or desktop app.
 
 ## `pi-webapp --version` and `pi-webapp update [--check]`
 
