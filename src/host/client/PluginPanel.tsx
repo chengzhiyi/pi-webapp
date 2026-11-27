@@ -15,6 +15,7 @@ import { randomUUID } from "./random-uuid.ts";
 import type { TabContextReport, TabResource, WorkbenchPanelProps } from "../../contracts/workbench.ts";
 import filesCss from "../../../web/src/ui/workbench/WorkspacePanel.module.css";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
+import { desktopWebPreview, loadDesktopWorkbenchPlugin, WEB_PREVIEW_ID } from "../../plugins/builtin/client.ts";
 
 interface SessionDock {
   controller: DockController; resources: Map<string, TabResource>; owners: Map<string, string>;
@@ -94,6 +95,15 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
 }) {
   const { controller, snapshot, openContent: open } = panel;
   const { state } = snapshot;
+  const [desktopPlugin, setDesktopPlugin] = useState<LoadedPlugin>();
+  const previewAvailable = Boolean(desktopWebPreview());
+  useEffect(() => {
+    if (!previewAvailable) return;
+    let current = true;
+    void loadDesktopWorkbenchPlugin().then(plugin => { if (current) setDesktopPlugin(plugin); })
+      .catch(() => { if (current) setDesktopPlugin(undefined); });
+    return () => { current = false; };
+  }, [previewAvailable]);
   const [closeError, setCloseError] = useState("");
   useErrorToast("plugin-panel-close", closeError);
   const closing = useRef(false);
@@ -117,7 +127,13 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
   const dictionary: Record<string, string> = props.locale === "zh" ? zh : en;
   const t = (key: string) => dictionary[key] ?? key;
   const text = (value: string | { zh: string; en: string }) => typeof value === "string" ? value : value[props.locale];
-  const panels = plugins.flatMap(plugin => (plugin.definition.workbench?.panels ?? []).map(contribution => ({ plugin, contribution })));
+  const workbenchPlugins = plugins.filter(plugin => plugin.id !== WEB_PREVIEW_ID);
+  if (previewAvailable && desktopPlugin) workbenchPlugins.push(desktopPlugin);
+  const launchers = workbenchPlugins.flatMap(plugin => {
+    const entry = plugin.definition.workbench?.entry;
+    return entry ? [{ plugin, entry }] : [];
+  });
+  const panels = workbenchPlugins.flatMap(plugin => (plugin.definition.workbench?.panels ?? []).map(contribution => ({ plugin, contribution })));
   const collapse = () => { onExitFocus(); controller.setExpanded(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus()); };
   const panelWidth = narrow ? "100vw" : width;
   return <div className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
@@ -129,11 +145,9 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
         const visible = state.expanded && getPane(state, paneId).activeTabId === tab.id;
         if (tab.kind === "guide") return <div className={filesCss.guide}>
           <div className={filesCss.guideGrid} role="group" aria-label={localize("工作区工具", "Workspace tools")}>
-            {plugins.map(plugin => {
-              const entry = plugin.definition.workbench?.entry;
-              if (!entry) return null;
+            {launchers.map(({ plugin, entry }) => {
               const Icon = entry.icon;
-              return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || !cwd} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
+              return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || (!cwd && plugin.id !== WEB_PREVIEW_ID)} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
                 <span className={filesCss.guideIcon} aria-hidden="true"><Icon size={24} /></span>
                 <span className={filesCss.guideCopy}>
                   <span className={filesCss.guideLabel}>{text(entry.label)}</span>
@@ -141,7 +155,7 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
                 </span>
               </button>;
             })}
-            {!plugins.some(plugin => plugin.definition.workbench?.entry) && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
+            {!launchers.length && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
           </div>
         </div>;
         const registered = panels.find(item => item.contribution.kind === tab.kind);

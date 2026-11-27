@@ -5,7 +5,7 @@ This page covers installing the desktop app, what is different from the web vers
 The desktop app is called **pi**. It shows the same workbench in its own window and bundles Node.js and Pi, so you don't install either. You still bring your own model credentials, Git and SSH setup, and project toolchains.
 
 ::: warning Test builds
-Desktop builds are published as **unsigned test pre-releases**. They are meant for people who are comfortable verifying a download. macOS builds carry an ad-hoc signature but no Apple notarization, so Gatekeeper may block them. Windows and Linux builds are unsigned. If you'd rather not accept that, use the [web launcher](./getting-started), which has the same features.
+Desktop builds are published as **unsigned test pre-releases**. They are meant for people who are comfortable verifying a download. macOS builds carry an ad-hoc signature but no Apple notarization, so Gatekeeper may block them. Windows and Linux builds are unsigned. If you'd rather not accept that, use the [web launcher](./getting-started), which provides the shared workbench.
 :::
 
 ## What you can download
@@ -80,6 +80,16 @@ After the first start, confirm the version: on macOS choose **pi → 关于 pi**
 - **Reuses a running service.** If a compatible pi-webapp service is already running (started by `npx pi-webapp`, for example), the desktop window connects to it instead of starting a second one. Otherwise it starts its own.
 - **Bundled runtime.** It runs the Node.js and Pi it ships with. A service it reuses keeps its own Pi version.
 - **No browser needed**, though **Window → 在浏览器中打开** (Open in browser) opens the same service in your browser.
+
+### Preview a website {#web-preview}
+
+Open **Web Preview** in the workbench. Enter an address such as `example.com`, `localhost:5173`, or `192.168.1.20:8080`, or type keywords and press Enter to search Google in the same panel. To search for something that looks like a URL, start with `? `, for example `? site:github.com pi-webapp`. Keywords are sent to Google only when you submit them.
+
+Bare domains default to HTTPS; IPs, local domains and addresses with an explicit port default to HTTP. For a single-word network hostname, include `http://` or `https://`.
+
+Use the toolbar to go back, go forward, reload, copy the current address, or open it in your system browser. Collapsing the right sidebar or switching tabs keeps the page loaded; closing the tab releases it.
+
+The preview is built into the desktop app. It does not share Pi's session or access Pi's server. Local files, popups and downloads are not supported; use your system browser for workflows that need them.
 
 The desktop menus are currently in Chinese. The ones you are likely to use:
 

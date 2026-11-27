@@ -37,11 +37,22 @@ The staging directory is `.desktop/runtime/`:
   including Pi. It is outside ASAR, so Node and native PTY helpers run normally.
 - `build-info.json`: app/runtime versions, platform, architecture and Node checksum.
 
-Electron's renderer has no Node integration or preload bridge. It loads the same
-loopback HTTP page as a browser, with sandboxing, context isolation, normal CSP,
-and the existing bearer-token authentication. External HTTP(S) links require a
-native confirmation and open in the default browser. Other OS protocols, webviews,
-page-created windows, permission requests and downloads are not enabled.
+Electron's renderer has no Node integration. It loads the same loopback HTTP
+page as a browser, with sandboxing, context isolation, normal CSP, and the
+existing bearer-token authentication. Its preload exposes only the Web Preview
+controls, with sender checks in the main process. Previewed pages run in a
+separate, in-memory session without that bridge. They can load HTTP(S) resources
+and WebSockets, but the Pi backend port is reserved across hostnames and URL
+aliases. The preview uses Chromium's normal network and certificate checks;
+popups, downloads and permission requests are blocked. The Pi workbench's
+external HTTP(S) links still go to the default browser.
+
+After `npm run desktop:prepare`, run `npm run desktop:smoke:web-preview` on a
+machine with a GUI to exercise the preview in a real Electron window using a
+temporary profile and a local development server. The omnibox smoke verifies
+query routing and result navigation with a fixture. Set `PI_WEB_PREVIEW_SMOKE_PUBLIC=1`
+to check a live public page, or `PI_WEB_PREVIEW_SMOKE_GOOGLE=1` to check live
+access to Google (which depends on your system network and Google's response).
 
 ## Create an installer
 
