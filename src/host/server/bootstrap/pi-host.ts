@@ -565,7 +565,7 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           if (retained) await shared.workspaceSessions.open(retained.path, { sessionManager: retained.sessionManager });
           const host: BridgeHost = {
             hosted: shared.hosted?.handlers,
-            selfUpdate: scheduleReleasePrune(new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_LAUNCHER_NONCE,
+            selfUpdate: scheduleReleasePrune(new SelfUpdater({ agentDir: getAgentDir(), packageRoot: resolve(webRoot, "../.."), launcherNonce: process.env.PI_WEBAPP_FOREGROUND === "1" ? undefined : process.env.PI_WEBAPP_LAUNCHER_NONCE,
               pluginWarnings: version => shared.hosted!.manager.hostUpdateWarnings(version),
               prefetchPlugins: (version, signal) => shared.hosted!.manager.prefetchForHost(version, signal),
               beforeRestart: force => shared.hosted!.prepareRestart(force) })),

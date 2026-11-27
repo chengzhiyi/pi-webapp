@@ -5,9 +5,14 @@
 ## 用法
 
 ```text
-pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]
-pi-webapp status
+pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [--foreground] [--no-open] [Pi 参数]
+pi-webapp status [--json]
 pi-webapp stop [--force]
+pi-webapp restart
+pi-webapp logs [--tail <N>] [--follow]
+pi-webapp doctor [--host <127.0.0.1|0.0.0.0>] [--port <1–65535>]
+pi-webapp --version
+pi-webapp update [--check]
 pi-webapp --help
 ```
 
@@ -31,11 +36,13 @@ pi-webapp --help
 
 **浏览器什么时候打开。** 成功启动之后以及重新打开时，启动器会在你的默认浏览器里打开这个地址，除非出现下面任意一种情况：设置了 `PI_WEBAPP_AUTO_OPEN=0`；你在 SSH 会话里（`SSH_CONNECTION`、`SSH_TTY` 或 `SSH_CLIENT`）；你在没有 `DISPLAY` 或 `WAYLAND_DISPLAY` 的 Linux 上；或者它运行在桌面应用内部。这时请自己打开打印出来的地址。
 
+`--no-open` 不自动打开浏览器，也可单独用于后台模式。`pi-webapp start --foreground --no-open` 则在当前终端运行、直接输出日志，收到退出信号时走正常关闭流程。适合容器或服务管理器；前台模式不支持网页内升级并重启。
+
 ### 固定端口与 Docker
 
 默认只监听 `127.0.0.1`，端口由系统分配。`pi-webapp --port 3000` 会继续只监听本机，但指定端口 3000。如果端口无效或无法绑定，命令报错退出，不会换用其他端口。要更改已运行服务的监听配置，请先停止服务。
 
-在 Docker 宿主机只向本地发布端口，例如 `docker run -p 127.0.0.1:8080:3000 …`。在运行中的容器内执行 `pi-webapp --host 0.0.0.0 --port 3000`。启动器会在后台启动服务后退出，不要把它设为容器唯一的前台进程。在宿主机浏览器访问 `http://127.0.0.1:8080`，并保留启动地址中的 `/#<token>`。该模式仅支持本地 HTTP 访问，不用于公网或局域网托管。不要分享令牌，持有它即可操作 Pi 会话。
+在 Docker 宿主机只向本地发布端口，例如 `docker run -p 127.0.0.1:8080:3000 …`。用 `pi-webapp start --foreground --no-open --host 0.0.0.0 --port 3000` 作为容器启动命令。在宿主机浏览器访问 `http://127.0.0.1:8080`，并保留启动地址中的 `/#<token>`。该模式仅支持本地 HTTP 访问，不用于公网或局域网托管。不要分享令牌，持有它即可操作 Pi 会话。
 
 ## `pi-webapp status`
 
@@ -45,7 +52,9 @@ pi-webapp --help
 pi-webapp 正在运行：http://127.0.0.1:52395/#<token>
 ```
 
-启动进行中时它会打印 `pi-webapp 正在启动`，什么都没运行时打印 `pi-webapp 未运行`。多余的参数会得到 `用法：pi-webapp status`。
+启动进行中时它会打印 `pi-webapp 正在启动`，什么都没运行时打印 `pi-webapp 未运行`。
+
+用 `status --json` 获取不含访问令牌的机器可读状态。它检查本机服务是否就绪，并区分 CLI 版本和正在运行的版本。脚本应读取 JSON 中的状态，不要仅凭退出码判断服务是否健康。
 
 ## `pi-webapp stop [--force]`
 
@@ -60,6 +69,20 @@ pi-webapp 已停止
 `--force` 会跳过这个保存检查。如果服务在五秒内没有响应，它会直接结束后台进程及其子进程。**未保存的插件修改可能丢失。**
 
 如果没有任何东西在运行，它会打印 `pi-webapp 未运行`，退出码为 `0`。
+
+## 日志、诊断与重启
+
+- `pi-webapp logs --tail 100` 读取后台启动器日志，默认最近 100 行。加 `--follow` 持续查看，按 Ctrl+C 退出。常见令牌格式会被遮盖；分享日志前仍请检查是否包含敏感信息。
+- `pi-webapp doctor --port 8080` 检查 Node/Pi、数据目录权限、启动器状态，以及（指定端口时）端口是否可绑定。不安装或修复任何东西；检查失败返回非零。
+- `pi-webapp restart` 正常停止并重启由新版 CLI 启动的后台服务，保留工作目录、监听地址、实际端口和 Pi 参数。停止被拒绝时不会强杀。新服务可能生成新的访问令牌，请使用命令打印的地址。旧版服务没有保存启动参数时，请手动停止后用原参数启动；前台或桌面服务请通过原终端、服务管理器或桌面应用重启。
+
+## `pi-webapp --version` 和 `pi-webapp update [--check]`
+
+- `pi-webapp --version`（或 `-v`）打印当前调用的 CLI 包版本，不启动服务。Web 服务可能另用了一个托管版本，可在网页设置中查看。
+- `pi-webapp update --check` 比较 CLI 版本和 npm `latest`，不安装、不重启。有更新也返回退出码 `0`。
+- `pi-webapp update` 只更新 npm 全局安装的 CLI，不降级，也不会自动停止或启动服务。如果当前 Pi 数据目录的服务还在运行，应先完成任务并执行 `pi-webapp stop`。
+
+通过 `npx` 运行时，用 `npx pi-webapp@latest` 选用最新版，不必全局安装。桌面版和源码的更新方式见[更新](../updates)。
 
 ## `pi-webapp --help`
 

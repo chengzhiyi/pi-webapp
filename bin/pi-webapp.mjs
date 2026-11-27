@@ -2,7 +2,7 @@
 import { spawn as spawnNode } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, openSync, watch } from "node:fs";
-import { mkdir, open, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,8 +47,8 @@ function compatible(parts, required) {
   return true;
 }
 
-function probe(command) {
-  const result = spawn.sync(command, ["--version"], { encoding: "utf8" });
+function probeVersion(command, args = []) {
+  const result = spawn.sync(command, [...args, "--version"], { encoding: "utf8", timeout: 5000, windowsHide: true });
   if (result.error?.code === "ENOENT") return null;
   if (result.error || result.status !== 0) {
     throw new Error(`无法运行 Pi：${result.error?.message || result.stderr?.trim() || command}`);
@@ -58,7 +58,15 @@ function probe(command) {
   if (!parts || !compatible(parts, minimum)) {
     throw new Error(`Pi 版本 ${version || "未知"} 不受支持，需要 0.87.1 或更新版本。请更新 Pi 后重试。`);
   }
-  return command;
+  return version;
+}
+
+function probe(command) {
+  return probeVersion(command) ? command : null;
+}
+
+async function locatePiCli() {
+  return await packagePiCli(dirname(dirname(launcher))) ?? process.env.PI_WEBAPP_PI_CLI;
 }
 
 function installPi() {
@@ -85,22 +93,27 @@ function alive(pid) {
   catch (error) { return error?.code === "EPERM"; }
 }
 
-async function activeState() {
+async function readLauncherState() {
+  try { return JSON.parse(await readFile(statePath, "utf8")); }
+  catch (error) { if (error?.code === "ENOENT") return null; throw error; }
+}
+
+async function activeState({ cleanup = true } = {}) {
   let state;
   for (let attempt = 0; attempt < 3; attempt++) {
-    try { state = JSON.parse(await readFile(statePath, "utf8")); break; }
+    try { state = await readLauncherState(); if (!state) return null; break; }
     catch (error) {
       if (error?.code === "ENOENT") return null;
       if (!(error instanceof SyntaxError)) throw error;
       if (attempt < 2) { await new Promise((resolveWait) => setTimeout(resolveWait, 50)); continue; }
       const age = Date.now() - (await stat(statePath)).mtimeMs;
       if (age < 5000) return { starting: true };
-      await unlink(statePath).catch(() => {});
+      if (cleanup) await unlink(statePath).catch(() => {});
       return null;
     }
   }
   if (alive(state?.pid)) return state;
-  await unlink(statePath).catch(() => {});
+  if (cleanup) await unlink(statePath).catch(() => {});
   return null;
 }
 
@@ -119,9 +132,12 @@ function notifyParent(message) {
 function parseStartArgs(args) {
   const piArgs = [];
   let host, port;
+  let foreground = false, noOpen = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--") { piArgs.push(...args.slice(i)); break; }
+    if (arg === "--foreground") { foreground = true; continue; }
+    if (arg === "--no-open") { noOpen = true; continue; }
     const match = /^(--host|--port)(?:=(.*))?$/.exec(arg);
     if (!match) { piArgs.push(arg); continue; }
     const value = match[2] ?? args[++i];
@@ -135,11 +151,11 @@ function parseStartArgs(args) {
       port = Number(value);
     }
   }
-  return { host, port, piArgs };
+  return { host, port, piArgs, foreground, noOpen };
 }
 
-async function serve(pi, args) {
-  const { host = "127.0.0.1", port, piArgs } = parseStartArgs(args);
+async function serve(pi, args, { report = notifyParent, piCli = process.env.PI_WEBAPP_PI_CLI } = {}) {
+  const { host = "127.0.0.1", port, piArgs, foreground, noOpen } = parseStartArgs(args);
   const nonce = randomUUID();
   await mkdir(dirname(statePath), { recursive: true });
   let claimed = false;
@@ -150,14 +166,14 @@ async function serve(pi, args) {
     await lock.writeFile(JSON.stringify({ pid: process.pid, nonce, cwd: process.cwd(), starting: true, ...runtimeInfo }));
   } catch (error) {
     if (claimed) await unlink(statePath).catch(() => {});
-    notifyParent({ type: "error", message: error?.code === "EEXIST" ? "pi-webapp 已在启动或运行" : String(error) });
-    return;
+    report({ type: "error", message: error?.code === "EEXIST" ? "pi-webapp 已在启动或运行" : String(error) });
+    return 1;
   } finally { await lock?.close().catch(() => {}); }
 
   const pluginRoots = (process.env.PI_WEBAPP_PLUGIN_DEV_ROOTS ?? "").split(delimiter).filter(Boolean).map((root) => resolve(root));
-  const piPrefix = process.env.PI_WEBAPP_PI_CLI ? [resolve(process.env.PI_WEBAPP_PI_CLI)] : [];
+  const piPrefix = piCli ? [resolve(piCli)] : [];
   const child = spawn(pi, [...piPrefix, "--mode", "rpc", "-e", extension, ...pluginRoots.flatMap((root) => ["-e", root]), ...piArgs], {
-    cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_LISTEN_HOST: host, PI_WEBAPP_LISTEN_PORT: port === undefined ? "" : String(port), PI_WEBAPP_LAUNCHER_NONCE: nonce, PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL: "1", PI_WEBAPP_LAUNCHER_VERSION: packageVersion }, stdio: ["pipe", "pipe", "pipe"],
+    cwd: process.cwd(), detached: foreground, windowsHide: foreground, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(new URL("./model-network-bootstrap.mjs", import.meta.url).href)}`.trim(), PI_WEBAPP_AUTO_OPEN: "0", PI_WEBAPP_FOREGROUND: foreground ? "1" : "0", PI_WEBAPP_LISTEN_HOST: host, PI_WEBAPP_LISTEN_PORT: port === undefined ? "" : String(port), PI_WEBAPP_LAUNCHER_NONCE: nonce, PI_WEBAPP_LAUNCHER_HANDOFF_PROTOCOL: "1", PI_WEBAPP_LAUNCHER_VERSION: packageVersion }, stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr?.pipe(process.stderr, { end: false });
   let ready = false;
@@ -198,7 +214,7 @@ async function serve(pi, args) {
     child.stdin?.end();
     // A handoff is not permission to kill a stalled process. The new desktop
     // must wait for this supervisor and its child to exit naturally.
-    if (handoffRequest) return;
+    if (handoffRequest || reason === "cli_restart" || (foreground && !forceStopRequested && reason.startsWith("signal_"))) return;
     killTimer = setTimeout(() => {
       forceStopRequested = true;
       lifecycle("pi_force_stop", { reason, signal: "SIGTERM" });
@@ -214,7 +230,7 @@ async function serve(pi, args) {
     // Keep the gate closed until the rejected request is gone. Otherwise the
     // interval can read that same nonce again and launch an unsolicited drain,
     // racing the caller's explicit retry (or leaving an idle host draining).
-    void readFile(stopPath, "utf8").then(value => value.trim() === nonce ? unlink(stopPath) : undefined)
+    void readFile(stopPath, "utf8").then(value => [nonce, `${nonce} restart`].includes(value.trim()) ? unlink(stopPath) : undefined)
       .catch(() => {}).finally(() => { stopping = false; });
   };
   const shutdown = (reason, force = false) => {
@@ -224,7 +240,7 @@ async function serve(pi, args) {
     stopReason = reason;
     lifecycle("launcher_stop_requested", { reason });
     // An explicit operator override: skip the save/drain preflight that an unresponsive view can block.
-    if (force) { lifecycle("launcher_stop_forced", { reason }); finishShutdown(reason); return; }
+    if (force) { forceStopRequested = true; lifecycle("launcher_stop_forced", { reason }); finishShutdown(reason); return; }
     // RPC EOF can exit even when an extension's shutdown handler fails. Drain
     // while the transport is alive and require an explicit successful response.
     if (ready && stopCommand) {
@@ -238,7 +254,7 @@ async function serve(pi, args) {
   const fail = (message) => {
     if (failed || ready) return;
     failed = true;
-    notifyParent({ type: "error", message });
+    report({ type: "error", message });
     shutdown("startup_failure");
   };
   const startupTimer = setTimeout(() => fail(`Pi 启动超时。日志：${logPath}`), 60000);
@@ -252,6 +268,7 @@ async function serve(pi, args) {
         if (epoch !== stopEpoch || stopping) return;
         if (request === nonce) shutdown("stop_request");
         else if (request === `${nonce} force`) shutdown("stop_request", true);
+        else if (request === `${nonce} restart`) shutdown("cli_restart");
       } catch { /* No stop request. */ }
       if (stopping || epoch !== stopEpoch) return;
       if (runtimeKind === "desktop") {
@@ -269,6 +286,9 @@ async function serve(pi, args) {
       try {
         const request = JSON.parse(await readFile(restartPath, "utf8"));
         if (request.nonce !== nonce || (runtimeKind === "desktop" && !desktopPackages)) return;
+        // A service manager owns the foreground process. Don't activate a
+        // replacement launcher through the detached update handoff here.
+        if (foreground) return;
         if (typeof request.candidate === "string") {
           // The host only names its validated candidate. Selection, admission and rollback are ours.
           const candidate = await readCandidate(agentDir);
@@ -290,8 +310,10 @@ async function serve(pi, args) {
       } catch { /* No valid restart request. */ }
     } finally { stopCheckRunning = false; }
   }, 400);
-  process.on("SIGTERM", () => shutdown("signal_sigterm"));
-  process.on("SIGINT", () => shutdown("signal_sigint"));
+  const onTerminate = () => shutdown("signal_sigterm");
+  const onInterrupt = () => shutdown("signal_sigint");
+  process.on("SIGTERM", onTerminate);
+  process.on("SIGINT", onInterrupt);
   child.stdout?.on("data", (chunk) => {
     if (failed) return;
     if (!sawStdout) { sawStdout = true; startupStage("first-rpc-output"); }
@@ -355,20 +377,20 @@ async function serve(pi, args) {
       let url;
       try { url = new URL(record.message.slice("pi-webapp: ".length)); }
       catch { continue; }
-      if (url.hostname !== "127.0.0.1" || !url.hash) continue;
+      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || !url.hash) continue;
       if (port !== undefined && Number(url.port || "80") !== port) {
         fail(`Pi Web 未监听指定端口 ${port}。日志：${logPath}`);
         return;
       }
       runningUrl = url.href;
       opening = true;
-      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href, listenHost: host, ...runtimeInfo })
+      stateWrite = saveState({ pid: process.pid, piPid: child.pid, nonce, cwd: process.cwd(), url: url.href, listenHost: host, restartConfig: { piArgs, noOpen, foreground }, ...runtimeInfo })
         .then(() => {
           if (closed || failed) return;
           ready = true;
           clearTimeout(startupTimer);
           lifecycle("launcher_ready", { port: Number(url.port || "80") });
-          notifyParent({ type: "ready", pid: process.pid, url: url.href });
+          report({ type: "ready", pid: process.pid, url: url.href });
           for (const root of pluginRoots) {
             try {
               devWatchers.push(watch(join(root, "dist"), (_event, file) => {
@@ -403,6 +425,8 @@ async function serve(pi, args) {
   });
   await stateWrite;
   if (handoffRequest) await writeHandoff(agentDir, { ...handoffRequest, phase: failed || child.exitCode !== 0 ? "failed" : "stopped" });
+  process.off("SIGTERM", onTerminate);
+  process.off("SIGINT", onInterrupt);
   clearTimeout(startupTimer);
   clearTimeout(stopPreflightTimer);
   clearTimeout(devReloadTimer);
@@ -415,7 +439,7 @@ async function serve(pi, args) {
         // A confirmed normal stop may supersede a restart this supervisor never
         // accepted. Archive only our request after a natural successful exit,
         // while the owner claim still excludes a successor writing its request.
-        if (!restartRequest && stopReason === "stop_request" && ready && !failed && child.exitCode === 0 && !forceStopRequested) {
+        if (!restartRequest && ["cli_restart", "stop_request"].includes(stopReason) && ready && !failed && child.exitCode === 0 && !forceStopRequested) {
           try {
             const request = JSON.parse(await readFile(restartPath, "utf8"));
             if (request.nonce === nonce) {
@@ -433,7 +457,7 @@ async function serve(pi, args) {
     }
     catch { /* Already removed. */ }
   }
-  try { if ((await readFile(stopPath, "utf8")).trim() === nonce) await unlink(stopPath); } catch { /* Already removed. */ }
+  try { if ([nonce, `${nonce} force`, `${nonce} restart`].includes((await readFile(stopPath, "utf8")).trim())) await unlink(stopPath); } catch { /* Already removed. */ }
   if (restartRequest && runningUrl) {
     await unlink(restartPath).catch(() => {});
     const oldUrl = new URL(runningUrl);
@@ -457,6 +481,7 @@ async function serve(pi, args) {
       }
     } finally { closeSync(fd); }
   }
+  return failed || !ready || forceStopRequested || child.exitCode !== 0 ? 1 : 0;
 }
 
 /** The launcher-owned upgrade transaction: select the candidate's pointer, admit the new host only
@@ -521,29 +546,43 @@ async function managedLauncher() {
   } catch { return null; }
 }
 
-async function start(args) {
-  const { host, port, piArgs } = parseStartArgs(args);
+async function start(args, { cwd = process.cwd(), requireNew = false } = {}) {
+  const { host, port, piArgs, foreground, noOpen } = parseStartArgs(args);
   const existing = await activeState();
   if (existing) {
+    if (foreground || requireNew) throw new Error("pi-webapp 已在启动或运行，请先停止服务。");
     if ((host !== undefined || port !== undefined) && (!existing.url
       || (host !== undefined && host !== (existing.listenHost ?? "127.0.0.1"))
       || (port !== undefined && port !== Number(new URL(existing.url).port || "80")))) {
       throw new Error("pi-webapp 已在启动或使用不同的监听配置。请先运行 pi-webapp stop，再使用指定参数启动。");
     }
     console.log(existing.url ? `pi-webapp 已在后台运行：${existing.url}` : "pi-webapp 正在启动");
-    if (existing.url) await openPageIfLocal(existing.url);
+    if (existing.url && !noOpen) await openPageIfLocal(existing.url);
     return;
   }
   const managed = await managedLauncher();
   if (managed) {
     const selected = desktopPackages ? await readDesktopRelease(agentDir, packageVersion, desktopFallbackVersion) : null;
     const env = selected?.launcher === managed ? { ...process.env, PI_WEBAPP_PI_CLI: selected.piCli } : process.env;
-    const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd: process.cwd(), env, stdio: "inherit" });
-    const code = await new Promise((resolveExit, rejectExit) => { next.once("error", rejectExit); next.once("exit", (status) => resolveExit(status)); });
+    const next = spawnNode(process.execPath, [managed, "start", ...args], { cwd, env, stdio: "inherit", detached: foreground, windowsHide: foreground });
+    const onTerminate = () => next.kill("SIGTERM");
+    const onInterrupt = () => next.kill("SIGINT");
+    if (foreground) {
+      process.on("SIGTERM", onTerminate);
+      process.on("SIGINT", onInterrupt);
+    }
+    let code;
+    try {
+      code = await new Promise((resolveExit, rejectExit) => { next.once("error", rejectExit); next.once("exit", (status) => resolveExit(status ?? 1)); });
+    } finally {
+      process.off("SIGTERM", onTerminate);
+      process.off("SIGINT", onInterrupt);
+    }
+    if (foreground) { process.exitCode = code; return; }
     if (code !== 0) {
       await clearManagedLauncher(managed);
       console.error(`pi-webapp: 新版启动失败（代码 ${code ?? "未知"}），正在恢复当前安装`);
-      await start(args);
+      await start(args, { cwd, requireNew });
     }
     return;
   }
@@ -551,14 +590,24 @@ async function start(args) {
   if (!nodeVersion || !compatible(nodeVersion, [22, 19, 0])) throw new Error("需要 Node.js 22.19 或更新版本。");
   if (!existsSync(extension)) throw new Error("找不到构建后的扩展。请先运行 npm run build。");
   if (piArgs.some((arg) => ["--mode", "--print", "-p"].includes(arg))) throw new Error("后台启动不支持覆盖 Pi 的运行模式");
-  const piCli = await packagePiCli(dirname(dirname(launcher))) ?? process.env.PI_WEBAPP_PI_CLI;
+  const piCli = await locatePiCli();
   const pi = piCli ? process.execPath : probe("pi") ?? installPi();
+  if (foreground) {
+    process.exitCode = await serve(pi, args, { piCli, report(message) {
+      if (message.type === "error") console.error(`pi-webapp: ${message.message}`);
+      else {
+        console.log(`pi-webapp 正在前台运行（PID ${message.pid}）：${message.url}`);
+        if (!noOpen) void openPageIfLocal(message.url);
+      }
+    } });
+    return;
+  }
   await mkdir(dirname(statePath), { recursive: true });
   const logFd = openSync(logPath, "a", 0o600);
   let worker;
   try {
     worker = spawnNode(process.execPath, [launcher, "__serve", pi, ...args], {
-      detached: true, cwd: process.cwd(), env: { ...process.env, ...(piCli ? { PI_WEBAPP_PI_CLI: piCli } : {}) }, stdio: ["ignore", logFd, logFd, "ipc"],
+      detached: true, cwd, env: { ...process.env, ...(piCli ? { PI_WEBAPP_PI_CLI: piCli } : {}) }, stdio: ["ignore", logFd, logFd, "ipc"],
     });
   } finally { closeSync(logFd); }
   let ready;
@@ -579,7 +628,7 @@ async function start(args) {
   }
   console.log(`pi-webapp 已在后台运行（PID ${ready.pid}）：${ready.url}`);
   console.log("停止服务：pi-webapp stop（源码目录中可运行 npm run stop）");
-  await openPageIfLocal(ready.url);
+  if (!noOpen) await openPageIfLocal(ready.url);
 }
 
 async function openPageIfLocal(url) {
@@ -600,12 +649,13 @@ async function killTree(pid) {
   try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
 }
 
-async function stop(force = false) {
+async function stop(force = false, expectedNonce) {
   const state = await activeState();
+  if (expectedNonce && state?.nonce !== expectedNonce) throw new Error("服务状态已改变，已取消重启。请重新查看 pi-webapp status。");
   if (!state) { console.log("pi-webapp 未运行"); return; }
   if (!state.nonce) throw new Error("pi-webapp 正在启动，请稍后再停止");
   if (force) console.error("pi-webapp: 强制停止将跳过插件视图的保存确认，未保存的编辑可能丢失。");
-  await writeFile(stopPath, force ? `${state.nonce} force` : state.nonce, { mode: 0o600 });
+  await writeFile(stopPath, expectedNonce ? `${state.nonce} restart` : force ? `${state.nonce} force` : state.nonce, { mode: 0o600 });
   for (let attempt = 0; attempt < 400; attempt++) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     const outcome = await observeStopOutcome(activeState, stopPath, state.nonce);
@@ -625,12 +675,106 @@ async function stop(force = false) {
   throw new Error(`停止超时。后台进程 PID：${state.pid}；日志：${logPath}`);
 }
 
+async function restart() {
+  const state = await activeState();
+  if (!state?.url || !state.nonce) throw new Error("没有已就绪的后台服务。请运行 pi-webapp start 或等待启动完成。");
+  if (runtimeKind !== "npm" || state.runtimeKind !== "npm") throw new Error("请从桌面应用重新启动桌面服务。");
+  const config = state.restartConfig;
+  if (config?.foreground) throw new Error("请在原终端或服务管理器中重新启动前台服务。");
+  if (!Array.isArray(config?.piArgs) || !config.piArgs.every(arg => typeof arg === "string") || typeof state.cwd !== "string") {
+    throw new Error("此服务没有保存启动参数。请先执行 pi-webapp stop，再用原参数启动。");
+  }
+  const url = new URL(state.url);
+  const args = ["--host", state.listenHost ?? "127.0.0.1", "--port", url.port || "80", ...(config.noOpen ? ["--no-open"] : []), ...config.piArgs];
+  parseStartArgs(args);
+  if (!(await stat(state.cwd)).isDirectory()) throw new Error("原工作目录已不可用，已取消重启。");
+  await stop(false, state.nonce);
+  await start(args, { cwd: state.cwd, requireNew: true });
+}
+
+function readNpmOutput(args, errorMessage) {
+  const command = npmCommand(args);
+  const result = spawn.sync(command.file, command.args, { encoding: "utf8", timeout: 20000, windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error(`${errorMessage}：${result.error?.message || result.stderr?.trim() || `npm 退出码 ${result.status}`}`);
+  return result.stdout.trim();
+}
+
+async function update(checkOnly) {
+  if (!checkOnly) {
+    const unsupported = "仅支持自更新通过 npm 全局安装的 pi-webapp。npx 请使用 npx pi-webapp@latest；源码请通过 Git 更新；桌面版请在应用内更新。";
+    if (runtimeKind === "desktop" || existsSync(fileURLToPath(new URL("../.git", import.meta.url)))) throw new Error(unsupported);
+    const root = readNpmOutput(["root", "-g"], "无法定位 npm 全局安装目录");
+    const installed = join(root, "pi-webapp");
+    // Don't replace a linked checkout or install globally from an npx/local copy.
+    if (!root || !(await lstat(installed).catch(() => null))?.isDirectory()
+      || await realpath(installed) !== await realpath(dirname(dirname(launcher)))) throw new Error(unsupported);
+  }
+
+  const output = readNpmOutput(["view", "pi-webapp@latest", "version", "--json"], "无法查询 pi-webapp 最新版本");
+  let latest;
+  try { latest = JSON.parse(output); parseVersion(latest); }
+  catch { throw new Error("npm 返回的 pi-webapp 最新版本无效"); }
+  const comparison = compareVersions(latest, packageVersion);
+  console.log(`pi-webapp CLI：${packageVersion}；npm latest：${latest}`);
+  if (comparison <= 0) {
+    console.log(comparison === 0 ? "已是最新版本" : "当前版本更新，不会降级");
+    return;
+  }
+  if (checkOnly) { console.log("有可用更新"); return; }
+  if (await activeState()) throw new Error("pi-webapp 正在启动或运行。请先完成任务并执行 pi-webapp stop，再更新 CLI。");
+
+  const command = npmCommand(["install", "-g", `pi-webapp@${latest}`]);
+  const result = spawn.sync(command.file, command.args, { stdio: "inherit", windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error(`更新失败：${result.error?.message || `npm 退出码 ${result.status}`}`);
+  console.log(`pi-webapp CLI 已更新至 ${latest}。服务未启动，可运行 pi-webapp start。`);
+}
+
 async function main() {
   const [argument, ...rest] = process.argv.slice(2);
   if (argument === "__serve") { await serve(rest[0], rest.slice(1)); return; }
+  if (argument === "--version" || argument === "-v") {
+    if (rest.length) throw new Error("用法：pi-webapp --version");
+    console.log(packageVersion);
+    return;
+  }
+  if (argument === "update") {
+    const usage = "用法：pi-webapp update [--check]";
+    if (rest.length === 1 && ["--help", "-h"].includes(rest[0])) { console.log(usage); return; }
+    if (rest.length && !(rest.length === 1 && rest[0] === "--check")) throw new Error(usage);
+    await update(rest.length === 1);
+    return;
+  }
+  if (argument === "logs") {
+    if (rest.length === 1 && ["--help", "-h"].includes(rest[0])) { console.log("用法：pi-webapp logs [--tail <N>] [--follow]"); return; }
+    const { showLogs } = await import("./launcher-logs.mjs");
+    try { await showLogs(logPath, rest); }
+    catch (error) { if (error?.code !== "ENOENT") throw error; throw new Error("还没有后台日志。请先启动后台服务；前台模式的日志直接输出到终端。"); }
+    return;
+  }
+  if (argument === "doctor") {
+    if (rest.length === 1 && ["--help", "-h"].includes(rest[0])) { console.log("用法：pi-webapp doctor [--host <127.0.0.1|0.0.0.0>] [--port <1–65535>]"); return; }
+    const { showDoctor } = await import("./launcher-diagnostics.mjs");
+    const passed = await showDoctor({ args: rest, readState: readLauncherState, agentDir, async probePi() {
+      const cli = await locatePiCli();
+      return cli ? probeVersion(process.execPath, [cli]) : probeVersion("pi");
+    } });
+    if (!passed) process.exitCode = 1;
+    return;
+  }
+  if (argument === "restart") {
+    if (rest.length === 1 && ["--help", "-h"].includes(rest[0])) { console.log("用法：pi-webapp restart"); return; }
+    if (rest.length) throw new Error("用法：pi-webapp restart");
+    await restart();
+    return;
+  }
+  if (argument === "status" && rest.length === 1 && rest[0] === "--json") {
+    const { showStatus } = await import("./launcher-diagnostics.mjs");
+    await showStatus({ state: await activeState({ cleanup: false }), cliVersion: packageVersion });
+    return;
+  }
   if (argument === "stop" || argument === "status") {
     const force = argument === "stop" && rest.length === 1 && rest[0] === "--force";
-    if (rest.length && !force) throw new Error(`用法：pi-webapp ${argument}${argument === "stop" ? " [--force]" : ""}`);
+    if (rest.length && !force) throw new Error(`用法：pi-webapp ${argument}${argument === "stop" ? " [--force]" : " [--json]"}`);
     if (argument === "stop") await stop(force);
     else {
       const state = await activeState();
@@ -638,7 +782,7 @@ async function main() {
     }
     return;
   }
-  const usage = "用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]\n      pi-webapp status | stop [--force]";
+  const usage = "用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [--foreground] [--no-open] [Pi 参数]\n      pi-webapp status [--json] | stop [--force] | restart\n      pi-webapp logs [--tail <N>] [--follow]\n      pi-webapp doctor [--host <127.0.0.1|0.0.0.0>] [--port <1–65535>]\n      pi-webapp --version | update [--check]";
   if (argument === "--help" || argument === "-h" || (argument === "start" && rest.length === 1 && ["--help", "-h"].includes(rest[0]))) { console.log(usage); return; }
   if (argument && argument !== "start" && !argument.startsWith("-")) throw new Error(usage);
   await start(argument === "start" || !argument ? rest : [argument, ...rest]);
