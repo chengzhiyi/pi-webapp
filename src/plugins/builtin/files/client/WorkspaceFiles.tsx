@@ -7,6 +7,8 @@ import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
 import { WorkspaceFilePreview } from "./WorkspaceFilePreview.tsx";
 import { FileBreadcrumb } from "./FileBreadcrumb.tsx";
 import { FileTree } from "./FileTree.tsx";
+import { FileOpenWith } from "./FileOpenWith.tsx";
+import { getDesktopOpenWith } from "../../../../host/client/desktop-file-manager.ts";
 import { FileSearchResults } from "./FileSearch.tsx";
 import { emptyStatus, statusIndex, type StatusIndex } from "./file-status.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
@@ -52,6 +54,10 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
 }) {
   const [expanded, setExpanded] = useState(() => new Set(state.expanded));
   const [selected, setSelected] = useState(() => state.selected);
+  const [directory, setDirectory] = useState<{ sessionId: string; path: string }>();
+  const canOpenWith = !!getDesktopOpenWith();
+  const activeDirectory = canOpenWith && directory?.sessionId === sessionId ? directory.path : undefined;
+  const selectDirectory = canOpenWith ? (path: string) => setDirectory({ sessionId, path }) : undefined;
   const [treeOpen, setTreeOpen] = useState(state.treeOpen);
   const [revision, setRevision] = useState(0);
   const [narrow, setNarrow] = useState(false);
@@ -85,7 +91,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const changeQuery = (value: string) => { state.query = value; setQuery(value); };
   const treeId = `files-tree-${sessionId}`;
   const path = selected?.cwd === cwd ? selected.path : undefined;
-  const lines = useReportedFile(cwd, path, reportContext);
+  const lines = useReportedFile(cwd, activeDirectory === undefined ? path : undefined, reportContext);
   // Runs whenever the tree column mounts, including after it is shown again.
   const restoreScroll = useCallback((element: HTMLDivElement | null) => { if (element) element.scrollTop = state.scrollTop; }, [state]);
   useLayoutEffect(() => {
@@ -110,6 +116,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const showTree = (value: boolean) => { state.treeOpen = value; setTreeOpen(value); };
   const open = (file: string, line?: number) => {
     if (file !== path && dirty.current && !window.confirm(t("放弃未保存的更改？", "Discard unsaved changes?"))) return;
+    setDirectory(undefined);
     setReveal(line ? { line } : undefined);
     const next = { cwd, path: file };
     state.selected = next; setSelected(next);
@@ -121,23 +128,28 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
     });
     if (narrow) showTree(false);
   };
-  const breadcrumb = <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={path} levels={state.levels} onOpen={open} />;
+  const breadcrumb = (current: string | undefined, directory = false) => <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={current} directory={directory}
+    levels={state.levels} onOpen={open} onSelectDirectory={selectDirectory} />;
   const toggleTree = !treeOpen && <TreeToggle open={false} controls={treeId} onToggle={() => showTree(true)} />;
+  const directoryToolbar = (current: string) => <>{breadcrumb(current, true)}<FileOpenWith sessionId={sessionId} path={current} kind="directory" /></>;
   return <div ref={layout} className={css.files} data-narrow={narrow || undefined} data-tree-open={treeOpen || undefined}>
     <div className={css.filesMain}>
-      {path
-        ? <WorkspaceFilePreview key={path} sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} trailing={toggleTree}
+      {path && <div className={css.body} hidden={activeDirectory !== undefined}>
+        <WorkspaceFilePreview key={path} sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb(path)}
+          trailing={<>{activeDirectory === undefined && <FileOpenWith sessionId={sessionId} path={path} kind="file" />}{toggleTree}</>}
           refresh={revision} reveal={reveal} onDirtyChange={onDirtyChange} onSaved={onSaved} onSelection={lines} />
-        : <div className={css.body}>
-          <div className={css.toolbar}>{breadcrumb}{toggleTree}</div>
-          <div className={css.emptyFile}>
-            <IconFolderClose16 size={28} className={css.emptyFileIcon} />
-            <p className={css.emptyFileTitle}>{t("打开的文件显示在这里", "Open files appear here")}</p>
-            <p className={css.emptyFileHint}>{t("请在目录树中选择一个文件，或在对话中点击文件路径。", "Choose a file in the tree, or click a file path in the chat.")}</p>
-          </div>
-        </div>}
+      </div>}
+      {(!path || activeDirectory !== undefined) && <div className={css.body}>
+        <div className={css.toolbar}>{canOpenWith && !(narrow && treeOpen) ? directoryToolbar(activeDirectory ?? "") : breadcrumb(activeDirectory, activeDirectory !== undefined)}{toggleTree}</div>
+        <div className={css.emptyFile}>
+          <IconFolderClose16 size={28} className={css.emptyFileIcon} />
+          <p className={css.emptyFileTitle}>{activeDirectory !== undefined ? activeDirectory.split("/").at(-1) : t("打开的文件显示在这里", "Open files appear here")}</p>
+          <p className={css.emptyFileHint}>{t("请在目录树中选择一个文件，或在对话中点击文件路径。", "Choose a file in the tree, or click a file path in the chat.")}</p>
+        </div>
+      </div>}
     </div>
     {treeOpen && <aside id={treeId} className={css.filesSide} aria-label={t("文件目录", "File tree")}>
+      {canOpenWith && narrow && <div className={css.toolbar}>{directoryToolbar(activeDirectory ?? "")}</div>}
       <div className={css.toolbar}>
         <label className={css.search} title={cwd}>
           <IconSearchOutlineRegular />
@@ -163,7 +175,8 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
         </div>
         : <div ref={restoreScroll} className={css.scroll} onScroll={event => { state.scrollTop = event.currentTarget.scrollTop; }}>
           <FileTree root="" label={t("工作区文件", "Workspace files")} sessionId={sessionId} levels={state.levels} revision={revision}
-            expanded={expanded} selected={path} status={status} toggle={toggle} open={open} />
+            expanded={expanded} selected={activeDirectory === undefined ? path : undefined} selectedDirectory={activeDirectory} selectDirectory={selectDirectory}
+            status={status} toggle={toggle} open={open} />
         </div>}
     </aside>}
   </div>;
@@ -181,5 +194,6 @@ export function WorkspaceFileTab({ sessionId, cwd, path, levels, renderMarkdown,
   useLayoutEffect(() => { latest.current = open; });
   const onOpen = useCallback((file: string) => latest.current(file), []);
   const breadcrumb = useMemo(() => <FileBreadcrumb sessionId={sessionId} cwd={cwd} path={path} levels={levels} onOpen={onOpen} />, [sessionId, cwd, path, levels, onOpen]);
-  return <WorkspaceFilePreview sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb} onSelection={lines} />;
+  return <WorkspaceFilePreview sessionId={sessionId} path={path} renderMarkdown={renderMarkdown} breadcrumb={breadcrumb}
+    trailing={<FileOpenWith sessionId={sessionId} path={path} kind="file" />} onSelection={lines} />;
 }

@@ -239,7 +239,7 @@ export function PiWorkspaceBrowser({ wide, navigationBusy = false, connected = t
               {unavailable && <span className={css.unavailable}>{t("不可用", "Unavailable")}</span>}
             </button>
             <span className={css.rowActions} data-workspace-actions>
-              <PiWorkspaceActions title={workspace.title} active={active} disabled={disabled} open={workspaceMenuId === workspace.id}
+              <PiWorkspaceActions workspaceId={workspace.id} unavailable={unavailable} title={workspace.title} active={active} disabled={disabled} open={workspaceMenuId === workspace.id}
                 onOpenChange={open => setWorkspaceMenuId(open ? workspace.id : null)} onRemove={() => { setError(""); setRemoveTarget({ id: workspace.id, title: workspace.title }); }} />
               <button type="button" className={css.rowAction} title={unavailable ? t("目录不可用，请恢复目录或移除后重新添加", "Directory unavailable; restore it or remove and add the workspace again") : t("新建会话", "New session")} aria-label={t(`在 ${workspace.title} 新建会话`, `Create a session in ${workspace.title}`)} disabled={disabled || unavailable} onClick={() => { void run(async () => { await onNewSession(workspace.id); setQuery(""); setExpanded(current => new Set([...current, workspace.id])); }); }}><IconNewChatOutline16 size={16} /></button>
             </span>

@@ -1,14 +1,16 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MenuSurface } from "../../../web/src/ui/shared/primitives/MenuSurface.tsx";
-import { IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
+import { IconEditOutline16, IconEllipsisOutline16, IconFolderOpenOutline16, IconTrashOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { localize as t } from "../../../web/src/ui/locale/preference.ts";
+import { fileManagerLabel, getDesktopFileManager, showInFileManager } from "./desktop-file-manager.ts";
 import css from "./pi-workspaces.module.css";
 
-interface RowMenuItem { label: string; icon: ReactNode; destructive?: boolean; disabled?: boolean; onSelect: () => void }
+interface RowMenuItem { label: string; icon: ReactNode; destructive?: boolean; disabled?: boolean; separatorBefore?: boolean; onSelect: () => void }
 
-/** DSH's workspace ellipsis action, limited to the mutation Pi actually supports. */
-export function PiWorkspaceActions({ title, active, disabled, open, onOpenChange, onRemove }: {
+export function PiWorkspaceActions({ workspaceId, unavailable, title, active, disabled, open, onOpenChange, onRemove }: {
+  workspaceId: string;
+  unavailable: boolean;
   title: string;
   active: boolean;
   disabled: boolean;
@@ -16,8 +18,14 @@ export function PiWorkspaceActions({ title, active, disabled, open, onOpenChange
   onOpenChange: (open: boolean) => void;
   onRemove: () => void;
 }) {
+  const bridge = getDesktopFileManager();
+  const items: RowMenuItem[] = [];
+  if (bridge) items.push({ label: fileManagerLabel(bridge.platform, "directory"), icon: <IconFolderOpenOutline16 />,
+    disabled: unavailable, onSelect: () => { void showInFileManager(bridge, { workspaceId, path: "", kind: "directory" }); } });
+  items.push({ label: t("从列表移除工作区", "Remove workspace from list"), icon: <IconTrashOutline16 />,
+    separatorBefore: !!bridge, destructive: true, disabled: active, onSelect: onRemove });
   return <PiRowMenu label={t(`${title} 的工作区操作`, `Workspace actions for ${title}`)} title={t("工作区操作", "Workspace actions")} disabled={disabled} open={open} onOpenChange={onOpenChange}
-    items={[{ label: t("从列表移除工作区", "Remove workspace from list"), icon: <IconTrashOutline16 />, destructive: true, disabled: active, onSelect: onRemove }]}
+    items={items}
     hint={active ? t("请先切换到其他工作区再移除", "Switch to another workspace before removing") : t("不删除目录、文件或会话历史", "Keeps directories, files and session history")} />;
 }
 
@@ -98,8 +106,11 @@ function PiRowMenu({ label, title, disabled, open, onOpenChange, items, hint }: 
           enabled[next]?.focus();
         }
       }}>
-      {items.map((item) => <button key={item.label} type="button" role="menuitem" className={`${css.menuItem} ${item.destructive ? "" : css.menuItemNeutral}`} disabled={disabled || item.disabled}
-        onClick={() => { close(); item.onSelect(); }}>{item.icon}{item.label}</button>)}
+      {items.map((item) => <Fragment key={item.label}>
+        {item.separatorBefore && <div role="separator" className={css.menuSeparator} />}
+        <button type="button" role="menuitem" className={`${css.menuItem} ${item.destructive ? "" : css.menuItemNeutral}`} disabled={disabled || item.disabled}
+          onClick={() => { close(); item.onSelect(); }}>{item.icon}{item.label}</button>
+      </Fragment>)}
       {hint && <p className={css.menuHint}>{hint}</p>}
     </MenuSurface>, document.body)}
   </>;

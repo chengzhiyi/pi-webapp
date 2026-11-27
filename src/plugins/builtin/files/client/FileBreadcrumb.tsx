@@ -24,9 +24,9 @@ function expandedFor(directory: string, file: string | undefined): Set<string> {
  * One directory's contents, portalled above the dock: the right sidebar slides
  * with a transform, which would otherwise become the fixed containing block.
  */
-function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, onDismiss }: {
+function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, onDismiss, onSelectDirectory }: {
   anchor: HTMLElement; segment: Segment; sessionId: string; levels: Map<string, WorkspaceFileListing>;
-  selected: string | undefined; onOpen(path: string): void; onDismiss(): void;
+  selected: string | undefined; onOpen(path: string): void; onDismiss(): void; onSelectDirectory?(path: string): void;
 }) {
   const self = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(() => expandedFor(segment.path, selected));
@@ -43,11 +43,13 @@ function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, o
     // The segment toggles its own menu; any other press outside dismisses it.
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && (self.current?.contains(event.target) || anchor.contains(event.target))) return;
+      if (event.target instanceof Element && event.target.closest("[data-file-tree-context-menu]")) return;
       onDismiss();
     };
     // Capture phase, like the dock's tab menu: Escape closes this menu before any pane-level shortcut sees it.
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      if (event.target instanceof Element && event.target.closest("[data-file-tree-context-menu]")) return;
       event.preventDefault(); event.stopPropagation();
       const restore = self.current?.contains(document.activeElement) || document.activeElement === document.body || document.activeElement === anchor;
       onDismiss();
@@ -81,7 +83,8 @@ function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, o
       }}>
       <div className={css.crumbMenuScroll} style={{ maxHeight }}>
         <FileTree root={segment.path} label={label} sessionId={sessionId} levels={levels} revision={0} compact
-          expanded={expanded} selected={selected} toggle={toggle} open={path => { onDismiss(); onOpen(path); }} />
+          expanded={expanded} selected={selected} toggle={toggle} open={path => { onDismiss(); onOpen(path); }}
+          selectDirectory={onSelectDirectory && (path => { onDismiss(); onSelectDirectory(path); })} />
       </div>
     </MenuSurface>,
     document.body,
@@ -89,18 +92,19 @@ function DirectoryMenu({ anchor, segment, sessionId, levels, selected, onOpen, o
 }
 
 /** Workspace-relative path as clickable segments; each directory opens a menu of its contents. */
-export function FileBreadcrumb({ sessionId, cwd, path, levels, onOpen }: {
-  sessionId: string; cwd: string; path: string | undefined; levels: Map<string, WorkspaceFileListing>; onOpen(path: string): void;
+export function FileBreadcrumb({ sessionId, cwd, path, directory, levels, onOpen, onSelectDirectory }: {
+  sessionId: string; cwd: string; path: string | undefined; directory?: boolean; levels: Map<string, WorkspaceFileListing>;
+  onOpen(path: string): void; onSelectDirectory?(path: string): void;
 }) {
   const [opened, setMenu] = useState<{ segment: Segment; anchor: HTMLElement; target: string } | null>(null);
   // A different file or workspace leaves no stale menu anchored to a removed segment.
-  const target = `${cwd}\0${path ?? ""}`;
+  const target = `${sessionId}\0${cwd}\0${directory ? "dir" : "file"}\0${path ?? ""}`;
   const menu = opened?.target === target ? opened : null;
-  const parts = path?.split("/") ?? [];
-  const file = parts.length ? parts.at(-1) : undefined;
+  const parts = path ? path.split("/") : [];
+  const file = directory ? undefined : parts.at(-1);
   const segments: Segment[] = [
     { name: cwd.split(/[\\/]/u).filter(Boolean).at(-1) ?? cwd, path: "", title: cwd },
-    ...parts.slice(0, -1).map((name, index) => {
+    ...(directory ? parts : parts.slice(0, -1)).map((name, index) => {
       const value = parts.slice(0, index + 1).join("/");
       return { name, path: value, title: value };
     }),

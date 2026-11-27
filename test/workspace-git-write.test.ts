@@ -41,6 +41,33 @@ test("commit includes only staged content, honors failing hooks, rejects stale s
   await assert.rejects(write({ action: "commit", message: "nothing staged" }));
 });
 
+test("commit co-authorship is opt-in, preserves the primary author and other trailers, and deduplicates by email", async t => {
+  const { cwd, git, write } = await repository(t);
+  const stage = async (content: string) => {
+    await writeFile(join(cwd, "file.txt"), content);
+    await write({ action: "stage", path: "file.txt" });
+  };
+  const trailer = "Co-authored-by: pi-webapp <pi-webapp@emath.top>";
+  const log = () => git("log", "-1", "--format=%B");
+  await stage("first");
+  await assert.rejects(write({ action: "commit", message: "Invalid flag", coAuthor: "true" }));
+  await write({ action: "commit", message: "No attribution", coAuthor: false });
+  assert.equal(await log(), "No attribution");
+  await stage("second");
+  const body = `Explain the format\n${trailer}\nThis is an example in the body.`;
+  await write({ action: "commit", message: body, coAuthor: true });
+  assert.equal(await log(), `${body}\n\n${trailer}`);
+  await stage("third");
+  const withOther = "With another author\n\nCo-authored-by: Pat <pat@example.invalid>";
+  await write({ action: "commit", message: `${withOther}\n\n`, coAuthor: true });
+  assert.equal(await log(), `${withOther}\n${trailer}`);
+  assert.equal(await git("log", "-1", "--format=%an <%ae>"), "Write Test <test@example.invalid>");
+  await stage("fourth");
+  const attributed = `${withOther}\nCo-authored-by: Pi <PI-WEBAPP@emath.top>`;
+  await write({ action: "commit", message: attributed, coAuthor: true });
+  assert.equal(await log(), attributed);
+});
+
 test("creates branches and switches only a clean root worktree, rejecting invalid, duplicate and occupied names", async t => {
   const { cwd, git, write, state } = await repository(t);
   await writeFile(join(cwd, "file.txt"), "base\n"); await write({ action: "stage", path: "file.txt" }); await write({ action: "commit", message: "base" });

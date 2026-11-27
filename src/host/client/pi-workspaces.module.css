@@ -54,6 +54,7 @@
 .menuItem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 34px; box-sizing: border-box; padding: 6px 8px; border: 0; border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-state-error-primary); font: inherit; font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
 .menuItem:hover, .menuItem:focus-visible { background: var(--dsw-alias-interactive-bg-hover); outline: none; }
 .menuItemNeutral { color: var(--dsw-alias-label-primary); }
+.menuSeparator { margin: 4px; border-top: 1px solid var(--dsw-alias-border-l2); }
 .menuItem:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
 .menuHint { margin: 4px 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 @media (hover: none), (pointer: coarse) {

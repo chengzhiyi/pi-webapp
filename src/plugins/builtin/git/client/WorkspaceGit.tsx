@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { GitDiffArea, GitFileChange, GitWriteAction } from "../contract/workspace-git.ts";
+import type { GitDiffArea, GitFileChange, GitWriteAction, GitWriteOptions } from "../contract/workspace-git.ts";
 import { FileTypeIcon } from "../../../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { IconRefreshOutlineRegular } from "../../../../../web/src/ui/shared/primitives/icons/index.tsx";
 import { localize as t, useLocale } from "../../../../../web/src/ui/locale/preference.ts";
@@ -53,13 +53,13 @@ export const WorkspaceGit = memo(function WorkspaceGit({ sessionId, visible, idl
   const refresh = () => window.dispatchEvent(new Event("pi-workspace-git-changed"));
   const blocked = !idle ? "agent_busy" : control?.blocked;
   const disabled = model.pending || !control?.version || controlLoading || controlError || error || !!blocked;
-  const write = async (action: GitWriteAction, input: { path?: string; message?: string; branch?: string; checkout?: boolean } = {}) => {
+  const write = async (action: GitWriteAction, input: GitWriteOptions = {}) => {
     if (disabled || model.pending || !control) return false;
     model.pending = true; model.outcome = null; redraw();
     try {
       await workspaceGitApi.write(sessionId, { action, expected: control.version, ...input });
       model.outcome = { ok: true, reason: action };
-      if (action === "commit" && model.message === input.message) model.message = "";
+      if (action === "commit" && model.message === input.message) { model.message = ""; model.coAuthor = false; }
       if (action === "create-branch" && model.branch === input.branch) model.branch = "";
       return true;
     } catch (error) {
@@ -127,8 +127,9 @@ export const WorkspaceGit = memo(function WorkspaceGit({ sessionId, visible, idl
         {controlError && <p className={css.hint} role="status">{t("操作状态读取失败，请刷新。", "Could not read operation state. Refresh to retry.")}</p>}
         {model.pending && !branchesOpen && <p className={css.hint} role="status">{t("正在执行 Git 操作…", "Running Git operation…")}</p>}
         {model.outcome && !branchesOpen && <div className={css.feedbackRow}><p className={css.feedback} data-error={!model.outcome.ok} role="status">{gitWriteFeedback(model.outcome.reason)}</p><button type="button" className={filesCss.iconButton} aria-label={t("关闭 Git 提示", "Dismiss Git message")} onClick={() => { model.outcome = null; redraw(); }}>×</button></div>}
-        {repository.scope ? <p className={css.rootHint} title={gitWriteFeedback("root_required")}>{t("提交请打开仓库根目录", "Commit from repository root")}</p> : <form className={css.commitForm} aria-label={t("创建提交", "Create commit")} onSubmit={event => { event.preventDefault(); if (canCommit) void write("commit", { message: model.message }); }}>
+        {repository.scope ? <p className={css.rootHint} title={gitWriteFeedback("root_required")}>{t("提交请打开仓库根目录", "Commit from repository root")}</p> : <form className={css.commitForm} aria-label={t("创建提交", "Create commit")} onSubmit={event => { event.preventDefault(); if (canCommit) void write("commit", { message: model.message, coAuthor: model.coAuthor }); }}>
           <textarea aria-label={t("提交说明", "Commit message")} rows={1} maxLength={8192} disabled={model.pending} value={model.message} placeholder={t("提交说明…", "Commit message…")} onChange={event => { model.message = event.target.value; redraw(); }} onKeyDown={event => { const composing = composition.current?.guards(event.nativeEvent) ?? event.nativeEvent.isComposing; if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !composing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+          <label className={css.checkbox}><input type="checkbox" checked={model.coAuthor} disabled={model.pending} onChange={event => { model.coAuthor = event.target.checked; redraw(); }} />{t("添加 pi-webapp 为共同作者", "Add pi-webapp as co-author")}</label>
           <div className={css.actionRow}><span className={css.hint}>{control?.staged ? t(`仅暂存区 · ${control.staged} 个文件`, `Staged only · ${control.staged} files`) : t("先暂存要提交的文件", "Stage files to commit")}</span><button className={css.actionButton} type="submit" disabled={!canCommit} title={t("仅提交暂存区 · ⌘/Ctrl+Enter", "Commit staged files · ⌘/Ctrl+Enter")}>{t("提交", "Commit")}</button></div>
         </form>}
       </div>}
