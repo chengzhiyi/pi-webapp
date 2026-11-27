@@ -8,6 +8,8 @@
 pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]
 pi-webapp status
 pi-webapp stop [--force]
+pi-webapp --version
+pi-webapp update [--check]
 pi-webapp --help
 ```
 
@@ -60,6 +62,14 @@ pi-webapp 已停止
 `--force` 会跳过这个保存检查。如果服务在五秒内没有响应，它会直接结束后台进程及其子进程。**未保存的插件修改可能丢失。**
 
 如果没有任何东西在运行，它会打印 `pi-webapp 未运行`，退出码为 `0`。
+
+## `pi-webapp --version` 和 `pi-webapp update [--check]`
+
+- `pi-webapp --version`（或 `-v`）打印当前调用的 CLI 包版本，不启动服务。Web 服务可能另用了一个托管版本，可在网页设置中查看。
+- `pi-webapp update --check` 比较 CLI 版本和 npm `latest`，不安装、不重启。有更新也返回退出码 `0`。
+- `pi-webapp update` 只更新 npm 全局安装的 CLI，不降级，也不会自动停止或启动服务。如果当前 Pi 数据目录的服务还在运行，应先完成任务并执行 `pi-webapp stop`。
+
+通过 `npx` 运行时，用 `npx pi-webapp@latest` 选用最新版，不必全局安装。桌面版和源码的更新方式见[更新](../updates)。
 
 ## `pi-webapp --help`
 

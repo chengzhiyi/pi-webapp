@@ -2,7 +2,7 @@
 import { spawn as spawnNode } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, openSync, watch } from "node:fs";
-import { mkdir, open, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -625,9 +625,58 @@ async function stop(force = false) {
   throw new Error(`停止超时。后台进程 PID：${state.pid}；日志：${logPath}`);
 }
 
+function readNpmOutput(args, errorMessage) {
+  const command = npmCommand(args);
+  const result = spawn.sync(command.file, command.args, { encoding: "utf8", timeout: 20000, windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error(`${errorMessage}：${result.error?.message || result.stderr?.trim() || `npm 退出码 ${result.status}`}`);
+  return result.stdout.trim();
+}
+
+async function update(checkOnly) {
+  if (!checkOnly) {
+    const unsupported = "仅支持自更新通过 npm 全局安装的 pi-webapp。npx 请使用 npx pi-webapp@latest；源码请通过 Git 更新；桌面版请在应用内更新。";
+    if (runtimeKind === "desktop" || existsSync(fileURLToPath(new URL("../.git", import.meta.url)))) throw new Error(unsupported);
+    const root = readNpmOutput(["root", "-g"], "无法定位 npm 全局安装目录");
+    const installed = join(root, "pi-webapp");
+    // Don't replace a linked checkout or install globally from an npx/local copy.
+    if (!root || !(await lstat(installed).catch(() => null))?.isDirectory()
+      || await realpath(installed) !== await realpath(dirname(dirname(launcher)))) throw new Error(unsupported);
+  }
+
+  const output = readNpmOutput(["view", "pi-webapp@latest", "version", "--json"], "无法查询 pi-webapp 最新版本");
+  let latest;
+  try { latest = JSON.parse(output); parseVersion(latest); }
+  catch { throw new Error("npm 返回的 pi-webapp 最新版本无效"); }
+  const comparison = compareVersions(latest, packageVersion);
+  console.log(`pi-webapp CLI：${packageVersion}；npm latest：${latest}`);
+  if (comparison <= 0) {
+    console.log(comparison === 0 ? "已是最新版本" : "当前版本更新，不会降级");
+    return;
+  }
+  if (checkOnly) { console.log("有可用更新"); return; }
+  if (await activeState()) throw new Error("pi-webapp 正在启动或运行。请先完成任务并执行 pi-webapp stop，再更新 CLI。");
+
+  const command = npmCommand(["install", "-g", `pi-webapp@${latest}`]);
+  const result = spawn.sync(command.file, command.args, { stdio: "inherit", windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error(`更新失败：${result.error?.message || `npm 退出码 ${result.status}`}`);
+  console.log(`pi-webapp CLI 已更新至 ${latest}。服务未启动，可运行 pi-webapp start。`);
+}
+
 async function main() {
   const [argument, ...rest] = process.argv.slice(2);
   if (argument === "__serve") { await serve(rest[0], rest.slice(1)); return; }
+  if (argument === "--version" || argument === "-v") {
+    if (rest.length) throw new Error("用法：pi-webapp --version");
+    console.log(packageVersion);
+    return;
+  }
+  if (argument === "update") {
+    const usage = "用法：pi-webapp update [--check]";
+    if (rest.length === 1 && ["--help", "-h"].includes(rest[0])) { console.log(usage); return; }
+    if (rest.length && !(rest.length === 1 && rest[0] === "--check")) throw new Error(usage);
+    await update(rest.length === 1);
+    return;
+  }
   if (argument === "stop" || argument === "status") {
     const force = argument === "stop" && rest.length === 1 && rest[0] === "--force";
     if (rest.length && !force) throw new Error(`用法：pi-webapp ${argument}${argument === "stop" ? " [--force]" : ""}`);
@@ -638,7 +687,7 @@ async function main() {
     }
     return;
   }
-  const usage = "用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]\n      pi-webapp status | stop [--force]";
+  const usage = "用法：pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi 参数]\n      pi-webapp status | stop [--force]\n      pi-webapp --version | update [--check]";
   if (argument === "--help" || argument === "-h" || (argument === "start" && rest.length === 1 && ["--help", "-h"].includes(rest[0]))) { console.log(usage); return; }
   if (argument && argument !== "start" && !argument.startsWith("-")) throw new Error(usage);
   await start(argument === "start" || !argument ? rest : [argument, ...rest]);

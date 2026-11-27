@@ -8,6 +8,8 @@ This page is the reference for the `pi-webapp` command, its exit behavior and ev
 pi-webapp [start] [--port <1–65535>] [--host <127.0.0.1|0.0.0.0>] [Pi arguments]
 pi-webapp status
 pi-webapp stop [--force]
+pi-webapp --version
+pi-webapp update [--check]
 pi-webapp --help
 ```
 
@@ -60,6 +62,14 @@ Stopping ends all running chats and every terminal. The service first asks its p
 `--force` skips that save check. If the service doesn't respond within five seconds, it ends the background process and its child processes directly. **Unsaved plugin edits can be lost.**
 
 If nothing is running, it prints `pi-webapp 未运行` and exits `0`.
+
+## `pi-webapp --version` and `pi-webapp update [--check]`
+
+- `pi-webapp --version` (or `-v`) prints the version of the CLI package you invoked without starting the service. The web service can run a different managed version, shown in web settings.
+- `pi-webapp update --check` compares the CLI version with npm's `latest` without installing anything or restarting. It exits `0` even if an update is available.
+- `pi-webapp update` updates an npm global install only. It never downgrades or automatically stops or starts the service. If a service is running for the current Pi data folder, finish your work and run `pi-webapp stop` first.
+
+If you use `npx`, run `npx pi-webapp@latest` to select the latest version instead of installing globally. See [Updates](../updates) for desktop and source checkouts.
 
 ## `pi-webapp --help`
 
