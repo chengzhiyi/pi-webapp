@@ -54,8 +54,10 @@ button without launching it or changing the operating system's default; Pi
 remembers the choice by file extension, with a separate preference for folders.
 Some types and folders only offer the file manager. For files that action
 selects the file; for folders it opens the directory. Right-click and the
-workspace's sidebar menu remain available. These actions are not available in
-browser sessions or on Linux.
+workspace's sidebar menu remain available. A browser opened by the local Pi
+launcher (or **Window → Open in Browser**) has the same actions, without
+installing the desktop app. A manually copied status URL, an SSH-forwarded
+session, or a headless or Linux host does not grant access to system apps.
 
 After `npm run desktop:prepare`, run `npm run desktop:smoke:web-preview` on a
 machine with a GUI to exercise the preview in a real Electron window using a
@@ -139,9 +141,9 @@ aggregate metadata must agree with the selected macOS arm64 receipt and its asse
   to 2 GiB / 15 minutes, and verify the exact byte count and SHA-256. Only fixed
   official GitHub URLs and release-asset redirects are accepted. Progress uses
   the OS window indicator; **取消桌面更新下载** aborts and cleans partial files.
-- An ad-hoc/unsigned current app or target, or a manifest without an update ZIP,
-  only downloads a checked DMG and reveals it in Finder for **manual installation**.
-  Checksums do not prove publisher identity; Gatekeeper is not bypassed.
+- Without a matching Developer ID update ZIP, this menu downloads a checked DMG
+  and reveals it in Finder for **manual installation**. Checksums alone do not
+  prove publisher identity. See the separate opt-in test updater below.
 - A publisher-signed current app and target ZIP still require a separate
   **安装并重启** confirmation before Squirrel.Mac sees an update. The native
   updater verifies the installed signing identity; a token-bound private loopback
@@ -155,12 +157,31 @@ aggregate metadata must agree with the selected macOS arm64 receipt and its asse
   A staged native update is guarded on normal exit too, because Squirrel may
   apply it then. Failed checks leave the original app and background work intact.
 
-Automatic installation is limited to publisher-signed macOS arm64 applications;
+The Squirrel updater is limited to publisher-signed macOS arm64 applications;
 Intel macOS, Windows/Linux, and source runs open official Releases instead.
-Actual signed replacement still needs signed old/new applications and separate
-release QA; unit tests and ad-hoc smoke do not certify it. Existing desktop builds
-without this updater need one manual upgrade. Public signing/notarization remains
-separately authorized; the wrapper does not discover certificates automatically.
+Actual Developer ID replacement needs signed old/new applications and separate
+release QA; ad-hoc tests do not certify it. Public signing and notarization
+remain separate from project signing.
+
+#### Auto-update on quit (macOS Apple Silicon test builds)
+
+Install a test build with the project's update public key manually once. Open
+`pi.app` from a writable `/Applications` or `~/Applications`, then enable
+**pi → Auto-Update Desktop on Quit (Test Builds)** (off by default).
+It downloads only project-authenticated test releases, verifies the Ed25519
+signature on the release manifest and the DMG's size and SHA-256, then stages
+and checks the app without running it. The regular Check for Desktop Updates
+menu is still available for manual installation.
+
+When the menu shows **Desktop Test Update Ready**, finish work and quit normally.
+The updater never stops a service itself. If you leave a bundled service
+running, an installation is deferred; a known external npm service can keep
+running. After the shell and its bundled processes are gone, a helper swaps the
+bundles on the same volume without admin privileges. It keeps the old app and
+does not touch `~/.pi` or relaunch the desktop. Filesystem or verification
+failures leave the installed app alone. Test builds are not Apple-notarized:
+quarantine remains active and macOS may ask you to explicitly allow the new app.
+See [test release setup and Finder recovery](desktop-testing.md#opt-in-desktop-updates-by-the-project).
 ### Business-package updates (independent of the desktop shell)
 
 Capable desktop shells set `PI_WEBAPP_DESKTOP_PACKAGE_UPDATES=1`. In these shells,

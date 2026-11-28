@@ -9,8 +9,9 @@ module.exports = {
   electronVersion: pkg.devDependencies.electron,
   directories: { app: "desktop", output: "desktop-release" },
   extraMetadata: { version: pkg.version },
-  files: ["main.mjs", "web-preview.mjs", "web-preview-policy.mjs", "web-preview-preload.cjs", "file-manager.mjs", "open-with-macos.mjs", "open-with-windows.mjs", "backend.mjs", "quit.mjs", "locale.mjs", "context-menu.mjs", "docs-links.mjs", "reset-upgrade.mjs", "stop-outcome.mjs", "launcher-handoff.mjs", "downloads.mjs", "managed-release.mjs", "release-version.mjs", "connect.mjs", "updater.mjs", "update-release.mjs", "update-native.mjs", "package.json", "release.json", "icons/icon.png", "!node_modules{,/**/*}"],
-  extraResources: [{ from: ".desktop/runtime", to: "runtime", filter: ["**/*"] }],
+  files: ["main.mjs", "web-preview.mjs", "web-preview-policy.mjs", "web-preview-preload.cjs", "file-manager.mjs", "native-file-actions.mjs", "local-file-grant.mjs", "open-with-macos.mjs", "open-with-windows.mjs", "backend.mjs", "quit.mjs", "locale.mjs", "context-menu.mjs", "docs-links.mjs", "reset-upgrade.mjs", "stop-outcome.mjs", "launcher-handoff.mjs", "downloads.mjs", "managed-release.mjs", "release-version.mjs", "connect.mjs", "updater.mjs", "update-release.mjs", "update-native.mjs", "update-project.mjs", "update-project-key.pem", "package.json", "release.json", "icons/icon.png", "!node_modules{,/**/*}"],
+  extraResources: [{ from: ".desktop/runtime", to: "runtime", filter: ["**/*"] },
+    ...(process.platform === "darwin" && process.arch === "arm64" ? [{ from: ".desktop/update-swap", to: "update-swap" }] : [])],
   asar: true,
   npmRebuild: false, // Native modules live beside the standalone Node runtime, not in Electron.
   nodeGypRebuild: false,

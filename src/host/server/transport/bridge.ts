@@ -28,6 +28,8 @@ import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandle
 
 import { readAssetManifest } from "./web-assets.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
+import { matchesLocalFileGrant } from "../../../../desktop/local-file-grant.mjs";
+import { localFileActionHeader, localFileActionRoute, type FileActionPlatform } from "../../../contracts/local-file-actions.ts";
 import { HOSTED_FRAME_CSP } from "../plugins/hosted/frame-csp.ts";
 
 export interface BridgeHost {
@@ -147,7 +149,7 @@ async function listen(server: Server, requestedPort: number, listenHost: string)
   return address.port;
 }
 
-export async function startBridge(host: BridgeHost, webRoot: string, telemetry = new NodeTelemetry(), options: { pluginSettingsFile?: string } = {}): Promise<Bridge> {
+export async function startBridge(host: BridgeHost, webRoot: string, telemetry = new NodeTelemetry(), options: { pluginSettingsFile?: string; localFileGrant?: { platform: FileActionPlatform; key: Buffer } } = {}): Promise<Bridge> {
   telemetry.setState({ piVersion: VERSION });
   const fixedToken = process.env.PI_WEBAPP_RESTART_TOKEN;
   const tokenText = fixedToken && /^[A-Za-z0-9_-]{32}$/.test(fixedToken) ? fixedToken : randomBytes(24).toString("base64url");
@@ -164,6 +166,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const logins = new ProviderLoginController((cause, context) => telemetry.capture(cause, context));
   const remember = (session: SessionView) => telemetry.setState({ nodeVersion: process.version, platform: process.platform, session: telemetry.session(session.sessionId), idle: session.idle, model: session.model, thinkingLevel: session.thinkingLevel, messageCount: session.messages.length });
   const listenHost = process.env.PI_WEBAPP_LISTEN_HOST === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
+  const nativeGrant = listenHost === "127.0.0.1" ? options.localFileGrant : undefined;
   let origin = "";
   let restarting = false;
   let preparingUpdate = false;
@@ -245,6 +248,14 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       }
       if (!authorized(req, token)) {
         json(res, 401, { error: "访问令牌无效" });
+        return;
+      }
+      const localFileAllowed = () => !!nativeGrant
+        && originMatches && req.headers.host === new URL(origin).host && req.socket.remoteAddress === "127.0.0.1"
+        && matchesLocalFileGrant(nativeGrant.key, tokenText, req.headers[localFileActionHeader.toLowerCase()]);
+      if (req.method === "GET" && path === localFileActionRoute) {
+        if (nativeGrant && localFileAllowed()) json(res, 200, { platform: nativeGrant.platform });
+        else json(res, 403, { error: "系统文件操作仅限已授权的本机桌面" });
         return;
       }
       if (req.method === "GET" && path === "/api/hosted-plugins") {
@@ -443,7 +454,9 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
             return;
           }
           if (pluginRegistry.mutating && path !== "/api/abort") { json(res, 409, { error: "插件配置正在保存，请稍后重试" }); return; }
-          if (await pluginRegistry.dispatch({ path, body: body as { sessionId: string } & Record<string, unknown>, res, snapshot: () => host.snapshot(), busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], json: (status, value) => json(res, status, value) })) return;
+          const localFileRequest = path === localFileActionRoute && req.headers.origin === origin && localFileAllowed()
+            ? { workspaces: () => host.workspaces(), trusted: () => !restarting && !res.destroyed } : undefined;
+          if (await pluginRegistry.dispatch({ path, body: body as { sessionId: string } & Record<string, unknown>, res, snapshot: () => host.snapshot(), busyWorkspaces: () => host.busyGitWorkspaces?.() ?? [], localFileRequest, json: (status, value) => json(res, status, value) })) return;
           if (path === "/api/plugin-interaction") {
             if (body.sessionId !== host.snapshot().sessionId) { json(res, 409, { error: "会话已切换" }); return; }
             if (!("pluginId" in body) || typeof body.pluginId !== "string" || body.pluginId.length > 200 || !("requestId" in body) || typeof body.requestId !== "string" || body.requestId.length > 200 || !host.resolvePluginInteraction || !("value" in body)) {

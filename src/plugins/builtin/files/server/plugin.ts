@@ -3,11 +3,15 @@ import { metadata } from "../contract/manifest.ts";
 import { EDITOR_LIMITS, listWorkspaceFiles, previewWorkspaceFile, readWorkspaceImage, writeWorkspaceFile, WorkspaceFileError } from "./workspace-files.ts";
 import { searchWorkspaceFiles, workspaceFileStatus } from "./workspace-search.ts";
 import { opaqueError } from "../../../../contracts/telemetry.ts";
+import { localFileActionRoute } from "../../../../contracts/local-file-actions.ts";
+import { handleNativeFileRequest } from "./native-file-request.ts";
 
 export const filesPlugin: ServerPlugin = {
   metadata,
-  routes: ["/api/workspace/files/list", "/api/workspace/files/preview", "/api/workspace/files/raw", "/api/workspace/files/write", "/api/workspace/files/status", "/api/workspace/files/search"],
-  async handle({ path, body, snapshot, json, res }) {
+  routes: ["/api/workspace/files/list", "/api/workspace/files/preview", "/api/workspace/files/raw", "/api/workspace/files/write", "/api/workspace/files/status", "/api/workspace/files/search", localFileActionRoute],
+  async handle(context) {
+    const { path, body, snapshot, json, res } = context;
+    if (path === localFileActionRoute) return handleNativeFileRequest(context);
     const session = snapshot();
     if (body.sessionId !== session.sessionId) { json(409, { error: "会话已切换" }); return; }
     const operation = path.slice(path.lastIndexOf("/") + 1);

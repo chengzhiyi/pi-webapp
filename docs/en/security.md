@@ -39,7 +39,7 @@ ssh -L 52395:127.0.0.1:52395 you@remote-host
 
 Then open the full address, with its token, in your local browser.
 
-The same port number matters because the service only accepts requests whose origin is exactly the address it printed. If you forward to a different local port, the page loads but shows **来源不匹配** ("origin mismatch") and live features fail. Over SSH the launcher doesn't try to open a browser, and **Add workspace** uses pi-webapp's own folder browser instead of a native one.
+The same port number matters because the service only accepts requests whose origin is exactly the address it printed. If you forward to a different local port, the page loads but shows **来源不匹配** ("origin mismatch") and live features fail. Over SSH the launcher doesn't try to open a browser, and **Add workspace** uses pi-webapp's own folder browser instead of a native one. **Open With** and **Show in Finder/File Explorer** also require a browser opened by the local launcher on macOS or Windows. The ordinary URL, even on `127.0.0.1`, does not grant those actions.
 
 ## What the agent and terminal can do
 

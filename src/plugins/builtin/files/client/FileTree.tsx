@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { fileManagerLabel, getDesktopFileManager, showInFileManager } from "../../../../host/client/desktop-file-manager.ts";
+import { fileManagerLabel, useFileManager, showInFileManager } from "../../../../host/client/desktop-file-manager.ts";
 import { MenuSurface } from "../../../../../web/src/ui/shared/primitives/MenuSurface.tsx";
 import { FileTypeIcon } from "../../../../../web/src/ui/primitives/FileTypeIcon.tsx";
 import { IconFolderOpen16 } from "../../../../../web/src/ui/primitives/index.ts";
@@ -139,7 +139,7 @@ function DirectoryLevel({ path, depth, tree, showMenu }: { path: string; depth: 
 /** One keyboard-navigable tree rooted at a workspace directory ("" is the workspace root). */
 export function FileTree({ root, label, ...tree }: TreeProps & { root: string; label: string }) {
   const { toggle, open, sessionId } = tree;
-  const bridge = getDesktopFileManager();
+  const bridge = useFileManager();
   const [menu, setMenu] = useState<(FileMenuTarget & { sessionId: string; root: string }) | null>(null);
   const dismiss = useRef(() => setMenu(null)).current;
   const activeMenu = menu?.sessionId === sessionId && menu.root === root ? menu : null;

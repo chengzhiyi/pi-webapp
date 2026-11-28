@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { fileManagerError, fileManagerLabel, getDesktopOpenWith, type SessionFileTarget, type SystemFileApp } from "../../../../host/client/desktop-file-manager.ts";
+import { fileManagerError, fileManagerLabel, useSystemOpenWith, type SessionFileTarget, type SystemFileApp } from "../../../../host/client/desktop-file-manager.ts";
 import { IconChevronDownOutline14, IconFolderOpenOutline16 } from "../../../../../web/src/ui/primitives/icons/index.tsx";
 import { MenuSurface } from "../../../../../web/src/ui/shared/primitives/MenuSurface.tsx";
 import { localize as t } from "../../../../../web/src/ui/locale/preference.ts";
@@ -22,12 +22,12 @@ function AppIcon({ app }: { app: SystemFileApp }) {
 }
 
 export function FileOpenWith({ sessionId, path, kind }: SessionFileTarget) {
-  const bridge = getDesktopOpenWith();
+  const bridge = useSystemOpenWith();
   if (!bridge) return null;
   return <OpenWith key={JSON.stringify([sessionId, path, kind])} target={{ sessionId, path, kind }} bridge={bridge} />;
 }
 
-function OpenWith({ target, bridge }: { target: SessionFileTarget; bridge: NonNullable<ReturnType<typeof getDesktopOpenWith>> }) {
+function OpenWith({ target, bridge }: { target: SessionFileTarget; bridge: NonNullable<ReturnType<typeof useSystemOpenWith>> }) {
   const { sessionId, path, kind } = target;
   const key = preferenceKey(target);
   const [remembered, setRemembered] = useState(() => preferred(key));

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { DesktopBackend, externalAddress, localAddress, sameDocument } from "./backend.mjs";
 import { connectBackend } from "./connect.mjs";
 import { DesktopUpdater } from "./updater.mjs";
+import { ProjectDesktopUpdate } from "./update-project.mjs";
 import { configureLocalExport } from "./downloads.mjs";
 import { confirmDesktopQuit } from "./quit.mjs";
 import { showContextMenu } from "./context-menu.mjs";
@@ -14,6 +15,7 @@ import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 import { installWebPreviewIpc, WebPreview } from "./web-preview.mjs";
 import { installFileManagerIpc } from "./file-manager.mjs";
+import { localFileLaunchUrl } from "./local-file-grant.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -31,6 +33,7 @@ let webPreview;
 let backend;
 let backendUrl;
 let updater;
+let projectUpdate;
 let bundledPiVersion = "unknown";
 let quitting = false;
 let askingQuit = false;
@@ -72,11 +75,18 @@ function showWindow() {
   });
   window.on("closed", () => { window = null; webPreview = null; });
   // Load the existing same-origin page; native APIs are narrow and sender-checked.
-  void window.loadURL(backendUrl).catch(() => {
+  void loadMainWindow(window).catch(() => {
     // Closing a loading window aborts navigation. A synchronous native alert
     // here would re-enter the macOS modal loop and block shutdown itself.
     if (!askingQuit && !quitting) dialog.showErrorBox(t("无法加载界面", "Could not load the interface"), t("请查看后端日志，或重新打开应用。", "Check the backend logs or reopen the app."));
   });
+}
+
+async function loadMainWindow(target) {
+  const address = backendUrl;
+  if (!address || !target || target.isDestroyed()) return;
+  const launchUrl = await localFileLaunchUrl(address);
+  if (address === backendUrl && target === window && !target.isDestroyed() && !quitting) await target.loadURL(launchUrl);
 }
 
 async function openExternal(value) {
@@ -112,13 +122,14 @@ async function requestQuit() {
   if (handingOff) { await showQuitMessage({ message: t("正在安全交接后台启动器，请等待正常退出和重新连接。", "The backend launcher is being handed off safely. Wait for it to exit and reconnect."), buttons: [t("确定", "OK")] }); return; }
   if (resetting) { await showQuitMessage({ message: t("正在清理升级状态并重启后台，请稍候。", "Resetting update state and restarting the backend. Please wait."), buttons: [t("确定", "OK")] }); return; }
   if (startup) return; // Finish acquiring ownership before permitting shutdown.
-  if (updater?.busy) {
+  if (updater?.busy || projectUpdate?.preparing || projectUpdate?.changing) {
     await showQuitMessage({ message: t("桌面更新正在处理，请等待下载或系统校验完成后再退出。", "A desktop update is in progress. Wait for the download or system verification to finish before quitting."), buttons: [t("确定", "OK")] });
     return;
   }
   askingQuit = true;
   try {
     if (!await confirmDesktopQuit({ appName, backend, updater, showMessageBox: showQuitMessage })) return;
+    await projectUpdate?.prepareQuit();
     quitting = true;
     app.quit();
   } catch (error) { dialog.showErrorBox(t("尚未退出", "Could Not Quit"), error.message); }
@@ -136,7 +147,7 @@ async function requestLauncherHandoff() {
     if (answer.response !== 1 || quitting) return;
     const state = await backend.handoff();
     backendUrl = localAddress(state.url).href;
-    await window?.loadURL(backendUrl);
+    await loadMainWindow(window);
     await showQuitMessage({ type: "info", message: t("启动器安全交接完成", "Launcher handoff completed"),
       detail: t(`当前桌面 ${app.getVersion()} build ${release.buildNumber} 已启动原业务包 ${state.version}，支持持久化体验版通道。请在设置中检查更新。`, `Desktop ${app.getVersion()} build ${release.buildNumber} started the existing app package ${state.version} with persistent prerelease channel support. Check for updates in Settings.`), buttons: [t("好", "OK")] });
   } catch (error) { await showQuitMessage({ type: "warning", message: t("启动器交接未完成", "Launcher handoff not completed"), detail: error.message, buttons: [t("好", "OK")] }); }
@@ -164,7 +175,7 @@ async function requestUpgradeReset() {
       result = await backend.resetUpgrade({ force: true });
     }
     backendUrl = localAddress(result.state.url).href;
-    if (window && !window.isDestroyed()) await window.loadURL(backendUrl); else showWindow();
+    if (window && !window.isDestroyed()) await loadMainWindow(window); else showWindow();
     await showQuitMessage({ type: "info", message: t("升级状态已清理", "Update state reset"),
       detail: result.folder ? t(`已移走 ${result.moved.length} 项记录到：${result.folder}\n当前运行内置版本 ${result.state.version}。`, `Moved ${result.moved.length} records to: ${result.folder}\nNow running the bundled version ${result.state.version}.`)
         : t(`没有需要清理的升级记录。当前运行内置版本 ${result.state.version}。`, `There were no update records to reset. Now running the bundled version ${result.state.version}.`), buttons: [t("好", "OK")] });
@@ -182,9 +193,26 @@ function installMenu() {
           detail: t(`桌面外壳版本 ${app.getVersion()} · 桌面构建 ${release.buildNumber}\n当前 pi-webapp ${backend?.state?.version ?? "unknown"}\n随包 Pi ${bundledPiVersion}（已有共享后台仍使用其自身版本）\n应用位置：${app.getPath("exe")}\n当前连接：${backend?.owned ? "桌面自有后台" : "已有共享后台"}\n后台启动器 ${backend?.state?.launcherVersion ?? "unknown"} · 启动桌面 ${backend?.state?.desktopShell?.version ?? "unknown"} build ${backend?.state?.desktopShell?.build ?? "unknown"}\n启动器通道持久化：${backend?.state?.desktopReleaseChannels === true ? "支持" : backend?.state?.desktopReleaseChannels === false ? "不支持" : "未报告"}\n业务包通过界面设置中的“应用更新”升级；“检查桌面更新”仅更新桌面外壳安装包。`, `Desktop shell ${app.getVersion()} · Desktop build ${release.buildNumber}\nCurrent pi-webapp ${backend?.state?.version ?? "unknown"}\nBundled Pi ${bundledPiVersion} (an existing shared backend continues to use its own version)\nApp location: ${app.getPath("exe")}\nCurrent connection: ${backend?.owned ? "desktop-owned backend" : "existing shared backend"}\nBackend launcher ${backend?.state?.launcherVersion ?? "unknown"} · Launching desktop ${backend?.state?.desktopShell?.version ?? "unknown"} build ${backend?.state?.desktopShell?.build ?? "unknown"}\nPersistent launcher channels: ${backend?.state?.desktopReleaseChannels === true ? "supported" : backend?.state?.desktopReleaseChannels === false ? "not supported" : "not reported"}\nUpdate the app package through App Updates in Settings. The Check for Desktop Updates command only updates the desktop shell installer.`) });
       } },
       { label: t("安全切换到当前桌面启动器…", "Switch to Current Desktop Launcher Safely…"), click: () => void requestLauncherHandoff() },
-      { label: t("检查桌面更新…", "Check for Desktop Updates…"), click: () => { if (!startup && !handingOff) void updater?.run(); } },
+      { label: t("检查桌面更新…", "Check for Desktop Updates…"), click: () => {
+        if (!startup && !handingOff && !askingQuit && !quitting && !projectUpdate?.busy) void updater?.run();
+      } },
+      ...(projectUpdate?.available ? [{ type: "checkbox", checked: projectUpdate.enabled,
+        label: t("退出时自动更新桌面（测试版）", "Auto-Update Desktop on Quit (Test Builds)"), click: async item => {
+          if (startup || askingQuit || quitting || updater?.busy) { installMenu(); return; }
+          try { await projectUpdate.setEnabled(item.checked); if (projectUpdate.enabled) void projectUpdate.run(); }
+          catch { void showQuitMessage({ type: "warning", message: t("无法保存桌面自动更新设置", "Could Not Save Desktop Auto-Update Preference"), buttons: [t("确定", "OK")] }); }
+          if (!quitting) installMenu();
+        } }, ...(projectUpdate.enabled ? [{
+          label: projectUpdate.pending ? t("桌面测试更新已就绪", "Desktop Test Update Ready")
+            : projectUpdate.busy ? t("正在准备桌面测试更新…", "Preparing Desktop Test Update…")
+              : projectUpdate.failed ? t("重试准备桌面测试更新…", "Retry Desktop Test Update…")
+                : t("检查测试版自动更新", "Check for Test Auto-Update"),
+          enabled: !projectUpdate.busy && !projectUpdate.pending,
+          click: () => { if (!startup && !handingOff && !askingQuit && !quitting && !updater?.busy) void projectUpdate.run(); },
+        }] : []), ...(projectUpdate.previous ? [{ label: t("在 Finder 中显示上个桌面版本", "Show Previous Desktop Version in Finder"),
+          click: () => shell.showItemInFolder(projectUpdate.previous) }] : [])] : []),
       { label: t("清理升级状态并恢复内置版本…", "Reset Update State and Use Bundled Version…"), click: () => void requestUpgradeReset() },
-      { label: t("取消桌面更新下载", "Cancel Desktop Update Download"), click: () => updater?.cancelDownload() },
+      { label: t("取消桌面更新下载", "Cancel Desktop Update Download"), click: () => { updater?.cancelDownload(); projectUpdate?.cancelDownload(); } },
       { type: "separator" }, { label: t("退出…", "Quit…"), accelerator: "CmdOrCtrl+Q", click: () => void requestQuit() },
     ] },
     { label: t("编辑", "Edit"), submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" },
@@ -193,7 +221,7 @@ function installMenu() {
       { label: t("显示主窗口", "Show Main Window"), click: showWindow },
       { label: t("重新加载界面", "Reload Interface"), accelerator: "CmdOrCtrl+R", click: () => window?.webContents.reload() },
       { role: "togglefullscreen" },
-      { label: t("在浏览器中打开", "Open in Browser"), click: () => { if (backendUrl) void shell.openExternal(backendUrl); } },
+      { label: t("在浏览器中打开", "Open in Browser"), click: () => { if (backendUrl) void localFileLaunchUrl(backendUrl).then(openInBrowser); } },
       { label: t("打开日志目录", "Open Log Folder"), click: () => { if (backend) void shell.openPath(dirname(backend.logPath)); } },
     ] },
     { label: t("帮助", "Help"), role: "help", submenu: [
@@ -211,6 +239,7 @@ else {
   app.on("second-instance", showWindow);
   app.on("activate", showWindow);
   app.on("before-quit", event => { if (!quitting) { event.preventDefault(); void requestQuit(); } });
+  app.on("will-quit", () => projectUpdate?.commitQuit());
   app.on("window-all-closed", () => { if (!startup && !quitting) void requestQuit(); });
   // Let the ESM entry finish evaluating before Electron emits ready.
   void app.whenReady().then(async () => {
@@ -226,14 +255,20 @@ else {
   session.defaultSession.on("will-download", (event, item, contents) => configureLocalExport(event, item, contents, {
     expectedContents: window?.webContents, backendUrl, downloadsPath: app.getPath("downloads"),
   }));
-  updater = new DesktopUpdater({ current: { version: app.getVersion(), build: release.buildNumber },
-    packaged: app.isPackaged, appPath: resolve(dirname(app.getPath("exe")), "../.."), cachePath: app.getPath("temp"),
+  const current = { version: app.getVersion(), build: release.buildNumber };
+  const appPath = resolve(dirname(app.getPath("exe")), "../..");
+  const cachePath = app.getPath("temp");
+  const getBackend = () => { if (!backend) throw new Error(t("后台身份尚未确认，请稍后重试安装", "Backend identity is not confirmed yet. Try installing again shortly.")); return backend; };
+  updater = new DesktopUpdater({ current, packaged: app.isPackaged, appPath, cachePath,
     autoUpdater, showMessageBox: options => quitting ? Promise.resolve({ response: 0 }) : dialog.showMessageBox(options),
-    openExternal: url => shell.openExternal(url), revealFile: path => shell.showItemInFolder(path),
-    getBackend: () => { if (!backend) throw new Error(t("后台身份尚未确认，请稍后重试安装", "Backend identity is not confirmed yet. Try installing again shortly.")); return backend; },
+    openExternal: url => shell.openExternal(url), revealFile: path => shell.showItemInFolder(path), getBackend,
     setProgress: value => window?.setProgressBar(value),
     beforeInstall: () => { const wasStarting = startup; startup = false; quitting = true;
       return () => { startup = wasStarting; quitting = false; }; } });
+  projectUpdate = new ProjectDesktopUpdate({ current, appPath, cachePath, getBackend, packaged: app.isPackaged,
+    home: homedir(), profile: app.getPath("userData"), helperPath: join(process.resourcesPath, "update-swap"),
+    showMessageBox: showQuitMessage, onChange: () => { if (!quitting && !askingQuit) installMenu(); } });
+  await projectUpdate.initialize();
   installMenu(); // Updates must remain reachable even when backend versions differ.
   try {
     const runtime = app.isPackaged ? join(process.resourcesPath, "runtime")
@@ -260,7 +295,10 @@ else {
     startup = false;
     installMenu();
     showWindow();
-    if (process.env.PI_WEBAPP_DESKTOP_UPDATE_CHECK !== "manual") void updater.run({ silent: true });
+    if (process.env.PI_WEBAPP_DESKTOP_UPDATE_CHECK !== "manual") {
+      if (projectUpdate.enabled) void projectUpdate.run();
+      else void updater.run({ silent: true });
+    }
   } catch (error) {
     startup = false;
     dialog.showErrorBox(t(`${appName} 启动失败`, `${appName} failed to start`), `${error.code === "ENOENT" ? t("缺少桌面运行环境，请先运行 npm run desktop:prepare 或重新安装桌面应用。", "The desktop runtime is missing. Run npm run desktop:prepare or reinstall the desktop app.") : error.message}\n\n${backend ? t(`日志：${backend.logPath}`, `Logs: ${backend.logPath}`) : ""}`);

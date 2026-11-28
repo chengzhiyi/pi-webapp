@@ -159,18 +159,18 @@ export function AppFrame({
   }, [actions])
 
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
-  // Desktop fullscreen keeps the navigation rail; its previous open width is
-  // only visually collapsed and returns when fullscreen ends.
-  const dockFullscreen = layoutInfo.rightbarFullscreen && viewport >= 767
-  const sidebarCollapsed = dockFullscreen || (narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0)
+  // Fullscreen keeps the rail in the grid; navigation opens over the dock.
+  const dockFullscreen = layoutInfo.rightbarShown && layoutInfo.rightbarFullscreen && viewport >= 767
+  const sidebarDrawerMode = narrow || dockFullscreen
+  const drawerOpen = sidebarDrawerMode && layoutInfo.sidebarDrawerOpen
+  const sidebarCollapsed = sidebarDrawerMode ? !drawerOpen : layoutInfo.sidebar === 0
   const sidebarPreference = sidebarCollapsed
     ? 0
     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
   const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
-  const normal = computeColumns(viewport, !layoutInfo.rightbarShown && narrow ? 0 : sidebarPreference, rightbarPreference)
-  const drawerOpen = narrow && !sidebarCollapsed
+  const normal = computeColumns(viewport, dockFullscreen || (!layoutInfo.rightbarShown && narrow) ? 0 : sidebarPreference, rightbarPreference)
   const drawerRef = useRef<HTMLDivElement>(null)
   useDialogFocus(drawerRef, drawerOpen, actions.closeSidebar)
   useEffect(() => {
@@ -179,7 +179,7 @@ export function AppFrame({
     for (const node of siblings) node.setAttribute('inert', '')
     return () => { for (const node of siblings) node.removeAttribute('inert') }
   }, [drawerOpen])
-  const cols = computeColumns(viewport, narrow ? 0 : sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
+  const cols = computeColumns(viewport, sidebarDrawerMode ? 0 : sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
   const [elasticWidth, setElasticWidth] = useState<number | null>(null)
   const [elasticSide, setElasticSide] = useState<'focus' | 'collapse' | null>(null)
   const focusWidth = viewport - cols.sidebar
@@ -283,7 +283,7 @@ export function AppFrame({
         {overlays}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && !narrow && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!sidebarCollapsed && !sidebarDrawerMode && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && !layoutInfo.rightbarFocus && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - visualWidth} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onRightbarEnd} />
       )}

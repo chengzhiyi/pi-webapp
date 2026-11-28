@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export interface LayoutInfo {
   sidebar: number;
   viewportWidth: number;
-  narrowExpanded: boolean;
+  sidebarDrawerOpen: boolean;
   rightbar: number | null;
   rightbarShown: boolean;
   rightbarTrack: boolean;

@@ -16,6 +16,9 @@ export async function openWebPage(url, platform = process.platform, env = proces
   if (platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY) return false;
   const command = platform === "darwin" ? "open" : platform === "linux" ? "xdg-open" : platform === "win32" ? "explorer.exe" : null;
   if (command === null) return false;
-  await run(command, [url]);
+  // The file grant is optional; it must never prevent opening the web page.
+  const launcher = platform === "darwin" || platform === "win32"
+    ? await import("../desktop/local-file-grant.mjs").catch(() => undefined) : undefined;
+  await run(command, [launcher ? await launcher.localFileLaunchUrl(url, platform, env) : url]);
   return true;
 }

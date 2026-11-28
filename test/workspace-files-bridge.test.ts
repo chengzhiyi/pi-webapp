@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { startBridge, type BridgeHost } from "../src/host/server/transport/bridge.ts";
 import type { SessionView } from "../src/host/server/sessions/view.ts";
+import { localFileKey, localFileLaunchUrl, localFilePlatform } from "../desktop/local-file-grant.mjs";
+import { localFileActionHeader, localFileActionRoute } from "../src/contracts/local-file-actions.ts";
+import { BUILTIN_IDS } from "../src/contracts/plugins.ts";
 
 test("workspace file endpoints require the active session, token and same origin, and write only through guarded saves", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "pi-files-api-"));
@@ -17,7 +20,10 @@ test("workspace file endpoints require the active session, token and same origin
     async updateConfig() { return this.config(); }, async workspaces() { return { items: [], activeId: null, sessions: [] }; },
     async addWorkspace() {}, async selectWorkspace() {}, async newSessionInWorkspace() {}, async removeWorkspace() {}, async selectSession() {},
   };
-  const bridge = await startBridge(host, fileURLToPath(new URL("../web/dist/", import.meta.url)));
+  const key = await localFileKey(cwd, true);
+  assert.ok(key);
+  const webRoot = fileURLToPath(new URL("../web/dist/", import.meta.url));
+  const bridge = await startBridge(host, webRoot, undefined, { pluginSettingsFile: join(cwd, "plugins.json"), localFileGrant: { platform: "win32", key } });
   try {
     await writeFile(join(cwd, "readme.md"), "# Local only\n");
     const url = new URL(bridge.url);
@@ -70,6 +76,34 @@ test("workspace file endpoints require the active session, token and same origin
     assert.deepEqual(found.results, [{ path: "readme.md" }]);
     assert.equal((await request("search", { query: "read", mode: "name" }, { ...headers, Authorization: "" })).status, 401);
     assert.equal((await request("search", { query: "", mode: "name" })).status, 400);
+    const windows = { SESSIONNAME: "Console" };
+    const localUrl = await localFileLaunchUrl(bridge.url, "win32", windows, cwd);
+    assert.notEqual(localUrl, bridge.url);
+    assert.equal(await localFileLaunchUrl(bridge.url, "win32", { ...windows, SSH_CLIENT: "forward" }, cwd), bridge.url);
+    assert.equal(await localFileLaunchUrl(bridge.url, "win32", { ...windows, PI_WEBAPP_LISTEN_HOST: "0.0.0.0" }, cwd), bridge.url);
+    assert.equal(localFilePlatform("win32", {}), undefined);
+    assert.equal(localFilePlatform("darwin", {}, () => 501, 501), "darwin");
+    assert.equal(localFilePlatform("darwin", {}, () => 501, 502), undefined);
+    const localHeaders = { ...headers, [localFileActionHeader]: new URL(localUrl).hash.split(".")[1]! };
+    const native = (selected: HeadersInit = headers, body?: object, base = url.origin) => fetch(`${base}${localFileActionRoute}`, body
+      ? { method: "POST", headers: selected, body: JSON.stringify(body) } : { headers: selected });
+    const show = { sessionId: "files-a", operation: "show", target: { sessionId: "files-a", path: "../outside", kind: "file" } };
+    assert.equal((await native()).status, 403); // A normal link still fails on loopback, as with an SSH tunnel.
+    assert.equal((await native(headers, show)).status, 403);
+    assert.equal((await native({ ...localHeaders, [localFileActionHeader]: "A".repeat(43) })).status, 403);
+    assert.equal((await native({ ...localHeaders, Authorization: "" }, show)).status, 401);
+    assert.equal((await native({ ...localHeaders, Origin: "https://other.example" }, show)).status, 403);
+    assert.deepEqual(await (await native(localHeaders)).json(), { platform: "win32" });
+    assert.deepEqual(await (await native(localHeaders, show)).json(), { ok: false, reason: "failed" });
+    assert.equal((await native(localHeaders, { ...show, sessionId: "stale" })).status, 409);
+    assert.equal((await fetch(`${url.origin}/api/plugin-action`, { method: "POST", headers: localHeaders,
+      body: JSON.stringify({ ...show, pluginId: BUILTIN_IDS.files, action: "local-file-actions" }) })).status, 403);
+    const headless = await startBridge(host, webRoot);
+    try {
+      const headlessUrl = new URL(headless.url);
+      assert.equal(await localFileLaunchUrl(headless.url, "win32", windows, cwd), headless.url);
+      assert.equal((await native({ ...localHeaders, Authorization: `Bearer ${headlessUrl.hash.slice(1)}`, Origin: headlessUrl.origin }, show, headlessUrl.origin)).status, 403);
+    } finally { await headless.close(); }
     // Simulate a switch between the initial snapshot and the completed disk read.
     let reads = 0;
     host.snapshot = () => ++reads === 1 ? session : { ...session, sessionId: "files-b" };

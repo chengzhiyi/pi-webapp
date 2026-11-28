@@ -37,6 +37,7 @@ import { NodeTelemetry } from "../../../platform/telemetry/telemetry.ts";
 import { buildId } from "../../../contracts/build-info.ts";
 import { ToolDiagnostics } from "../../../platform/telemetry/tool-diagnostics.ts";
 import { assertModelAdmission } from "../models/model-transport.ts";
+import { localFileKey, localFilePlatform } from "../../../../desktop/local-file-grant.mjs";
 export { verifySentryNodeRelease } from "../../../platform/telemetry/sentry-verification.ts";
 
 // The installed bundle and source checkout have different directory depths.
@@ -895,7 +896,9 @@ export default function piWeb(pi: ExtensionAPI, openPage: (url: string) => Promi
           host.newSession = shared.lifecycle.wrap(host.newSession);
           host.updateConfig = shared.lifecycle.wrap(host.updateConfig);
           try {
-            shared.bridge = await startBridge(host, webRoot, shared.telemetry);
+            const platform = localFilePlatform();
+            const key = platform && await localFileKey(getAgentDir(), true);
+            shared.bridge = await startBridge(host, webRoot, shared.telemetry, { localFileGrant: platform && key ? { platform, key } : undefined });
           } catch (cause) {
             // Pi RPC can acknowledge the prompt even when the /web handler fails.
             if (process.env.PI_WEBAPP_LAUNCHER_NONCE) ctx.ui.notify(`pi-webapp-start-error: ${cause instanceof Error ? cause.message : String(cause)}`, "error");

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { MenuSurface } from "../../../web/src/ui/shared/primitives/MenuSurface.tsx";
 import { IconEditOutline16, IconEllipsisOutline16, IconFolderOpenOutline16, IconTrashOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
 import { localize as t } from "../../../web/src/ui/locale/preference.ts";
-import { fileManagerLabel, getDesktopFileManager, showInFileManager } from "./desktop-file-manager.ts";
+import { fileManagerLabel, useFileManager, showInFileManager } from "./desktop-file-manager.ts";
 import css from "./pi-workspaces.module.css";
 
 interface RowMenuItem { label: string; icon: ReactNode; destructive?: boolean; disabled?: boolean; separatorBefore?: boolean; onSelect: () => void }
@@ -18,7 +18,7 @@ export function PiWorkspaceActions({ workspaceId, unavailable, title, active, di
   onOpenChange: (open: boolean) => void;
   onRemove: () => void;
 }) {
-  const bridge = getDesktopFileManager();
+  const bridge = useFileManager();
   const items: RowMenuItem[] = [];
   if (bridge) items.push({ label: fileManagerLabel(bridge.platform, "directory"), icon: <IconFolderOpenOutline16 />,
     disabled: unavailable, onSelect: () => { void showInFileManager(bridge, { workspaceId, path: "", kind: "directory" }); } });

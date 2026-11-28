@@ -36,6 +36,12 @@ Builtin browser modules use `defineWebPlugin`, API v1 validation, synchronous ac
 
 The workbench owns tab/session identity, docking, focus and generic tab resources. A plugin supplies its own model, disposal and active-chat hooks. Closing a tab disposes its resource; switching chats retains resources and changes activation. Disabling a builtin closes its owned tabs across retained chats. Shared panel styles live in `web/src/ui/workbench`, not another capability's private directory. Git's untracked previews use the Files module's explicit bounded-reader export, not its UI enablement gate.
 
+## Local system file actions
+
+Open With and reveal use the same Files UI in a local browser and the desktop shell. The shared Node module (`desktop/native-file-actions.mjs`, bundled into the Pi runtime as well as packaged in the shell) resolves and rechecks workspace-relative targets, then dispatches to macOS or Windows. It accepts only approved app associations; the browser cannot supply native commands or absolute paths. The Electron IPC adapter is retained for compatibility with older runtimes and launchers.
+
+The loopback URL and ordinary access token are not proof of a local desktop: SSH forwarding preserves both. Only attended local launchers add a separate, per-runtime-token file grant to the URL fragment; it is not included in status output or readiness messages. The runtime rechecks the grant on each request and does not enable it on remote or wildcard launches. The browser removes the fragment after startup and keeps the grant in tab storage for reloads.
+
 ## Management and switch semantics
 
 The sidebar's Plugins entry sits directly below New session and opens a global management panel, with the same selected-state and collapsed-rail treatment as other sidebar panels. Settings does not duplicate this entry. Selecting a chat or creating a new session returns to the conversation; plugin details only navigate back to the plugin list, without a separate Back to conversation button. Its centred package rows, independent switches, status copy and detail navigation follow the local DSH checkout at `687f282e86`, specifically `packages/client/ui-plugin-manager` and `ui-primitives/Switch`; the implementation uses this project's bridge, tokens, locale and modal primitives, not DSH's Cordis/runtime dependencies.

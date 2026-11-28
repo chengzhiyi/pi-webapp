@@ -1,17 +1,16 @@
 import { localize as t } from "../../../web/src/ui/locale/preference.ts";
 import { showToast } from "../../../web/src/ui/primitives/Toast.tsx";
+import { useEffect, useSyncExternalStore } from "react";
+import { accessToken, localFileGrant } from "./access-token.ts";
+import { localFileActionHeader, localFileActionRoute, type FileActionPlatform as Platform, type FileActionTarget as Target, type FileActionResult as FileManagerResult, type SessionFileTarget, type ListFileAppsResult } from "../../contracts/local-file-actions.ts";
+export type { SessionFileTarget, SystemFileApp } from "../../contracts/local-file-actions.ts";
 
-type Platform = "darwin" | "win32";
-type Kind = "file" | "directory";
-export type SessionFileTarget = { sessionId: string; path: string; kind: Kind };
-type Target = SessionFileTarget | { workspaceId: string; path: ""; kind: "directory" };
-export type FileManagerResult = { ok: true } | { ok: false; reason: "not-found" | "failed" };
-export interface SystemFileApp { id: string; name: string; icon?: string; isDefault?: boolean }
+type Kind = SessionFileTarget["kind"];
 
 interface DesktopFileManager {
   readonly platform: Platform;
   show(target: Target): Promise<FileManagerResult>;
-  listApps?(target: SessionFileTarget): Promise<{ ok: true; apps: SystemFileApp[] } | Extract<FileManagerResult, { ok: false }>>;
+  listApps?(target: SessionFileTarget): Promise<ListFileAppsResult>;
   openWith?(target: SessionFileTarget, appId: string): Promise<FileManagerResult>;
 }
 
@@ -19,9 +18,49 @@ declare global {
   interface Window { piDesktopFileManager?: DesktopFileManager }
 }
 
-export function getDesktopFileManager() {
+let runtimeManager: DesktopFileManager | undefined;
+let loading: Promise<void> | undefined;
+const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+const empty = () => undefined;
+
+function getFileManager() {
+  if (runtimeManager) return runtimeManager;
+  // Compatibility with desktop launchers that do not supply the runtime grant yet.
   const bridge = typeof window === "undefined" ? undefined : window.piDesktopFileManager;
   return bridge?.platform === "darwin" || bridge?.platform === "win32" ? bridge : undefined;
+}
+
+function loadRuntimeManager() {
+  const proof = localFileGrant();
+  const token = accessToken();
+  if (!proof || !token) return;
+  const headers = { Authorization: `Bearer ${token}`, [localFileActionHeader]: proof };
+  loading ??= (async () => {
+    const response = await fetch(localFileActionRoute, { headers, redirect: "error" });
+    if (!response.ok) return;
+    const { platform } = await response.json();
+    if (platform !== "darwin" && platform !== "win32") return;
+    const operation = async <T extends FileManagerResult | ListFileAppsResult>(operation: "show" | "list" | "open", target: Target, appId?: string): Promise<T> => {
+      const response = await fetch(localFileActionRoute, { method: "POST", redirect: "error", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "sessionId" in target ? target.sessionId : "", operation, target, appId }) });
+      const result = await response.json();
+      if (response.ok || result?.ok === false) return result;
+      throw new Error("Native file action unavailable");
+    };
+    runtimeManager = { platform,
+      show: target => operation("show", target),
+      listApps: target => operation("list", target),
+      openWith: (target, appId) => operation("open", target, appId),
+    };
+    for (const listener of listeners) listener();
+  })().catch(() => { loading = undefined; });
+}
+
+export function useFileManager() {
+  const manager = useSyncExternalStore(subscribe, getFileManager, empty);
+  useEffect(loadRuntimeManager, []);
+  return manager;
 }
 
 export function fileManagerLabel(platform: Platform, kind: Kind) {
@@ -29,8 +68,8 @@ export function fileManagerLabel(platform: Platform, kind: Kind) {
   return kind === "file" ? t("在文件资源管理器中显示", "Show in File Explorer") : t("在文件资源管理器中打开", "Open in File Explorer");
 }
 
-export function getDesktopOpenWith() {
-  const bridge = getDesktopFileManager();
+export function useSystemOpenWith() {
+  const bridge = useFileManager();
   return bridge?.listApps && bridge.openWith ? { platform: bridge.platform, show: bridge.show, listApps: bridge.listApps, openWith: bridge.openWith } : undefined;
 }
 

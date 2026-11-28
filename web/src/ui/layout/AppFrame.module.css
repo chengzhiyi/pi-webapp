@@ -58,6 +58,14 @@
   cursor: pointer;
 }
 
+/* In fullscreen the drawer also covers the floating composer and dock floats. */
+.frame[data-rightbar-fullscreen] .drawerMask {
+  z-index: 71;
+}
+.frame[data-rightbar-fullscreen][data-sidebar-drawer] .sidebarCol {
+  z-index: 72;
+}
+
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
    centered on the column border via inline left, above column content. No
    handle draws a visible pill: the details column was the only one that did,
