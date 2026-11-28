@@ -5,8 +5,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startBridge, type BridgeHost } from "../../src/host/server/transport/bridge.ts";
 import { NodeTelemetry } from "../../src/platform/telemetry/telemetry.ts";
+import { localFileKey, localFileLaunchUrl } from "../../desktop/local-file-grant.mjs";
+import { localFileActionRoute } from "../../src/contracts/local-file-actions.ts";
 
-for (const platform of ["darwin", "win32", null] as const) test(`system file manager menu (${platform ?? "browser"})`, async ({ page }) => {
+for (const mode of ["darwin", "win32", "native-browser", "plain-browser"] as const) test(`system file manager menu (${mode})`, async ({ page }) => {
+  const platform = mode === "native-browser" ? "win32" : mode === "plain-browser" ? null : mode;
   const cwd = await mkdtemp(join(tmpdir(), "pi-file-manager-"));
   const folder = "项目 Docs";
   const filename = "说明 file.txt";
@@ -22,7 +25,11 @@ for (const platform of ["darwin", "win32", null] as const) test(`system file man
   await mkdir(join(cwd, folder));
   await writeFile(join(cwd, folder, filename), "file preview");
   await writeFile(join(cwd, folder, "second.txt"), "second preview");
-  const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)), new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), { pluginSettingsFile: join(cwd, "plugin-settings.json") });
+  const key = await localFileKey(cwd, true);
+  expect(key).toBeDefined();
+  const bridge = await startBridge(host, fileURLToPath(new URL("../../web/dist/", import.meta.url)), new NodeTelemetry({ env: { PI_WEB_SENTRY_ENABLED: "false" }, monitor: false }), {
+    pluginSettingsFile: join(cwd, "plugin-settings.json"), localFileGrant: { platform: "win32", key: key! },
+  });
   const calls: unknown[] = [];
   try {
     await page.exposeFunction("recordFileManagerCall", (target: unknown) => { calls.push(target); });
@@ -46,9 +53,27 @@ for (const platform of ["darwin", "win32", null] as const) test(`system file man
           return target.path.endsWith(".txt") ? { ok: false, reason: "not-found" } : { ok: true };
         },
       } });
-    }, platform);
+    }, mode === "native-browser" ? null : platform);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(bridge.url);
+    const launchUrl = mode === "native-browser" ? await localFileLaunchUrl(bridge.url, "win32", { SESSIONNAME: "Console" }, cwd) : bridge.url;
+    if (mode === "native-browser") {
+      expect(launchUrl).not.toBe(bridge.url);
+      await page.route(`**${localFileActionRoute}`, async route => {
+        if (route.request().method() === "GET") return route.continue();
+        const { operation, target, appId } = route.request().postDataJSON();
+        expect(route.request().headers()["x-pi-local-files"]).toBe(new URL(launchUrl).hash.split(".")[1]);
+        if (operation === "list") return route.fulfill({ json: { ok: true, apps: target.kind === "file"
+          ? [{ id: "default", name: "System Editor", isDefault: true }, { id: "other", name: "Other Editor" }]
+          : [{ id: "project", name: "Project Editor" }] } });
+        calls.push(operation === "show" ? target : { target, id: appId });
+        return route.fulfill({ json: operation === "show" && target.path.endsWith(".txt") ? { ok: false, reason: "not-found" } : { ok: true } });
+      });
+    }
+    await page.goto(launchUrl);
+    if (mode === "native-browser") {
+      await expect(page).toHaveURL(new URL(bridge.url).origin + "/");
+      await page.reload(); // The grant is kept in tab storage, not in the visible URL.
+    }
     const system = platform === "darwin" ? "Finder" : "File Explorer";
     const open = page.getByRole("menuitem", { name: `Open in ${system}`, exact: true });
     const reveal = page.getByRole("menuitem", { name: `Show in ${system}`, exact: true });

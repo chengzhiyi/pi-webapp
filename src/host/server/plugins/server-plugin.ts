@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import type { SessionView } from "../../../contracts/bridge-contract.ts";
+import type { SessionView, WorkspaceListView } from "../../../contracts/bridge-contract.ts";
 import type { PluginMetadata } from "../../../contracts/plugins.ts";
 
 export interface PluginRequestContext {
@@ -8,6 +8,8 @@ export interface PluginRequestContext {
   res: ServerResponse;
   snapshot(): SessionView;
   busyWorkspaces(): string[];
+  /** Present only on independently authorized local desktop requests. */
+  localFileRequest?: { workspaces(): Promise<WorkspaceListView>; trusted(): boolean };
   json(status: number, value: unknown): void;
 }
 /** Authentication and JSON parsing are host-owned; domain processing and teardown are plugin-owned. */

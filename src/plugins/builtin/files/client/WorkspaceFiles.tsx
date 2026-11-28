@@ -8,7 +8,7 @@ import { WorkspaceFilePreview } from "./WorkspaceFilePreview.tsx";
 import { FileBreadcrumb } from "./FileBreadcrumb.tsx";
 import { FileTree } from "./FileTree.tsx";
 import { FileOpenWith } from "./FileOpenWith.tsx";
-import { getDesktopOpenWith } from "../../../../host/client/desktop-file-manager.ts";
+import { useSystemOpenWith } from "../../../../host/client/desktop-file-manager.ts";
 import { FileSearchResults } from "./FileSearch.tsx";
 import { emptyStatus, statusIndex, type StatusIndex } from "./file-status.ts";
 import { workspaceFilesApi } from "./workspace-files-api.ts";
@@ -55,7 +55,7 @@ export const WorkspaceFiles = memo(function WorkspaceFiles({ sessionId, cwd, idl
   const [expanded, setExpanded] = useState(() => new Set(state.expanded));
   const [selected, setSelected] = useState(() => state.selected);
   const [directory, setDirectory] = useState<{ sessionId: string; path: string }>();
-  const canOpenWith = !!getDesktopOpenWith();
+  const canOpenWith = !!useSystemOpenWith();
   const activeDirectory = canOpenWith && directory?.sessionId === sessionId ? directory.path : undefined;
   const selectDirectory = canOpenWith ? (path: string) => setDirectory({ sessionId, path }) : undefined;
   const [treeOpen, setTreeOpen] = useState(state.treeOpen);

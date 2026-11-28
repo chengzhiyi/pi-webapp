@@ -54,8 +54,10 @@ button without launching it or changing the operating system's default; Pi
 remembers the choice by file extension, with a separate preference for folders.
 Some types and folders only offer the file manager. For files that action
 selects the file; for folders it opens the directory. Right-click and the
-workspace's sidebar menu remain available. These actions are not available in
-browser sessions or on Linux.
+workspace's sidebar menu remain available. A browser opened by the local Pi
+launcher (or **Window → Open in Browser**) has the same actions, without
+installing the desktop app. A manually copied status URL, an SSH-forwarded
+session, or a headless or Linux host does not grant access to system apps.
 
 After `npm run desktop:prepare`, run `npm run desktop:smoke:web-preview` on a
 machine with a GUI to exercise the preview in a real Electron window using a

@@ -44,6 +44,7 @@
     "assets/readme",
     "bin",
     "desktop/managed-release.mjs",
+    "desktop/local-file-grant.mjs",
     "desktop/stop-outcome.mjs",
     "desktop/launcher-handoff.mjs",
     "desktop/release-version.mjs",

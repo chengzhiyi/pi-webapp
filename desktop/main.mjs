@@ -14,6 +14,7 @@ import { docsUrl, isDocsAddress, issuesUrl } from "./docs-links.mjs";
 import { localize as t, setDesktopLocale } from "./locale.mjs";
 import { installWebPreviewIpc, WebPreview } from "./web-preview.mjs";
 import { installFileManagerIpc } from "./file-manager.mjs";
+import { localFileLaunchUrl } from "./local-file-grant.mjs";
 
 const iconPath = fileURLToPath(new URL("./icons/icon.png", import.meta.url));
 const release = JSON.parse(readFileSync(new URL("./release.json", import.meta.url), "utf8"));
@@ -72,11 +73,18 @@ function showWindow() {
   });
   window.on("closed", () => { window = null; webPreview = null; });
   // Load the existing same-origin page; native APIs are narrow and sender-checked.
-  void window.loadURL(backendUrl).catch(() => {
+  void loadMainWindow(window).catch(() => {
     // Closing a loading window aborts navigation. A synchronous native alert
     // here would re-enter the macOS modal loop and block shutdown itself.
     if (!askingQuit && !quitting) dialog.showErrorBox(t("无法加载界面", "Could not load the interface"), t("请查看后端日志，或重新打开应用。", "Check the backend logs or reopen the app."));
   });
+}
+
+async function loadMainWindow(target) {
+  const address = backendUrl;
+  if (!address || !target || target.isDestroyed()) return;
+  const launchUrl = await localFileLaunchUrl(address);
+  if (address === backendUrl && target === window && !target.isDestroyed() && !quitting) await target.loadURL(launchUrl);
 }
 
 async function openExternal(value) {
@@ -136,7 +144,7 @@ async function requestLauncherHandoff() {
     if (answer.response !== 1 || quitting) return;
     const state = await backend.handoff();
     backendUrl = localAddress(state.url).href;
-    await window?.loadURL(backendUrl);
+    await loadMainWindow(window);
     await showQuitMessage({ type: "info", message: t("启动器安全交接完成", "Launcher handoff completed"),
       detail: t(`当前桌面 ${app.getVersion()} build ${release.buildNumber} 已启动原业务包 ${state.version}，支持持久化体验版通道。请在设置中检查更新。`, `Desktop ${app.getVersion()} build ${release.buildNumber} started the existing app package ${state.version} with persistent prerelease channel support. Check for updates in Settings.`), buttons: [t("好", "OK")] });
   } catch (error) { await showQuitMessage({ type: "warning", message: t("启动器交接未完成", "Launcher handoff not completed"), detail: error.message, buttons: [t("好", "OK")] }); }
@@ -164,7 +172,7 @@ async function requestUpgradeReset() {
       result = await backend.resetUpgrade({ force: true });
     }
     backendUrl = localAddress(result.state.url).href;
-    if (window && !window.isDestroyed()) await window.loadURL(backendUrl); else showWindow();
+    if (window && !window.isDestroyed()) await loadMainWindow(window); else showWindow();
     await showQuitMessage({ type: "info", message: t("升级状态已清理", "Update state reset"),
       detail: result.folder ? t(`已移走 ${result.moved.length} 项记录到：${result.folder}\n当前运行内置版本 ${result.state.version}。`, `Moved ${result.moved.length} records to: ${result.folder}\nNow running the bundled version ${result.state.version}.`)
         : t(`没有需要清理的升级记录。当前运行内置版本 ${result.state.version}。`, `There were no update records to reset. Now running the bundled version ${result.state.version}.`), buttons: [t("好", "OK")] });
@@ -193,7 +201,7 @@ function installMenu() {
       { label: t("显示主窗口", "Show Main Window"), click: showWindow },
       { label: t("重新加载界面", "Reload Interface"), accelerator: "CmdOrCtrl+R", click: () => window?.webContents.reload() },
       { role: "togglefullscreen" },
-      { label: t("在浏览器中打开", "Open in Browser"), click: () => { if (backendUrl) void shell.openExternal(backendUrl); } },
+      { label: t("在浏览器中打开", "Open in Browser"), click: () => { if (backendUrl) void localFileLaunchUrl(backendUrl).then(openInBrowser); } },
       { label: t("打开日志目录", "Open Log Folder"), click: () => { if (backend) void shell.openPath(dirname(backend.logPath)); } },
     ] },
     { label: t("帮助", "Help"), role: "help", submenu: [
