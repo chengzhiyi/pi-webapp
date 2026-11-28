@@ -3,9 +3,9 @@ layout: home
 title: pi-webapp user guide
 
 release:
-  label: New in 0.1.55
-  text: OpenPencil plugin, UI design with Pi
-  link: /changelog#v0-1-55
+  label: Desktop build 18
+  text: Web Preview and opening files with system apps
+  link: /changelog#build-18
 
 hero:
   name: pi-webapp

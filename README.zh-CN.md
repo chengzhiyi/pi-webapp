@@ -6,7 +6,7 @@
 
 [English](README.md) · [快速开始](#快速开始) · [下载桌面端](#桌面端下载) · [项目架构](#技术架构亮点) · [使用指南](docs/zh/getting-started.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**桌面测试版 build 17：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
+**桌面测试版 build 18：** [macOS Apple 芯片 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-arm64.dmg) · [Intel、Windows 与 Linux 下载](#桌面端下载) · [SHA-256 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/SHA256SUMS)。测试包未签名或未公证，详见[安全安装说明](docs/desktop-testing.md)。
 
 [![Pi 工作台：左侧项目会话，中间 Agent 对话，右侧代码高亮预览](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -120,16 +120,16 @@ pi
 
 ## 桌面端下载
 
-**最新桌面测试版：[pi 0.1.52 · build 17](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.52-b17)。** 请按系统与芯片选择安装包：
+**最新桌面测试版：[pi 0.1.58 · build 18](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.58-b18)。** 请按系统与芯片选择安装包：
 
 | 平台 | 下载 |
 | --- | --- |
-| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) |
-| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-x64.dmg) |
-| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-win-x64.exe) |
-| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-linux-x86_64.AppImage) |
+| **macOS · Apple 芯片（arm64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-arm64.dmg) |
+| **macOS · Intel（x64）** | [下载 DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-x64.dmg) |
+| **Windows · x64** | [下载 EXE 安装包](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-win-x64.exe) |
+| **Linux · x64** | [下载 AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-linux-x86_64.AppImage) |
 
-[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/desktop-release.json)
+[全部版本](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS 校验文件](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/SHA256SUMS) · [构建与运行时信息](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/desktop-release.json)
 
 **build 12 修复桌面退出无响应。** 退出确认会显示在主窗口前方；加载中关闭不再弹出阻塞警告；后台停止失败时可以选择“仅退出桌面”。已有后台服务和任务可继续运行。
 
