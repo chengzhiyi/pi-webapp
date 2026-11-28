@@ -71,6 +71,13 @@ export class SelfUpdater {
   private ownTransaction?: string;
   private readonly beforeRestart?: (force?: boolean) => Promise<void | (() => Promise<void>)>;
 
+  private async resumeUnacceptedRestart(accepted: boolean, resume: void | (() => Promise<void>)): Promise<void> {
+    if (accepted || !resume) return;
+    // Recovery failure must remain visible without replacing the original handoff error.
+    try { await resume(); }
+    catch (error) { console.error("pi-webapp: failed to resume after an unaccepted restart:", error); }
+  }
+
   constructor(options: { agentDir: string; packageRoot: string; launcherNonce?: string; runNpm?: (args: string[], signal?: AbortSignal) => Promise<string>; desktopManaged?: boolean;
     desktopPackageUpdates?: boolean; desktopReleaseChannels?: boolean; peerSpecs?: typeof desktopPeerSpecs; verifyPackage?: typeof verifyDesktopPackage;
     /** Plugins unavailable on a target version. Shown before updating; never a gate. */
@@ -135,7 +142,7 @@ export class SelfUpdater {
         if (!accepted) throw error;
       }
       this.restartPending = true;
-    } finally { if (!accepted && resume) await resume(); }
+    } finally { await this.resumeUnacceptedRestart(accepted, resume); }
   }
 
   private async current(): Promise<string> {
@@ -392,10 +399,13 @@ export class SelfUpdater {
       this.restartPending = true;
     } catch (error) {
       if (restartWritten) { this.restartPending = true; return; }
-      const transaction = await this.transaction();
-      if (transaction?.id === staged.id && transaction.phase === "restart-requested") await this.record({ ...transaction, phase: "prepared" });
-      if (resume) await resume();
+      try {
+        const transaction = await this.transaction();
+        if (transaction?.id === staged.id && transaction.phase === "restart-requested") await this.record({ ...transaction, phase: "prepared" });
+      } catch (journalError) {
+        console.error("pi-webapp: failed to reset the update journal after an unaccepted restart:", journalError);
+      }
       throw error;
-    }
+    } finally { await this.resumeUnacceptedRestart(restartWritten, resume); }
   }
 }

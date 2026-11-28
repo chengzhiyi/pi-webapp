@@ -1,4 +1,5 @@
 import type { HostedContribution } from "../../../../contracts/hosted-plugins.ts";
+import { isWorkbenchEntryCategory } from "../../../../contracts/workbench.ts";
 import { HostedPluginError } from "./errors.ts";
 import type { OfficialPlugin } from "./official-catalog.ts";
 import { MAX_WORKSPACE_FILE_BYTES, type HostedPluginPolicy, type SecretAuthPolicy, type WorkspaceFileRule } from "./plugin-policies.ts";
@@ -60,10 +61,12 @@ class Reader {
 
 function contribution(r: Reader, value: unknown, path: string): HostedContribution {
   const c = r.object(value, path, ["entry", "panels", "artifactTools", "toolViews", "panelAlias"]);
-  const entry = r.object(c.entry, `${path}.entry`, ["label", "description", "kind"]);
+  const entry = r.object(c.entry, `${path}.entry`, ["label", "description", "kind", "category"], ["label", "description", "kind"]);
+  const category = entry.category;
+  if (category !== undefined && !isWorkbenchEntryCategory(category)) r.fail(`${path}.entry.category`, 'must be "workspace" or "design"');
   const alias = r.object(c.panelAlias, `${path}.panelAlias`, ["prefix", "kind", "title"]);
   return {
-    entry: { label: r.string(entry.label, `${path}.entry.label`, 64), description: r.text(entry.description, `${path}.entry.description`, 120), kind: r.string(entry.kind, `${path}.entry.kind`, 32, ACTION) },
+    entry: { label: r.string(entry.label, `${path}.entry.label`, 64), description: r.text(entry.description, `${path}.entry.description`, 120), kind: r.string(entry.kind, `${path}.entry.kind`, 32, ACTION), ...(category !== undefined ? { category } : {}) },
     panels: r.strings(c.panels, `${path}.panels`, ACTION, 16), artifactTools: r.strings(c.artifactTools, `${path}.artifactTools`, TOOL, 128), toolViews: r.strings(c.toolViews, `${path}.toolViews`, TOOL, 128),
     panelAlias: { prefix: r.string(alias.prefix, `${path}.panelAlias.prefix`, 32, /^[a-z][a-z0-9-]{0,30}:$/), kind: r.string(alias.kind, `${path}.panelAlias.kind`, 32, ACTION), title: r.string(alias.title, `${path}.panelAlias.title`, 64) },
   };

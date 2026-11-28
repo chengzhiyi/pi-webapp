@@ -17,17 +17,17 @@ test("official-plugins.json lists exactly the released plugins, in order", () =>
   assert.ok(OFFICIAL_PLUGINS.every(p => !("policy" in p) && p.official === undefined), "catalog cards carry no policy and stay official");
 });
 
-test("the data file reproduces the previously hardcoded policies field for field", () => {
+test("official policies keep their reviewed capabilities and design launcher metadata", () => {
   assert.deepEqual(DEFAULT_POLICIES.get(EXCALIDRAW), {
     tools: { excalidraw_read_me: "reference", excalidraw_create_view: "view", diagram_reference: "reference", diagram_create: "create", diagram_read: "read", diagram_patch: "patch" },
     readonlyActions: ["read", "reference"], actions: ["list", "new", "open", "import", "get", "focus", "sync", "initialize", "accept", "reject", "save"], checkpointActions: ["sync", "get", "list"],
-    contribution: { entry: { label: "Excalidraw", description: { zh: "手绘图稿", en: "Editable drawings" }, kind: "workspace" }, panels: ["workspace", "editor"], artifactTools: ["excalidraw_create_view", "diagram_create", "diagram_patch"],
+    contribution: { entry: { label: "Excalidraw", description: { zh: "绘制流程图和手绘草图", en: "Draw diagrams and freehand sketches" }, kind: "workspace", category: "design" }, panels: ["workspace", "editor"], artifactTools: ["excalidraw_create_view", "diagram_create", "diagram_patch"],
       toolViews: ["excalidraw_create_view", "diagram_create", "diagram_patch"], panelAlias: { prefix: "diagram:", kind: "editor", title: "Excalidraw" } },
   });
   assert.deepEqual(DEFAULT_POLICIES.get(PENCIL), {
     tools: { pencil_read_me: "reference", pencil_status: "status", pencil_inspect: "inspect", pencil_render: "render", pencil_apply_changes: "apply" },
     readonlyActions: ["reference", "status", "inspect", "render"], actions: ["list", "get", "accept", "reject", "revert", "save", "open", "import", "upload", "create", "rename", "selection", "sync", "lock"], checkpointActions: ["get", "list", "sync", "create"],
-    contribution: { entry: { label: "OpenPencil", description: { zh: "UI 设计", en: "UI design" }, kind: "workspace" }, panels: ["workspace", "editor"], artifactTools: ["pencil_apply_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "OpenPencil" } },
+    contribution: { entry: { label: "OpenPencil", description: { zh: "设计界面与组件", en: "Design interfaces and components" }, kind: "workspace", category: "design" }, panels: ["workspace", "editor"], artifactTools: ["pencil_apply_changes"], toolViews: [], panelAlias: { prefix: "pencil:", kind: "editor", title: "OpenPencil" } },
     browser: { wasm: true }, workspace: { files: [{ extension: ".fig", binary: true, maxBytes: 64 * 1024 * 1024, createDirectory: "designs" }] }, runtime: { invokeTimeoutMs: 120_000 },
   });
 });
@@ -55,12 +55,21 @@ test("the validator rejects malformed entries with the field that is wrong", () 
   reject(e => { e.policy.readonlyActions = ["delete"]; }, /readonlyActions lists "delete", which is not one of its tool actions/);
   reject(e => { e.policy.checkpointActions = ["delete"]; }, /checkpointActions lists "delete", which is not one of its actions/);
   reject(e => { e.policy.contribution.artifactTools = ["pencil_delete"]; }, /artifactTools lists "pencil_delete", which is not one of its tools/);
+  reject(e => { e.policy.contribution.entry.category = "custom"; }, /entry\.category must be/);
   reject(e => { e.policy.workspace.files[0].maxBytes = 64 * 1024 * 1024 + 1; }, /files\[0\]\.maxBytes must be an integer/);
   reject(e => { e.policy.workspace.files[0].extension = "fig"; }, /files\[0\]\.extension has an invalid format/);
   reject(e => { e.policy.runtime.invokeTimeoutMs = 999_999; }, /invokeTimeoutMs must be an integer from 1000 to 180000/);
   reject(e => { e.policy.browser.wasm = "yes"; }, /browser\.wasm must be a boolean/);
   reject(e => { e.policy.secrets = { token: { provider: "github", scope: "repo", createUrl: "https://evil.example/new" } }; }, /createUrl must be an https URL on github\.com/);
   assert.doesNotThrow(() => parseCatalogEntry(entry(), where));
+});
+
+test("catalog launchers can omit a category or declare the workspace category", () => {
+  const source = entry();
+  source.policy.contribution.entry.category = "workspace";
+  assert.equal(parseCatalogEntry(source, "test.json").policy.contribution.entry.category, "workspace");
+  delete source.policy.contribution.entry.category;
+  assert.equal(parseCatalogEntry(source, "test.json").policy.contribution.entry.category, undefined);
 });
 
 test("a catalog document needs schemaVersion 1 and unique ids", () => {

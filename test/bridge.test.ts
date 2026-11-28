@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { startBridge } from "../src/host/server/transport/bridge.ts";
+import { EventSubscribers } from "../src/host/server/transport/event-subscribers.ts";
 import type { SessionView } from "../src/host/server/sessions/view.ts";
 import { NodeTelemetry } from "../src/platform/telemetry/telemetry.ts";
 import type { Event } from "@sentry/core";
@@ -424,6 +426,36 @@ test("streams the current snapshot and later events", async () => {
     await reader.cancel();
     await bridge.close();
   }
+});
+
+test("a slow event subscriber cannot build an unbounded queue or delay a draining subscriber", () => {
+  class Response extends EventEmitter {
+    destroyed = false;
+    writableLength = 0;
+    events: string[] = [];
+    write(line: string) { this.writableLength += Buffer.byteLength(line); this.events.push(JSON.parse(line).type); }
+    end(line: string) { this.write(line); this.emit("close"); }
+    destroy() { this.destroyed = true; this.emit("close"); }
+  }
+  const subscribers = new EventSubscribers();
+  const slow = new Response(), fast = new Response();
+  // A large existing transcript still gets a complete first frame; the pending
+  // bytes are checked before writing any subsequent event, not on admission.
+  const snapshot = { type: "snapshot", session: { ...fixture(), name: "x".repeat(5 * 1024 * 1024) } } as const;
+  subscribers.add(slow, snapshot);
+  subscribers.add(fast, snapshot);
+  assert.deepEqual(slow.events, ["snapshot"]);
+  assert.equal(slow.destroyed, false);
+  fast.writableLength = 0;
+  subscribers.publish({ type: "stream", message: null });
+  assert.equal(slow.destroyed, true);
+  assert.deepEqual(slow.events, ["snapshot"]);
+  assert.deepEqual(fast.events, ["snapshot", "stream"]);
+  const reconnected = new Response();
+  subscribers.add(reconnected, { type: "snapshot", session: fixture() });
+  subscribers.close(true);
+  assert.deepEqual(reconnected.events, ["snapshot", "shutdown"]);
+  assert.deepEqual(fast.events, ["snapshot", "stream", "shutdown"]);
 });
 
 test("protects model and configuration actions and validates configuration input", async () => {

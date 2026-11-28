@@ -12,7 +12,7 @@ export default defineWebPlugin<WorkbenchPluginDefinition>({
   id: metadata.id, apiVersion: 1, activate() {},
   workbench: {
     apiVersion: 1,
-    entry: { label: { zh: "Git 改动", en: "Git changes" }, description: { zh: "查看分支、工作区改动与文件差异", en: "Review branches, workspace changes and file diffs" }, kind: "git", icon: IconBranchOutlineRegular },
+    entry: { category: "workspace", label: { zh: "Git 改动", en: "Git changes" }, description: { zh: "查看分支和文件差异", en: "Review branches and file diffs" }, kind: "git", icon: IconBranchOutlineRegular },
     panels: [
       { kind: "git", title: () => <><IconBranchOutlineRegular size={16} /><span>Git</span></>, component: p => <WorkspaceGit sessionId={p.session.sessionId} visible={p.visible} idle={p.session.idle} model={p.resource(createGitPanelModel)} onCommit={hash => p.open("git-commit", hash, hash.slice(0, 7))} /> },
       { kind: "git-commit", component: p => <WorkspaceGitCommit sessionId={p.session.sessionId} hash={p.contentId} visible={p.visible} idle={p.session.idle} onCommit={hash => p.open("git-commit", hash, hash.slice(0, 7))} /> },

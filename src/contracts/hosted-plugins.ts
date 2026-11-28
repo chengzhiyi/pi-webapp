@@ -1,6 +1,8 @@
+import type { WorkbenchEntryCategory } from "./workbench.ts";
+
 /** JSON-only browser API. The server resolves cwd/workspace from authenticated session access. */
 export interface HostedContribution {
-  entry: { label: string; description: { zh: string; en: string }; kind: string };
+  entry: { label: string; description: { zh: string; en: string }; kind: string; category?: WorkbenchEntryCategory };
   panels: string[]; artifactTools: string[]; toolViews: string[];
   panelAlias: { prefix: string; kind: string; title: string };
 }

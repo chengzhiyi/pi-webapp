@@ -42,6 +42,11 @@ export const zh = {
   'dock.drop.top': '上分栏',
   'dock.drop.bottom': '下分栏',
   'tab.guide.title': '开始',
+  'guide.tools': '工作区工具',
+  'guide.group.workspace': '工作区',
+  'guide.group.design': '绘图与设计',
+  'guide.group.other': '其他工具',
+  'guide.empty': '没有已启用的工作区插件，可在设置中启用。',
   'tab.unavailable': '这类内容还没有可用的查看方式。',
 } satisfies Record<string, string>
 
@@ -84,5 +89,10 @@ export const en = {
   'dock.drop.top': 'Add top split',
   'dock.drop.bottom': 'Add bottom split',
   'tab.guide.title': 'Start',
+  'guide.tools': 'Workspace tools',
+  'guide.group.workspace': 'Workspace',
+  'guide.group.design': 'Drawing & design',
+  'guide.group.other': 'Other tools',
+  'guide.empty': 'No workspace plugins enabled. Enable one in Settings.',
   'tab.unavailable': 'Nothing here can view this kind of content yet.',
 } satisfies Record<SidebarRightKey, string>

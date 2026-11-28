@@ -65,16 +65,63 @@ test("mount changes during flush reject rather than silently bypassing a new edi
   registry.add({ identity: identity("one"), ready: Promise.resolve(), adapter: { async call() { registry.add({ identity: identity("new"), ready: Promise.resolve(), adapter: {} as FrameAdapter }); } } as unknown as FrameAdapter });
   await assert.rejects(registry.flush("session"), /views changed/);
 });
-test("tab close retires only its still-mounted scoped frame; refusal cannot manufacture a close", async () => {
-  const registry = new FrameRegistry(), retired: string[] = [];
-  const editor = {} as HTMLIFrameElement, tool = {} as HTMLIFrameElement;
-  for (const [name, frame] of [["editor", editor], ["tool", tool]] as const) registry.add({ identity: identity(name), ready: Promise.resolve(), adapter: { frame } as FrameAdapter, retire: async () => { retired.push(name); } });
-  registry.add({ identity: { ...identity("other-session"), sessionId: "other" }, ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => { assert.fail("wrong scope"); } });
-  const root = { contains: (frame: unknown) => frame === editor } as Element;
-  await registry.retireWithin("session", root);
-  assert.deepEqual(retired, ["editor"]);
-  registry.add({ identity: identity("busy"), ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => { throw new Error("unacknowledged edits"); } });
-  await assert.rejects(registry.retireWithin("session", root), /unacknowledged edits/);
+const tabRoot = (frames: HTMLIFrameElement[]) => ({
+  isConnected: true,
+  contains: (node: HTMLIFrameElement) => frames.includes(node),
+  querySelectorAll: () => frames,
+} as unknown as Element);
+
+test("an unrelated failing drawing blocks a session flush, not an ordinary tab close", async () => {
+  const registry = new FrameRegistry();
+  const drawing = {} as HTMLIFrameElement;
+  let calls = 0, closed = false;
+  registry.add({ identity: identity("drawing"), ready: Promise.resolve(), adapter: { frame: drawing, async call() { calls++; throw new Error("IME busy"); } } as unknown as FrameAdapter, retire: async () => assert.fail("unrelated drawing retired") });
+  const root = tabRoot([]);
+  await registry.retireWithin("session", () => root, () => { closed = true; });
+  assert.equal(closed, true);
+  assert.equal(calls, 0);
+  await assert.rejects(registry.flush("session"), /IME busy/);
+  assert.equal(calls, 1);
+});
+
+test("a hosted tab closes only after its own retirement ACK; a refusal leaves it open", async () => {
+  const registry = new FrameRegistry(), events: string[] = [];
+  const editor = {} as HTMLIFrameElement;
+  let busy = true;
+  registry.add({ identity: identity("editor"), ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, afterFlush: async () => assert.fail("standalone clean status"), retire: async () => {
+    events.push("retire");
+    if (busy) throw new Error("unacknowledged edits");
+  } });
+  registry.add({ identity: { ...identity("other-session"), sessionId: "other" }, ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => assert.fail("wrong session") });
+  const root = tabRoot([editor]);
+  const close = () => registry.retireWithin("session", () => root, () => events.push("close"));
+  await assert.rejects(close(), /unacknowledged edits/);
+  assert.deepEqual(events, ["retire"]);
+  busy = false;
+  await close();
+  assert.deepEqual(events, ["retire", "retire", "close"]);
+});
+
+test("a replaced tab root during readiness prevents retiring the stale realm", async () => {
+  const registry = new FrameRegistry(), iframe = {} as HTMLIFrameElement;
+  let root = tabRoot([iframe]);
+  let ready!: () => void;
+  registry.add({ identity: identity("editor"), adapter: { frame: iframe } as FrameAdapter, ready: new Promise<void>(resolve => { ready = resolve; }), retire: async () => assert.fail("retired stale realm") });
+  const closing = registry.retireWithin("session", () => root, () => assert.fail("closed replacement tab"));
+  root = tabRoot([iframe]);
+  ready();
+  await assert.rejects(closing, /views changed/);
+});
+
+for (const registered of [true, false]) test(`a new ${registered ? "registered" : "DOM-only"} frame during retirement prevents tab close`, async () => {
+  const registry = new FrameRegistry(), editor = {} as HTMLIFrameElement;
+  const frames = [editor], root = tabRoot(frames);
+  registry.add({ identity: identity("editor"), ready: Promise.resolve(), adapter: { frame: editor } as FrameAdapter, retire: async () => {
+    const next = {} as HTMLIFrameElement;
+    frames.push(next);
+    if (registered) registry.add({ identity: identity("next"), ready: Promise.resolve(), adapter: { frame: next } as FrameAdapter, retire: async () => assert.fail("retired replacement") });
+  } });
+  await assert.rejects(registry.retireWithin("session", () => root, () => assert.fail("closed over new realm")), /views changed/);
 });
 
 test("editor updates wait by default; explicit immediate mode still refuses busy views, marked as in-flight work", async () => {

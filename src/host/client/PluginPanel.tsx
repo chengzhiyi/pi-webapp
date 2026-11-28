@@ -6,13 +6,12 @@ import { zh, en } from "../../../web/src/ui/shared/sidebar/locales.ts";
 import { Button } from "../../../web/src/ui/shared/primitives/Button.tsx";
 import { Tooltip } from "../../../web/src/ui/shared/primitives/Tooltip.tsx";
 import { useErrorToast } from "../../../web/src/ui/primitives/Toast.tsx";
-import { IconPanelLeftOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
+import { IconChevronRightOutlineMedium, IconPanelLeftOutlineRegular } from "../../../web/src/ui/shared/primitives/icons/index.tsx";
 import css from "../../../web/src/ui/shared/sidebar/SidebarRight.module.css";
 import expandCss from "../../../web/src/ui/shared/sidebar/ExpandButton.module.css";
 import { PluginBoundary, PluginSlot, type LoadedPlugin, type PluginHostProps } from "./plugin-runtime.tsx";
-import { localize } from "../../../web/src/ui/locale/preference.ts";
 import { randomUUID } from "./random-uuid.ts";
-import type { TabContextReport, TabResource, WorkbenchPanelProps } from "../../contracts/workbench.ts";
+import { isWorkbenchEntryCategory, type TabContextReport, type TabResource, type WorkbenchPanelProps } from "../../contracts/workbench.ts";
 import filesCss from "../../../web/src/ui/workbench/WorkspacePanel.module.css";
 import { hostedFrames } from "./hosted/frame-adapter.ts";
 import { desktopWebPreview, loadDesktopWorkbenchPlugin, WEB_PREVIEW_ID } from "../../plugins/builtin/client.ts";
@@ -106,15 +105,15 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
   }, [previewAvailable]);
   const [closeError, setCloseError] = useState("");
   useErrorToast("plugin-panel-close", closeError);
+  const panelRoot = useRef<HTMLDivElement>(null);
   const closing = useRef(false);
   const intents = useMemo(() => new Proxy(controller, { get(target, key) {
     if (key === "closeTab") return (id: TabId) => {
       if (closing.current) return;
       closing.current = true;
       const sessionId = props.session?.sessionId ?? "";
-      void hostedFrames.flush(sessionId).then(async () => {
-        const content = document.querySelector(`[data-dockkit-content="${CSS.escape(id)}"]`);
-        if (content) await hostedFrames.retireWithin(sessionId, content);
+      const content = () => panelRoot.current?.querySelector(`[data-dockkit-content="${CSS.escape(id)}"]`);
+      void hostedFrames.retireWithin(sessionId, content, () => {
         setCloseError(""); target.closeTab(id);
       })
         .catch(error => setCloseError(error instanceof Error ? error.message : String(error)))
@@ -133,10 +132,14 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
     const entry = plugin.definition.workbench?.entry;
     return entry ? [{ plugin, entry }] : [];
   });
+  const groups = (["workspace", "design", "other"] as const).map(category => ({
+    category,
+    items: launchers.filter(({ entry }) => (isWorkbenchEntryCategory(entry.category) ? entry.category : "other") === category),
+  })).filter(group => group.items.length);
   const panels = workbenchPlugins.flatMap(plugin => (plugin.definition.workbench?.panels ?? []).map(contribution => ({ plugin, contribution })));
   const collapse = () => { onExitFocus(); controller.setExpanded(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("[data-sidebar-right-expand]")?.focus()); };
   const panelWidth = narrow ? "100vw" : width;
-  return <div className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
+  return <div ref={panelRoot} className={css.panel} style={{ width: panelWidth, "--dsh-sidebar-width": typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as CSSProperties}
     data-sidebar-right-session={props.session?.sessionId} data-sidebar-right-panel={fullscreen ? "fullscreen" : focus ? "focus" : "push"} data-sidebar-right-open={panel.shown || undefined} aria-hidden={!panel.shown || undefined}>
     <div className={css.panelBody}><DockLayout state={state} canSplit={snapshot.canSplit && dockPaneIds(state).length < 2} dropZones="horizontal" minPaneFraction={0.2}
       intents={intents} labels={dockLabels(t)} active keepMounted={() => true}
@@ -144,18 +147,28 @@ export function PluginPanel({ panel, width, narrow, focus, onExitFocus, plugins,
         const paneId = findTabPane(state, tab.id).id;
         const visible = state.expanded && getPane(state, paneId).activeTabId === tab.id;
         if (tab.kind === "guide") return <div className={filesCss.guide}>
-          <div className={filesCss.guideGrid} role="group" aria-label={localize("工作区工具", "Workspace tools")}>
-            {launchers.map(({ plugin, entry }) => {
-              const Icon = entry.icon;
-              return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || (!cwd && plugin.id !== WEB_PREVIEW_ID)} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
-                <span className={filesCss.guideIcon} aria-hidden="true"><Icon size={24} /></span>
-                <span className={filesCss.guideCopy}>
-                  <span className={filesCss.guideLabel}>{text(entry.label)}</span>
-                  <span className={filesCss.guideDescription}>{text(entry.description)}</span>
-                </span>
-              </button>;
+          <div className={filesCss.guideGroups} role="group" aria-label={t("guide.tools")}>
+            {groups.map(({ category, items }) => {
+              const headingId = `${tab.id}-guide-${category}`;
+              return <div key={category} role="group" aria-labelledby={headingId}>
+                <h2 id={headingId} className={filesCss.guideHeading}>{t(`guide.group.${category}`)}</h2>
+                <div className={filesCss.guideGrid} data-category={category}>
+                  {items.map(({ plugin, entry }) => {
+                    const { icon: Icon, artwork: Artwork } = entry;
+                    return <button key={plugin.id} type="button" className={filesCss.guideEntry} disabled={!props.session || (!cwd && plugin.id !== WEB_PREVIEW_ID)} aria-label={text(entry.label)} onClick={() => open(entry.kind, entry.multiple ? randomUUID() : "workspace", text(entry.panelTitle ?? entry.label), paneId, plugin.id)}>
+                      <span className={filesCss.guideIcon} aria-hidden="true"><Icon size={16} /></span>
+                      <span className={filesCss.guideCopy}>
+                        <span className={filesCss.guideLabel}>{text(entry.label)}</span>
+                        <span className={filesCss.guideDescription}>{text(entry.description)}</span>
+                      </span>
+                      <span className={filesCss.guideCue} aria-hidden="true"><IconChevronRightOutlineMedium size={14} /></span>
+                      {Artwork && <span className={filesCss.guideArtwork} aria-hidden="true"><Artwork /></span>}
+                    </button>;
+                  })}
+                </div>
+              </div>;
             })}
-            {!launchers.length && <p className={filesCss.state}>{localize("没有已启用的工作区插件，可在设置中启用。", "No workspace plugins enabled. Enable one in Settings.")}</p>}
+            {!groups.length && <p className={filesCss.state}>{t("guide.empty")}</p>}
           </div>
         </div>;
         const registered = panels.find(item => item.contribution.kind === tab.kind);

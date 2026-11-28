@@ -27,12 +27,28 @@ export interface WorkbenchPanelContribution {
   component: ComponentType<WorkbenchPanelProps>;
   title?: (contentId: string, fallback: string) => ReactNode;
 }
+export type WorkbenchEntryCategory = "workspace" | "design";
+export function isWorkbenchEntryCategory(value: unknown): value is WorkbenchEntryCategory {
+  return value === "workspace" || value === "design";
+}
+export interface WorkbenchEntry {
+  label: WebLocalizedText;
+  panelTitle?: WebLocalizedText;
+  description: WebLocalizedText;
+  kind: string;
+  multiple?: boolean;
+  /** The host localizes, orders and lays out the groups. Omitted categories go under Other tools. */
+  category?: WorkbenchEntryCategory;
+  icon: ComponentType<{ size?: number }>;
+  /** Optional decorative card artwork, separate from the plugin icon. */
+  artwork?: ComponentType;
+}
 /** Additive host contribution. Existing protocol-v1 slots/actions remain valid for external packages. */
 export interface WorkbenchPluginDefinition extends WebPluginDefinition {
   workbench?: {
     apiVersion: 1;
     /** History-only renderers may omit a launcher. */
-    entry?: { label: WebLocalizedText; panelTitle?: WebLocalizedText; description: WebLocalizedText; kind: string; multiple?: boolean; icon: ComponentType<{ size?: number }> };
+    entry?: WorkbenchEntry;
     panels: readonly WorkbenchPanelContribution[];
     /** Native tool-result UI, also receives partial arguments while the model streams. Not an MCP Apps bridge. */
     toolViews?: readonly { tools: readonly string[]; component: ComponentType<ToolViewProps> }[];

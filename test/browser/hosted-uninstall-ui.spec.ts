@@ -21,8 +21,8 @@ for (const locale of ["en", "zh"] as const) test(`uninstall removes launchers an
     const checkpoint = (await h.action("get", { id: created.id })).scene.elements;
     await expect(page.locator("[data-hosted-recovery]")).toHaveCount(0);
     await page.getByRole("button", { name: t("New tab", "新标签页"), exact: true }).click();
-    const guide = page.locator('[role="group"]').filter({ has: page.getByRole("button", { name: "Excalidraw", exact: true }) });
-    const workspaceIcon = await guide.getByRole("button", { name: "Excalidraw", exact: true }).locator("svg").innerHTML();
+    const designGroup = page.getByRole("group", { name: t("Drawing & design", "绘图与设计"), exact: true });
+    const workspaceIcon = await designGroup.getByRole("button", { name: "Excalidraw", exact: true }).locator("svg").first().innerHTML();
     await page.locator("[data-sidebar-right-toggle]").click();
     await page.getByRole("button", { name: t("Plugins", "插件"), exact: true }).click();
     const management = page.locator("[data-hosted-management]");
@@ -67,7 +67,7 @@ for (const locale of ["en", "zh"] as const) test(`uninstall removes launchers an
     await expect(page.locator('[role="tab"]').filter({ hasText: "Excalidraw" })).toHaveCount(0);
     const restoredEntry = page.locator('[aria-label="' + t("Workspace tools", "工作区工具") + '"] button[aria-label="Excalidraw"]');
     await expect(restoredEntry).toHaveCount(1);
-    expect(await restoredEntry.locator("svg").innerHTML()).toBe(workspaceIcon);
+    expect(await restoredEntry.locator("svg").first().innerHTML()).toBe(workspaceIcon);
     expect(h.errors).toEqual([]);
   } finally {
     if (lost) await h.integration.handlers.views({ ...lost, operation: "discard", confirmation: "discard-unconfirmed-edits" });
