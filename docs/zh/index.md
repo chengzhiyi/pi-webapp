@@ -3,9 +3,9 @@ layout: home
 title: pi-webapp 使用指南
 
 release:
-  label: 0.1.55 新功能
-  text: OpenPencil 插件，让 Pi 做 UI 设计
-  link: /zh/changelog#v0-1-55
+  label: 桌面构建 18
+  text: 网页预览与用系统应用打开文件
+  link: /zh/changelog#build-18
 
 hero:
   name: pi-webapp

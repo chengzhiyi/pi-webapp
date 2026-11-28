@@ -6,7 +6,7 @@ Conversations, project files, terminals, and Git—side by side. Use the same wo
 
 [简体中文](README.zh-CN.md) · [Get started](#get-started) · [Download desktop](#desktop-downloads) · [Architecture](#architecture-highlights) · [User guide](docs/en/introduction.md) · [npm](https://www.npmjs.com/package/pi-webapp)
 
-**Desktop test build 17:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
+**Desktop test build 18:** [macOS Apple Silicon DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-arm64.dmg) · [Intel, Windows & Linux downloads](#desktop-downloads) · [SHA-256 checksums](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/SHA256SUMS). These are unsigned/unnotarized test packages. See [safe installation](docs/desktop-testing.md).
 
 [![Pi workbench with project sessions, an agent conversation, and a highlighted code preview](assets/readme/workbench.png)](assets/readme/workbench.png)
 
@@ -120,16 +120,16 @@ Enter **`/web`** inside Pi. The browser stays synchronized with that terminal se
 
 ## Desktop downloads
 
-**Latest desktop test release: [pi 0.1.52 · build 17](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.52-b17).** Download the installer for your operating system and CPU:
+**Latest desktop test release: [pi 0.1.58 · build 18](https://github.com/chengzhiyi/pi-webapp/releases/tag/desktop-v0.1.58-b18).** Download the installer for your operating system and CPU:
 
 | Platform | Download |
 | --- | --- |
-| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-arm64.dmg) |
-| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-mac-x64.dmg) |
-| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-win-x64.exe) |
-| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/pi-0.1.52-desktop.17-linux-x86_64.AppImage) |
+| **macOS · Apple Silicon (arm64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-arm64.dmg) |
+| **macOS · Intel (x64)** | [Download DMG](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-mac-x64.dmg) |
+| **Windows · x64** | [Download EXE installer](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-win-x64.exe) |
+| **Linux · x64** | [Download AppImage](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/pi-0.1.58-desktop.18-linux-x86_64.AppImage) |
 
-[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.52-b17/desktop-release.json)
+[All releases](https://github.com/chengzhiyi/pi-webapp/releases) · [SHA256SUMS](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/SHA256SUMS) · [Build/runtime metadata](https://github.com/chengzhiyi/pi-webapp/releases/download/desktop-v0.1.58-b18/desktop-release.json)
 
 **Build 12 fixes desktop quit responsiveness.** Quit confirmations focus the main window, closing a loading window no longer opens a blocking error alert, and a failed backend stop offers a desktop-only exit. Existing background services remain available.
 
