@@ -6,6 +6,7 @@ pi-webapp ships two ways. The npm package (the web launcher, and the service ins
 
 ## Unreleased
 
+- If closing a plugin tab fails to save, the tab stays open and can still respond to later save requests from plugin updates or uninstall.
 - The workbench **Start** tab uses compact cards grouped by tool type. Cards reflow when you resize or split the pane, and **Web Preview** appears only where the desktop preview is available.
 - From a browser opened by the local Pi launcher, use the file **Open** menu to open workspace files in system apps or reveal them in the file manager on macOS and Windows.
 - Open conversation navigation from the sidebar toggle without leaving the fullscreen workspace.

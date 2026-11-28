@@ -194,7 +194,13 @@ test("independent cards/editors retain dirty views when close, uninstall and upd
     expect((await h.action("get", { id: second.id })).scene.elements).toEqual(saved.elements);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(h.errors).toEqual([]); expect(h.external).toEqual([]);
-  } finally { failSync = false; await h.close(); }
+  } catch (error) {
+    failSync = false;
+    // The harness attaches shutdown failures; don't let one replace the original assertion.
+    await h.close().catch(() => {});
+    throw error;
+  }
+  await h.close();
 });
 
 test("legacy published iframe keeps its own tool chrome and editor without host UI negotiation", async ({ page }, info) => {

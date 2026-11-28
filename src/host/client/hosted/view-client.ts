@@ -91,19 +91,26 @@ export class HostedViewClient {
   close(): Promise<void> {
     if (this.closed) return Promise.resolve();
     if (this.closing) return this.closing;
-    this.stopped = true; this.unlisten?.(); this.abort.abort();
+    this.stopped = true; this.unlisten?.(); this.unlisten = undefined;
     this.closing = (async () => {
       if (!this.token) return;
-      // Use independent requests because in-flight status requests were aborted. A frozen view is
+      if (this.mount.kind !== "controller" && this.frameStarted && !this.frozen) {
+        // Freeze can report dirty/busy status while checkpointing. Keep those writes alive;
+        // if no checkpoint was made, the retained realm must still receive lifecycle commands.
+        try { this.snapshot = await this.adapter.call("freeze"); }
+        catch (error) {
+          if (this.adapter.frame.isConnected) { this.stopped = false; this.listen(); }
+          throw error;
+        }
+        this.frozen = true;
+        this.localCloseCheckpoint = true;
+      }
+      this.abort.abort();
+      // Use independent requests after aborting in-flight status updates. A frozen view is
       // already checkpointed. Its old-generation capability may CLOSE, but not CHANGE.
       if (this.mount.kind !== "controller" && !this.frameStarted) {
         await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "cancel-initialization" });
       } else {
-        if (this.mount.kind !== "controller" && !this.frozen) {
-          this.snapshot = await this.adapter.call("freeze");
-          this.frozen = true;
-          this.localCloseCheckpoint = true;
-        }
         if (this.localCloseCheckpoint) {
           await hostedApi.view({ ...this.identity, viewToken: this.token, operation: "change", dirty: false, busy: false });
         }
