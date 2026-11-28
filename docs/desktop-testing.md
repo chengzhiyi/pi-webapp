@@ -11,8 +11,9 @@
   Gatekeeper 仍可能拦截；`spctl --assess` 拒绝此包是预期限制，不等于打包签名校验失败。
 - SHA-256 只核对发行文件；临时签名只检查包是否符合当前签名，不验证开发者身份，
   二者都不能证明软件安全。只邀请明确知情、愿意信任项目的测试用户。
-- 桌面更新菜单可下载、校验并交给 Finder 手动安装 macOS arm64 测试包；不会自动安装 ad-hoc 包。
-  Intel macOS、Windows/Linux 的更新菜单打开官方 Releases，选择匹配的安装包。
+- 桌面更新菜单可下载、校验并交给 Finder 手动安装 macOS arm64 测试包。含项目更新公钥的
+  Apple Silicon 测试版还可单独启用项目签名的自动更新。Intel macOS、Windows/Linux 的更新菜单
+  打开官方 Releases，选择匹配的安装包。
 
 ## 测试用户安装步骤
 
@@ -53,6 +54,46 @@
 再次安装/更新未公证测试包时，可能需要重复信任步骤。不接受这些限制的用户可继续使用
 Web 版，或从可信源码构建运行，不必购买开发者会员。
 
+## Opt-in desktop updates by the project
+
+限 Apple Silicon，且 `pi.app` 必须安装在可写的 `/Applications` 或 `~/Applications`。
+先手动装一次内置项目更新公钥的版本，然后在 **pi → 退出时自动更新桌面（测试版）** 启用。
+后台只处理带项目签名的测试版；菜单显示更新已就绪后，完成任务并正常退出。
+如果保留内置后台运行，本次不安装；外部 npm 后台不需要停止。更新不提权，不重新启动应用，
+不移除下载隔离，不修改 `~/.pi`。新版本若被 Gatekeeper 拦截，请用 macOS 提供的界面处理，
+或恢复旧版，切勿关闭系统保护。
+
+**Finder 回滚：** 在新版本里选择 **pi → 在 Finder 中显示上个桌面版本** 可以找到旧版。
+如果新版本无法打开，在 Finder 打开安装目录并按 **⌘⇧.** 显示隐藏项目；查找最新的
+`.pi-update-XXXXXX` 目录，其中 `result` 文件为 `installed` 的才表示交换成功，里面的
+`pi.app` 是旧版。先退出桌面并停止它的内置后台，再将新版移出安装目录，把旧版移回。
+打开旧版后关掉自动更新，避免马上再次更新到同一构建。确认新版正常后，可自行删除
+不再需要的旧备份。不要在尚未退出或更新正在进行时移动这些目录。
+
+### 给测试发布配置项目签名（不需要 Apple 开发者会员）
+
+1. 在安全的位置生成 Ed25519 密钥。只把公钥提交到仓库，**不要提交、贴出或打包私钥**。
+   例如，在一个权限仅你自己的、位于仓库外且已经建好的签名目录执行：
+
+   ```bash
+   umask 077
+   openssl genpkey -algorithm ED25519 -out desktop-update-private.pem
+   openssl pkey -in desktop-update-private.pem -pubout -out desktop-update-public.pem
+   ```
+
+2. 将公钥放在 `desktop/update-project-key.pem`。在 GitHub 的 `desktop-release`
+   Environment 设置 `PI_WEBAPP_DESKTOP_UPDATE_PRIVATE_KEY` 为对应的完整私钥 PEM，限制发布
+   来源并配置审核；不要让普通构建 job 访问该密钥。两项都不设时仍可发布手动安装版；只设
+   一项或密钥不匹配时发布失败。
+3. 用正常桌面流程发布新构建。发布 job 对已验收的 `desktop-release.json` 原始字节签名，
+   额外发布 `desktop-release.json.sig`，并回下载核验后才公开。已发布构建不能补签或覆盖。
+   初次启用需要一个内置公钥的安装包，以及随后发布的更高构建来验证升级。
+   项目签名不是 Apple 公证；私钥丢失或泄露时停用自动更新，手动迁移到含新公钥的构建。
+
+本地验收：`node --test desktop/test/update-project.test.mjs desktop/test/update-swap.test.mjs desktop/test/update-manifest-publish.test.mjs`。
+在 Apple Silicon 上它使用一次性密钥和临时目录创建真实 DMG，验证签名、暂存、隔离标记、
+退出后原子交换和旧版备份。不修改本机正式安装，也不代表 Gatekeeper 放行或公共发布通过。
+
 ## Release operator / 维护者验收
 
 - 默认 `mac.identity` 为 `-`；证书自动发现保持关闭。
@@ -64,7 +105,8 @@ Web 版，或从可信源码构建运行，不必购买开发者会员。
   `desktop-release.json` 的 `signing` 记录 `type` 和 `verified`；兼容字段 `unsigned: true`
   表示**没有发布者身份**，即使 ad-hoc 完整性校验通过也保持为 true。
 - 打包命令还会只读挂载 DMG、解压 ZIP，自动校验其中实际应用的 deep/strict 签名。
-  四平台发布清单可包含 macOS arm64 的可选更新 ZIP；没有发布者身份时仍只走 DMG 手动安装。
+  四平台发布清单可包含 macOS arm64 的可选原生更新 ZIP；没有 Developer ID 时，
+  除独立的项目签名测试渠道外，使用 DMG 手动安装。
   执行 packaged smoke（含 PTY/浏览器共享后台）。
   这些检查不能替代“浏览器下载 → Finder 安装 → 用户明确同意”的隔离场景人工验收。
 - 每次交付先运行 `npm run desktop:prepare-build`：递增 `desktop/release.json` 的构建号，并把 `package.json` 版本设为 npm 下一个未发布版本；再重新生成校验和。

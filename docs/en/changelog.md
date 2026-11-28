@@ -4,6 +4,12 @@ What's new in each release, newest first. Check **Pi Settings → General** for 
 
 pi-webapp ships two ways. The npm package (the web launcher, and the service inside the desktop app) is published on every release, and **Update and restart** installs it in both; see [Updates](./updates). The desktop app gets a new installer build less often. Each entry below is either a desktop build or an npm release with notable changes, and lists everything since the entry before it. **Unreleased** is what the [preview channel](./updates#channels) has that no stable release has yet.
 
+## Unreleased
+
+- From a browser opened by the local Pi launcher, use the file **Open** menu to open workspace files in system apps or reveal them in the file manager on macOS and Windows.
+- Open conversation navigation from the sidebar toggle without leaving the fullscreen workspace.
+- On Apple Silicon, a project-signed desktop test build can **automatically update on normal quit** when you opt in. It leaves a rollback copy and doesn't bypass macOS security. The option requires a test installer with the project's update key.
+
 ## Desktop build 18 · pi 0.1.58 · 2026-11-28 {#build-18}
 
 ### Highlights

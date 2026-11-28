@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish all four verified platform installers (unsigned test release)"
+        description: "Publish all four verified platform installers (test prerelease)"
         type: boolean
         default: false
 
@@ -186,6 +186,8 @@ jobs:
   publish:
     if: github.event_name == 'push' || inputs.publish
     needs: assemble
+    # Configure reviewers and restrict deployment refs to reviewed release sources.
+    environment: desktop-release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -202,9 +204,11 @@ jobs:
         with:
           name: verified-desktop-bundle
           path: .desktop/release-assets
-      - name: Download-verify every draft asset before making the prerelease public
+      # Only run the publisher from the reviewed checkout, never code from the downloaded bundle.
+      - name: Optionally sign the manifest and download-verify every draft asset before publication
         env:
           GH_TOKEN: ${{ github.token }}
+          PI_WEBAPP_DESKTOP_UPDATE_PRIVATE_KEY: ${{ secrets.PI_WEBAPP_DESKTOP_UPDATE_PRIVATE_KEY }}
         run: |
           export DESKTOP_SOURCE_COMMIT="$(git rev-parse HEAD)"
           node scripts/publish-desktop-release.mjs

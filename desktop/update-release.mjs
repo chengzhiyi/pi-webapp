@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { localize as t } from "./locale.mjs";
 import { open, rm } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
@@ -49,7 +49,7 @@ async function downloadResponse(url, fetchRequest, signal) {
   throw new Error(t("更新下载重定向过多", "Too many update download redirects"));
 }
 
-async function jsonResponse(response, limit = 2 * 1024 ** 2) {
+async function responseBytes(response, limit = 2 * 1024 ** 2) {
   if (!response.body) throw new Error(t("更新信息为空", "Update information is empty"));
   const reader = response.body.getReader(); const chunks = []; let bytes = 0;
   try {
@@ -59,8 +59,25 @@ async function jsonResponse(response, limit = 2 * 1024 ** 2) {
       if (bytes > limit) throw new Error(t("更新信息过大", "Update information is too large"));
       chunks.push(Buffer.from(item.value));
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return Buffer.concat(chunks);
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
+const jsonResponse = async response => JSON.parse((await responseBytes(response)).toString("utf8"));
+export const projectSignatureName = "desktop-release.json.sig";
+
+export function parseProjectPublicKey(pem) {
+  if (typeof pem !== "string" || !/^-----BEGIN PUBLIC KEY-----\r?\n(?:[A-Za-z0-9+/=]+\r?\n)+-----END PUBLIC KEY-----$/.test(pem.trim())) {
+    throw new Error("Expected an Ed25519 public key PEM");
+  }
+  const key = createPublicKey(pem);
+  if (key.asymmetricKeyType !== "ed25519") throw new Error("Expected an Ed25519 public key PEM");
+  return key;
+}
+
+export function verifyProjectManifest(bytes, signature, key) {
+  try { return signature.length === 64 && verify(null, bytes, parseProjectPublicKey(key), signature); }
+  catch { return false; }
 }
 
 function validateAsset(asset, name) {
@@ -106,9 +123,10 @@ export function validateManifest(manifest, release, arch) {
 }
 
 /** Explicit desktop test channel, including prereleases; npm's latest is unrelated. */
-export async function checkDesktopRelease(current, { arch = process.arch, fetchRequest = fetch } = {}) {
+export async function checkDesktopRelease(current, { arch = process.arch, fetchRequest = fetch, projectKey, signal } = {}) {
+  const deadline = () => signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
   if (arch !== "arm64") throw new Error(t("当前桌面更新渠道仅支持 macOS Apple Silicon；其他平台请前往 Releases", "This desktop update channel only supports macOS Apple Silicon. Visit Releases for other platforms."));
-  const response = await fetchRequest(api, { redirect: "error", signal: AbortSignal.timeout(15000),
+  const response = await fetchRequest(api, { redirect: "error", signal: deadline(),
     headers: { Accept: "application/vnd.github+json", "User-Agent": "pi-desktop-updater" } });
   if (!response.ok) { await response.body?.cancel(); throw new Error(t("无法检查 GitHub 桌面更新（可能达到访问频率限制），请稍后重试", "Could not check GitHub for desktop updates (the rate limit may have been reached). Try again later.")); }
   const releases = await jsonResponse(response);
@@ -119,13 +137,22 @@ export async function checkDesktopRelease(current, { arch = process.arch, fetchR
     const match = /^desktop-v(\d+\.\d+\.\d+)-b([1-9]\d*)$/.exec(release.tag_name);
     if (!match) continue;
     const identity = { version: match[1], build: Number(match[2]) };
+    if (projectKey && (!release.prerelease || !release.assets?.some(asset => asset.name === projectSignatureName
+      && asset.state === "uploaded" && asset.size === 64 && asset.browser_download_url === assetUrl(release.tag_name, projectSignatureName)))) continue;
     if (compareDesktop(identity, current) > 0 && release.assets?.some(asset => asset.name === "desktop-release.json")) candidates.push({ release, identity });
   }
   candidates.sort((a, b) => compareDesktop(b.identity, a.identity));
   if (!candidates.length) return null;
   const { release } = candidates[0];
-  const responseManifest = await downloadResponse(assetUrl(release.tag_name, "desktop-release.json"), fetchRequest, AbortSignal.timeout(15000));
-  return validateManifest(await jsonResponse(responseManifest, 64 * 1024), release, arch);
+  const responseManifest = await downloadResponse(assetUrl(release.tag_name, "desktop-release.json"), fetchRequest, deadline());
+  const bytes = await responseBytes(responseManifest, 64 * 1024);
+  if (projectKey) {
+    const signature = await responseBytes(await downloadResponse(assetUrl(release.tag_name, projectSignatureName), fetchRequest, deadline()), 64);
+    if (!verifyProjectManifest(bytes, signature, projectKey)) throw new Error("Invalid project release signature");
+  }
+  const manifest = validateManifest(JSON.parse(bytes.toString("utf8")), release, arch);
+  // The preview route is not a substitute for the Developer ID/Squirrel channel.
+  return projectKey && (!manifest.unsigned || !manifest.prerelease) ? null : manifest;
 }
 
 /** Stream to a private, fresh file. Failed or cancelled downloads are never staged. */
