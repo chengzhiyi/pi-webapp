@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "../../../web/src/ui/layout/AppFrame.tsx";
-import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO } from "../../../web/src/ui/layout/columns.ts";
+import { clampWidth, RIGHTBAR_MIN, RIGHTBAR_MAX_RATIO, SIDEBAR_AUTO_COLLAPSE } from "../../../web/src/ui/layout/columns.ts";
 import { SidebarRoot } from "../../../web/src/ui/sidebar/SidebarRoot.tsx";
 import { PiLogo, ToastViewport, useErrorToast } from "../../../web/src/ui/primitives/index.ts";
 import { IconSettingsOutline14, IconSettingsOutline16 } from "../../../web/src/ui/primitives/icons/index.tsx";
@@ -98,7 +98,7 @@ export function PiApp() {
   const [layout, setLayout] = useState<LayoutInfo>(() => ({
     sidebar: 280,
     viewportWidth: window.innerWidth,
-    narrowExpanded: false,
+    sidebarDrawerOpen: false,
     rightbar: null,
     rightbarShown: false,
     rightbarTrack: false,
@@ -109,7 +109,7 @@ export function PiApp() {
   const lastSidebarWidth = useRef(280);
   const navigationLock = useRef(false);
   const [navigationBusy, setNavigationBusy] = useState(false);
-  const closeSidebar = useCallback(() => setLayout(previous => ({ ...previous, narrowExpanded: false })), []);
+  const closeSidebar = useCallback(() => setLayout(previous => previous.sidebarDrawerOpen ? { ...previous, sidebarDrawerOpen: false } : previous), []);
   const navigate = async (action: () => Promise<void>, nextSubagent: string | null = null) => {
     if (navigationLock.current) return;
     navigationLock.current = true;
@@ -132,7 +132,11 @@ export function PiApp() {
   const actions = useMemo(() => ({
     closeSidebar,
     setViewportWidth(width: number) {
-      setLayout((previous) => previous.viewportWidth === width ? previous : { ...previous, viewportWidth: width, narrowExpanded: (previous.viewportWidth < 1024) !== (width < 1024) ? false : previous.narrowExpanded });
+      setLayout(previous => previous.viewportWidth === width ? previous : {
+        ...previous,
+        viewportWidth: width,
+        sidebarDrawerOpen: previous.sidebarDrawerOpen && (previous.viewportWidth < SIDEBAR_AUTO_COLLAPSE) === (width < SIDEBAR_AUTO_COLLAPSE),
+      });
     },
     setSidebar(width: number) {
       lastSidebarWidth.current = Math.min(420, Math.max(264, Math.round(width)));
@@ -148,19 +152,26 @@ export function PiApp() {
     else panel.controller.openContent({ kind: "plugin", contentId: id, title: t("预览", "Preview") });
     panel.controller.setExpanded(true);
     setPluginsOpen(false);
-    setLayout((previous) => ({ ...previous, narrowExpanded: false }));
+    closeSidebar();
   };
   const closePanel = () => panel.controller.setExpanded(false);
   const openWorkspaceFile = useCallback((path: string) => {
     if (!bridge.session || bridge.disabledPlugins.includes(BUILTIN_IDS.files)) return;
     const relative = workspacePreviewPath(bridge.session.cwd, path);
     panel.openContent("file-preview", relative, relative.split("/").at(-1)!, undefined, BUILTIN_IDS.files);
-    setLayout(previous => ({ ...previous, narrowExpanded: false }));
-  }, [bridge.session?.cwd, bridge.disabledPlugins, panel.openContent]);
+    closeSidebar();
+  }, [bridge.session?.cwd, bridge.disabledPlugins, panel.openContent, closeSidebar]);
   useEffect(() => {
     const fullscreen = layout.viewportWidth < 767 || panel.snapshot.state.mode === "fullscreen";
     const shown = panel.shown && !pluginsOpen && !subagent;
-    setLayout((previous) => ({ ...previous, rightbarShown: shown, rightbarTrack: shown, rightbarFullscreen: fullscreen, rightbarFocus: previous.rightbarFocus && shown && !fullscreen }));
+    setLayout(previous => ({
+      ...previous,
+      rightbarShown: shown,
+      rightbarTrack: shown,
+      rightbarFullscreen: fullscreen,
+      rightbarFocus: previous.rightbarFocus && shown && !fullscreen,
+      sidebarDrawerOpen: previous.sidebarDrawerOpen && (previous.viewportWidth < SIDEBAR_AUTO_COLLAPSE || (shown && fullscreen)),
+    }));
   }, [panel.shown, panel.snapshot.state.mode, layout.viewportWidth, pluginsOpen, !!subagent]);
   useEffect(() => { setLayout(previous => previous.rightbarFocus ? { ...previous, rightbarFocus: false } : previous); }, [bridge.session?.sessionId]);
   useEffect(() => { void loadMarkdownText(); }, []);
@@ -214,8 +225,8 @@ export function PiApp() {
   };
   hostedCallbacks.current = { openPanel, sendMessage: pluginProps.sendMessage, abort: bridge.stop };
   const renderPluginSlot = (slot: WebSlotName, turn?: TurnReference) => <PluginSlot plugins={plugins} slot={slot} props={{ ...pluginProps, turn }} />;
-  const toggleSidebar = () => setLayout((previous) => previous.viewportWidth < 1024
-    ? { ...previous, narrowExpanded: !previous.narrowExpanded }
+  const toggleSidebar = () => setLayout((previous) => previous.viewportWidth < SIDEBAR_AUTO_COLLAPSE || (previous.rightbarShown && previous.rightbarFullscreen)
+    ? { ...previous, sidebarDrawerOpen: !previous.sidebarDrawerOpen }
     : { ...previous, sidebar: previous.sidebar === 0 ? lastSidebarWidth.current : 0 });
   const useStore = <T,>(select: (state: { layoutInfo: LayoutInfo }) => T): T => select({ layoutInfo: layout });
   const usePanelInfo = <T,>(select: (state: PanelInfo) => T): T => select({ activePanelId: pluginsOpen ? "plugins" : null });
@@ -266,7 +277,7 @@ export function PiApp() {
     if (key === "rightbar" && Object.keys(panel.snapshot.state.tabs).length > 0) return <div hidden={pluginsOpen || !!subagent} style={{ height: "100%" }}><PluginPanel key={bridge.session?.sessionId} panel={panel} cwd={bridge.session?.cwd} width={owner.width} narrow={layout.viewportWidth < 767} focus={layout.rightbarFocus} onExitFocus={() => setLayout(previous => ({ ...previous, rightbarFocus: false }))} plugins={plugins} props={pluginProps} /></div>;
     return null;
   };
-  return <AppUpdateProvider actions={bridge}>{hosted.controllers}<ToastViewport closeLabel={t("关闭", "Dismiss")} detailLabel={t("诊断信息", "Diagnostics")} /><ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} />{/* Floating composer layer: above the focused/fullscreen dock (40), below dock floats (60), menus and toasts. */}<div ref={setFloatingHost} data-floating-host="" style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }} /><AppFrame
+  return <AppUpdateProvider actions={bridge}>{hosted.controllers}<ToastViewport closeLabel={t("关闭", "Dismiss")} detailLabel={t("诊断信息", "Diagnostics")} /><ExecuteApprovalPrompt approvals={hosted.approvals} locale={locale} decide={hosted.decide} />{/* Floating composer layer: above the focused/fullscreen dock (40), below dock floats (60), menus and toasts. */}<div ref={setFloatingHost} data-floating-host="" inert={layout.sidebarDrawerOpen} style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }} /><AppFrame
     useStore={useStore}
     usePanelInfo={usePanelInfo}
     actions={actions}
