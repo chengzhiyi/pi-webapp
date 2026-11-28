@@ -5,7 +5,7 @@
 OpenPencil 是官方插件，基于开源设计编辑器 [OpenPencil](https://github.com/open-pencil/open-pencil)，**不随应用内置，也不会自动安装**。设计稿是 `.fig` 文件。Pi 直接修改设计稿：它的改动会在画布上即时出现，你可以撤销最近的一次。编辑器在你的浏览器里本地运行，不需要账号。插件不包含 OpenPencil 自带的 AI 对话，这件事由 Pi 用你连接的模型来做。
 
 ::: info 0.1.55 新功能
-OpenPencil 需要 pi-webapp 0.1.55 或更新版本。打开电脑里的文件还需要更新的版本，见更新日志里的[未发布](./changelog#unreleased)部分。
+OpenPencil 需要 pi-webapp 0.1.55 或更新版本。打开电脑里的文件还需要更新的版本，见更新日志里的[桌面构建 18](./changelog#build-18)部分。
 :::
 
 ![OpenPencil 在对话旁边：Pi 在画布上添加了登录页和仪表盘，提示里带有撤销按钮](/images/openpencil.webp)

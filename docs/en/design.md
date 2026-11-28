@@ -5,7 +5,7 @@ This page shows how to install the optional OpenPencil plugin, ask Pi to design 
 OpenPencil is an official plugin built on the open-source [OpenPencil](https://github.com/open-pencil/open-pencil) design editor. It is **not bundled and not installed automatically**. Designs are `.fig` files. Pi edits them directly: its changes appear on the canvas as it makes them, and you can undo the latest one. The editor runs locally in your browser and needs no account. OpenPencil's own AI chat is not included, because Pi does that job with the model you've connected.
 
 ::: info New in 0.1.55
-OpenPencil needs pi-webapp 0.1.55 or later. Opening files from your computer needs a newer version still: see [Unreleased](./changelog#unreleased) in the changelog.
+OpenPencil needs pi-webapp 0.1.55 or later. Opening files from your computer needs a newer version still: see [Desktop build 18](./changelog#build-18) in the changelog.
 :::
 
 ![OpenPencil beside a conversation: Pi has added a sign-in screen and a dashboard to the canvas, and a toast offers Undo](/images/openpencil.webp)
