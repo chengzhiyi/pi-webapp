@@ -27,6 +27,7 @@ import { PromptQueueError } from "../sessions/editable-prompt-queue.ts";
 import { hostedApi, hostedHttpFailure, HOSTED_API_PATHS, type HostedBridgeHandlers } from "../plugins/hosted/routes.ts";
 
 import { readAssetManifest } from "./web-assets.ts";
+import { EventSubscribers } from "./event-subscribers.ts";
 import { desktopProtocolVersion } from "../../../../desktop/managed-release.mjs";
 import { matchesLocalFileGrant } from "../../../../desktop/local-file-grant.mjs";
 import { localFileActionHeader, localFileActionRoute, type FileActionPlatform } from "../../../contracts/local-file-actions.ts";
@@ -155,13 +156,13 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
   const tokenText = fixedToken && /^[A-Za-z0-9_-]{32}$/.test(fixedToken) ? fixedToken : randomBytes(24).toString("base64url");
   const token = Buffer.from(tokenText);
   const pickerKind = directoryPickerKind();
-  const streams = new Set<ServerResponse>();
+  const streams = new EventSubscribers();
   const preferences = new PluginPreferences(options.pluginSettingsFile ?? join(getAgentDir(), "pi-web", "plugins.json"));
   try { await preferences.load(); } catch (error) { await telemetry.close(); throw error; }
   const pluginRegistry = new ServerPluginRegistry(builtinServerPlugins(), preferences);
   const externalCatalog = async () => await host.plugins?.() ?? { plugins: [], errors: [] };
   const pluginState = () => ({ type: "plugin_state" as const, disabled: pluginRegistry.plugins.filter(plugin => !preferences.enabled(plugin.metadata.id)).map(plugin => plugin.metadata.id) });
-  const publishPluginState = () => { for (const stream of streams) stream.write(`${JSON.stringify(pluginState())}\n`); };
+  const publishPluginState = () => streams.publish(pluginState());
   const attachments = new Map<string, UploadedAttachment>();
   const logins = new ProviderLoginController((cause, context) => telemetry.capture(cause, context));
   const remember = (session: SessionView) => telemetry.setState({ nodeVersion: process.version, platform: process.platform, session: telemetry.session(session.sessionId), idle: session.idle, model: session.model, thinkingLevel: session.thinkingLevel, messageCount: session.messages.length });
@@ -399,9 +400,7 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
           Connection: "keep-alive",
           "X-Accel-Buffering": "no",
         });
-        streams.add(res);
-        res.write(`${JSON.stringify({ type: "snapshot", session: initial })}\n`);
-        res.on("close", () => streams.delete(res));
+        streams.add(res, { type: "snapshot", session: initial });
         return;
       }
       if (req.method === "POST" && [...pluginRegistry.routes, "/api/desktop/handoff", "/api/plugin-management", "/api/plugin-interaction", "/api/plugin-action", "/api/update", "/api/update/channel", "/api/update/cancel", "/api/message", "/api/prompt-queue", "/api/attachment/remove", "/api/abort", "/api/resume", "/api/compact", "/api/new-session", "/api/model", "/api/thinking-level", "/api/config", "/api/provider/login", "/api/provider/login/respond", "/api/provider/login/cancel", "/api/provider/custom", "/api/provider/models", "/api/provider/logout", "/api/workspace/add", "/api/workspace/select", "/api/workspace/new-session", "/api/workspace/remove", "/api/session/select", "/api/session/rename", "/api/session/delete", "/api/directory/list", "/api/directory/create", "/api/directory/pick"].includes(path)) {
@@ -764,14 +763,12 @@ export async function startBridge(host: BridgeHost, webRoot: string, telemetry =
       if (event.type === "error" && !event.errorCode) event = { ...event, errorCode: "unexpected_error", errorId: telemetry.capture(new Error("Agent execution failed"), { stage: "agent", requestId: event.requestId, operationId: event.operationId }) };
       if (event.type === "error") event = { ...event, errorReported: event.errorReported ?? telemetry.enabled };
       if (event.type === "snapshot") for (const [id, attachment] of attachments) if (attachment.sessionId !== event.session.sessionId) attachments.delete(id);
-      const line = `${JSON.stringify(event)}\n`;
-      for (const stream of streams) stream.write(line);
+      streams.publish(event);
     },
     async close(options) {
       logins.close();
       await pluginRegistry.close();
-      for (const stream of streams) stream.end(`${JSON.stringify({ type: "shutdown", reconnect: options?.reconnect ?? restarting })}\n`);
-      streams.clear();
+      streams.close(options?.reconnect ?? restarting);
       let force: ReturnType<typeof setTimeout> | undefined;
       try {
         await new Promise<void>((resolve, reject) => {

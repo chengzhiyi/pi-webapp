@@ -26,7 +26,7 @@
         "actions": ["list", "new", "open", "import", "get", "focus", "sync", "initialize", "accept", "reject", "save"],
         "checkpointActions": ["sync", "get", "list"],
         "contribution": {
-          "entry": { "label": "Excalidraw", "description": { "zh": "手绘图稿", "en": "Editable drawings" }, "kind": "workspace" },
+          "entry": { "label": "Excalidraw", "description": { "zh": "绘制流程图和手绘草图", "en": "Draw diagrams and freehand sketches" }, "kind": "workspace", "category": "design" },
           "panels": ["workspace", "editor"],
           "artifactTools": ["excalidraw_create_view", "diagram_create", "diagram_patch"],
           "toolViews": ["excalidraw_create_view", "diagram_create", "diagram_patch"],
@@ -58,7 +58,7 @@
         "actions": ["list", "get", "accept", "reject", "revert", "save", "open", "import", "upload", "create", "rename", "selection", "sync", "lock"],
         "checkpointActions": ["get", "list", "sync", "create"],
         "contribution": {
-          "entry": { "label": "OpenPencil", "description": { "zh": "UI 设计", "en": "UI design" }, "kind": "workspace" },
+          "entry": { "label": "OpenPencil", "description": { "zh": "设计界面与组件", "en": "Design interfaces and components" }, "kind": "workspace", "category": "design" },
           "panels": ["workspace", "editor"],
           "artifactTools": ["pencil_apply_changes"],
           "toolViews": [],

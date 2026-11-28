@@ -71,6 +71,9 @@ export function usePiBridge() {
 
     const follow = async () => {
       while (alive) {
+        // Bootstrap belongs to this stream attempt, not the rendered connection state.
+        // Once the stream supplies a list, it is authoritative for this attempt.
+        let acceptsWorkspaceBootstrap = true;
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
         let correlation: ErrorCorrelation | undefined;
         let stage = "stream_connect";
@@ -83,6 +86,7 @@ export function usePiBridge() {
             cache: "no-store",
             signal: controller.signal,
           });
+          if (!alive) return;
           const { response } = followed;
           correlation = followed.correlation;
           if (!response.ok) await bridgeJson(followed);
@@ -94,11 +98,15 @@ export function usePiBridge() {
           breadcrumb("stream_connected", { ...correlation });
           setError("");
           reader = response.body.getReader();
+          void get<WorkspaceListView>("/api/workspaces", controller.signal).then((value) => {
+            if (alive && acceptsWorkspaceBootstrap) setWorkspaces(value);
+          }).catch(() => {});
           const decoder = new TextDecoder();
           let pending = "";
           while (alive) {
             stage = "stream_read";
             const { done, value } = await reader.read();
+            if (!alive) return;
             if (done) break;
             stage = "stream_event";
             pending += decoder.decode(value, { stream: true });
@@ -137,7 +145,10 @@ export function usePiBridge() {
                   streamingActive = active;
                   setStreaming(event.message);
                 }
-                if (event.type === "workspaces") setWorkspaces(event.value);
+                if (event.type === "workspaces") {
+                  acceptsWorkspaceBootstrap = false;
+                  setWorkspaces(event.value);
+                }
                 if (event.type === "error") {
                   // A failed reply explains itself in the transcript; only other failures need a toast.
                   if (!event.inTranscript) setError(event.message);
@@ -163,8 +174,10 @@ export function usePiBridge() {
           setConnection("disconnected");
           setModelsStatus("loading");
           setError(cause instanceof Error ? cause.message : t("连接 Pi 失败", "Could not connect to Pi"));
-          await new Promise<void>((resolve) => { timer = setTimeout(resolve, 1500); });
+        } finally {
+          acceptsWorkspaceBootstrap = false;
         }
+        await new Promise<void>((resolve) => { timer = setTimeout(resolve, 1500); });
       }
     };
     void follow();
@@ -194,7 +207,6 @@ export function usePiBridge() {
   useEffect(() => {
     if (connection !== "connected") return;
     let active = true;
-    void get<WorkspaceListView>("/api/workspaces").then((value) => { if (active) setWorkspaces(value); }).catch(() => {});
     void get<{ kind: DirectoryPickerKind }>("/api/directory/capability").then((value) => { if (active) setDirectoryPickerKind(value.kind); }).catch(() => { if (active) setDirectoryPickerKind("browse"); });
     return () => { active = false; };
   }, [connection]);

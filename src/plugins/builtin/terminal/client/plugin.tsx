@@ -16,7 +16,7 @@ export default defineWebPlugin<WorkbenchPluginDefinition>({
   } }],
   workbench: {
     apiVersion: 1,
-    entry: { label: { zh: "打开终端", en: "Open terminal" }, panelTitle: metadata.name, description: { zh: "在当前工作区中运行交互式 Shell", en: "Run an interactive shell in this workspace" }, kind: "terminal", multiple: true, icon: () => <span aria-hidden="true" style={{ fontFamily: "monospace", fontSize: 24 }}>›_</span> },
+    entry: { category: "workspace", label: { zh: "打开终端", en: "Open terminal" }, panelTitle: metadata.name, description: { zh: "在当前工作区运行命令", en: "Run commands in this workspace" }, kind: "terminal", multiple: true, icon: ({ size = 24 }) => <span aria-hidden="true" style={{ fontFamily: "monospace", fontSize: size, lineHeight: 1 }}>›_</span> },
     panels: [{ kind: "terminal", component: p => <WorkspaceTerminal model={p.resource(() => new TerminalSession(p.contentId, p.session.sessionId), model => model.dispose(), (model, active) => model.activate(active))} visible={p.visible} sessionId={p.session.sessionId} interactions={p.session.interactions} onNew={() => p.open("terminal", randomUUID(), p.locale === "zh" ? "终端" : "Terminal")} /> }],
   },
 });

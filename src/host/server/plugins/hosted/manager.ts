@@ -6,7 +6,7 @@ import { CapabilityBroker, type CapabilityBrokerOptions } from "./capabilities/b
 import { parseDeclarations } from "./capabilities/declarations.ts";
 import { PluginScheduler } from "./capabilities/scheduler.ts";
 import { HostedPluginError, failure } from "./errors.ts";
-import { HostedPluginInstaller } from "./installer.ts";
+import { HostedPluginInstaller, type InstalledHostedVersion } from "./installer.ts";
 import { officialPlugin, type OfficialPlugin, type RegistryRelease, type UpdatePolicy } from "./official-catalog.ts";
 import { HostedStateBroker } from "./state-broker.ts";
 import { HostedPluginSupervisor, type HostedSwitchHooks } from "./supervisor.ts";
@@ -217,12 +217,13 @@ export class HostedPluginManager {
     });
     // Host health is decided before, and independently of, any plugin.
     const { admitted } = await this.settleHostPair();
-    await this.installer.inventory();
+    const { versions } = await this.installer.inventory();
     for (const plugin of this.installer.catalog) {
-      const s = this.supervisor(plugin.id), active = await s.broker.active();
-      if (!active?.enabled) continue;
+      const s = this.supervisor(plugin.id);
       try {
-        const pkg = await this.compatiblePackage(plugin.id, active.version);
+        const active = await s.broker.active();
+        if (!active?.enabled) continue;
+        const pkg = await this.localCandidate(this.installer, plugin.id, versions[plugin.id] ?? [], active.version);
         await this.lifecycle(plugin.id, () => s.replace(pkg)); this.packages.set(plugin.id, pkg);
         // Right after a host switch, keep versions a fallback host may still need.
         if (!admitted) await this.collectSettled(plugin.id);
@@ -237,18 +238,23 @@ export class HostedPluginManager {
       }
     }
   }
-  /** The active version when it supports this host; otherwise the newest installed version that
-   * does (e.g. one prefetched before a host update). Never a downgrade guess across hosts. */
-  private async compatiblePackage(id: string, activeVersion: string): Promise<HostedPackage> {
-    try { return await this.installer.load(id, activeVersion); }
-    catch (error) {
-      if (failure(error).code !== "incompatible_plugin") throw error;
-      const versions = ((await this.installer.inventory()).versions[id] ?? []).map(v => v.version).filter(v => v !== activeVersion).sort((a, b) => compareVersions(b, a));
-      for (const version of versions) {
-        try { return await this.installer.load(id, version); } catch { /* Try an older installed release. */ }
+  /** Shared offline selection. Only a verified compatibility conflict opens fallback for an
+   * enabled plugin. An unreadable/missing/modified active release needs explicit recovery. When
+   * prefetching for a disabled plugin there is no startup selection to protect. */
+  private async localCandidate(target: HostedPluginInstaller, id: string, installed: readonly InstalledHostedVersion[], activeVersion?: string): Promise<HostedPackage> {
+    let incompatibility: unknown;
+    if (activeVersion !== undefined) {
+      try { return await target.load(id, activeVersion); }
+      catch (error) {
+        if (failure(error).code !== "incompatible_plugin") throw error;
+        incompatibility = error;
       }
-      throw error;
     }
+    const versions = installed.map(v => v.version).filter(v => v !== activeVersion).sort((a, b) => compareVersions(b, a));
+    for (const version of versions) {
+      try { return await target.load(id, version); } catch { /* Skip an unusable alternate. */ }
+    }
+    throw incompatibility ?? new HostedPluginError("incompatible_plugin", "No usable installed release for the target host");
   }
   async inventory(): Promise<{ plugins: ManagedHostedPlugin[]; errors: string[] }> {
     const installed = await this.installer.inventory(), policies = await this.policies(), diagnostics = await this.diagnostics();
@@ -423,49 +429,56 @@ export class HostedPluginManager {
   async pairSnapshot(): Promise<unknown> {
     return { policies: await this.policies(), active: await Promise.all(this.installer.catalog.map(async p => [p.id, await this.supervisor(p.id).broker.active()])) };
   }
-  /** Best effort, before a host update: download a release compatible with the target host for each
-   * installed plugin whose installed versions do not support it. Nothing is activated; failures are
-   * recorded on the plugin's own diagnostics and never reach the host update. */
+  /** Best effort, before a host update: download a compatible release when it could fill a
+   * compatibility gap. Nothing is activated; failures stay on the plugin's diagnostics. */
   async prefetchForHost(hostVersion: string, signal?: AbortSignal): Promise<void> {
     const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog, fetch: this.options.fetch });
     const inventory = await this.installer.inventory();
     for (const plugin of this.installer.catalog) {
-      const versions = (inventory.versions[plugin.id] ?? []).map(v => v.version).sort((a, b) => compareVersions(b, a));
-      const active = await this.supervisor(plugin.id).broker.active();
-      if (!versions.length || this.isDevPlugin(plugin.id)) continue;
-      let usable = false;
-      for (const version of new Set([...(active?.enabled ? [active.version] : []), ...versions])) {
-        try { await target.load(plugin.id, version); usable = true; break; } catch { /* Not for the target host. */ }
-      }
-      if (usable) continue;
+      signal?.throwIfAborted();
+      if (this.isDevPlugin(plugin.id)) continue;
+      const installed = inventory.versions[plugin.id] ?? [];
       try {
-        const release = await target.check(plugin.id, versions[0], undefined, signal);
-        const pkg = await target.install(plugin.id, release, signal);
-        await this.recordCheck(plugin.id, { status: "up-to-date", version: pkg.version, message: "Release compatible with the next software version downloaded; activation happens on that version" });
+        const active = await this.supervisor(plugin.id).broker.active();
+        if (!active?.enabled && !installed.length) continue;
+        try {
+          await this.localCandidate(target, plugin.id, installed, active?.enabled ? active.version : undefined);
+          continue;
+        } catch (error) {
+          if (failure(error).code !== "incompatible_plugin") throw error;
+        }
       } catch (error) {
         signal?.throwIfAborted();
         const cause = failure(error);
-        await this.recordCheck(plugin.id, { status: "failed", code: cause.code, message: `${cause.message}; plugin will be unavailable after the software update until a compatible release is installed` }).catch(() => {});
+        await this.recordCheck(plugin.id, { status: "failed", code: cause.code, message: `Plugin prefetch skipped: ${cause.message}. Downloading another release would not resolve this startup error.` }).catch(() => {});
+        continue;
+      }
+      try {
+        const latest = installed.map(v => v.version).sort((a, b) => compareVersions(b, a))[0];
+        const release = await target.check(plugin.id, latest, undefined, signal);
+        const pkg = await target.install(plugin.id, release, signal);
+        await this.recordCheck(plugin.id, { status: "up-to-date", version: pkg.version, message: "Release compatible with the next software version downloaded; activation unchanged" });
+      } catch (error) {
+        signal?.throwIfAborted();
+        const cause = failure(error);
+        await this.recordCheck(plugin.id, { status: "failed", code: cause.code, message: `${cause.message}; no compatible release was prefetched for the software update` }).catch(() => {});
       }
     }
   }
-  /** Per-plugin compatibility against a future host's declared protocol range: a warning list,
-   * never a gate. No registry/install/activation happens here; a plugin with no usable local
-   * version simply starts unavailable on the new host until a compatible release is installed. */
+  /** Advisory local selection check for enabled plugins. No registry, download or activation. */
   async hostUpdateWarnings(hostVersion: string): Promise<Array<{ pluginId: string; message: string }>> {
     const target = new HostedPluginInstaller({ root: this.installer.root, hostVersion, catalog: this.installer.catalog });
     const inventory = await this.installer.inventory(), warnings: Array<{ pluginId: string; message: string }> = [];
     for (const plugin of this.installer.catalog) {
-      const versions = inventory.versions[plugin.id], active = await this.supervisor(plugin.id).broker.active();
-      if (!active?.enabled) continue;
-      if (!versions?.length) { warnings.push({ pluginId: plugin.id, message: "Plugin is not installed; it stays unavailable after the update until it is reinstalled" }); continue; }
-      const candidates = [active.version, ...versions.map(v => v.version).sort((a, b) => compareVersions(b, a))];
-      let usable = false, cause = "";
-      for (const version of new Set(candidates)) {
-        try { await target.load(plugin.id, version); usable = true; break; }
-        catch (error) { cause ||= failure(error).message; }
+      try {
+        const active = await this.supervisor(plugin.id).broker.active();
+        if (!active?.enabled) continue;
+        await this.localCandidate(target, plugin.id, inventory.versions[plugin.id] ?? [], active.version);
+      } catch (error) {
+        const cause = failure(error);
+        const recovery = cause.code === "incompatible_plugin" ? "Install a compatible release." : "Resolve the local plugin error before it can start.";
+        warnings.push({ pluginId: plugin.id, message: `Plugin unavailable after the update to ${hostVersion}: ${cause.message}. ${recovery}` });
       }
-      if (!usable) warnings.push({ pluginId: plugin.id, message: `No installed version supports ${hostVersion} (${cause}); it is unavailable after the update until a compatible release is installed` });
     }
     return warnings;
   }

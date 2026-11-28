@@ -13,7 +13,7 @@ export default defineWebPlugin<WorkbenchPluginDefinition>({
   id: WEB_PREVIEW_ID, apiVersion: 1, activate() {},
   workbench: {
     apiVersion: 1,
-    entry: { kind, label, description: { zh: "预览公网、本机或局域网网页，或使用 Google 搜索", en: "Preview public, local, or LAN pages, or search Google" }, icon: IconGlobeOutlineRegular },
+    entry: { category: "workspace", kind, label, description: { zh: "在工作区打开网页", en: "Open websites in the workspace" }, icon: IconGlobeOutlineRegular },
     panels: [{ kind, component: p => {
       const api = desktopWebPreview();
       if (!api) return null;

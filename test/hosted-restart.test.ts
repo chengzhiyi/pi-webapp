@@ -122,6 +122,51 @@ for (const rejectFirst of [false, true]) test(`paired HTTP update reversibly dra
   } finally { await next.shutdown(); }
 });
 
+test("an unaccepted restart restores the hosted runtime even if resetting the update journal fails", async t => {
+  const f = await fixture(t);
+  const marker = join(f.root, "pi-web", "launcher.restart"), lock = join(f.broker.root, "runtime.lock");
+  const before = await f.broker.active();
+  let resumes = 0;
+  const updater = new SelfUpdater({ agentDir: f.root, packageRoot: f.oldHost, launcherNonce: "test-nonce", desktopManaged: false,
+    beforeRestart: async () => {
+      const resume = await f.integration.prepareRestart();
+      await assert.rejects(readFile(lock), { code: "ENOENT" });
+      return async () => { resumes++; await resume(); };
+    },
+    runNpm: async args => {
+      if (args[0] === "view") return '"0.1.33"';
+      await hostPackage(join(args[args.indexOf("--prefix") + 1]!, "node_modules/pi-webapp"), "0.1.33", f.worker);
+      return "";
+    } });
+  const prepared = await updater.prepare();
+  const candidate = await readCandidate(f.root);
+  assert.ok(candidate);
+  const conflictingMarker = JSON.stringify({ nonce: "test-nonce", candidate: "different-candidate" });
+  await writeFile(marker, conflictingMarker);
+
+  const journal = updater as unknown as { record(transaction: { phase: string }): Promise<void> };
+  const record = journal.record.bind(journal), writeFailure = new Error("injected prepared journal write failure");
+  const writes = t.mock.method(journal, "record", async (transaction: { phase: string }) => {
+    if (transaction.phase === "prepared") throw writeFailure;
+    await record(transaction);
+  });
+  const log = t.mock.method(console, "error", (..._args: unknown[]) => {});
+  await assert.rejects(updater.requestRestart(prepared), error => {
+    assert.equal(resumes, 1, "the restart lease must be resumed before reporting failure");
+    assert.match((error as Error).message, /EEXIST/);
+    assert.equal((error as NodeJS.ErrnoException).code, "EEXIST");
+    return true;
+  });
+  assert.deepEqual(writes.mock.calls.map(call => call.arguments[0].phase), ["restart-requested", "prepared"]);
+  assert.ok(log.mock.calls.some(call => call.arguments.includes(writeFailure)), "the journal error remains visible");
+  assert.equal(f.integration.adapter.isFrozen, false);
+  assert.equal((await f.integration.inventory()).plugins[0]!.phase, "active");
+  await assert.rejects(acquireStorageOwnership(f.broker.root, "runtime"), /Another host owns/);
+  assert.deepEqual(await f.broker.active(), before);
+  assert.equal(await readFile(marker, "utf8"), conflictingMarker);
+  assert.deepEqual(await readCandidate(f.root), candidate);
+});
+
 test("a startup ownership error stays on the plugin card, never fences updates and never reclaims a dead PID lock", async t => {
   const f = await fixture(t), nextHost = join(f.root, "next");
   await hostPackage(nextHost, "0.1.33", f.worker);

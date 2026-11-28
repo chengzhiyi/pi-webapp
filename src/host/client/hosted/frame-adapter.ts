@@ -86,15 +86,39 @@ export class FrameRegistry {
   private incarnations = new Map<string, number>();
   incarnation(sessionId: string, callId: string | undefined) { return this.incarnations.get(`${sessionId}/${callId}`) ?? 0; }
   add(item: RegisteredFrame) { this.frames.add(item); return () => this.frames.delete(item); }
-  /** Retire only the realms in a tab while their DOM/MessagePorts are still alive.
-   * A preflush is not permission to fabricate a close after React destroys the frame. */
-  async retireWithin(sessionId: string, root: Element) {
-    const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId && root.contains(frame.adapter.frame));
-    await Promise.all(frames.map(async frame => {
-      await frame.ready;
-      if (!frame.retire) throw new Error("View cannot retire safely");
-      await frame.retire();
-    }));
+  /** Retire only this tab's live realms. Authoring retirement already requires
+   * the realm's freeze (which flushes) and the server's close acknowledgement. */
+  async retireWithin(sessionId: string, resolveRoot: () => Element | null | undefined, close: () => void) {
+    const root = resolveRoot();
+    const changed = () => new Error("Plugin views changed during tab close; retry");
+    if (!root?.isConnected) throw changed();
+    const within = () => [...this.frames].filter(frame => frame.identity.sessionId === sessionId && root.contains(frame.adapter.frame));
+    const frames = within();
+    const checkScope = () => {
+      const current = within();
+      if (!root.isConnected || resolveRoot() !== root || current.length !== frames.length || frames.some(frame => !current.includes(frame))) throw changed();
+      // An iframe can enter the DOM before its registration effect runs.
+      const registered = new Set(current.map(frame => frame.adapter.frame));
+      for (const iframe of root.querySelectorAll<HTMLIFrameElement>("[data-hosted-plugin] iframe")) {
+        if (!registered.has(iframe)) throw changed();
+      }
+    };
+    checkScope();
+    const retire = frames.map(frame => {
+      const { retire } = frame;
+      if (!retire) throw new Error("View cannot retire safely");
+      return () => retire.call(frame);
+    });
+    if (frames.length) {
+      await Promise.all(frames.map(frame => frame.ready));
+      checkScope();
+      const results = await Promise.allSettled(retire.map(async run => run()));
+      const failed = results.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      checkScope();
+    }
+    // Commit in the same turn as the final scope check, before tearing down the ports.
+    close();
   }
   async retireTools(sessionId: string, callIds: readonly string[]) {
     const frames = [...this.frames].filter(frame => frame.identity.sessionId === sessionId && frame.toolCallId && callIds.includes(frame.toolCallId));

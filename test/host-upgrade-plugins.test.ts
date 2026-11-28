@@ -182,6 +182,57 @@ test("an offline incompatible plugin never blocks the host update; it starts una
   await f.restart("0.1.29"); assert.equal(f.manager.tools.length, 1);
 });
 
+test("active integrity failure is visible before and after restart and cannot be repaired by prefetch", async t => {
+  for (const hasFallback of [true, false]) await t.test(hasFallback ? "with a compatible older release" : "with only a registry candidate", async t => {
+    const f = await fixture(t);
+    const active = await f.manager.installer.installArchive(id, f.old.bytes, integrity(f.old.bytes), "0.1.0");
+    await f.manager.manage(id, "enable");
+    if (hasFallback) {
+      const older = integrationFixture("0.0.9");
+      await f.manager.installer.installArchive(id, older.bytes, integrity(older.bytes), "0.0.9");
+    }
+    const before = await f.manager.pairSnapshot();
+    const manifestPath = join(active.root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.piWebapp.hostRange = ">=0.1.0 <1.0.0"; // Valid metadata, but no longer matches the installed digest.
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    const warnings = await f.manager.hostUpdateWarnings("0.2.0");
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0]!.pluginId, id);
+    assert.match(warnings[0]!.message, /unavailable after the update.*integrity changed/i);
+    assert.deepEqual(f.calls(), { downloads: 0, registry: 0 });
+
+    await f.manager.prefetchForHost("0.2.0");
+    assert.deepEqual(f.calls(), { downloads: 0, registry: 0 });
+    const diagnostic = (await f.manager.inventory()).plugins[0]!.updateDiagnostic;
+    assert.equal(diagnostic?.status, "failed");
+    assert.equal(diagnostic.code, "resource_changed");
+    await f.restart();
+    assert.equal(f.manager.tools.length, 0);
+    assert.equal((await f.manager.inventory()).plugins[0]!.error?.code, "resource_changed");
+    assert.deepEqual(await f.manager.pairSnapshot(), before, "active selection and data reference are retained");
+  });
+});
+
+test("local compatibility fallback skips a broken alternate and picks the newest usable release", async t => {
+  const f = await fixture(t);
+  await f.manager.installer.installArchive(id, f.old.bytes, integrity(f.old.bytes), "0.1.0");
+  await f.manager.manage(id, "enable");
+  for (const version of ["0.1.3", "0.1.1", "0.1.2"]) {
+    const release = integrationFixture(version);
+    const pkg = await f.manager.installer.installArchive(id, release.bytes, integrity(release.bytes), version);
+    if (version === "0.1.3") await writeFile(join(pkg.root, "dist/frame.html"), "corrupt resource");
+  }
+  assert.deepEqual(await f.manager.hostUpdateWarnings("0.2.0"), []);
+  await f.manager.prefetchForHost("0.2.0");
+  assert.deepEqual(f.calls(), { downloads: 0, registry: 0 });
+  assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.1.0", "prefetch does not activate");
+  await f.restart();
+  assert.equal(f.manager.tools.length, 1);
+  assert.equal((await f.manager.inventory()).plugins[0]!.activeVersion, "0.1.2");
+});
+
 test("absent never downloads; disabled stays disabled; legacy pin is retired; no downgrade is guessed", async t => {
   const absent = await fixture(t); absent.offline(); await absent.manager.prefetchForHost("0.2.0");
   assert.deepEqual(absent.calls(), { downloads: 0, registry: 0 });

@@ -11,6 +11,7 @@ import { downloadDrawing } from "./download.ts";
 import { HostedToolCard } from "./ToolCard.tsx";
 import { notification, toolHeight, toolPresentation } from "./tool-ui.ts";
 import { HostedPluginIcon } from "./PluginIcon.tsx";
+import { DesignArtwork, DrawingArtwork } from "./LauncherArtwork.tsx";
 import { dismissToast, showToast } from "../../../../web/src/ui/primitives/Toast.tsx";
 
 // A host outage fails a plugin's controller, panels and tool cards together, so
@@ -135,7 +136,8 @@ function definition(card: HostedPluginCard, reconnect: () => void, callbacks: Ho
     artifactTools: contribution.artifactTools,
     workbench: {
       apiVersion: 1,
-      entry: { ...contribution.entry, kind: panelKind(contribution.entry.kind), icon: props => <HostedPluginIcon card={card} {...props} /> },
+      entry: { ...contribution.entry, kind: panelKind(contribution.entry.kind), icon: props => <HostedPluginIcon card={card} {...props} />,
+        artwork: card.icon === "drawing" ? DrawingArtwork : card.icon === "design" ? DesignArtwork : undefined },
       panels: contribution.panels.map(kind => ({ kind: panelKind(kind), component: (props: WorkbenchPanelProps) => <HostedFrame card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
         mount={{ kind: kind === contribution.entry.kind ? "workspace" : "editor", sessionId: props.session.sessionId, contentId: props.contentId, title: props.title, visible: props.visible, locale: props.locale, theme: theme() }} open={(kind, id, title) => props.open(panelKind(kind), id, title)} sendMessage={props.sendMessage} /> })),
       toolViews: contribution.toolViews.length ? [{ tools: contribution.toolViews, component: (props: ToolViewProps) => props.session ? <HostedFrame key={hostedFrames.incarnation(props.session.sessionId, props.call.toolCallId)} card={card} reconnect={reconnect} abort={() => callbacks.current.abort?.() ?? Promise.reject(new Error("Abort unavailable"))}
